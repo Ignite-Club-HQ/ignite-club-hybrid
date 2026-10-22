@@ -29,7 +29,7 @@ This is the first connected app implementation batch, with no canister upgrade r
 - An unsuccessful group reply is unknown/failed, never evidence that the member has no clubs there. Background discovery cannot block navigation or replace the complete snapshot with an empty/partial list.
 
 ### Stage B — eliminate periodic all-group reconciliation
-Use an authenticated on-chain caller membership directory with a lightweight per-account change revision. This requires a completeness audit and, if existing contracts cannot supply it, a narrowly scoped canister extension under separate release approval.
+The audit found no complete central caller-membership API today. Existing `acl_revision` does not advance for ordinary joins/removals; it cannot validate this cache. Use an authenticated on-chain caller membership directory with a new durable per-account change revision. This requires a completeness audit and, if existing contracts cannot supply it, a narrowly scoped canister extension under separate release approval.
 
 - Cover original Group 1 clubs and all registered groups, principal/account aliases, parent memberships, team-only grants, administrative role changes, invitations, restores and removals.
 - Only verified club authorities update references, never browsers.
@@ -64,12 +64,7 @@ Search for clubs to join, unknown invitations, foreign-host resources, operator 
 - No history deletion, club moves, photo-key changes, payment/allowance changes, group opening or broad deployment.
 
 ## 5. Media and aggregate completeness
-Progressive display must not corrupt pagination or create authoritative empty lists.
-
-- Use per-club loading/empty/failed/denied state and cursors.
-- Render ready gallery sources without skipping or duplicating exact asset IDs. Do not claim a globally sorted page is complete until each included source has supplied its required boundary; retain unresolved source cursors for later fetches.
-- Reconcile acknowledged comments/messages by ID and preserve pending mutations across harmless refreshes.
-- Deleted clubs are excluded before their live sections are published; failed deletion checks are not absence.
+Use per-club loading/empty/failed/denied state and cursors. Ready gallery sources may render, but do not declare a globally sorted page complete until every included source supplies its boundary. Retain unresolved cursors and deduplicate by exact asset ID. Reconcile acknowledged comments/messages by ID. Exclude confirmed deleted clubs before publishing sections; failed deletion checks are not absence.
 
 ## Technical implementation
 Add an account/full-target-scoped coordinator with injected transports and lazy ICP imports. Adapt groupDispatch/groupSession to reuse verified discovery without page-driven membership sweeps; cached state never authorizes writes. Centralize membership keys/invalidation. Classify every `everyGroup` caller before replacing member-content fan-outs; retain genuine wider discovery and security inventory. Keep configuration revisions separate from membership/content revisions. Record privacy-safe call counts/reasons and timings.
@@ -87,10 +82,7 @@ Add behaviour tests with real call counters, not source-text assertions:
 
 Run both backend modes and delayed/denied-source checks, then signed-in browser/Android traces. Existing recovery targets: tap p95 ≤100 ms, warm content ≤300 ms, cold first useful ≤3 seconds; media unlock separate. These are targets, not verified timings.
 
-## Delivery order and completion
-1. Implement Stage A coordinator, routing reuse and all affected member-content pages as one connected batch, including safe media cursors and mutation invalidation.
-2. Run request-count/lifecycle regressions and collect signed-in acceptance when an authorized Internet Identity session is available.
-3. Audit Stage B directory completeness and propose only the exact needed canister changes/backfill/release path; no upgrade is authorized by this design request.
-4. Publish/update native bundles only with explicit approval and verified release evidence. A web publication does not update installed native code.
+## Delivery and completion
+Implement Stage A coordinator, routing reuse and affected pages in one connected batch; run request/lifecycle regressions and signed-in acceptance. Then separately audit and propose Stage B’s exact upgrade/backfill. No canister upgrade or publication is authorized by this design request; native bundles need their own update.
 
-Completion means actual one-group page traces stop querying unrelated group content, external membership changes still appear, and signed-in data/timing checks pass—not merely that a cache was added.
+Done means signed-in one-group traces stop querying unrelated content, external changes still appear and data/timing gates pass. Account testing remains unavailable in this sandbox.
