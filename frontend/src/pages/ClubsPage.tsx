@@ -300,66 +300,33 @@ export default function ClubsPage() {
     enabled: !!user,
   });
 
-  // Get unique sports from clubs for filter options
-  const availableSports = useMemo(() => {
-    if (!clubs) return [];
-    const sports = new Set(clubs.map(c => c.sport).filter(Boolean) as string[]);
-    return Array.from(sports).sort();
-  }, [clubs]);
 
-  // Filter clubs by sport only (for My Clubs)
-  const filterBySport = (clubList: Club[] | undefined) => {
-    if (!clubList) return clubList;
-    
-    if (sportFilter === "all") return clubList;
-    
-    return clubList.filter(club => {
-      if (!club.sport) return false;
-      const lowerSport = club.sport.toLowerCase();
-      const lowerFilter = sportFilter.toLowerCase();
-      return lowerSport.includes(lowerFilter) || lowerFilter.includes(lowerSport);
-    });
-  };
 
-  // Filter clubs by sport and search query (for search results)
-  const filterBySearch = (clubList: Club[] | undefined) => {
+  // Search matches on name, description or sport. It only ever applies to the
+  // "Search Results" list below — never to My Clubs.
+  const matchSearch = (clubList: Club[] | undefined) => {
     if (!clubList) return clubList;
-    
-    let filtered = clubList;
-    
-    // Filter by sport
-    if (sportFilter !== "all") {
-      filtered = filtered.filter(club => {
-        if (!club.sport) return false;
-        const lowerSport = club.sport.toLowerCase();
-        const lowerFilter = sportFilter.toLowerCase();
-        return lowerSport.includes(lowerFilter) || lowerFilter.includes(lowerSport);
-      });
-    }
-    
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(club => 
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return clubList;
+    return clubList.filter(
+      (club) =>
         club.name.toLowerCase().includes(query) ||
         club.description?.toLowerCase().includes(query) ||
         club.sport?.toLowerCase().includes(query)
-      );
-    }
-    
-    return filtered;
+    );
   };
 
-  // My Clubs - filter by sport and active club theme
-  const myClubs = filterBySport(
-    clubs?.filter((club) => {
-      const isMember = userRoles?.some((role) => role.club_id === club.id);
-      if (!isMember) return false;
-      // If a club theme is active, only show that club
-      if (activeClubFilter) return club.id === activeClubFilter;
-      return true;
-    })
-  );
+
+  // My Clubs - every club the user belongs to. The club theme picker is the
+  // only thing that narrows this list.
+  const myClubs = clubs?.filter((club) => {
+    const isMember = userRoles?.some((role) => role.club_id === club.id);
+    if (!isMember) return false;
+    // If a club theme is active, only show that club
+    if (activeClubFilter) return club.id === activeClubFilter;
+    return true;
+  });
+
 
   // Recently removed: respect the active club filter so other clubs don't leak in
   const scopedRemovedClubs = (removedClubs ?? []).filter((club) =>
@@ -371,7 +338,7 @@ export default function ClubsPage() {
   // Only show search results (other clubs) when user is actively searching
   const isSearching = searchQuery.trim().length > 0;
   const searchResults = isSearching 
-    ? filterBySearch(clubs?.filter((club) => !userRoles?.some((role) => role.club_id === club.id)))
+    ? matchSearch(clubs?.filter((club) => !userRoles?.some((role) => role.club_id === club.id)))
     : [];
 
   if (isLoading) {
