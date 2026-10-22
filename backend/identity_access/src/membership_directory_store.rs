@@ -30,12 +30,22 @@ impl<M: Memory> Store<M> {
     pub fn stage(&self, club: &str) -> Option<Stage> { self.stages.get(&club.to_string()).map(|b|decode(&b)) }
     pub fn begin(&mut self, source: &Source, revision: u64) -> Result<(), String> {
         if source.club.is_empty() || source.club.len()>128 || source.club.contains('\u{1f}') || source.generation==0 || source.authority==candid::Principal::anonymous() || source.authority==candid::Principal::management_canister() || revision == 0 || revision < source.revision { return Err("Invalid snapshot stage".into()); }
+        let manifest=self.source(&source.club);
+        if let Some(prior)=&manifest {
+            if prior.generation>source.generation || (prior.generation==source.generation && (prior.authority!=source.authority || prior.revision>revision)) {return Err("Obsolete source stage".into());}
+        }
         if let Some(prior)=self.stage(&source.club) {
             if prior.generation==source.generation && prior.authority!=source.authority { return Err("Conflicting generation authority".into()); }
             if prior.generation==source.generation && prior.revision==revision { return Ok(()); }
             if prior.generation>source.generation || (prior.generation==source.generation && prior.revision>revision) { return Err("Stale snapshot stage".into()); }
         }
         let stage=Stage {club:source.club.clone(),authority:source.authority,generation:source.generation,revision,next_sequence:0,terminal:false};
+        if let Some(mut prior)=manifest {
+            if prior.generation!=source.generation || prior.revision<revision {
+                prior.authority=source.authority; prior.generation=source.generation; prior.revision=revision; prior.complete=false;
+                self.manifests.insert(source.club.clone(),encode(&prior));
+            }
+        }
         self.stages.insert(source.club.clone(),encode(&stage)); Ok(())
     }
     pub fn append(&mut self, club: &str, generation: u64, revision: u64, sequence: u64, rows: Vec<Vec<u8>>, terminal: bool) -> Result<(), String> {
@@ -93,6 +103,11 @@ impl<M: Memory> Store<M> {
         assert!(store.append("club",1,2,2,vec![],true).is_err());
         store.append("club",1,2,1,vec![vec![3]],true).unwrap(); store.persist_verified_source(&source).unwrap();
         assert_eq!(store.source("club"),Some(source)); assert_eq!(store.staged_chunk("club",1),Some(vec![vec![3]]));
+        let mut next=store.source("club").unwrap();next.revision=3;next.subjects.insert(Principal::from_slice(&[3,1]).to_text());
+        store.begin(&next,3).unwrap();assert!(!store.source("club").unwrap().complete);
+        store.append("club",1,3,0,vec![],true).unwrap();store.persist_verified_source(&next).unwrap();
+        let mut conflicting=next.clone();conflicting.subjects.clear();
+        assert!(store.persist_verified_source(&conflicting).is_err());assert_eq!(store.source("club"),Some(next));
     }
     #[test] fn bounds_and_generation_drift_leave_progress_unchanged() {
         let manager=MemoryManager::init(VectorMemory::default());
