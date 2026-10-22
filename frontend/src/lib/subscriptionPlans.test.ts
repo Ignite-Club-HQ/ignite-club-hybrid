@@ -53,4 +53,12 @@ it("preserves Unlimited promo storage and enforces Free after expiry", () => {
 it("keeps legacy club allowances separate from new USD purchases", () => {
   expect(mediaAllowance({ is_pro:true, plan:"standard" }).limitBytes).toBe(5368709120);
   expect(mediaAllowance({ is_pro:true, plan:"standard", pricing_version:"usd_v2" }).limitBytes).toBe(3221225472);
+  expect(mediaAllowance({ is_pro:true, plan:"usd_v2_standard" }).limitBytes).toBe(3221225472);
+});
+it("enforces versioned ICP team bands without inheriting legacy Unlimited", () => {
+  expect(effectiveTeamLimit({ is_pro:true, plan:"usd_v2_small", team_limit:21 })).toBe(3);
+  expect(effectiveTeamLimit({ is_pro:true, plan:"usd_v2_growing", team_limit:21 })).toBe(5);
+  expect(effectiveTeamLimit({ is_pro:true, plan:"usd_v2_starter", team_limit:21 })).toBe(10);
+  expect(effectiveTeamLimit({ is_pro:true, plan:"usd_v2_standard", team_limit:20 })).toBe(20);
+  expect(effectiveTeamLimit({ is_pro:true, plan:"usd_v2_standard", team_limit:21 })).toBe(21);
 });

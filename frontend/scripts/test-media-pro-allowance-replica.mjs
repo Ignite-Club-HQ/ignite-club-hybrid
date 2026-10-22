@@ -79,6 +79,11 @@ try {
   const branding = ok(await reserve('clubs/club-pro/logos/logo.png', 50n));
   assert.equal((await actor.get_club_media_bytes('club-pro')).pending, 0n);
   ok(await actor.abort_upload(branding));
+  const invalid = ok(await reserve('clubs/club-pro/photos/raw.jpg', 1_000n));
+  ok(await actor.put_chunk(invalid, 0, new Uint8Array(1_000)));
+  ok(await actor.finalize_upload(invalid));
+  assert.equal((await actor.get_club_media_bytes('club-pro')).finalized, 1_864n, 'Unframed legacy bytes do not earn a framing discount');
+  ok(await actor.delete_blob('clubs/club-pro/photos/raw.jpg'));
 
   // Free clubs have a smaller combined allowance and their monthly caps.
   ok(await clubActor.create_club('club-free', 'Free Club', 'club-free', [], []));
@@ -127,6 +132,8 @@ try {
   };
   ok(await clubActor.save_club_subscription(subscription));
   assert.equal(ok(await clubActor.get_media_allowance('club-pro', [])).limit_bytes, 5_368_709_120n);
+  ok(await clubActor.save_club_subscription({ ...subscription, plan: 'usd_v2_standard', team_limit: [20] }));
+  assert.equal(ok(await clubActor.get_media_allowance('club-pro', [])).limit_bytes, 3_221_225_472n);
   ok(await clubActor.save_club_subscription({ ...subscription, expires_at_ms: [1n] }));
   assert.equal(ok(await clubActor.get_media_allowance('club-pro', [])).limit_bytes, 262_144_000n);
   assert.equal((await actor.get_club_media_bytes('club-pro')).finalized, 864n, 'Expiry does not delete existing files');
