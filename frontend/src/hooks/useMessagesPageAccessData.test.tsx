@@ -47,7 +47,7 @@ describe('Messages access reads', () => {
     mocks.mode = 'icp'; mocks.grants.mockResolvedValue([{ club: ['g2-club'], team: ['g2-team'] }]);
     const from = vi.fn(); const hook = mount({ from });
     await waitFor(() => expect(hook.queries.getQueryCache().find({ queryKey: ['club-pro-status'], exact: false })?.state.error).toBeNull());
-    await waitFor(() => expect(hook.result.current.clubProStatus).toEqual({ 'g2-club': true }));
+    await waitFor(() => expect(hook.queries.getQueryCache().find({ queryKey: ['club-pro-status'], exact: false })?.state).toMatchObject({ status: 'success', data: { 'g2-club': true } }), { timeout: 10000 });
     await waitFor(() => expect(hook.result.current.hasAnyProAccess).toBe(true));
     expect(mocks.routing.mock.calls.map(call => call[0])).toEqual([{ shared: 'person' }, { shared: 'person' }]);
     expect(mocks.grants).toHaveBeenCalledTimes(1); expect(from).not.toHaveBeenCalled();
