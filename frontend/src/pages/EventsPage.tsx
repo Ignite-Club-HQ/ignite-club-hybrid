@@ -49,7 +49,7 @@ import { useToast } from "@/hooks/use-toast";
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { logScheduleOpenLatency, resetScheduleOpenLog } from "@/lib/scheduleOpenLatency";
 import { format, parseISO, startOfDay, isSameDay, subHours } from "date-fns";
-import { hasValidScheduleDate, scheduleTimestampDate } from "@/lib/scheduleDates";
+import { hasValidScheduleDate } from "@/lib/scheduleDates";
 import { formatCompactDateTime } from "@/lib/eventRelativeDate";
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { useClubTheme } from "@/hooks/useClubTheme";
@@ -62,10 +62,11 @@ import { fetchViewableCompetitionMatchIds, makeCompetitionFixtureVisibility } fr
 import { readScheduleEvents } from "@/features/events/scheduleReadRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
-import { getLiveAccountRosterScope, listLiveEventDutyTeams, listLiveEvents } from "@/live/features/events";
+import { getLiveAccountRosterScope } from "@/live/features/events";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/club";
 import { loadScheduleFixtures, type FixtureSnapshot } from "@/live/scheduleFixtures";
+import { loadMemberSchedule, type MemberScheduleSnapshot } from "@/live/scheduleMembers";
 
 /** Derive the memberships shape the schedule filters need from the caller's
  * club_domain role grants + events_domain roster scope (live ICP path).
@@ -746,7 +747,33 @@ export default function EventsPage() {
     refetchOnReconnect: 'always',
   });
 
-  const { data: eventsData, isLoading, isFetching, isError: eventsIsError, refetch: refetchEvents } = useQuery({
+  const memberScheduleKey = ['events', 'icp-member-schedule', user?.id, localIcpPersona, filter, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, viewerRoleScope];
+  const memberScheduleQuery = useQuery({
+    queryKey: memberScheduleKey,
+    enabled: isIcpAuthBackend && !!userMemberships,
+    queryFn: ({ signal }) => withFeatureBackend('events', {
+      supabase: async () => { throw new Error('unreachable'); },
+      icp: ctx => {
+        const from = new Date(); from.setDate(from.getDate() - Math.max(30, pastDaysBack));
+        const to = new Date(); to.setDate(to.getDate() + (viewMode === 'calendar' ? 240 : 45));
+        const present = (next: MemberScheduleSnapshot) => ({ ...next, events: viewMode === 'calendar' ? next.events : filterRecurringEvents(next.events) });
+        return loadMemberSchedule(ctx, {
+          clubIds: clubFilter ? [clubFilter] : userMemberships?.clubIds ?? [], teamIds: userMemberships?.teamIds ?? [],
+          adminClubIds: userMemberships?.clubAdminClubIds ?? [], filter,
+          selectedTeamId: teamFilter && !teamFilter.startsWith('ml:') ? teamFilter : null,
+          fromMs: from.getTime(), toMs: to.getTime(),
+        }, next => { if (!signal.aborted) queryClient.setQueryData(memberScheduleKey, present(next)); }).then(next => {
+          if (signal.aborted) throw new Error('Schedule request cancelled');
+          const value = present(next);
+          if (!value.incomplete) cacheEventsList(eventsScopeKey, value.events, user?.id);
+          return value;
+        });
+      },
+    }, { shared: 'person' }),
+    staleTime: 5 * 60 * 1000, refetchOnMount: 'always', refetchOnReconnect: 'always',
+  });
+
+  const legacyEventsQuery = useQuery({
     queryKey: ["events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, filter, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, userMemberships?.miniLeagueIds, viewerRoleScope],
     queryFn: async () => {
       const overall = performance.now();
@@ -767,136 +794,6 @@ export default function EventsPage() {
           }
           throw error;
         }
-      }
-
-      // Live ICP mode: read events from the events_domain canister. The
-      // canister Event record is slimmer than the Supabase row (single
-      // location string, no opponent/address/updated_at/mini-league link), so
-      // those fields map to null and cancelled events can't be age-filtered —
-      // all cancellations are shown.
-      if (isIcpAuthBackend) {
-        return withFeatureBackend("events", {
-          supabase: async () => { throw new Error("unreachable"); },
-          icp: async (ctx) => {
-            diagLog("events:icp-start", { clubs: clubIds.length });
-            const selectedTeamId = teamFilter && !teamFilter.startsWith("ml:") ? teamFilter : null;
-            const scopeClubIds = clubFilter ? [clubFilter] : clubIds;
-
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - Math.max(30, pastDaysBack));
-            const upperBound = new Date();
-            upperBound.setDate(upperBound.getDate() + (viewMode === "calendar" ? 240 : 45));
-
-            const teamNameCache = new Map<string, string | null>();
-            const clubInfoCache = new Map<string, { name: string; sport: string | null }>();
-            const getClubInfo = async (clubId: string) => {
-              if (!clubInfoCache.has(clubId)) {
-                try {
-                  const profileOpt = await readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubProfile(scoped, clubId));
-                  const profile = (profileOpt as any)?.[0] as { name?: string; sport?: string[] } | undefined;
-                  clubInfoCache.set(clubId, { name: profile?.name ?? "Club", sport: (profile?.sport?.[0] ?? null) as string | null });
-                } catch {
-                  clubInfoCache.set(clubId, { name: "Club", sport: null });
-                }
-              }
-              return clubInfoCache.get(clubId)!;
-            };
-            const getTeamName = async (teamId: string) => {
-              if (!teamNameCache.has(teamId)) {
-                try {
-                  const teamOpt = await readMembershipInScope(ctx, { teamId }, (scoped) => getLiveTeam(scoped, teamId));
-                  teamNameCache.set(teamId, ((teamOpt as any)?.[0]?.name ?? null) as string | null);
-                } catch {
-                  teamNameCache.set(teamId, null);
-                }
-              }
-              return teamNameCache.get(teamId) ?? null;
-            };
-
-            // Fetch every club's events at once, then resolve all team/club
-            // names in parallel so the loop below only reads from cache.
-            const rowsByClub = scopeClubIds.length > 0
-              // Each club from its own group; one failing club never hides the others.
-              ? await Promise.allSettled(scopeClubIds.map((clubId) =>
-                  readContentInScope(ctx, "events", { clubId }, (scoped) => listLiveEvents(scoped, clubId, selectedTeamId)),
-                )).then((results) => {
-                  const ok = results.filter((r) => r.status === "fulfilled").length;
-                  if (ok === 0) throw (results[0] as PromiseRejectedResult).reason;
-                  return results.map((r) => (r.status === "fulfilled" ? r.value : []));
-                })
-              : [];
-            const visibleEventRows = rowsByClub.flatMap((rows) => (rows as any[]).filter((event) => !event.deleted));
-            const dutyTeamsPromise = listLiveEventDutyTeams(ctx, visibleEventRows.map((event) => event.id)).catch(() => []);
-            const neededTeamIds = new Set<string>();
-            const neededClubIds = new Set<string>();
-            for (const rows of rowsByClub) {
-              for (const ev of rows as any[]) {
-                if (ev.deleted) continue;
-                const tId = ev.team_id?.[0];
-                if (tId) neededTeamIds.add(tId);
-                neededClubIds.add(ev.club_id);
-              }
-            }
-            await Promise.all([
-              ...[...neededTeamIds].map(getTeamName),
-              ...[...neededClubIds].map(getClubInfo),
-            ]);
-            const dutyTeams = await dutyTeamsPromise;
-            const dutyTeamByEventId = new Map(dutyTeams.map((assignment) => [assignment.event_id, assignment.team_id]));
-
-            const all: Event[] = [];
-            for (const [clubIndex, clubId] of scopeClubIds.entries()) {
-              const rows = rowsByClub[clubIndex];
-              for (const ev of rows as any[]) {
-                if (ev.deleted) continue;
-                // Skip rows with missing/invalid timestamps — formatting an
-                // Invalid Date throws RangeError and blanks the whole page.
-                const start = scheduleTimestampDate(ev.starts_at_ms);
-                if (!start) continue;
-                if (start < thirtyDaysAgo || start > upperBound) continue;
-                if (filter !== "all" && ev.event_type !== filter) continue;
-                const teamId = (ev.team_id?.[0] ?? null) as string | null;
-                // Club-wide events (no team) show to every club member; team
-                // events show to that team's members and club admins.
-                if (teamId && !teamIds.includes(teamId) && !(userMemberships?.clubAdminClubIds ?? []).includes(clubId)) continue;
-                const end = scheduleTimestampDate(ev.ends_at_ms) ?? start;
-                all.push({
-                  id: ev.id,
-                  title: ev.title,
-                  type: ev.event_type as EventType,
-                  event_date: format(start, "yyyy-MM-dd"),
-                  address: (ev.address?.[0] ?? null) as string | null,
-                  suburb: null,
-                  location_name: (ev.location?.[0] ?? null) as string | null,
-                  club_id: ev.club_id,
-                  team_id: teamId,
-                  duty_team_id: dutyTeamByEventId.get(ev.id) ?? null,
-                  mini_league_id: (ev.mini_league_id?.[0] ?? null) as string | null,
-                  is_cancelled: !!ev.cancelled,
-                  is_bye: false,
-                  is_recurring: ((ev.series_id?.length ?? 0) as number) > 0,
-                  parent_event_id: null,
-                  opponent: (ev.opponent?.[0] ?? null) as string | null,
-                  teams: teamId ? { name: (await getTeamName(teamId)) ?? "Team" } : null,
-                  clubs: await getClubInfo(ev.club_id),
-                  // Extra fields consumed via `any` by the ICS export and
-                  // EventCard (start/end times, description).
-                  start_time: format(start, "HH:mm"),
-                  end_time: format(end, "HH:mm"),
-                  description: ev.description ?? "",
-                  updated_at: (scheduleTimestampDate(ev.updated_at_ms) ?? start).toISOString(),
-                } as Event);
-              }
-            }
-            all.sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id));
-
-            const scheduleEvents: Event[] = viewMode === "calendar" ? all : (filterRecurringEvents(all) as Event[]);
-            cacheEventsList(eventsScopeKey, scheduleEvents, user?.id);
-            diagLog("events:icp-end", { count: scheduleEvents.length });
-            return scheduleEvents;},
-        // Body already reads each club from its own group: run it once, not
-        // once per group (that tripled the work and duplicated events).
-        }, { shared: "person" });
       }
 
       const viewableCompetitionMatchIds = await fetchViewableCompetitionMatchIds(supabase).catch((error) => {
@@ -1016,7 +913,7 @@ export default function EventsPage() {
 
       return finalEvents;
     },
-    enabled: (!!user || useIcpLab) && !!userMemberships,
+    enabled: !isIcpAuthBackend && (!!user || useIcpLab) && !!userMemberships,
     staleTime: 5 * 60 * 1000, // 5min — avoid re-running the full events query on every tab focus
     // Render from cache first; background-refetch only if stale. Big snappiness
     // win on navigation — previously every mount paid a full round-trip.
@@ -1027,6 +924,12 @@ export default function EventsPage() {
     refetchOnReconnect: "always",
     placeholderData: (prev) => prev,
   });
+
+  const eventsData = isIcpAuthBackend ? memberScheduleQuery.data?.events : legacyEventsQuery.data;
+  const isLoading = isIcpAuthBackend ? memberScheduleQuery.isLoading : legacyEventsQuery.isLoading;
+  const isFetching = isIcpAuthBackend ? memberScheduleQuery.isFetching : legacyEventsQuery.isFetching;
+  const eventsIsError = isIcpAuthBackend ? memberScheduleQuery.isError || (memberScheduleQuery.data?.failed.length ?? 0) > 0 : legacyEventsQuery.isError;
+  const refetchEvents = () => isIcpAuthBackend ? memberScheduleQuery.refetch() : legacyEventsQuery.refetch();
 
   // --- Cold-offline fallback -------------------------------------------
   // When the app opens with no connectivity, the memberships query (which
@@ -1345,7 +1248,7 @@ export default function EventsPage() {
                 await Promise.all([
                   queryClient.invalidateQueries({ queryKey: ["user-memberships-for-events"] }),
                   queryClient.invalidateQueries({ queryKey: eventKeys.lists() }),
-                  ...(isIcpAuthBackend ? [queryClient.invalidateQueries({ queryKey: ['icp-schedule-fixtures'] })] : []),
+                  ...(isIcpAuthBackend ? [queryClient.invalidateQueries({ queryKey: ['icp-schedule-fixtures'] }), queryClient.invalidateQueries({ queryKey: ['events', 'icp-member-schedule'] })] : []),
                 ]);
               } finally {
                 setTimeout(() => setIsRefreshing(false), 600);
@@ -1398,6 +1301,7 @@ export default function EventsPage() {
         </div>
       </div>
 
+      {isIcpAuthBackend && memberScheduleQuery.isFetching && memberScheduleQuery.data && <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" />Loading more club events…</div>}
       <QueryErrorBanner
         hasError={isOnline && eventsIsError && !isFetching}
         onRetry={async () => {

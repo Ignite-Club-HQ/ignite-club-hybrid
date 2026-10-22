@@ -104,28 +104,23 @@ export function useMessagesPageAccessData({
   const { data: userLeagueIds, isFetching: userLeagueIdsFetching } = useQuery({
     queryKey: ["user-child-league-ids", userId],
     queryFn: async () => {
-      const { data: children } = await client.from("children").select("id").eq("parent_id", userId!);
-      let childIds = children?.map((child: { id: string }) => child.id) || [];
-      if (!childIds.length) {
-        const { data: guardianLinks } = await client
-          .from("child_guardians")
-          .select("child_id")
-          .eq("guardian_id", userId!);
-        childIds = guardianLinks?.map((link: { child_id: string }) => link.child_id) || [];
-      } else {
-        const { data: guardianLinks } = await client
-          .from("child_guardians")
-          .select("child_id")
-          .eq("guardian_id", userId!);
-        guardianLinks?.forEach((link: { child_id: string }) => {
-          if (!childIds.includes(link.child_id)) childIds.push(link.child_id);
-        });
-      }
+      if (!userId) return new Set<string>();
+      const [owned, guarded] = await Promise.all([
+        client.from("children").select("id").eq("parent_id", userId),
+        client.from("child_guardians").select("child_id").eq("guardian_id", userId),
+      ]);
+      if (owned.error) throw owned.error;
+      if (guarded.error) throw guarded.error;
+      const childIds = [...new Set<string>([
+        ...(owned.data ?? []).map((child: { id: string }) => child.id),
+        ...(guarded.data ?? []).map((link: { child_id: string }) => link.child_id),
+      ])];
       if (!childIds.length) return new Set<string>();
-      const { data: assignments } = await client
+      const { data: assignments, error } = await client
         .from("child_mini_league_assignments")
         .select("mini_league_id")
         .in("child_id", childIds);
+      if (error) throw error;
       return new Set(assignments?.map((assignment: { mini_league_id: string }) => assignment.mini_league_id) || []);
     },
     enabled,
@@ -156,7 +151,7 @@ export function useMessagesPageAccessData({
             if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
             return fetchLiveCallerIapPro(ctx);
           },
-        }, { everyGroup: true, merge: (parts: boolean[]) => parts.some(Boolean) });
+        }, { shared: "person" });
       }
       const { data: userTeamRoles } = await client
         .from("user_roles")
@@ -206,7 +201,7 @@ export function useMessagesPageAccessData({
             const subs = await listLiveClubSubscriptions(ctx, memberClubIds);
             return Object.fromEntries(memberClubIds.map((id) => [id, liveHasAnyPro(subs.get(id))]));
           },
-        }, { everyGroup: true, merge: (parts: Record<string, unknown>[]) => Object.assign({}, ...parts) });
+        }, { shared: "person" });
       }
       const { data: subscriptions, error } = await client
         .from("club_subscriptions")

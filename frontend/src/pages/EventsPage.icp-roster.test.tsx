@@ -23,13 +23,13 @@ const competitionMocks = vi.hoisted(() => ({
   listLiveMyNewsCompetitions: vi.fn(),
 }));
 const getLiveTeamMock = vi.fn();
-const scheduleMocks = vi.hoisted(() => ({ events: vi.fn(), grants: vi.fn() }));
+const scheduleMocks = vi.hoisted(() => ({ events: vi.fn(), grants: vi.fn(), duties: vi.fn(), profile: vi.fn() }));
 vi.mock('@/live/contentRouting', () => ({ readContentInScope: (ctx: unknown, _feature: unknown, _scope: unknown, read: (ctx: unknown) => unknown) => read(ctx) }));
 vi.mock('@/live/membershipRouting', () => ({ readMembershipInScope: (ctx: unknown, _scope: unknown, read: (ctx: unknown) => unknown) => read(ctx) }));
 vi.mock("@/live/features/events", () => ({
   getLiveAccountRosterScope: (...args: unknown[]) => getLiveAccountRosterScopeMock(...args),
   listLiveEvents: (...args: unknown[]) => scheduleMocks.events(...args),
-  listLiveEventDutyTeams: async () => [],
+  listLiveEventDutyTeams: (...args: unknown[]) => scheduleMocks.duties(...args),
 }));
 
 vi.mock("@/live/features/membership", () => ({
@@ -38,7 +38,7 @@ vi.mock("@/live/features/membership", () => ({
 
 vi.mock("@/live/features/club", () => ({
   getLiveTeam: (...args: unknown[]) => getLiveTeamMock(...args),
-  getLiveClubProfile: async () => [],
+  getLiveClubProfile: (...args: unknown[]) => scheduleMocks.profile(...args),
   listLiveTeams: async () => [],
   listLiveSponsors: async () => [],
   getLiveClubSubscription: async () => null,
@@ -73,7 +73,7 @@ vi.mock("@/hooks/useAuth", () => ({
 }));
 vi.mock("@/hooks/usePageTitle", () => ({ usePageTitle: () => {} }));
 vi.mock("@/hooks/useOnlineStatus", () => ({ useOnlineStatus: () => ({ isOnline: true }) }));
-vi.mock("@/hooks/useEventViews", () => ({ useUserEventViews: () => ({ data: [] }) }));
+vi.mock("@/hooks/useEventViews", () => ({ useUserEventViews: () => ({ data: new Set<string>() }) }));
 vi.mock("@/hooks/useScheduleBroadcastListener", () => ({ useScheduleBroadcastListener: () => {} }));
 vi.mock("@/hooks/useClubTheme", () => ({ useClubTheme: () => ({ activeClubFilter: null, setActiveClubTheme: vi.fn() }) }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
@@ -151,6 +151,8 @@ beforeEach(() => {
   localStorage.clear();
   scheduleMocks.events.mockReset(); scheduleMocks.events.mockResolvedValue([]);
   scheduleMocks.grants.mockReset(); scheduleMocks.grants.mockResolvedValue([]);
+  scheduleMocks.duties.mockReset(); scheduleMocks.duties.mockResolvedValue([]);
+  scheduleMocks.profile.mockReset(); scheduleMocks.profile.mockResolvedValue([]);
   leagueDiscoveryMock.mockReset();
   leagueDiscoveryMock.mockResolvedValue([]);
   eventsRoutedToIcp = false;
@@ -171,6 +173,26 @@ beforeEach(() => {
 });
 
 describe("EventsPage roster-derived team scope routing", () => {
+  it('renders ready Group 1 events before Group 2 or the Group 1 profile finishes', async () => {
+    eventsRoutedToIcp = true;
+    scheduleMocks.grants.mockResolvedValue([{ club: ['g1'], team: [], role: 'club_member' }, { club: ['g2'], team: [], role: 'club_member' }]);
+    const event = { id: 'g1-event', title: 'Ready training', event_type: 'training', starts_at_ms: BigInt(Date.now() + 86400000),
+      ends_at_ms: BigInt(Date.now() + 90000000), updated_at_ms: BigInt(Date.now()), deleted: false, club_id: 'g1', team_id: [],
+      address: [], location: [], mini_league_id: [], cancelled: false, series_id: [], opponent: [], description: '' };
+    let finishClub: ((value: unknown[]) => void) | undefined; let finishProfile: ((value: unknown[]) => void) | undefined;
+    scheduleMocks.events.mockImplementation((_ctx, clubId) => clubId === 'g1' ? Promise.resolve([event]) : new Promise(resolve => { finishClub = resolve; }));
+    scheduleMocks.profile.mockImplementation(() => new Promise(resolve => { finishProfile = resolve; }));
+    const client = renderPage();
+    await waitFor(() => expect(client.getQueryCache().getAll().some(query => query.queryKey[0] === 'events' &&
+      (query.state.data as { events?: { id: string }[] } | undefined)?.events?.some(row => row.id === 'g1-event'))).toBe(true));
+    expect(screen.getByText('Schedule')).toBeInTheDocument();
+    const schedule = client.getQueryCache().getAll().find(query => query.queryKey[0] === 'events' && query.queryKey[1] === 'icp-member-schedule' &&
+      (query.state.data as { events?: { id: string }[] } | undefined)?.events?.some(row => row.id === 'g1-event'));
+    expect(schedule?.state.fetchStatus).toBe('fetching');
+    expect((schedule?.state.data as { incomplete: boolean }).incomplete).toBe(true);
+    finishClub?.([]); finishProfile?.([{ name: 'Cats', sport: [] }]);
+    await waitFor(() => expect((schedule?.state.data as { incomplete: boolean }).incomplete).toBe(false));
+  });
   it('shows a ready public fixture while member club events are still pending', async () => {
     eventsRoutedToIcp = true;
     scheduleMocks.grants.mockResolvedValue([{ club: ['member-club'], team: [], role: 'club_member' }]);
@@ -181,7 +203,7 @@ describe("EventsPage roster-derived team scope routing", () => {
     const client = renderPage();
     expect(await screen.findByText('Foreign Cup', { exact: false })).toBeInTheDocument();
     await waitFor(() => expect(scheduleMocks.events).toHaveBeenCalledWith(expect.anything(), 'member-club', null));
-    const members = client.getQueryCache().getAll().find(query => query.queryKey[0] === 'events' && query.state.fetchStatus === 'fetching');
+    const members = client.getQueryCache().getAll().find(query => query.queryKey[0] === 'events' && query.queryKey[1] === 'icp-member-schedule' && query.state.fetchStatus === 'fetching');
     expect(members?.state.fetchStatus).toBe('fetching');
     expect(competitionMocks.listLiveCompetitionMatches).toHaveBeenCalledWith(expect.anything(), 'foreign-cup');
     finish?.([]);
@@ -192,7 +214,7 @@ describe("EventsPage roster-derived team scope routing", () => {
     let finish: ((value: unknown[]) => void) | undefined;
     competitionMocks.listLivePublicCompetitions.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
     const client = renderPage();
-    await waitFor(() => expect(client.getQueryCache().getAll().some(query => query.queryKey[0] === 'events' && query.state.status === 'success')).toBe(true));
+    await waitFor(() => expect(client.getQueryCache().getAll().some(query => query.queryKey[0] === 'events' && query.queryKey[1] === 'icp-member-schedule' && query.state.status === 'success')).toBe(true));
     expect(client.getQueryCache().getAll().find(query => query.queryKey[0] === 'icp-schedule-fixtures')?.state.fetchStatus).toBe('fetching');
     finish?.([]);
   });
@@ -252,7 +274,7 @@ describe("EventsPage roster-derived team scope routing", () => {
 
     await waitFor(() => expect(competitionMocks.listLivePublicCompetitions).toHaveBeenCalled());
     const eventsQuery = queryClient.getQueryCache().getAll().find((query) =>
-      query.queryKey[0] === "events" && query.queryKey[1] === "supabase",
+      query.queryKey[0] === "events" && query.queryKey[1] === "icp-member-schedule",
     );
     expect(eventsQuery?.state.error).toBeNull();
     expect(await screen.findByText("Home FC vs Away FC")).toBeInTheDocument();
