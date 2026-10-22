@@ -13,6 +13,7 @@ const TEAM_LIST_KEY_PREFIXES = [
   "clubs",
   "home-data",
   "home-feed",
+  "user-memberships-and-events",
   "user-memberships-for-events",
   "user-clubs-for-filter",
   "user-memberships",

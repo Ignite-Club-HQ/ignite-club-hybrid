@@ -1,6 +1,6 @@
 import { readContentInScope } from "../contentRouting";
 import { settleAll } from "../crossGroupClubs";
-import { acrossLists, memberLists } from "../featureScopes";
+import { memberLists } from "../featureScopes";
 import type { FeatureBackendContext } from "../featureRouter";
 import { getLiveClubProfile, getLiveTeam, listLivePersonalTeams } from "./club";
 import { listLiveEvents, listLiveMyRsvps } from "./events";
