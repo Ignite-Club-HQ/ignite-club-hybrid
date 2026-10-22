@@ -120,7 +120,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
       // every other group's results. All failing still throws (keeps cache).
       type Part = { ok: true; value: T } | { ok: false; error: unknown };
       const attempt = async (ctx: FeatureBackendContext): Promise<Part> => { try { return { ok: true, value: await fn(ctx) }; } catch (error) { return { ok: false, error }; } };
-      const [shared, groups] = await Promise.all([attempt(ctx0()), s.readEveryGroup(domain, async ctx => [await attempt(ctx)], Number.MAX_SAFE_INTEGER)]);
+      const [shared, groups] = await Promise.all([deps.legacy(feature, '', fn).then((value): Part => ({ ok: true, value }), (error): Part => ({ ok: false, error })), s.readEveryGroup(domain, async ctx => [await attempt(ctx)], Number.MAX_SAFE_INTEGER)]);
       const parts = [shared, ...groups];
       const ok = parts.filter((p): p is { ok: true; value: T } => p.ok);
       if (ok.length === 0) { const first = parts.find(p => !p.ok) as { ok: false; error: unknown }; throw first.error; }
