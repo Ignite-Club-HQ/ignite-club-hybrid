@@ -11,7 +11,10 @@ module {
   };
   public func mediaBase(sub : ?Types.ClubSubscription, now : Nat64) : Nat {
     if (not premium(sub, now)) return 262_144_000;
-    switch (sub) { case (?s) { if (s.plan == "unlimited") 5_368_709_120 else 3_221_225_472 }; case null 262_144_000 }
+    // Existing bands have no pricing-version field on-chain. Keep their
+    // prior allowance until verified versioned fulfillment can distinguish
+    // a new purchase from a legacy promo/entitlement.
+    switch (sub) { case (?s) { if (s.plan == "unlimited" or s.plan == "starter" or s.plan == "standard") 5_368_709_120 else 3_221_225_472 }; case null 262_144_000 }
   };
   public func limit(sub : ?Types.ClubSubscription, now : Nat64) : Nat {
     switch (sub) {

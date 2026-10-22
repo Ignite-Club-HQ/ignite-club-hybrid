@@ -66,7 +66,7 @@ export function assertPurchaseCatalogReady(productId: string, readyProducts: rea
   }
 }
 
-export type MediaSubscription = Parameters<typeof effectiveTeamLimit>[0] & { storage_purchased_gb?: number | null };
+export type MediaSubscription = Parameters<typeof effectiveTeamLimit>[0] & { storage_purchased_gb?: number | null; pricing_version?: string | null };
 export function hasActiveMediaSubscription(sub: MediaSubscription, now = Date.now()): boolean {
   if (!sub) return false;
   return !!(sub.admin_pro_override || sub.admin_pro_football_override ||
@@ -76,7 +76,8 @@ export function hasActiveMediaSubscription(sub: MediaSubscription, now = Date.no
 export function mediaAllowance(sub: MediaSubscription, teamSub?: MediaSubscription, now = Date.now()) {
   const premiumClub = hasActiveMediaSubscription(sub, now);
   const premiumTeam = !premiumClub && hasActiveMediaSubscription(teamSub, now);
-  const baseBytes = premiumClub ? (sub?.plan === "unlimited" ? 5 * 1024 ** 3 : CLUB_MEDIA_BYTES) : premiumTeam ? TEAM_MEDIA_BYTES : FREE_MEDIA_BYTES;
+  const legacyClub = sub?.plan === "unlimited" || (sub?.pricing_version !== "usd_v2" && (sub?.plan === "starter" || sub?.plan === "standard"));
+  const baseBytes = premiumClub ? (legacyClub ? 5 * 1024 ** 3 : CLUB_MEDIA_BYTES) : premiumTeam ? TEAM_MEDIA_BYTES : FREE_MEDIA_BYTES;
   const purchased = sub?.storage_purchased_gb ?? 0;
   if (!Number.isSafeInteger(purchased) || purchased < 0) throw new Error("Could not check storage allowance.");
   return { baseBytes, limitBytes: baseBytes + (premiumTeam ? 0 : purchased * 1024 ** 3), teamScoped: premiumTeam, premium: premiumClub || premiumTeam };
