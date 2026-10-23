@@ -27,6 +27,7 @@ import { checkLegacyOwnership } from '../../scripts/membership-legacy-ownership.
 import { fingerprint } from '../../scripts/membership-source-configuration.mjs';
 import { runOwnershipAcceptance } from '../../scripts/membership-ownership-acceptance.mjs';
 import { requireCompleteFill, checkHistoricalAcceptance, checkReplicaAcceptance } from '../../scripts/membership-acceptance-checks.mjs';
+import { recoverRejectedLookup, rejectionEvidence, REJECTED_RELEASE } from '../../scripts/membership-lookup-recovery.mjs';
 
 const [action, artifacts, pem, directory] = process.argv.slice(2);
 validateRequest(action, process.env.CONFIRMATION);
@@ -143,7 +144,32 @@ const entries = api(`contents?ref=${branch}`);
 let stored = entries.some((e: { name: string }) => e.name === 'membership-lookup-release.json') ? api(`${path}?ref=${branch}`) : null;
 const binding = { release, governor: GROUP2_GOVERNOR, router: shared.shard_router, registryRevision: String(initial.revision), directoryBinding: JSON.parse(fingerprint(directoryBinding)), configurationRevision: String(initial.configurationRevision), configuration, sources: observedSources, targets };
 let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
-if (journal && digest(journal.binding) !== digest(binding)) throw new Error('Another release journal exists; do not reset it. Review its settled outcomes before a separate release.');
+if (journal && digest(journal.binding) !== digest(binding)) {
+  // Read the original GitHub run, not user-pasted or locally edited evidence.
+  journal = await recoverRejectedLookup(journal, binding, { gate, observe,
+    evidence: async () => {
+      const result = api(`actions/workflows/release-membership-lookup.yml/runs?head_sha=${REJECTED_RELEASE}&status=failure&per_page=100`);
+      const runs = result.workflow_runs.filter((r: { head_sha: string; conclusion: string }) => r.head_sha === REJECTED_RELEASE && r.conclusion === 'failure');
+      for (const run of runs) {
+        const jobs = api(`actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`);
+        const job = jobs.jobs.find((j: { name: string; conclusion: string }) => j.name === 'release' && j.conclusion === 'failure');
+        if (!job) continue;
+        const failed = job.steps?.filter((s: { conclusion: string }) => s.conclusion === 'failure');
+        if (failed?.length !== 1 || failed[0].name !== 'Check every membership source or run the protected lookup release') continue;
+        const logs = spawnSync('gh', ['run','view',String(run.id),'--repo',repo,'--attempt',String(run.run_attempt),'--job',String(job.id),'--log-failed'], { encoding:'utf8', maxBuffer:16*1024*1024 });
+        if (logs.status !== 0) throw new Error('Original failed-run logs unavailable; pending record retained');
+        try { return { ...rejectionEvidence(run, logs.stdout), attempt:run.run_attempt, jobId:job.id }; }
+        catch { /* A different failed attempt is not recovery evidence. */ }
+      }
+      throw new Error('Original CLI rejection cannot be verified from GitHub; pending record retained');
+    },
+    persist: async (recovered: unknown) => {
+      stored = persistGroup2Journal(api, path, branch, stored, recovered, 'membership-lookup');
+      writeFileSync(resolve(directory, 'progress.json'), JSON.stringify(recovered, null, 2));
+    },
+  });
+  console.log('Verified the original CLI rejection and two complete unchanged live inventories; original intent retained in recovery receipt.');
+}
 if (!journal) {
   journal = { binding, complete: false, ready: false, fill: Object.fromEntries(observedSources.map(s => [s.groupId, false])), steps: observations.map(s => ({ ...s, oldHash: s.moduleHash, phase: 'ready' })) };
 }
