@@ -48,6 +48,10 @@ vi.mock("@/components/UpcomingClassesWidget", () => ({
 vi.mock("@/components/ContactClubButton", () => ({
   ContactClubButton: () => null,
 }));
+vi.mock("@/components/competitions/ContactCompetitionAdminsButton", () => ({
+  ContactCompetitionAdminsList: () => null,
+  ContactCompetitionAdminsButton: () => null,
+}));
 
 function renderOverview(
   overrides: Partial<Parameters<typeof HomeDashboardOverview>[0]> = {},
