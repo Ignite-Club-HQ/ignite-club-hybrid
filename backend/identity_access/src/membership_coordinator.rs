@@ -324,6 +324,42 @@ impl<M:Memory+Clone> Coordinator<M>{
     type Mem=VirtualMemory<VectorMemory>;
     fn open(m:&MemoryManager<VectorMemory>)->Coordinator<Mem>{Coordinator::open(m.get(MemoryId::new(0)),Pool::open(m.get(MemoryId::new(1)),m.get(MemoryId::new(2)),10000,32).unwrap(),m.get(MemoryId::new(3)))}
     fn viewer(p:Principal)->Viewer{Viewer{account:"member".into(),version:1,aliases:vec![p]}}
+    #[test]fn bounded_exclusive_legacy_acceptance_survives_upgrade_and_rejects_new_notifications(){
+        let manager=MemoryManager::init(VectorMemory::default());let (s,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&s,&pin,&a,1).unwrap()).unwrap();
+        let edges=(0..205).map(|n|Edge::Club{id:format!("legacy{n:03}"),deleted:n==204}).collect();
+        finish(&mut c,"g1",a[1],1,edges);finish(&mut c,"g0",a[0],1,vec![Edge::Club{id:"new".into(),deleted:false}]);
+        let binding=c.build("g1").unwrap().binding;c.unresolved_location("g1",&binding).unwrap();
+        assert!(c.advance_ownership(None).is_err());assert!(c.accepted_ownership().is_err());
+        let p=c.advance_ownership(Some(a[1])).unwrap();assert_eq!(p.scanned,100);assert!(!p.complete);assert!(!p.verified_current);drop(c);
+        let mut c=open(&manager);let mut calls=1;
+        loop{let p=c.advance_ownership(Some(a[1])).unwrap();assert!(p.scanned<=100);calls+=1;if p.complete{assert_eq!(p.clubs,206);break;}assert!(calls<20);}
+        c.accepted_ownership().unwrap();c.require_resolved_locations().unwrap();drop(c);
+        let mut c=open(&manager);c.accepted_ownership().unwrap();
+        let mut newer=c.build("g0").unwrap().binding;newer.revision=2;c.observe_invalidation("g0",&newer).unwrap();
+        assert!(c.accepted_ownership().is_err());assert!(c.require_resolved_locations().is_err());assert!(c.advance_ownership(Some(a[1])).is_err());
+        finish(&mut c,"g0",a[0],2,vec![Edge::Club{id:"changed".into(),deleted:false}]);assert!(c.accepted_ownership().is_err());
+        loop{if c.advance_ownership(Some(a[1])).unwrap().complete{break;}}
+        c.accepted_ownership().unwrap();
+    }
+    #[test]fn duplicate_clubs_including_tombstones_never_accept_ownership(){
+        for deleted in [false,true]{
+            let manager=MemoryManager::init(VectorMemory::default());let (s,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
+            c.bind_inventory(verify_inventory(&s,&pin,&a,1).unwrap()).unwrap();
+            finish(&mut c,"g0",a[0],1,vec![Edge::Club{id:"same".into(),deleted:false}]);
+            finish(&mut c,"g1",a[1],1,vec![Edge::Club{id:"same".into(),deleted}]);
+            assert!(c.advance_ownership(Some(a[1])).is_err());assert!(c.accepted_ownership().is_err());
+        }
+    }
+    #[test]fn incomplete_unchecked_and_nonlegacy_missing_assignments_cannot_be_accepted(){
+        let manager=MemoryManager::init(VectorMemory::default());let (s,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&s,&pin,&a,1).unwrap()).unwrap();finish(&mut c,"g1",a[1],1,vec![]);
+        assert!(c.advance_ownership(Some(a[1])).is_err());
+        finish(&mut c,"g0",a[0],1,vec![]);let binding=c.build("g0").unwrap().binding;
+        c.unresolved_location("g0",&binding).unwrap();assert!(c.advance_ownership(Some(a[1])).is_err());
+        let mut b=c.build("g0").unwrap();b.unresolved_locations=false;b.location_checks_from_start=false;c.save("g0",&b);
+        assert!(c.advance_ownership(Some(a[1])).is_err());assert!(c.accepted_ownership().is_err());
+    }
     #[test]fn original_mainnet_pin_matches_exact_existing_canisters_and_deployment(){
         let (_,mut pin,_)=group_inventory::tests::fixture();pin.registry=Principal::from_text("jcdfe-vqaaa-aaaal-qxloq-cai").unwrap();
         pin.target_alias="mainnet".into();pin.deployment_id="mainnet".into();pin.host="https://icp-api.io".into();

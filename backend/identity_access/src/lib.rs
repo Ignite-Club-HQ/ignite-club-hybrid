@@ -702,12 +702,15 @@ async fn advance_membership_directory_ownership()->Outcome<membership_coordinato
     let inventory=if let Some(p)=original{membership_coordinator::verify_inventory_with_original(&first,&config.binding,&required,config.generation,p)?}
         else{membership_coordinator::verify_inventory(&first,&config.binding,&required,config.generation)?};
     if inventory.digest().as_slice()!=config.inventory_digest.as_slice()||inventory.source_bindings()!=config.sources{return Err("Ownership inventory changed".into());}
+    let captured=DIRECTORY_COORDINATOR.with(|c|c.borrow().sources())?;
     for (source,authority) in &config.sources{
         let (current,acknowledged,pending)=directory_source_status(&config,source,*authority).await?;
-        if pending||current!=acknowledged{return Err("Ownership source has pending membership changes".into());}
+        if pending||current!=acknowledged||captured.iter().find(|s|&s.id==source).is_none_or(|s|s.binding.revision!=current){return Err("Ownership source has pending membership changes or changed revision".into());}
     }
     let second=read_registry_pages(&config.binding,check).await?;
     if first!=second{return Err("Ownership registry changed".into());}recheck_directory(&config)?;
+    let after=DIRECTORY_COORDINATOR.with(|c|c.borrow().sources())?;
+    if captured.iter().map(|s|(&s.id,&s.binding)).collect::<Vec<_>>()!=after.iter().map(|s|(&s.id,&s.binding)).collect::<Vec<_>>(){return Err("Ownership build changed during status checks".into());}
     DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().advance_ownership(original))
 }
 // Independent of start: an exhausted pool must still be reclaimable.
