@@ -9,6 +9,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/useDebounce";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -22,6 +24,15 @@ interface ParentCandidate {
   avatar_url: string | null;
   role: string;
   onThisTeam: boolean;
+}
+
+interface ClubChildMatch {
+  child_id: string;
+  name: string;
+  year_of_birth: number | null;
+  team_names: string[];
+  guardian_names: string[];
+  on_this_team: boolean;
 }
 
 interface Props {
@@ -61,6 +72,9 @@ export default function AddPlayerToParentSheet({
   const [search, setSearch] = useState("");
   const [childName, setChildName] = useState("");
   const [yearOfBirth, setYearOfBirth] = useState("");
+  const [confirmNew, setConfirmNew] = useState(false);
+  const debouncedName = useDebounce(childName, 300);
+  const isIcp = resolveAuthBackend() === "icp";
 
   const teamParents: ParentCandidate[] = useMemo(() => {
     const map = new Map<string, ParentCandidate>();
@@ -200,7 +214,59 @@ export default function AddPlayerToParentSheet({
     },
   });
 
-  const canSubmit = !!selectedParentId && childName.trim().length > 0 && !addPlayer.isPending;
+  // Existing-player lookup (Supabase only — no on-chain child search yet):
+  // typing a name searches club children so an existing player can be added
+  // instead of creating a duplicate.
+  const { data: matches = [], isFetching: isMatchesLoading } = useQuery({
+    queryKey: ["club-child-search", teamId, debouncedName.trim().toLowerCase()],
+    enabled: !isIcp && open && debouncedName.trim().length >= 2,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("search_club_children_for_team" as any, {
+        p_team_id: teamId,
+        p_query: debouncedName.trim(),
+      });
+      if (error) throw error;
+      return ((data as any[]) ?? []).map((r) => ({
+        child_id: r.child_id as string,
+        name: r.name as string,
+        year_of_birth: r.year_of_birth as number | null,
+        team_names: (r.team_names ?? []) as string[],
+        guardian_names: (r.guardian_names ?? []) as string[],
+        on_this_team: !!r.on_this_team,
+      })) as ClubChildMatch[];
+    },
+  });
+
+  const linkExisting = useMutation({
+    mutationFn: async (m: ClubChildMatch) => {
+      if (m.on_this_team) throw new Error("This player is already on this team");
+      const { error } = await supabase.rpc("add_existing_club_child_to_team" as any, {
+        p_team_id: teamId,
+        p_child_id: m.child_id,
+      });
+      if (error) throw error;
+      return m;
+    },
+    onSuccess: (m) => {
+      toast({ title: "Player added", description: `${m.name} added to ${teamName}.` });
+      queryClient.invalidateQueries({ queryKey: membershipKeys.teamChildren(teamId) });
+      queryClient.invalidateQueries({ queryKey: ["club-child-search", teamId] });
+      refreshTeamRoleChange(queryClient, teamId);
+      handleOpenChange(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Couldn't add player", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Creating a brand-new player is a deliberate choice once a search ran.
+  const searched = !isIcp && childName.trim().length >= 2;
+  const canSubmit =
+    !!selectedParentId &&
+    childName.trim().length > 0 &&
+    (!searched || confirmNew) &&
+    !addPlayer.isPending;
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
@@ -317,10 +383,57 @@ export default function AddPlayerToParentSheet({
             <Input
               id="child-name"
               value={childName}
-              onChange={(e) => setChildName(e.target.value)}
+              onChange={(e) => { setChildName(e.target.value); setConfirmNew(false); }}
               placeholder="e.g. Emmy Collings"
-              disabled={addPlayer.isPending}
+              disabled={addPlayer.isPending || linkExisting.isPending}
+              autoComplete="off"
             />
+            {!isIcp && debouncedName.trim().length >= 2 && !confirmNew && (
+              <div className="rounded-lg border divide-y max-h-72 overflow-y-auto">
+                {isMatchesLoading ? (
+                  <div className="p-3 text-sm text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Searching club players…
+                  </div>
+                ) : (
+                  <>
+                    {matches.length > 0 && (
+                      <p className="px-3 py-2 text-[11px] text-muted-foreground">
+                        Already in the club — tap to add to {teamName}
+                      </p>
+                    )}
+                    {matches.map((m) => (
+                      <button
+                        key={m.child_id}
+                        type="button"
+                        disabled={m.on_this_team || linkExisting.isPending}
+                        onClick={() => linkExisting.mutate(m)}
+                        className="w-full p-3 text-left hover:bg-muted/60 transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
+                      >
+                        <p className="text-sm font-medium">
+                          {m.name}
+                          {m.year_of_birth ? <span className="text-muted-foreground font-normal"> · {m.year_of_birth}</span> : null}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {m.on_this_team
+                            ? "Already on this team"
+                            : `Team: ${m.team_names.join(", ") || "None"}`}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Parent: {m.guardian_names.join(", ") || "Not listed"}
+                        </p>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setConfirmNew(true)}
+                      className="w-full p-3 text-left text-sm text-primary hover:bg-muted/60 flex items-center gap-2"
+                    >
+                      <UserPlus className="h-4 w-4" /> Create new player: “{childName.trim()}”
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

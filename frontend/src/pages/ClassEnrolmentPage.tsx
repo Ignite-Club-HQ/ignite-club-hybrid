@@ -636,10 +636,11 @@ function SupabaseClassEnrolmentPage() {
           {classes.map((cls) => {
             const currentCount = enrolmentCounts[cls.id] || 0;
             const isFull = cls.class_capacity && currentCount >= cls.class_capacity;
-            const childEnrolment = selectedChildId ? getChildEnrolment(selectedChildId, cls.id) : (children.length === 1 ? getChildEnrolment(children[0].id, cls.id) : null);
+            const activeChild = selectedChildId || children[0]?.id || "";
+            const childEnrolment = activeChild ? getChildEnrolment(activeChild, cls.id) : null;
             const selfEnrolment = getSelfEnrolment(cls.id);
             const isEnrolled = !!childEnrolment || !!selfEnrolment;
-            const enrolment = childEnrolment || selfEnrolment;
+            const activeChildName = children.find((c) => c.id === activeChild)?.name || "Child";
 
             return (
               <Card key={cls.id} className={isEnrolled ? "border-primary/50 bg-primary/5" : ""}>
@@ -688,79 +689,165 @@ function SupabaseClassEnrolmentPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between gap-2">
-                    {isEnrolled ? (
-                      <>
-                        <Badge variant={enrolment?.status === "enrolled" ? "default" : "outline"} className="gap-1">
-                          {enrolment?.status === "enrolled" ? "Enrolled" : "Waitlisted"}
-                          {enrolment?.waitlist_position && ` #${enrolment.waitlist_position}`}
-                        </Badge>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                              Withdraw
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Withdraw from class?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to withdraw {childEnrolment ? "your child" : "yourself"} from {cls.name}?
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => withdrawMutation.mutate(enrolment!.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Withdraw
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </>
-                    ) : (
-                      <div className="flex gap-2 w-full">
-                        {allowsChildren(cls.team_type) && (hasChildClasses && (children.length > 0)) && (
-                          <Button
-                            className="flex-1"
-                            disabled={enrolChildMutation.isPending || (!selectedChildId && children.length > 1)}
-                            onClick={() => {
-                              const cid = selectedChildId || (children.length === 1 ? children[0].id : "");
-                              if (cid) {
-                                setEnrollingClassId(cls.id);
-                                enrolChildMutation.mutate({ childId: cid, teamId: cls.id });
-                              }
-                            }}
-                          >
-                            {enrolChildMutation.isPending && enrollingClassId === cls.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : (
-                              <UserPlus className="h-4 w-4 mr-2" />
-                            )}
-                            {isFull ? "Join Waitlist" : "Enrol Child"}
-                          </Button>
-                        )}
-                        {allowsAdults(cls.team_type) && (
-                          <Button
-                            variant={allowsChildren(cls.team_type) ? "outline" : "default"}
-                            className="flex-1"
-                            disabled={enrolSelfMutation.isPending}
-                            onClick={() => {
-                              setEnrollingClassId(cls.id);
-                              enrolSelfMutation.mutate({ teamId: cls.id });
-                            }}
-                          >
-                            {enrolSelfMutation.isPending && enrollingClassId === cls.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : (
-                              <UserPlus className="h-4 w-4 mr-2" />
-                            )}
-                            {isFull ? "Join Waitlist" : "Enrol Self"}
-                          </Button>
+                  <div className="mt-4 space-y-2">
+                    {/* Child enrolment — independent of the adult's own enrolment */}
+                    {allowsChildren(cls.team_type) && children.length > 0 && activeChild && (
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
+                        <span className="text-sm text-muted-foreground">{activeChildName}</span>
+                        {childEnrolment ? (
+                          <div className="flex items-center gap-2">
+                            <Badge variant={childEnrolment.status === "enrolled" ? "default" : "secondary"}>
+                              {childEnrolment.status === "enrolled" ? "Enrolled" : `Waitlisted${childEnrolment.waitlist_position ? ` #${childEnrolment.waitlist_position}` : ""}`}
+                            </Badge>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive h-7 text-xs" disabled={withdrawMutation.isPending}>
+                                  Withdraw
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Withdraw from class?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to withdraw {activeChildName} from <strong>{cls.name}</strong>? You can re-enrol later if spots are available.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    onClick={() => withdrawMutation.mutate(childEnrolment.id)}
+                                  >
+                                    Withdraw
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        ) : (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="sm" variant={isFull ? "outline" : "default"} disabled={enrolChildMutation.isPending}>
+                                {enrolChildMutation.isPending && enrollingClassId === cls.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <UserPlus className="h-4 w-4 mr-1" />
+                                    {isFull ? "Join Waitlist" : "Enrol"}
+                                  </>
+                                )}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>{isFull ? "Join waitlist?" : "Confirm enrolment"}</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  {isFull
+                                    ? <>The class <strong>{cls.name}</strong> is currently full. {activeChildName} will be added to the waitlist and notified when a spot becomes available.</>
+                                    : <>Are you sure you want to enrol {activeChildName} in <strong>{cls.name}</strong>?</>
+                                  }
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => {
+                                    setEnrollingClassId(cls.id);
+                                    enrolChildMutation.mutate({ childId: activeChild, teamId: cls.id });
+                                  }}
+                                >
+                                  {isFull ? "Join Waitlist" : "Enrol"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
                       </div>
+                    )}
+
+                    {/* Adult self-enrolment — independent of the child's enrolment */}
+                    {allowsAdults(cls.team_type) && (
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
+                        <span className="text-sm text-muted-foreground">Your enrolment</span>
+                        {selfEnrolment ? (
+                          <div className="flex items-center gap-2">
+                            <Badge variant={selfEnrolment.status === "enrolled" ? "default" : "secondary"}>
+                              {selfEnrolment.status === "enrolled" ? "Enrolled" : `Waitlisted${selfEnrolment.waitlist_position ? ` #${selfEnrolment.waitlist_position}` : ""}`}
+                            </Badge>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive h-7 text-xs" disabled={withdrawMutation.isPending}>
+                                  Withdraw
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Withdraw from class?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to withdraw from <strong>{cls.name}</strong>? You can re-enrol later if spots are available.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    onClick={() => withdrawMutation.mutate(selfEnrolment.id)}
+                                  >
+                                    Withdraw
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        ) : (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="sm" variant={isFull ? "outline" : "default"} disabled={enrolSelfMutation.isPending}>
+                                {enrolSelfMutation.isPending && enrollingClassId === cls.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <UserPlus className="h-4 w-4 mr-1" />
+                                    {isFull ? "Join Waitlist" : "Enrol"}
+                                  </>
+                                )}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>{isFull ? "Join waitlist?" : "Confirm enrolment"}</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  {isFull
+                                    ? <>The class <strong>{cls.name}</strong> is currently full. You will be added to the waitlist and notified when a spot becomes available.</>
+                                    : <>Are you sure you want to enrol in <strong>{cls.name}</strong>?</>
+                                  }
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => {
+                                    setEnrollingClassId(cls.id);
+                                    enrolSelfMutation.mutate({ teamId: cls.id });
+                                  }}
+                                >
+                                  {isFull ? "Join Waitlist" : "Enrol"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Child-only class with no children yet — shortcut to add one */}
+                    {allowsChildren(cls.team_type) && !allowsAdults(cls.team_type) && children.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">
+                        <Button variant="link" className="h-auto p-0 text-xs" onClick={() => navigate("/children")}>
+                          Add a child profile
+                        </Button>{" "}
+                        to enrol.
+                      </p>
                     )}
                   </div>
                 </CardContent>
@@ -791,10 +878,13 @@ function SupabaseClassEnrolmentPage() {
               <p className="text-sm text-muted-foreground px-1 italic">No classes scheduled for this day.</p>
             ) : (
               classesForSelectedDate.map((cls) => {
-                const childEnrolment = selectedChildId ? getChildEnrolment(selectedChildId, cls.id) : (children.length === 1 ? getChildEnrolment(children[0].id, cls.id) : null);
+                const activeChild = selectedChildId || children[0]?.id || "";
+                const childEnrolment = activeChild ? getChildEnrolment(activeChild, cls.id) : null;
                 const selfEnrolment = getSelfEnrolment(cls.id);
                 const isEnrolled = !!childEnrolment || !!selfEnrolment;
-                const enrolment = childEnrolment || selfEnrolment;
+                // A party can still enrol when their side is allowed and not yet enrolled.
+                const canStillEnrolChild = allowsChildren(cls.team_type) && !!activeChild && !childEnrolment;
+                const canStillEnrolSelf = allowsAdults(cls.team_type) && !selfEnrolment;
 
                 return (
                   <Card key={cls.id} className={isEnrolled ? "border-primary/50 bg-primary/5" : ""}>
@@ -816,29 +906,36 @@ function SupabaseClassEnrolmentPage() {
                             </div>
                           </div>
                         </div>
-                        {isEnrolled ? (
-                          <Badge variant={enrolment?.status === "enrolled" ? "default" : "outline"} className="text-[10px] px-1.5 h-5">
-                            {enrolment?.status === "enrolled" ? "Enrolled" : "Waitlisted"}
-                          </Badge>
-                        ) : (
-                          <Button
-                            size="sm"
-                            className="h-7 text-xs px-2"
-                            onClick={() => {
-                              // Auto-enrol based on priority (child if child selector has selection, else self)
-                              if (allowsChildren(cls.team_type) && (selectedChildId || children.length === 1)) {
-                                const cid = selectedChildId || children[0].id;
-                                setEnrollingClassId(cls.id);
-                                enrolChildMutation.mutate({ childId: cid, teamId: cls.id });
-                              } else if (allowsAdults(cls.team_type)) {
-                                setEnrollingClassId(cls.id);
-                                enrolSelfMutation.mutate({ teamId: cls.id });
-                              }
-                            }}
-                          >
-                            Enrol
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {childEnrolment && (
+                            <Badge variant={childEnrolment.status === "enrolled" ? "default" : "outline"} className="text-[10px] px-1.5 h-5">
+                              {childEnrolment.status === "enrolled" ? "Enrolled" : "Waitlisted"}
+                            </Badge>
+                          )}
+                          {selfEnrolment && (
+                            <Badge variant={selfEnrolment.status === "enrolled" ? "default" : "outline"} className="text-[10px] px-1.5 h-5">
+                              You: {selfEnrolment.status === "enrolled" ? "Enrolled" : "Waitlisted"}
+                            </Badge>
+                          )}
+                          {(canStillEnrolChild || canStillEnrolSelf) && (
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs px-2"
+                              onClick={() => {
+                                // Enrol the child when their side is open, otherwise self.
+                                if (canStillEnrolChild) {
+                                  setEnrollingClassId(cls.id);
+                                  enrolChildMutation.mutate({ childId: activeChild, teamId: cls.id });
+                                } else if (canStillEnrolSelf) {
+                                  setEnrollingClassId(cls.id);
+                                  enrolSelfMutation.mutate({ teamId: cls.id });
+                                }
+                              }}
+                            >
+                              Enrol
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

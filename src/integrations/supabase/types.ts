@@ -4677,6 +4677,7 @@ export type Database = {
           max_guests_per_member: number | null
           meet_time: string | null
           mini_league_id: string | null
+          notify_suppressed: boolean
           opponent: string | null
           parent_event_id: string | null
           player_of_match: string | null
@@ -4735,6 +4736,7 @@ export type Database = {
           max_guests_per_member?: number | null
           meet_time?: string | null
           mini_league_id?: string | null
+          notify_suppressed?: boolean
           opponent?: string | null
           parent_event_id?: string | null
           player_of_match?: string | null
@@ -4793,6 +4795,7 @@ export type Database = {
           max_guests_per_member?: number | null
           meet_time?: string | null
           mini_league_id?: string | null
+          notify_suppressed?: boolean
           opponent?: string | null
           parent_event_id?: string | null
           player_of_match?: string | null
@@ -13156,6 +13159,10 @@ export type Database = {
           p_recipient_user_id: string
           p_team_name: string
         }
+        Returns: undefined
+      }
+      send_fixture_import_summary: {
+        Args: { p_event_ids: string[] }
         Returns: undefined
       }
       send_game_stats_email_rpc: {

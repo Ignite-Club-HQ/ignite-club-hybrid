@@ -24,6 +24,7 @@ export type EventRecipientContext = {
   clubId?: string | null;
   miniLeagueId?: string | null;
   targetTeamIds?: string[] | null;
+  competitionId?: string | null;
   restrictedToRoles?: string[] | null;
 };
 
@@ -31,11 +32,13 @@ export type EventRecipientScope =
   | "mini_league"
   | "team"
   | "club_targeted"
-  | "club_untargeted";
+  | "club_untargeted"
+  | "competition";
 
 export function getEventRecipientScope(ctx: EventRecipientContext): EventRecipientScope {
   if (ctx.miniLeagueId) return "mini_league";
   if (ctx.teamId) return "team";
+  if (ctx.competitionId) return "competition";
   const targets = (ctx.targetTeamIds ?? []).filter(Boolean);
   if (targets.length > 0) return "club_targeted";
   return "club_untargeted";
@@ -53,6 +56,12 @@ export async function resolveEventRecipients(
   ctx: EventRecipientContext,
 ): Promise<string[]> {
   const scope = getEventRecipientScope(ctx);
+
+  if (scope === "competition") {
+    const { data, error } = await client.rpc("get_competition_event_recipients", { p_event_id: ctx.eventId });
+    if (error) throw error;
+    return uniq((data ?? []).map((r: any) => (typeof r === "string" ? r : r?.get_competition_event_recipients ?? r?.user_id)));
+  }
 
   if (scope === "club_targeted") {
     const { data, error } = await client.rpc(
@@ -121,6 +130,7 @@ export function eventRecipientContext(event: any, eventId: string): EventRecipie
     clubId: event?.club_id ?? null,
     miniLeagueId: event?.mini_league_id ?? null,
     targetTeamIds: Array.isArray(event?.target_team_ids) ? event.target_team_ids : null,
+    competitionId: event?.competition_id ?? null,
     restrictedToRoles: Array.isArray(event?.restricted_to_roles)
       ? event.restricted_to_roles
       : null,

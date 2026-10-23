@@ -657,13 +657,34 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
         }
       }
 
-      const eventsToInsert = fixturesToInsert.map(fixture => {
+      // Bulk import notification behaviour: the earliest game per team sends the
+      // normal per-game invite; every other game is inserted with
+      // notify_suppressed = true and the team gets one summary alert instead
+      // (sent via send_fixture_import_summary after the insert).
+      const firstFixtureKeyByTeam = new Map<string, number>();
+      fixturesToInsert.forEach((fixture, idx) => {
+        const tId = fixture.teamId || teamId || null;
+        if (!tId) return;
+        const existing = firstFixtureKeyByTeam.get(tId);
+        if (existing === undefined) {
+          firstFixtureKeyByTeam.set(tId, idx);
+          return;
+        }
+        const existingFixture = fixturesToInsert[existing];
+        const thisStart = `${fixture.date}T${fixture.time}`;
+        const existingStart = `${existingFixture.date}T${existingFixture.time}`;
+        if (thisStart < existingStart) firstFixtureKeyByTeam.set(tId, idx);
+      });
+
+      const eventsToInsert = fixturesToInsert.map((fixture, idx) => {
         const eventDateTime = new Date(`${fixture.date}T${fixture.time}`);
+        const tId = fixture.teamId || teamId || null;
+        const isFirstForTeam = tId ? firstFixtureKeyByTeam.get(tId) === idx : true;
         return {
           title: fixture.title,
           type: 'game' as const,
           club_id: clubId,
-          team_id: fixture.teamId || teamId || null,
+          team_id: tId,
           event_date: eventDateTime.toISOString(),
           start_time: eventDateTime.toISOString(),
           address: fixture.address || null,
@@ -674,13 +695,31 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
           is_recurring: false,
           opponent: fixture.opponent || null,
           is_home_game: fixture.isHomeGame ?? null,
+          notify_suppressed: !isFirstForTeam,
         };
       });
 
       await withFeatureBackend("events", {
         supabase: async () => {
-          const { error } = await supabase.from("events").insert(eventsToInsert);
+          const { data: insertedEvents, error } = await supabase
+            .from("events")
+            .insert(eventsToInsert)
+            .select("id, team_id");
           if (error) throw error;
+
+          // One summary alert per team that had more than one game imported.
+          const suppressedIds = (insertedEvents || [])
+            .filter((e) => e.team_id && firstFixtureKeyByTeam.has(e.team_id))
+            .map((e) => e.id);
+          const hasSuppressed = eventsToInsert.some((e) => e.notify_suppressed);
+          if (hasSuppressed && suppressedIds.length > 0) {
+            const { error: summaryError } = await supabase.rpc("send_fixture_import_summary" as any, {
+              p_event_ids: suppressedIds,
+            });
+            if (summaryError) {
+              console.error("Fixture import summary notification failed:", summaryError);
+            }
+          }
         },
         // ICP: create one events_domain event per fixture row, mapping the
         // same fields the Supabase insert above writes (title/opponent,

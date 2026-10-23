@@ -168,6 +168,7 @@ describe("unchanged behaviour", () => {
       clubId: "c1",
       miniLeagueId: null,
       targetTeamIds: ["t1"],
+      competitionId: null,
       restrictedToRoles: null,
     });
   });

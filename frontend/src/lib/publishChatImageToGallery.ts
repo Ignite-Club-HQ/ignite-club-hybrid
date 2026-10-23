@@ -40,7 +40,7 @@ export interface PublishChatImageResult {
 }
 
 const PHOTOS_BUCKET = "photos";
-const SUPABASE_URL = "REDACTED_LAB_VALUE";
+const SUPABASE_URL = "https://yabcfiuntwqjwvschnji.supabase.co";
 
 function inferExtension(blob: Blob, fallback = "jpg"): string {
   const fromMime = blob.type?.split("/")?.[1];

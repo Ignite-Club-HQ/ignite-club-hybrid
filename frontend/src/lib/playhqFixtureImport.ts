@@ -41,28 +41,68 @@ export function normalisePlayHQDate(raw: string): string {
   return value;
 }
 
+const VALID_DATE = /^\d{2}\/\d{2}\/\d{4}$/;
+const PIECE_SPLIT = /\s*(?:,|;|\n|&|\band\b|\bto\b|\s[-–]\s|\|)\s*/i;
+
+/**
+ * Expand a day range into individual dd/mm/yyyy dates. When `to < from`
+ * the range crosses a month boundary ("31-1/11/2026": the month/year
+ * belong to the last day).
+ */
+function expandDayRange(from: number, to: number, month: number, year: number): string[] {
+  const out: string[] = [];
+  const start = to >= from ? new Date(year, month - 1, from) : new Date(year, month - 2, from);
+  const end = new Date(year, month - 1, to);
+  for (let d = start; d <= end && out.length < 7; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+    out.push(toPlayHQDate(d));
+  }
+  return out;
+}
+
 function expandSharedDayRange(value: string): string[] {
   const match = value.trim().match(/^(\d{1,2})\s*[-–&]\s*(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})$/);
   if (!match) return [];
-  const from = Number(match[1]);
-  const to = Number(match[2]);
-  const month = Number(match[3]);
-  const year = fullYear(match[4]);
-  if (to < from || to - from > 6) return [];
-  return Array.from({ length: to - from + 1 }, (_, offset) => `${pad(from + offset)}/${pad(month)}/${year}`);
+  return expandDayRange(Number(match[1]), Number(match[2]), Number(match[3]), fullYear(match[4]));
 }
 
+/** Named-month day range: "17-18 Oct 2026" / "Sat 17 - Sun 18 October 2026". */
+function expandNamedMonthRange(value: string): string[] {
+  const match = value.trim().match(/^(?:[a-z]{3,9}\s+)?(\d{1,2})(?:st|nd|rd|th)?\s*[-–&]\s*(?:[a-z]{3,9}\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})\.?,?\s+(\d{4})$/i);
+  if (!match) return [];
+  const month = MONTHS[match[3].slice(0, 4).toLowerCase()] ?? MONTHS[match[3].slice(0, 3).toLowerCase()];
+  if (!month) return [];
+  return expandDayRange(Number(match[1]), Number(match[2]), month, Number(match[4]));
+}
+
+/**
+ * Every date in a cell, as dd/mm/yyyy, in order. Handles
+ * "17/10/2026, 18/10/2026", "17/10/2026 - 18/10/2026", "17-18/10/2026",
+ * "17-18 Oct 2026", "31-1/11/2026", "17/10 - 18/10/2026", one date per
+ * line, etc. Pieces without a year borrow the year found elsewhere in
+ * the cell.
+ */
 export function extractPlayHQDates(raw: string): string[] {
   const value = raw.trim();
   if (!value) return [];
   const sharedRange = expandSharedDayRange(value);
   if (sharedRange.length) return sharedRange;
+  const namedRange = expandNamedMonthRange(value);
+  if (namedRange.length) return namedRange;
   const isoDates = [...value.matchAll(/\d{4}-\d{1,2}-\d{1,2}/g)].map(([date]) => normalisePlayHQDate(date));
   if (isoDates.length) return [...new Set(isoDates)];
-  const numericDates = [...value.matchAll(/\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}/g)].map(([date]) => normalisePlayHQDate(date));
-  if (numericDates.length) return [...new Set(numericDates)];
+  const year = value.match(/\b(20\d{2})\b/)?.[1];
+  const pieces = value.split(PIECE_SPLIT).filter(Boolean);
+  const dates: string[] = [];
+  for (const piece of pieces) {
+    const withYear = year && !/\b\d{4}\b/.test(piece) && !/\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2}\b/.test(piece)
+      ? `${piece} ${year}`
+      : piece;
+    const d = normalisePlayHQDate(withYear);
+    if (VALID_DATE.test(d) && !dates.includes(d)) dates.push(d);
+  }
+  if (dates.length >= 2) return dates;
   const single = normalisePlayHQDate(value);
-  return /^\d{2}\/\d{2}\/\d{4}$/.test(single) ? [single] : [];
+  return VALID_DATE.test(single) ? [single] : [];
 }
 
 export function normalisePlayHQTime(raw: string): string {
