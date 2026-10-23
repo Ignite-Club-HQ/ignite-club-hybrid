@@ -1,6 +1,7 @@
 ## Follow-up page-loading audit — 23 October 2026
 - [x] Re-audit complete: nine remaining source defects recorded in docs/icp-page-opening-followup-2026-10-23.md; focused checks pass in both modes. No app code changed.
-- [ ] Repair the nine follow-up defects together with regressions (Paul approved 23 October 10:11 UTC); preserve access checks, quiet loading and incomplete-feed protection. Signed-in acceptance requires an Internet Identity session; publication remains separately approved.
+- [x] Repair the nine follow-up defects together with regressions (Paul approved 23 October 10:11 UTC): bounded membership/session/fanout reads, scoped callbacks, existing-thread-first/message-first club chat, bounded schedule/roster enrichment, independent Home team events, progressive carousel/legacy Media, retryable Vault errors and decoded admin-chat profile. ICP 158/Supabase 159 focused checks passed; preview build OK. Access gates and quiet loading retained; partial snapshots excluded. No canister changes or publication.
+- [ ] Follow-up live acceptance: confirm Events, Vault, chat and Home with Paul's Internet Identity account; blocked on unavailable signed-in session. Publication requires separate approval.
 
 ## Safe GitHub setup transfer — 23 October 2026
 - [x] 08:19 UTC cross-page audit and repairs: team-chat header owner routing, metadata error preservation, missing-only chat provisioning, bounded event labels/thread enrichment, scoped Vault loading/link retries, progressive nonpersistent partial Home results, bounded membership refresh/late disposal and scoped ownership probes. Independent audits and focused two-backend regressions recorded in docs/icp-page-opening-audit-2026-10-23.md. No canister deployment/publication/repository transfer.

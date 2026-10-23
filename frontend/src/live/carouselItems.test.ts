@@ -13,6 +13,12 @@ beforeEach(() => {
   mocks.trial.mockResolvedValue(null); mocks.leagues.mockResolvedValue([]);
 });
 describe('independent carousel cards', () => {
+  it('does not treat an empty optional trial date as an active trial', async () => {
+    mocks.trial.mockResolvedValue({ is_pro: true, trial_ends_at_ms: [] });
+    expect((await fetchIcpCarouselItems({} as never, 'club-a')).items[0]?.isOnTrial).toBe(false);
+    mocks.trial.mockResolvedValue({ is_pro: true, trial_ends_at_ms: [1n] });
+    expect((await fetchIcpCarouselItems({} as never, 'club-a')).items[0]?.isOnTrial).toBe(true);
+  });
   it('publishes a verified team before club labels, trial and league reads finish', async () => {
     vi.useFakeTimers();
     try {
