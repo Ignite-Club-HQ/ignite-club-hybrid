@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ haptic: vi.fn() }));
@@ -8,6 +9,45 @@ vi.mock("@/lib/haptics", () => ({ hapticSelectionTick: mocks.haptic }));
 import { ChatSendButton } from "./ChatSendButton";
 
 describe("ChatSendButton visibility and send contract", () => {
+  it("sends consecutive drafts while the first delivery remains pending", () => {
+    vi.useFakeTimers();
+    const delivered = vi.fn();
+    const submitted: string[] = [];
+    function Composer() {
+      const [draft, setDraft] = useState("");
+      const [pending, setPending] = useState(false);
+      return <>
+        <input aria-label="Message" value={draft} onChange={event => setDraft(event.target.value)} />
+        <ChatSendButton allowConcurrentSend loading={pending} canSend={!!draft.trim()}
+          onSend={() => {
+            submitted.push(draft);
+            setDraft("");
+            setPending(true);
+            window.setTimeout(() => delivered(draft), 10000);
+          }} />
+      </>;
+    }
+    try {
+      render(<Composer />);
+      const input = screen.getByRole("textbox", { name: "Message" });
+      const send = screen.getByRole("button", { name: "Send message" });
+      fireEvent.change(input, { target: { value: "First message" } });
+      fireEvent.click(send);
+      expect(send).toBeDisabled();
+      act(() => vi.advanceTimersByTime(301));
+      fireEvent.change(input, { target: { value: "Second message" } });
+      expect(send).toBeEnabled();
+      expect(send.querySelector(".animate-spin")).toBeNull();
+      fireEvent.click(send);
+      expect(submitted).toEqual(["First message", "Second message"]);
+      expect(delivered).not.toHaveBeenCalled();
+      expect(input).toHaveValue("");
+      fireEvent.change(input, { target: { value: "Third draft" } });
+      act(() => vi.advanceTimersByTime(10000));
+      expect(delivered.mock.calls).toEqual([["First message"], ["Second message"]]);
+      expect(input).toHaveValue("Third draft");
+    } finally { vi.useRealTimers(); }
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();

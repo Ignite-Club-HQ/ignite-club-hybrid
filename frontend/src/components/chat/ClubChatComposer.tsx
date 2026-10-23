@@ -126,8 +126,8 @@ export function ClubChatComposer({
           preview={
             (pendingPollId || pendingNewsId) && !editingMessage ? (
               <div className="space-y-1.5">
-                {pendingPollId && <PollAttachmentPreview pollId={pendingPollId} onRemove={onRemovePoll} disabled={sendPending} />}
-                {pendingNewsId && <NewsAttachmentPreview newsId={pendingNewsId} onRemove={onRemoveNews} disabled={sendPending} />}
+                {pendingPollId && <PollAttachmentPreview pollId={pendingPollId} onRemove={onRemovePoll} />}
+                {pendingNewsId && <NewsAttachmentPreview newsId={pendingNewsId} onRemove={onRemoveNews} />}
               </div>
             ) : undefined
           }
@@ -171,6 +171,7 @@ export function ClubChatComposer({
             onSchedule={scheduleTarget ? onSchedule : undefined}
             disabled={!message.trim() && !imageUrl && !pendingPollId && !pendingNewsId}
             loading={sendPending}
+            allowConcurrentSend
             canSend={!!message.trim() || !!imageUrl || !!pendingPollId || !!pendingNewsId}
           />
         </ChatComposerShell>
