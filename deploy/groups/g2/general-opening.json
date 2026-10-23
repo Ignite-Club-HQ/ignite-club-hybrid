@@ -23,7 +23,7 @@
       "name": "events_domain",
       "canisterId": "ymvtj-3qaaa-aaaal-qxpza-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "cd6bf6136b171639f2f5adede548b2e4805fe3f7f2ebf2b33e4f2b14329ef655"
+      "moduleHash": "97173f4279d7cac4da35f767b3d2f8742c656e18f60b9a53e92eb71ac539b952"
     },
     {
       "name": "messaging_domain",
@@ -41,7 +41,7 @@
       "name": "competition_domain",
       "canisterId": "yzsce-2yaaa-aaaal-qxp2q-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "a5966f2c33b29f67029ddbfe3da1dccb84d40ab6b06f046d7cc26b4b2c226c80"
+      "moduleHash": "a400292e046fc05b438d767ec5c38797299d7ede962f1a951e120377ac264078"
     },
     {
       "name": "club_points_domain",
