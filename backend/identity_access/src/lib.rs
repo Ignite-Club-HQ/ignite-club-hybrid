@@ -535,7 +535,17 @@ async fn configure_membership_directory(binding:group_inventory::Binding,authori
     let first=read_registry_pages(&binding,recheck).await?;
     let second=read_registry_pages(&binding,recheck).await?;
     if first!=second{return Err("Directory registry changed".into());}
-    let verified=membership_coordinator::verify_inventory(&first,&binding,&authorities,generation)?;
+    // Original G1 predates registry registration. Trust only the existing
+    // deployment pin AND these immutable original mainnet identities; never
+    // derive a legacy writer from caller names, missing assignments or a new
+    // lifecycle grant. This changes inventory, not club ownership/readiness.
+    let verified=if binding.registry.to_text()=="jcdfe-vqaaa-aaaal-qxloq-cai"&&
+        ic_cdk::api::canister_self().to_text()=="mq2sj-fqaaa-aaaal-qxlqa-cai"&&
+        binding.target_alias=="mainnet"&&binding.deployment_id=="mainnet"&&
+        binding.host=="https://icp-api.io"&&binding.network_kind=="public_mainnet"{
+        let original=Principal::from_text("mzzzv-taaaa-aaaal-qxlrq-cai").map_err(|_|"Invalid original mainnet authority pin")?;
+        membership_coordinator::verify_inventory_with_original(&first,&binding,&authorities,generation,original)?
+    }else{membership_coordinator::verify_inventory(&first,&binding,&authorities,generation)?};
     let digest=verified.digest().to_vec();let sources=verified.source_bindings();
     recheck()?;
     let config=match directory_config(){

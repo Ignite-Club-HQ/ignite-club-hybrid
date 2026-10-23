@@ -3,6 +3,10 @@
 Status: durable source invalidation, bounded reconstruction, dedicated source transport/grants, automatic canister timers and exact acknowledgement/readback are implemented and tested on two disposable local sources plus shared identity. Caller-private diagnostic API, lazy app diagnostic connection and source configuration/readback orchestration are implemented locally; the released verified-current API, safe unregistered legacy G1 coverage and runnable protected activation are not complete. Nothing deployed.
 Stage A complete discovery remains mandatory until the requirements below pass.
 
+### 23 October original-source continuation
+
+Identity transport can now include the original unregistered Group 1 writer under the existing pinned deployment plus exact original mainnet identity/router/club canister IDs. Complete registered source validation remains unchanged; aliases, omissions and conflicting registered G1 fail. The transport digest includes the explicit original source. This does not invent a router placement, accept missing club assignments, certify currentness or activate the app. Operator consensus observations compare every club ID across complete unchanged source traversals, including unnamed legacy clubs and tombstone collisions. Live source/ownership acceptance and the verified-current release reader remain unfinished.
+
 ## Scope and ownership
 
 The shared identity authority is the proposed directory owner because it already owns verified account/principal associations. This proposal must not activate its rehearsal-only linked-account synchronization, release account lifecycle operations, or repurpose service reader grants. The directory is a caller-private display/discovery index, never a resource authorization source.
