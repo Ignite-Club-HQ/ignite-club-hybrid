@@ -8,7 +8,7 @@ import { Principal } from "@icp-sdk/core/principal";
 import { candidOpt } from "./features/candid";
 import { createLiveClub, saveLiveTeam } from "./features/club";
 import { addLiveRoleGrant } from "./features/membership";
-import { sendLiveMessage } from "./features/messaging";
+import { createLivePoll, sendLiveMessage, voteLivePoll } from "./features/messaging";
 import { createLiveEvent } from "./features/events";
 import { registerLiveAsset, setLiveAssetScope } from "./features/media";
 import { registerLiveVaultFile } from "./features/vault";
@@ -205,8 +205,9 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
     }),
   );
   let evDone = 0;
+  const eventIds: string[] = [];
   await pool(events, 6, async (e) => {
-    await createLiveEvent(ctx, {
+    const created: any = await createLiveEvent(ctx, {
       clubId, teamId: e.teamId,
       title: e.game ? `Game vs ${real ? OPPONENTS[(e.k + e.teamId.length) % OPPONENTS.length] : `Opponent ${e.k}`}` : "Training",
       description: e.game ? "Arrive 30 minutes before kick-off." : " ",
