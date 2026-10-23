@@ -228,6 +228,7 @@ export interface ReleasedReply {
   'page' : Reply,
   'release' : string,
   'instance' : bigint,
+  'photo_stores' : Array<[string, [] | [Principal]]>,
   'registry' : Snapshot,
 }
 export type RemovalHistoryCursor = { 'ErasedAccounts' : [] | [string] } |

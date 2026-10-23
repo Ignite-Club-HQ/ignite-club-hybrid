@@ -298,6 +298,7 @@ export const idlFactory = ({ IDL }) => {
     'page' : Reply,
     'release' : IDL.Text,
     'instance' : IDL.Nat64,
+    'photo_stores' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Opt(IDL.Principal))),
     'registry' : Snapshot,
   });
   const Result_22 = IDL.Variant({ 'Ok' : ReleasedReply, 'Err' : IDL.Text });

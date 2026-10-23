@@ -191,6 +191,7 @@ type ReleasedReply = record {
   page : Reply;
   release : text;
   instance : nat64;
+  photo_stores : vec record { text; opt principal };
   registry : Snapshot;
 };
 type RemovalHistoryCursor = variant {

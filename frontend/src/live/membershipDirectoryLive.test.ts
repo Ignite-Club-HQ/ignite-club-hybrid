@@ -29,7 +29,7 @@ const registry = () => ({ revision: 9n, groups: [{ id:'g2',target_alias:'mainnet
 const fingerprint = JSON.stringify({revision:'9',groups:[{id:'g2',targetAlias:'mainnet',domains:[{domain:'club_domain',canisterId:'g2-club'}]}],
   deployment:{host:'https://icp-api.io',networkKind:'public_mainnet',id:'mainnet',revision:'1',primarySubnet:'subnet',approvedSubnets:['subnet'],additionalSubnetsEnabled:false},
   bindings:[{groupId:'g2',deploymentId:'mainnet',deploymentRevision:'1',domains:[{domain:'club_domain',canisterId:'g2-club',subnetId:'subnet'}]}]});
-const released = () => ({ page:{...diagnostic(),verified_current:true,rows:[{club_id:'club',group_id:'g2',authority:principal('g2-club')}]},instance:8n,release:'a'.repeat(40),registry:registry() }) as unknown as import('../lab/bindings/identity_access/declarations/identity_access.did').ReleasedReply;
+const released = () => ({ page:{...diagnostic(),verified_current:true,rows:[{club_id:'club',group_id:'g2',authority:principal('g2-club')}]},instance:8n,release:'a'.repeat(40),registry:registry(),photo_stores:[['g2',[]]] }) as unknown as import('../lab/bindings/identity_access/declarations/identity_access.did').ReleasedReply;
 describe('released page conversion',()=>{
   it('accepts populated owner-bound replies and terminal instance without fabricating registry evidence',()=>{
     const page=convertReleasedDirectoryReply(released(),'caller',fingerprint);
@@ -44,6 +44,8 @@ describe('released page conversion',()=>{
       (r: ReturnType<typeof released>)=>{r.registry.placements[0].host='https://foreign.invalid';},
       (r: ReturnType<typeof released>)=>{r.page.rows[0].authority=principal('foreign') as Reply['caller'];},
       (r: ReturnType<typeof released>)=>{r.instance=0n;},
+      (r: ReturnType<typeof released>)=>{r.photo_stores=[['g2',[principal('foreign-store') as Reply['caller']]]];},
+      (r: ReturnType<typeof released>)=>{r.registry.groups[0].domains=[r.registry.groups[0].domains[0],r.registry.groups[0].domains[0]];},
     ]){const r=released();change(r);expect(()=>convertReleasedDirectoryReply(r,'caller',fingerprint)).toThrow();}
   });
   it('allows only pinned original G1 as an unregistered legacy source',()=>{
