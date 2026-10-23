@@ -18,10 +18,13 @@ import type { _SERVICE as IdentityService } from '../src/lab/bindings/identity_a
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, validateGroup2Inventory, verifyUpgradeStatus, upgradeArgs, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
-import { digest, validateRequest, validateTargets, validateJournal, executeUpgrades, runFill, PINNED, requireLookupReleaseAcceptance } from '../../scripts/membership-lookup-release-policy.mjs';
+import { digest, validateRequest, validateTargets, validateJournal, executeUpgrades, runFill, PINNED, requireLookupReleaseAcceptance, directorySources, requireReleaseSourceCoverage } from '../../scripts/membership-lookup-release-policy.mjs';
 import { configureDirectorySources } from '../../scripts/membership-source-configuration.mjs';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import type { _SERVICE as ClubService } from '../src/lab/bindings/club_domain/declarations/club_domain.did';
+import { membershipOwnershipTransport } from './membership-ownership-transport';
+import { checkLegacyOwnership } from '../../scripts/membership-legacy-ownership.mjs';
+import { fingerprint } from '../../scripts/membership-source-configuration.mjs';
 
 const [action, artifacts, pem, directory] = process.argv.slice(2);
 validateRequest(action, process.env.CONFIRMATION);
@@ -44,6 +47,10 @@ const agent = await HttpAgent.create({ host: 'https://icp-api.io', identity });
 const router = Actor.createActor<_SERVICE>(idlFactory, { agent, canisterId: shared.shard_router });
 const registry = () => readPinnedGroupRegistry((rev, cursor, limit) => router.read_group_registry_page('mainnet', rev, cursor, limit));
 const initial = await registry();
+const observedSources = directorySources(initial);
+// Independent complete-source gate BEFORE any upgrade/journal write. Check
+// may inspect G3 and later groups; this release never upgrades them implicitly.
+if (action === 'upgrade') requireReleaseSourceCoverage(observedSources);
 if (initial.configurationRevision === undefined) throw new Error('Configuration-bound router required');
 const configuration = groupApprovalConfiguration(initial.groups, initial.placements);
 const liveG2 = initial.groups.find(g => g.id === 'g2');
@@ -84,8 +91,16 @@ const observations = [];
 for (const t of targets) observations.push({ ...t, ...(await observe(t)) });
 await gate();
 if (action === 'check') {
-  writeFileSync(resolve(directory, 'check.json'), JSON.stringify({ targets: observations, configurationRevision: String(initial.configurationRevision), liveAcceptance: false }, null, 2));
-  console.log('Three existing lookup targets checked; no upgrades or settings changes.');
+  const transport = membershipOwnershipTransport(agent, registry);
+  const ownership = await checkLegacyOwnership({ ...transport, registry: async () => {
+    const current = await transport.registry();
+    if (current.fingerprint !== fingerprint(initial)) throw new Error('Registry changed after target checks');
+    return current;
+  } });
+  await gate();
+  writeFileSync(resolve(directory, 'check.json'), JSON.stringify({ targets: observations, sources: observedSources, ownership,
+    configurationRevision: String(initial.configurationRevision), liveAcceptance: false, ready: false, appEnabled: false }, null, 2));
+  console.log('Pinned targets and every membership source checked; no upgrades, grants or app activation.');
   process.exit(0);
 }
 const repo = process.env.GITHUB_REPOSITORY, release = process.env.GITHUB_SHA;
@@ -118,15 +133,9 @@ await executeUpgrades(journal, { gate, observe, persist, verifyKeys: async () =>
 // Actual generated Candid contract, one bounded source request at a time.
 // Do not skip previous historical completion: a newer revision may be pending.
 const fillActor = Actor.createActor<IdentityService>(identityIdl, { agent, canisterId: PINNED.identity });
-// Complete inventory only. In particular, the original unregistered G1 cannot
-// be silently appended to this identity verifier's registered-source contract.
-const sources = initial.groups.map(g => {
-  const domain = g.domains.find(d => d.domain === 'club_domain');
-  if (!domain) throw new Error('Missing registered directory source');
-  return { groupId: g.id, authority: domain.canister };
-});
-if (!sources.some(s => s.groupId === 'g1' && s.authority.toText() === PINNED.g1) ||
-    sources.some(s => !['g1', 'g2'].includes(s.groupId))) throw new Error('Exact release-covered complete source inventory required; legacy or additional group coverage is unfinished');
+// Same complete source set checked before mutation; original G1 is supported
+// by identity's explicit pinned-source verifier, never by a fake placement.
+const sources = observedSources.map((s: { groupId: string; canisterId: string }) => ({ groupId: s.groupId, authority: Principal.fromText(s.canisterId) }));
 const firstPlacement = initial.placements[0];
 if (!firstPlacement) throw new Error('Directory deployment placement required');
 const directoryBinding = { registry: Principal.fromText(shared.shard_router), registry_revision: initial.revision,

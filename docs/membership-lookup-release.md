@@ -2,9 +2,11 @@
 
 The release is **not ready to run in upgrade mode**. The draft workflow now
 refuses upgrade before installing tools, restoring the signing key or changing
-any canister. Existing club discovery stays active. Check mode inspects only
-the three pinned service targets and routing configuration; it does not verify
-lookup readiness, source grants or memberships.
+any canister. Existing club discovery stays active. Check mode inspects the
+three pinned service targets and all registered membership sources plus original
+Group 1, using bounded consensus exports and unchanged revision checks. It does
+not certify lookup readiness, create grants or enable the app. A missing live
+export method fails the check; there is no public-query fallback.
 
 ## Before you run
 
@@ -19,7 +21,7 @@ lookup readiness, source grants or memberships.
 2. Click **Run workflow**, choose **check**, leave confirmation empty.
 3. Click the green **Run workflow** button and approve if GitHub asks.
 
-A green **check** means the target inspection passed, not that the new lookup
+A green **check** means the target/source observation passed, not that the new lookup
 is ready. Do not run **upgrade** yet; it deliberately stops without changes.
 
 ## Essential work before upgrade
@@ -45,8 +47,8 @@ It reads the complete registry, includes the explicitly pinned original Group 1
 authority, traverses every source's governor-only consensus export twice,
 rechecks revisions and registry, and rejects missing/deleted/duplicate matches.
 It emits only club IDs/source counts/revisions and `ready: false`; no raw ACL
-relationships, grants, placements or media-key changes. This check is not wired
-into an upgrade or represented as runnable without the existing signing key and
+relationships, grants, placements or media-key changes. The same transport is
+now used by release check mode, not as upgrade acceptance. It needs the existing signing key and
 supported live source-export methods. It has not been run signed on mainnet.
 
 ### Remaining release prerequisites
@@ -57,10 +59,11 @@ The app's ordinary lookup switch remains off, so navigation makes no new lookup
 calls and continues using existing discovery. Diagnostic replies explicitly
 say they are not verified-current.
 
-Two engineering blockers remain, rather than only an owner workflow:
-the identity inventory verifier cannot yet include an unregistered original
-Group 1, and the verified-current/old-restored-state release contract is not
-implemented. The protected upgrade still refuses before making changes.
+Identity transport now includes explicitly pinned original Group 1 without
+inventing a placement. Exclusive legacy-location acceptance and the verified-current/
+old-restored-state release contract remain unfinished. Additional registered groups
+are inspected, but cannot be silently ignored or added to this three-target upgrade.
+The protected upgrade still refuses before making changes.
 
 - The intended upgrade scope is only three existing services: the shared account service
   (`identity_access`) and each group's club service (`club_domain`). No other

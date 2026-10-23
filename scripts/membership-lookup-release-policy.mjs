@@ -14,6 +14,52 @@ export const PINNED = {
   g2: 'yfwyv-nyaaa-aaaal-qxpyq-cai',
 };
 
+/** Complete observed sources, not the three-service upgrade allowlist. The
+ * original G1 is explicitly pinned; every registered group stays in the list.
+ * This makes no placement, authority grant or readiness claim. */
+export function directorySources(snapshot) {
+  if (!snapshot || typeof snapshot.revision !== 'bigint' || snapshot.revision < 1n ||
+      !Array.isArray(snapshot.groups) || !snapshot.groups.length || snapshot.groups.length > 4096 ||
+      !Array.isArray(snapshot.placements) || snapshot.placements.length !== snapshot.groups.length) throw new Error('Complete registered source snapshot required');
+  const text = p => typeof p === 'string' ? p : p?.toText?.();
+  const groups = new Set(), authorities = new Set(), placements = new Set();
+  for (const p of snapshot.placements) {
+    if (placements.has(p.group_id)) throw new Error('Duplicate source placement');
+    placements.add(p.group_id);
+  }
+  const sources = snapshot.groups.map(g => {
+    if (typeof g.id !== 'string' || !g.id || g.id.length > 64 || g.id.includes('\u001f') || groups.has(g.id) || g.target_alias !== 'mainnet') throw new Error('Invalid registered source group');
+    groups.add(g.id);
+    const club = g.domains?.filter(d => d.domain === 'club_domain');
+    const p = snapshot.placements.find(p => p.group_id === g.id);
+    const placed = p?.domains?.filter(d => d.domain === 'club_domain');
+    const authority = club?.length === 1 ? text(club[0].canister) : undefined;
+    if (!p || p.deployment_id !== 'mainnet' || p.host !== 'https://icp-api.io' || p.network_kind !== 'public_mainnet' ||
+        typeof p.deployment_revision !== 'bigint' || p.deployment_revision < 1n ||
+        !authority || ['aaaaa-aa', '2vxsx-fae'].includes(authority) || authorities.has(authority) ||
+        placed?.length !== 1 || text(placed[0].canister) !== authority) throw new Error('Exact registered club placement required');
+    authorities.add(authority);
+    return { groupId: g.id, canisterId: authority };
+  });
+  const original = sources.find(s => s.groupId === 'g1');
+  if (original && original.canisterId !== PINNED.g1) throw new Error('Registered Group 1 differs from original authority');
+  if (!original) {
+    if (snapshot.groups.some(g => g.domains.some(d => text(d.canister) === PINNED.g1))) throw new Error('Original Group 1 collides with registered service');
+    sources.push({ groupId: 'g1', canisterId: PINNED.g1 });
+  }
+  return sources.sort((a, b) => a.groupId.localeCompare(b.groupId));
+}
+
+/** Must run before any installation or journal mutation, independently of the
+ * activation gate. Additional groups may be inspected, never silently omitted
+ * or upgraded by this exact three-target release. */
+export function requireReleaseSourceCoverage(sources) {
+  if (!Array.isArray(sources) || sources.length !== 2 ||
+      ['g1', 'g2'].some(group => sources.filter(s => s.groupId === group && s.canisterId === PINNED[group]).length !== 1)) {
+    throw new Error('Complete source inventory exceeds or differs from the approved three lookup targets; no changes permitted');
+  }
+}
+
 export function validateRequest(action, confirmation) {
   if (!['check', 'upgrade'].includes(action)) throw new Error('Choose check or upgrade');
   if (action === 'upgrade' && confirmation?.trim() !== CONFIRMATION) throw new Error(`Type ${CONFIRMATION}`);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { validateRequest, validateTargets, validateJournal, runFill, digest, PINNED, requireLookupReleaseAcceptance } from './membership-lookup-release-policy.mjs';
+import { validateRequest, validateTargets, validateJournal, runFill, digest, PINNED, requireLookupReleaseAcceptance, directorySources, requireReleaseSourceCoverage } from './membership-lookup-release-policy.mjs';
 
 const targets = [
   { canisterId: PINNED.identity, groupId: 'shared', name: 'identity_access', subnetId: 'subnet', newHash: 'a'.repeat(64) },
@@ -10,6 +10,37 @@ const targets = [
 const binding = { targets, governor: 'gov' };
 const step = t => ({ ...t, oldHash: 'c'.repeat(64), settingsHash: 'd'.repeat(64), phase: 'complete' });
 const journal = (overrides = {}) => ({ binding, complete: true, steps: targets.map(step), fill: { g1: true, g2: true }, ...overrides });
+const snapshot = (groups = ['g2']) => ({ revision: 9n,
+  groups: groups.map(id => ({ id, target_alias: 'mainnet', domains: [{ domain: 'club_domain', canister: PINNED[id] ?? `${id}-authority` }] })),
+  placements: groups.map(id => ({ group_id: id, deployment_id: 'mainnet', deployment_revision: 1n, host: 'https://icp-api.io', network_kind: 'public_mainnet', domains: [{ domain: 'club_domain', canister: PINNED[id] ?? `${id}-authority` }] })),
+});
+
+test('source inventory explicitly includes original Group 1 without inventing a placement', () => {
+  const before = snapshot(); const rows = directorySources(before);
+  assert.deepEqual(rows, [{ groupId: 'g1', canisterId: PINNED.g1 }, { groupId: 'g2', canisterId: PINNED.g2 }]);
+  assert.equal(before.groups.length, 1); assert.equal(before.placements.length, 1);
+  requireReleaseSourceCoverage(rows);
+  assert.deepEqual(directorySources(snapshot(['g1', 'g2'])), rows);
+});
+
+test('additional registered groups are observed but never fit a partial three-target release', () => {
+  const rows = directorySources(snapshot(['g3', 'g2']));
+  assert.deepEqual(rows.map(s => s.groupId), ['g1', 'g2', 'g3']);
+  assert.throws(() => requireReleaseSourceCoverage(rows), /no changes/);
+  assert.throws(() => requireReleaseSourceCoverage(rows.filter(s => s.groupId !== 'g2')), /no changes/);
+});
+
+test('source inventory refuses mismatched original, duplicates, missing placements and foreign deployment', () => {
+  for (const change of [
+    s => { s.groups[0].id = 'g1'; s.placements[0].group_id = 'g1'; },
+    s => { s.groups.push(s.groups[0]); s.placements.push(s.placements[0]); },
+    s => { s.placements = []; },
+    s => { s.placements[0].host = 'https://other.invalid'; },
+    s => { s.placements[0].domains[0].canister = PINNED.g1; },
+    s => { s.groups[0].domains.push({ domain: 'events_domain', canister: PINNED.g1 }); },
+    s => { s.revision = 0n; },
+  ]) { const bad = snapshot(); change(bad); assert.throws(() => directorySources(bad)); }
+});
 
 test('requires the exact confirmation and exactly the three existing lookup targets', () => {
   validateRequest('upgrade', ' RELEASE MEMBERSHIP LOOKUP\n'); validateRequest('check', '');
