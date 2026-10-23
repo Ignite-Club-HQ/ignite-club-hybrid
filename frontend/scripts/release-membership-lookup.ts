@@ -17,8 +17,8 @@ import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/d
 import type { _SERVICE as IdentityService } from '../src/lab/bindings/identity_access/declarations/identity_access.did';
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
-import { GROUP2_GOVERNOR, validateGroup2Inventory, verifyUpgradeStatus, upgradeArgs, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
-import { digest, validateRequest, validateTargets, validateJournal, executeUpgrades, runFill, PINNED, requireLookupReleaseAcceptance, directorySources, requireReleaseSourceCoverage } from '../../scripts/membership-lookup-release-policy.mjs';
+import { GROUP2_GOVERNOR, verifyUpgradeStatus, upgradeArgs, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
+import { digest, validateRequest, validateTargets, validateJournal, executeUpgrades, runFill, PINNED, requireLookupReleaseAcceptance, directorySources, requireReleaseSourceCoverage, lookupReleaseTargets } from '../../scripts/membership-lookup-release-policy.mjs';
 import { configureDirectorySources } from '../../scripts/membership-source-configuration.mjs';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import type { _SERVICE as ClubService } from '../src/lab/bindings/club_domain/declarations/club_domain.did';
@@ -41,7 +41,6 @@ const provision = json('deploy/groups/g2/provision.json');
 if (shared.shard_router !== 'jcdfe-vqaaa-aaaal-qxloq-cai' || shared.identity_access !== PINNED.identity ||
     shared.club_domain !== PINNED.g1) throw new Error('Pinned original mainnet mappings required');
 if (provision.canisters.club_domain !== PINNED.g2) throw new Error('Pinned Group 2 club service required');
-const g2 = validateGroup2Inventory(provision, shared);
 const identity = loadOperatorIdentity(pem);
 if (identity.getPrincipal().toText() !== GROUP2_GOVERNOR) throw new Error('Original governor identity required');
 mkdirSync(directory, { recursive: true });
@@ -52,23 +51,23 @@ const initial = await registry();
 const observedSources = directorySources(initial);
 // Independent complete-source gate BEFORE any upgrade/journal write. Check
 // may inspect G3 and later groups; this release never upgrades them implicitly.
-if (action === 'upgrade') requireReleaseSourceCoverage(observedSources);
+if (action === 'upgrade') requireReleaseSourceCoverage(observedSources, initial);
 if (initial.configurationRevision === undefined) throw new Error('Configuration-bound router required');
 const configuration = groupApprovalConfiguration(initial.groups, initial.placements);
 const liveG2 = initial.groups.find(g => g.id === 'g2');
 const placement = initial.placements.find(p => p.group_id === 'g2');
 if (!liveG2 || !placement || placement.deployment_id !== 'mainnet' || placement.host !== 'https://icp-api.io' || placement.network_kind !== 'public_mainnet' ||
     liveG2.domains.find(d => d.domain === 'club_domain')?.canister.toText() !== PINNED.g2) throw new Error('Registered Group 2 inventory differs');
-const primarySubnet = 'e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe';
-const targets = [
-  { groupId: 'shared', name: 'identity_access', canisterId: PINNED.identity, subnetId: primarySubnet, newHash: wasmHash(readFileSync(resolve(artifacts, 'identity_access'))) },
-  ...(['g1', 'g2'] as const).map(groupId => {
-    const s = g2.find(s => s.name === 'club_domain');
-    if (!s) throw new Error('Missing Group 2 club service');
-    return { groupId, name: 'club_domain', canisterId: PINNED[groupId], subnetId: groupId === 'g1' ? primarySubnet : s.subnetId, newHash: wasmHash(readFileSync(resolve(artifacts, 'club_domain'))) };
-  }),
-];
-validateTargets(targets);
+const targets = lookupReleaseTargets(initial, {
+  identity_access: wasmHash(readFileSync(resolve(artifacts, 'identity_access'))),
+  club_domain: wasmHash(readFileSync(resolve(artifacts, 'club_domain'))),
+});
+validateTargets(targets, observedSources);
+const firstPlacement = initial.placements[0];
+if (!firstPlacement) throw new Error('Directory deployment placement required');
+const directoryBinding = { registry: Principal.fromText(shared.shard_router), registry_revision: initial.revision,
+  target_alias: 'mainnet', deployment_id: firstPlacement.deployment_id, deployment_revision: firstPlacement.deployment_revision,
+  host: firstPlacement.host, network_kind: firstPlacement.network_kind };
 type Target = typeof targets[number];
 const mgmtIdl = () => IDL.Service({ canister_status: IDL.Func([IDL.Record({ canister_id: IDL.Principal })], [IDL.Record({
   status: IDL.Variant({ running: IDL.Null, stopped: IDL.Null, stopping: IDL.Null }), module_hash: IDL.Opt(IDL.Vec(IDL.Nat8)), cycles: IDL.Nat,
@@ -87,7 +86,7 @@ const observe = async (s: Target) => {
 };
 const gate = async () => {
   const current = await registry();
-  if (current.configurationRevision !== initial.configurationRevision || groupApprovalConfiguration(current.groups, current.placements) !== configuration) throw new Error('Routing configuration changed; stop without replay');
+  if (current.revision !== initial.revision || current.configurationRevision !== initial.configurationRevision || groupApprovalConfiguration(current.groups, current.placements) !== configuration) throw new Error('Routing configuration changed; stop without replay');
 };
 const observations = [];
 for (const t of targets) observations.push({ ...t, ...(await observe(t)) });
@@ -120,7 +119,7 @@ const binding = { release, governor: GROUP2_GOVERNOR, router: shared.shard_route
 let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
 if (journal && digest(journal.binding) !== digest(binding)) throw new Error('Another release journal exists; do not reset it. Review its settled outcomes before a separate release.');
 if (!journal) {
-  journal = { binding, complete: false, ready: false, fill: { g1: false, g2: false }, steps: observations.map(s => ({ ...s, oldHash: s.moduleHash, phase: 'ready' })) };
+  journal = { binding, complete: false, ready: false, fill: Object.fromEntries(observedSources.map(s => [s.groupId, false])), steps: observations.map(s => ({ ...s, oldHash: s.moduleHash, phase: 'ready' })) };
 }
 validateJournal(journal, binding);
 const persist = async () => {
@@ -138,13 +137,6 @@ const fillActor = Actor.createActor<IdentityService>(identityIdl, { agent, canis
 // Same complete source set checked before mutation; original G1 is supported
 // by identity's explicit pinned-source verifier, never by a fake placement.
 const sources = observedSources.map((s: { groupId: string; canisterId: string }) => ({ groupId: s.groupId, authority: Principal.fromText(s.canisterId) }));
-const firstPlacement = initial.placements.find(p => p.group_id === 'g2');
-if (!firstPlacement) throw new Error('Directory deployment placement required');
-if (initial.placements.some(p => p.deployment_id !== firstPlacement.deployment_id || p.deployment_revision !== firstPlacement.deployment_revision ||
-    p.host !== firstPlacement.host || p.network_kind !== firstPlacement.network_kind)) throw new Error('Common exact directory deployment binding required');
-const directoryBinding = { registry: Principal.fromText(shared.shard_router), registry_revision: initial.revision,
-  target_alias: 'mainnet', deployment_id: firstPlacement.deployment_id, deployment_revision: firstPlacement.deployment_revision,
-  host: firstPlacement.host, network_kind: firstPlacement.network_kind };
 const sourceActors = new Map(sources.map(s => [s.groupId, Actor.createActor<ClubService>(clubIdl, { agent, canisterId: s.authority })]));
 const sourceActor = (source: { groupId: string }) => {
   const actor = sourceActors.get(source.groupId); if (!actor) throw new Error('Unknown exact source'); return actor;
@@ -188,5 +180,20 @@ const replicaAcceptance = await checkReplicaAcceptance(sources, completed, {
 });
 journal.replicaAcceptance = replicaAcceptance;await persist();
 writeFileSync(resolve(directory, 'replica-acceptance.json'), JSON.stringify(replicaAcceptance, null, 2));
+// Intent before the idempotent identity-owned enable. A lost response is
+// reconciled only by repeating the SAME release with fresh snapshot checks.
+journal.activation = { release, phase: 'pending' }; await persist();
+await gate();
+const enabled = await fillActor.enable_membership_directory(release);
+if ('Err' in enabled) throw new Error(enabled.Err);
+if (!enabled.Ok.app_enabled || !enabled.Ok.snapshot_verified || !enabled.Ok.restoration_guard_verified) throw new Error('Lookup release not verified');
+await gate();
+const readback = await fillActor.read_membership_directory_configuration();
+if ('Err' in readback || !readback.Ok.app_enabled) throw new Error('Lookup enable readback failed; intent retained');
+journal.activation = { release, phase: 'complete' };
+// Readiness remains page-specific; this receipt never grants access or claims
+// that a real user's complete traversal or loading speed has been verified.
 journal.ready = false; await persist();
-throw new Error('Coverage/ownership, consensus snapshot and replica-history restoration guards checked; released per-page reader/app activation remain separate. No readiness record or app activation.');
+writeFileSync(resolve(directory, 'release.json'), JSON.stringify({ release, sources: observedSources,
+  appReaderReleased: true, signedUserVerified: false, published: false }, null, 2));
+console.log('All membership sources upgraded, filled and snapshot-verified; identity-owned reader released. App publication and real-user timing remain separate.');
