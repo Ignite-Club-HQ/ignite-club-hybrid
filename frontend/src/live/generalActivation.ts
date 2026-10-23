@@ -45,7 +45,8 @@ const TTL_MS = 60_000;
 let cache: { key: string; value: RoutingStatus; atMs: number } | null = null;
 
 let inflight: { key: string; p: Promise<RoutingStatus> } | null = null;
-export function clearGeneralRoutingCache() { cache = null; inflight = null; }
+let generation = 0;
+export function clearGeneralRoutingCache() { generation++; cache = null; inflight = null; }
 /** Sync view for call sites that cannot await (media URL parsing). Cold or
  * stale simply means not-yet-active; the async check always decides writes. */
 export function cachedGeneralRoutingActive(): boolean { return cache?.value.active ?? false; }
@@ -58,6 +59,7 @@ const safePrincipal = (ctx?: FeatureBackendContext) => {
 
 export async function generalRoutingStatus(ctx: FeatureBackendContext): Promise<RoutingStatus> {
   const key = keyFor(ctx);
+  const startedGeneration = generation;
   if (cache && cache.key === key && Date.now() - cache.atMs < TTL_MS) return cache.value;
   // Concurrent callers on page load share one check (it reads the registry twice).
   if (inflight?.key !== key) {
@@ -67,7 +69,7 @@ export async function generalRoutingStatus(ctx: FeatureBackendContext): Promise<
   const entry = inflight;
   const value = await entry.p;
   // A cleared/replaced request must not restore an old account's cache.
-  if (keyFor(ctx) === key && (!inflight || inflight === entry)) cache = { key, value, atMs: Date.now() };
+  if (generation === startedGeneration && keyFor(ctx) === key && (!inflight || inflight === entry)) cache = { key, value, atMs: Date.now() };
   return value;
 }
 
