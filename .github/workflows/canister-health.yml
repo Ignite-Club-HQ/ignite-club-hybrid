@@ -2,7 +2,9 @@
 #
 # Every canister pays for its own reads, writes and storage out of its cycle
 # balance, and each one has a memory ceiling. This workflow prints every
-# deployed canister's real fuel and memory once a week (and on demand from the
+# deployed canister's real fuel and memory across Group 1, shared services and
+# every deploy/groups/*/provision.json inventory (including photo stores), once
+# a week (and on demand from the
 # Actions tab) by asking each service directly through its own public query, so
 # it needs no deploy key and cannot be fooled by management-canister settings.
 # It warns when a balance drops under 1T cycles (≈ US$1.30) or memory passes
