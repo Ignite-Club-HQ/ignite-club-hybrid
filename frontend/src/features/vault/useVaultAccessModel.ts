@@ -21,6 +21,7 @@ import {
   isVaultCoachOrTeamAdmin,
   resolveVaultContextPro,
 } from "./vaultAccess";
+import { withReadDeadline } from "@/live/readDeadline";
 import { vaultKeys } from "./vaultQueryKeys";
 
 export type { VaultClubSummary } from "./vaultAccessRepository";
@@ -71,6 +72,8 @@ export interface UseVaultAccessModelResult {
   isCompetitionVaultMember: boolean;
   isCompetitionVaultAdmin: boolean;
   isLoadingAccess: boolean;
+  accessError: unknown;
+  retryAccess: () => void;
 }
 
 /**
@@ -94,17 +97,17 @@ export function useVaultAccessModel({
   activeClubFilter,
   onAutoNavigateToClub,
 }: UseVaultAccessModelOptions): UseVaultAccessModelResult {
-  const { isAppAdmin: isAppAdminFromHook, isLoading: isLoadingAppAdminHook } = useIsAppAdmin();
+  const { isAppAdmin: isAppAdminFromHook, isLoading: isLoadingAppAdminHook, error: appAdminError } = useIsAppAdmin();
   // Mirror the old raw query's `undefined` while the lookup is in flight so
   // every `isAppAdmin ?? false` / `!!isAppAdmin` call site keeps working.
   const isAppAdmin = !userId || isLoadingAppAdminHook ? undefined : isAppAdminFromHook;
   const isLoadingAppAdmin = !!userId && isLoadingAppAdminHook;
 
-  const { data: userRoles, isLoading: isLoadingRoles } = useQuery({
+  const { data: userRoles, isLoading: isLoadingRoles, error: rolesError, refetch: retryRoles } = useQuery({
     queryKey: ["user-admin-roles", userId],
     queryFn: async () => {
       if (!userId) return [];
-      const roles = await fetchVaultUserRoles(userId);
+      const roles = await withReadDeadline(fetchVaultUserRoles(userId), "Vault roles");
       console.log("[Vault] Fetched userRoles for user", userId, ":", roles);
       return roles;
     },
@@ -159,9 +162,9 @@ export function useVaultAccessModel({
   const userTeamIds = useMemo(() => getVaultTeamIds(userRoles), [userRoles]);
 
   const competitionId = currentView.type === "competition" ? currentView.competitionId : null;
-  const { data: competitionAccess, isLoading: isLoadingCompetitionAccess } = useQuery({
+  const { data: competitionAccess, isLoading: isLoadingCompetitionAccess, error: competitionError, refetch: retryCompetition } = useQuery({
     queryKey: ["vault-competition-access", userId, competitionId],
-    queryFn: () => competitionId && userId ? fetchVaultCompetitionAccess(competitionId, userId) : null,
+    queryFn: () => competitionId && userId ? withReadDeadline(fetchVaultCompetitionAccess(competitionId, userId), "Vault competition access") : null,
     enabled: !!userId && !!competitionId,
     staleTime: 30_000,
   });
@@ -172,18 +175,18 @@ export function useVaultAccessModel({
       : null;
 
   // Check if the current club has Pro
-  const { data: currentClubHasPro, isLoading: isLoadingClubHasPro } = useQuery({
+  const { data: currentClubHasPro, isLoading: isLoadingClubHasPro, error: clubProError, refetch: retryClubPro } = useQuery({
     queryKey: vaultKeys.clubHasPro(contextClubId),
-    queryFn: () => contextClubId ? fetchVaultClubHasPro(contextClubId) : false,
+    queryFn: () => contextClubId ? withReadDeadline(fetchVaultClubHasPro(contextClubId), "Vault club subscription") : false,
     enabled: contextClubId !== null,
   });
 
   const contextTeamId = currentView.type === "team" ? currentView.teamId : null;
 
   // Check if the current team has Pro (for teams in non-Pro clubs)
-  const { data: currentTeamHasPro, isLoading: isLoadingTeamHasPro } = useQuery({
+  const { data: currentTeamHasPro, isLoading: isLoadingTeamHasPro, error: teamProError, refetch: retryTeamPro } = useQuery({
     queryKey: vaultKeys.teamHasPro(contextTeamId),
-    queryFn: () => contextTeamId ? fetchVaultTeamHasPro(contextTeamId) : false,
+    queryFn: () => contextTeamId ? withReadDeadline(fetchVaultTeamHasPro(contextTeamId), "Vault team subscription") : false,
     enabled: contextTeamId !== null,
   });
 
@@ -195,9 +198,9 @@ export function useVaultAccessModel({
 
   // Check for Pro subscription across every club/team the user holds a role
   // in (the root-view entitlement gate; distinct from `currentContextHasPro`).
-  const { data: proAccessInfo, isLoading: isLoadingProClub } = useQuery({
+  const { data: proAccessInfo, isLoading: isLoadingProClub, error: anyProError, refetch: retryAnyPro } = useQuery({
     queryKey: ["pro-access-info", userId],
-    queryFn: () => userId ? fetchVaultAnyProAccess(userId) : false,
+    queryFn: () => userId ? withReadDeadline(fetchVaultAnyProAccess(userId), "Vault subscriptions") : false,
     enabled: !!userId,
   });
 
@@ -228,7 +231,19 @@ export function useVaultAccessModel({
     ? vaultAccessContextHasPro && !isCompetitionVaultMember
     : vaultAccessContextHasPro && !hasVaultRoleAccess;
 
+  const accessError = canAccessVault ? null : appAdminError || rolesError || (currentView.type === "root"
+    ? anyProError
+    : (!currentContextHasPro && (clubProError || teamProError)) || (competitionId && competitionError));
+  const retryAccess = () => {
+    void retryRoles();
+    if (currentView.type === "root") void retryAnyPro();
+    if (contextClubId) void retryClubPro();
+    if (contextTeamId) void retryTeamPro();
+    if (competitionId) void retryCompetition();
+  };
+
   return {
+    accessError, retryAccess,
     isAppAdmin,
     userRoles,
     hasVaultRoleAccess,

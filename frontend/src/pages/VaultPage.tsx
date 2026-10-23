@@ -123,7 +123,7 @@ function SupabaseVaultPage() {
     hasProButNoRole,
     isCompetitionVaultMember,
     isCompetitionVaultAdmin,
-    isLoadingAccess,
+    isLoadingAccess, accessError, retryAccess,
   } = useVaultAccessModel({
     userId: user?.id,
     currentView,
@@ -1144,6 +1144,14 @@ function SupabaseVaultPage() {
     },
     onFileSoftDeleteSuccess: () => setDeleteFileId(null),
   });
+
+  if (accessError) {
+    return <div className="py-6 space-y-4">
+      <Button variant="ghost" onClick={() => navigate(-1)}><ArrowLeft className="h-4 w-4 mr-1" />Back</Button>
+      <p className="text-muted-foreground">Could not check Vault access. Please try again.</p>
+      <Button variant="outline" onClick={retryAccess}>Try again</Button>
+    </div>;
+  }
 
   if (isLoadingAccess) {
     return (
