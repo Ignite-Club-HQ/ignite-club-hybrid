@@ -687,6 +687,29 @@ async fn advance_directory_source(source:String)->Outcome<membership_runtime::Pr
 }
 #[derive(CandidType,Deserialize)]
 struct DirectoryCleanup { scanned:u64, complete:bool }
+/// Governor-only bounded ownership acceptance. Every live source status and
+/// complete registry is checked before local acceptance; no observer supplies
+/// club claims or proofs. This never enables the verified-current reader.
+#[ic_cdk::update]
+async fn advance_membership_directory_ownership()->Outcome<membership_coordinator::OwnershipProgress>{
+    require_governor(&state(),ic_cdk::api::msg_caller())?;
+    let config=directory_config()?;recheck_directory(&config)?;
+    if config.sources.len()>100{return Err("Ownership source-status budget exceeded".into());}
+    let check=||recheck_directory(&config);
+    let first=read_registry_pages(&config.binding,check).await?;
+    let required=config.sources.iter().map(|(_,p)|*p).collect::<Vec<_>>();
+    let original=membership_coordinator::original_mainnet_writer(&config.binding,ic_cdk::api::canister_self());
+    let inventory=if let Some(p)=original{membership_coordinator::verify_inventory_with_original(&first,&config.binding,&required,config.generation,p)?}
+        else{membership_coordinator::verify_inventory(&first,&config.binding,&required,config.generation)?};
+    if inventory.digest().as_slice()!=config.inventory_digest.as_slice()||inventory.source_bindings()!=config.sources{return Err("Ownership inventory changed".into());}
+    for (source,authority) in &config.sources{
+        let (current,acknowledged,pending)=directory_source_status(&config,source,*authority).await?;
+        if pending||current!=acknowledged{return Err("Ownership source has pending membership changes".into());}
+    }
+    let second=read_registry_pages(&config.binding,check).await?;
+    if first!=second{return Err("Ownership registry changed".into());}recheck_directory(&config)?;
+    DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().advance_ownership(original))
+}
 // Independent of start: an exhausted pool must still be reclaimable.
 #[ic_cdk::update]
 fn reclaim_membership_directory()->Outcome<DirectoryCleanup>{
