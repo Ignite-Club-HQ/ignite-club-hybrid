@@ -1,6 +1,6 @@
 # Stage B: authority-backed membership display directory
 
-Status: durable source invalidation, bounded reconstruction, dedicated source transport/grants, automatic canister timers and exact acknowledgement/readback are implemented and tested on two disposable local sources plus shared identity. The private public API, frontend connection and protected release workflow are not complete. Nothing deployed.
+Status: durable source invalidation, bounded reconstruction, dedicated source transport/grants, automatic canister timers and exact acknowledgement/readback are implemented and tested on two disposable local sources plus shared identity. Caller-private diagnostic API, lazy app diagnostic connection and source configuration/readback orchestration are implemented locally; the released verified-current API, safe unregistered legacy G1 coverage and runnable protected activation are not complete. Nothing deployed.
 Stage A complete discovery remains mandatory until the requirements below pass.
 
 ## Scope and ownership
@@ -176,3 +176,11 @@ Final local validation: 111 identity regressions, 42 frontend lookup/discovery t
 - The runner rechecks routing before/after every source call and re-observes previous historical fills instead of treating old `fill: true` as currentness. Source configuration/grants and complete authority coverage are still required; the three upgrade targets do not imply only two current registered sources.
 - Workflow and runner both reject upgrade before signing/materialization. Removed automatic readiness emission/commit; policy rejects `ready: true` even after both historical fills. A successful check is service-target inspection only.
 - Owner-provided Group 1 names help identify clubs to cross-check, but cannot authorize mappings, attest exclusivity or bypass unresolved coverage. No club placement, media-key authority or permissions are changed.
+
+### Consolidated source configuration and private connection (23 October 00:47)
+
+- Added governor-only `read_membership_directory_configuration` consensus readback of exact binding/generation/source/digest; it always reports app disabled and reveals no memberships.
+- Added `read_my_membership_directory_diagnostic(consumer, token)`: only freshly derived caller/account aliases, current coordinator watermarks and resolved ownership can reach the existing durable session core. No arbitrary account selection, no awaited work inside local paging, and every reply explicitly reports `verified_current: false`. It is a diagnostic endpoint, not a currentness release.
+- The lazy diagnostic actor uses regenerated identity Candid contracts. The ordinary live group session now connects the opt-in adapter with a hard-disabled release switch: zero additional directory calls during ordinary navigation, and diagnostic/unverified pages cannot replace complete existing discovery. The released reader deliberately still refuses pending a real verified-current contract; wiring this seam is not a finished performance feature.
+- Exact source configuration orchestration is connected to the draft runner behind its existing pre-mutation block: journal identity/source intent, read exact generated replies, canonicalize Candid records/bytes/principals, check enabled binding/digest/source inventory, resume matching grants and recheck all sources after the last await. Foreign/disabled bindings and unknown journal outcomes stop. No partial source grant or automatic recovery-generation replacement.
+- Important concrete blocker: identity's complete inventory verifier enumerates registered groups only. It cannot include an unregistered original G1 merely because an operator query found its clubs. The runner now explicitly refuses that gap and any additional group outside the approved three upgrade targets. Safe explicit legacy coverage and verified-current/restored-old release acceptance remain unfinished engineering; no activation or deployment is claimed.

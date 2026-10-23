@@ -19,6 +19,9 @@ import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, validateGroup2Inventory, verifyUpgradeStatus, upgradeArgs, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
 import { digest, validateRequest, validateTargets, validateJournal, executeUpgrades, runFill, PINNED, requireLookupReleaseAcceptance } from '../../scripts/membership-lookup-release-policy.mjs';
+import { configureDirectorySources } from '../../scripts/membership-source-configuration.mjs';
+import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
+import type { _SERVICE as ClubService } from '../src/lab/bindings/club_domain/declarations/club_domain.did';
 
 const [action, artifacts, pem, directory] = process.argv.slice(2);
 validateRequest(action, process.env.CONFIRMATION);
@@ -115,6 +118,32 @@ await executeUpgrades(journal, { gate, observe, persist, verifyKeys: async () =>
 // Actual generated Candid contract, one bounded source request at a time.
 // Do not skip previous historical completion: a newer revision may be pending.
 const fillActor = Actor.createActor<IdentityService>(identityIdl, { agent, canisterId: PINNED.identity });
+// Complete inventory only. In particular, the original unregistered G1 cannot
+// be silently appended to this identity verifier's registered-source contract.
+const sources = initial.groups.map(g => {
+  const domain = g.domains.find(d => d.domain === 'club_domain');
+  if (!domain) throw new Error('Missing registered directory source');
+  return { groupId: g.id, authority: domain.canister };
+});
+if (!sources.some(s => s.groupId === 'g1' && s.authority.toText() === PINNED.g1) ||
+    sources.some(s => !['g1', 'g2'].includes(s.groupId))) throw new Error('Exact release-covered complete source inventory required; legacy or additional group coverage is unfinished');
+const firstPlacement = initial.placements[0];
+if (!firstPlacement) throw new Error('Directory deployment placement required');
+const directoryBinding = { registry: Principal.fromText(shared.shard_router), registry_revision: initial.revision,
+  target_alias: 'mainnet', deployment_id: firstPlacement.deployment_id, deployment_revision: firstPlacement.deployment_revision,
+  host: firstPlacement.host, network_kind: firstPlacement.network_kind };
+const sourceActors = new Map(sources.map(s => [s.groupId, Actor.createActor<ClubService>(clubIdl, { agent, canisterId: s.authority })]));
+const sourceActor = (source: { groupId: string }) => {
+  const actor = sourceActors.get(source.groupId); if (!actor) throw new Error('Unknown exact source'); return actor;
+};
+await configureDirectorySources(directoryBinding, sources, 1n, {
+  gate,
+  configure: (b: typeof directoryBinding, authorities: Principal[], generation: bigint) => fillActor.configure_membership_directory(b, authorities, generation),
+  configuration: () => fillActor.read_membership_directory_configuration(),
+  sourceConfiguration: (source: { groupId: string }) => sourceActor(source).read_membership_directory_source_binding(),
+  configureSource: (source: { groupId: string }, grant: Parameters<ClubService['configure_membership_directory_source']>[0]) => sourceActor(source).configure_membership_directory_source(grant),
+  persist: async (checkpoint: unknown) => { journal.configuration = checkpoint; await persist(); },
+});
 await runFill(['g1', 'g2'], async (groupId: string) => {
   await gate();
   const progress = await fillActor.advance_membership_directory_source(groupId);

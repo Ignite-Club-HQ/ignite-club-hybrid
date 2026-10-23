@@ -51,6 +51,17 @@ supported live source-export methods. It has not been run signed on mainnet.
 
 ### Remaining release prerequisites
 
+The source-grant setup and exact readback orchestration are now connected to the
+draft runner, and the private diagnostic endpoint/app actor connection exist.
+The app's ordinary lookup switch remains off, so navigation makes no new lookup
+calls and continues using existing discovery. Diagnostic replies explicitly
+say they are not verified-current.
+
+Two engineering blockers remain, rather than only an owner workflow:
+the identity inventory verifier cannot yet include an unregistered original
+Group 1, and the verified-current/old-restored-state release contract is not
+implemented. The protected upgrade still refuses before making changes.
+
 - The intended upgrade scope is only three existing services: the shared account service
   (`identity_access`) and each group's club service (`club_domain`). No other
   service is touched, created or rewired.

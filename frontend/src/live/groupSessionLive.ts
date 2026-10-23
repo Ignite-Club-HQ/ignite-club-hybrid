@@ -7,6 +7,8 @@ import type { FeatureBackendContext } from './featureRouter';
 import { openGroupSession, type GroupRegistry } from './groupSession';
 import { GROUP_DOMAINS, type GroupDomain } from './groupRouting';
 import type { EntityKind } from './groupDispatch';
+import { membershipTransport } from './membershipTransport';
+import { MEMBERSHIP_LOOKUP_RELEASE_ENABLED, readReleasedMembershipDirectory } from './membershipDirectoryLive';
 
 export async function openLiveGroupReadSession(ctx: FeatureBackendContext, ownerGroupId?: 'g2') {
   const { connectLiveShardRouter, connectLiveClubDomain } = await import('./domains');
@@ -18,7 +20,7 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext, owner
   // target alias is a different, local name for the same deployment. Routing
   // must bind to the on-chain name or every resolve rejects as foreign.
   let onChainAlias: string | undefined;
-  return openGroupSession(ctx, {
+  return openGroupSession(ctx, membershipTransport({
     async readRegistry(): Promise<GroupRegistry> {
       const principal = ctx.identity.getPrincipal().toText();
       const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => router.read_group_registry_page(routerAlias, revision, cursor, limit), undefined,
@@ -98,7 +100,7 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext, owner
       if ('Err' in reply) throw new Error(reply.Err);
       return { clubId: reply.Ok.club_id, groupId: reply.Ok.group_id, revision: reply.Ok.revision };
     },
-  });
+  }, { enabled: MEMBERSHIP_LOOKUP_RELEASE_ENABLED, read: readReleasedMembershipDirectory }));
 }
 /** Which club owns an event, chat or team in this group's canister (null = not held here). */
 export async function lookupEntityClub(ctx: FeatureBackendContext, kind: EntityKind, id: string): Promise<string | null> {

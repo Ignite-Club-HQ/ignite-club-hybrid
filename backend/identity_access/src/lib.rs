@@ -24,6 +24,7 @@ mod membership_propagation;
 mod membership_transport;
 mod membership_runtime;
 mod membership_locations;
+mod membership_wire;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -549,6 +550,27 @@ async fn configure_membership_directory(binding:group_inventory::Binding,authori
 }
 #[ic_cdk::update]
 fn disable_membership_directory()->Outcome<()>{require_governor(&state(),ic_cdk::api::msg_caller())?;let mut c=directory_config()?;c.enabled=false;save_directory_config(&c);Ok(())}
+/// Exact operator readback of the separate directory configuration. Does not
+/// return memberships, grant lifecycle readers, or certify currentness.
+#[derive(CandidType,Deserialize)]
+struct DirectoryConfigurationReadback { binding:group_inventory::Binding,generation:u64,inventory_digest:Vec<u8>,sources:Vec<(String,Principal)>,enabled:bool,app_enabled:bool }
+#[ic_cdk::update]
+fn read_membership_directory_configuration()->Outcome<DirectoryConfigurationReadback>{
+    require_governor(&state(),ic_cdk::api::msg_caller())?;
+    let c=directory_config()?;
+    Ok(DirectoryConfigurationReadback{binding:c.binding,generation:c.generation,inventory_digest:c.inventory_digest,sources:c.sources,enabled:c.enabled,app_enabled:false})
+}
+/// Caller-private diagnostic, not the release/current reader. The actor never
+/// accepts another account ID or aliases. Source/ownership and fresh account
+/// checks precede every persisted page/replay, with no intervening await.
+#[ic_cdk::update]
+fn read_my_membership_directory_diagnostic(consumer:u64,token:Option<membership_wire::Token>)->Outcome<membership_wire::Reply>{
+    let caller=ic_cdk::api::msg_caller();
+    let viewer=membership_lookup_viewer(caller)?;
+    let config=directory_config()?;recheck_directory(&config)?;
+    let (page,next)=DIRECTORY_COORDINATOR.with(|c|DIRECTORY_SESSIONS.with(|s|c.borrow().private_page(&mut s.borrow_mut(),caller,viewer.clone(),consumer,membership_wire::continuation(token),ic_cdk::api::time())))?;
+    Ok(membership_wire::diagnostic(caller,&viewer,config.generation,config.binding.registry_revision,config.inventory_digest,page,next))
+}
 /// Only the exact configured source may notify; never accepts raw edges.
 #[ic_cdk::update]
 fn invalidate_membership_directory_source(binding:membership_transport::SourceBinding,revision:candid::Nat)->membership_transport::UnitReply {
