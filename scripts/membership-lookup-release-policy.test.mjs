@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { validateRequest, validateTargets, validateJournal, runFill, digest, PINNED, requireLookupReleaseAcceptance, directorySources, requireReleaseSourceCoverage } from './membership-lookup-release-policy.mjs';
+import { validateRequest, validateTargets, validateJournal, runFill, digest, PINNED, requireLookupReleaseAcceptance, directorySources, requireReleaseSourceCoverage, lookupReleaseTargets, PRIMARY_SUBNET, lookupUpgradeArgs } from './membership-lookup-release-policy.mjs';
 
 const targets = [
   { canisterId: PINNED.identity, groupId: 'shared', name: 'identity_access', subnetId: 'subnet', newHash: 'a'.repeat(64) },
@@ -23,11 +23,11 @@ test('source inventory explicitly includes original Group 1 without inventing a 
   assert.deepEqual(directorySources(snapshot(['g1', 'g2'])), rows);
 });
 
-test('additional registered groups are observed but never fit a partial three-target release', () => {
+test('additional registered groups require exact full-source release coverage', () => {
   const rows = directorySources(snapshot(['g3', 'g2']));
   assert.deepEqual(rows.map(s => s.groupId), ['g1', 'g2', 'g3']);
-  assert.throws(() => requireReleaseSourceCoverage(rows), /no changes/);
-  assert.throws(() => requireReleaseSourceCoverage(rows.filter(s => s.groupId !== 'g2')), /no changes/);
+  requireReleaseSourceCoverage(rows, snapshot(['g3', 'g2']));
+  assert.throws(() => requireReleaseSourceCoverage(rows.filter(s => s.groupId !== 'g2'), snapshot(['g3', 'g2'])), /no changes/);
 });
 
 test('source inventory refuses mismatched original, duplicates, missing placements and foreign deployment', () => {
@@ -93,8 +93,8 @@ test('fill stops on refusal and never loops forever', async () => {
   await assert.rejects(() => runFill(['g1'], async () => ({ Ok: { source: 'g1', revision: 1n, scanned: 0n, phase: 'published' } }), { maxCalls: 3 }), /did not finish/);
 });
 
-test('upgrade is blocked before live mutation until release acceptance exists', () => {
-  assert.throws(requireLookupReleaseAcceptance, /No canisters changed/);
+test('local reader contract permits protected release but does not claim live readiness', () => {
+  assert.equal(requireLookupReleaseAcceptance(), 'snapshot-checked-private-pages-v1');
 });
 
 test('fill rejects wrong sources, fabricated completion, malformed and unbounded progress', async () => {
@@ -106,7 +106,7 @@ test('fill rejects wrong sources, fabricated completion, malformed and unbounded
   }
   await assert.rejects(() => runFill(['g1'], async () => null), /Invalid membership progress/);
   await assert.rejects(() => runFill(['g1', 'g1'], async () => ({ Ok: valid })), /source list/);
-  await assert.rejects(() => runFill(['g3'], async () => ({ Ok: valid })), /source list/);
+  await assert.rejects(() => runFill(['g3'], async () => ({ Ok: valid })), /Invalid membership progress/);
 });
 
 test('unknown replies exhaust retries and failed persistence stops the next source', async () => {
@@ -129,4 +129,42 @@ test('restart rejects fabricated activation and contradictory saved source revis
     assert.throws(() => validateJournal(journal(changes), binding));
   }
   validateJournal(journal({ acknowledgedRevisions: { g1: '7', g2: '9' } }), binding);
+});
+test('G2 G3 G4 produce five exact targets and no media or chat upgrade', () => {
+  const s = snapshot(['g2','g3','g4']);
+  for (const p of s.placements) {
+    p.primary_subnet = PRIMARY_SUBNET; p.approved_subnets = [PRIMARY_SUBNET]; p.additional_subnets_enabled = false;
+    p.domains[0].subnet = PRIMARY_SUBNET;
+  }
+  const sources = directorySources(s), plan = lookupReleaseTargets(s, {identity_access:'a'.repeat(64),club_domain:'b'.repeat(64)});
+  assert.equal(plan.length,5);assert.deepEqual(plan.map(t => t.groupId),['shared','g1','g2','g3','g4']);
+  validateTargets(plan,sources);
+  assert.throws(() => validateTargets(plan.slice(0,-1),sources));
+  assert.throws(() => validateTargets([...plan,{...plan[0],canisterId:'foreign'}],sources));
+  const binding = {sources,targets:plan}, j = {binding,complete:false,steps:plan.map(step),fill:Object.fromEntries(sources.map(s=>[s.groupId,false]))};
+  validateJournal(j,binding);
+  assert.throws(()=>validateJournal({...j,fill:{...j.fill,extra:false}},binding));
+  assert.throws(()=>validateJournal({...j,steps:j.steps.slice(1)},binding));
+  s.placements[1].domains[0].subnet='foreign-subnet';
+  assert.throws(()=>lookupReleaseTargets(s,{identity_access:'a'.repeat(64),club_domain:'b'.repeat(64)}),/subnet/);
+});
+test('all valid sources fill and over-budget inventories refuse before a release', async () => {
+  const called=[];
+  const done=await runFill(['g1','g2','g3','g4'],async source=>{called.push(source);return {Ok:{source,revision:7n,scanned:0n,phase:'acknowledged'}};});
+  assert.deepEqual(called,['g1','g2','g3','g4']);assert.equal(Object.keys(done).length,4);
+  const oversized=directorySources(snapshot(['g2',...Array.from({length:100},(_,n)=>`x${n}`)]));
+  assert.throws(()=>requireReleaseSourceCoverage(oversized),/no changes/);
+});
+test('identity upgrade uses its record init while club upgrades retain principal init',()=>{
+  const governor='vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
+  for(const t of targets){const args=lookupUpgradeArgs(t,'/tmp/module',governor);
+    assert.equal(args[args.indexOf('--args')+1],t.name==='identity_access'?`(record { governor = principal "${governor}" })`:`(principal "${governor}")`);
+    assert.equal(args[args.indexOf('--mode')+1],'upgrade');
+  }
+});
+test('activation restart requires the exact release and settled snapshot checkpoint',()=>{
+  const release='a'.repeat(40), b={...binding,release};
+  const j={...journal(),binding:b,replicaAcceptance:{snapshotVerified:true,restorationGuardVerified:true},activation:{release,phase:'pending'}};
+  validateJournal(j,b);
+  for(const changes of [{activation:{release:'b'.repeat(40),phase:'pending'}},{complete:false},{replicaAcceptance:{snapshotVerified:true}}])assert.throws(()=>validateJournal({...j,...changes},b));
 });

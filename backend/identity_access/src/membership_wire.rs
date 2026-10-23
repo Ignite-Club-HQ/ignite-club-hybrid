@@ -14,6 +14,15 @@ pub struct Reply {
     pub registry_revision:u64, pub inventory_digest:Vec<u8>,
     pub rows:Vec<Row>, pub next:Option<Token>, pub verified_current:bool,
 }
+#[derive(Clone,Debug,CandidType,Deserialize)]
+pub struct ReleasedReply {
+    pub page:Reply,pub instance:u64,pub release:String,pub registry:crate::group_inventory::Snapshot,
+    pub photo_stores:Vec<(String,Option<Principal>)>,
+}
+#[derive(Clone,Debug,CandidType,Deserialize)]
+pub struct PhotoGroup {pub id:String,pub photo_store:Option<Principal>}
+#[derive(Clone,Debug,CandidType,Deserialize)]
+pub struct PhotoRegistryPage {pub revision:u64,pub groups:Vec<PhotoGroup>,pub next_cursor:Option<String>}
 pub fn continuation(token:Option<Token>)->Option<Continuation>{token.map(|t|Continuation{instance:t.instance,sequence:t.sequence})}
 pub fn diagnostic(caller:Principal,viewer:&Viewer,generation:u64,registry_revision:u64,inventory_digest:Vec<u8>,page:Page,next:Option<Continuation>)->Reply{
     Reply{caller,account_version:viewer.version,generation,registry_revision,inventory_digest,

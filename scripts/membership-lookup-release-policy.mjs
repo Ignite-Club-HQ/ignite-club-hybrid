@@ -1,11 +1,10 @@
 // Protected release policy for the permanent membership lookup.
-// Exact three targets: the shared identity_access coordinator and the
-// existing club_domain membership source in each group. Nothing else may be
-// upgraded, created, rewired or opened by this release. Historical source
-// completion cannot certify readiness; upgrades remain blocked until the
-// source configuration and verified-current release contract are implemented.
+// Exact inventory-derived targets: pinned shared identity plus every existing
+// registered club source/original G1. Nothing else is upgraded or opened.
+// Historical completion never certifies readiness; enable is identity-owned.
 import { digest, executeUpgrades } from './subscription-upgrade-policy.mjs';
 import { requireHistoricalCheckpoint } from './membership-acceptance-checks.mjs';
+import { upgradeArgs } from './group2-upgrade-rules.mjs';
 export { digest, executeUpgrades };
 
 export const CONFIRMATION = 'RELEASE MEMBERSHIP LOOKUP';
@@ -15,7 +14,7 @@ export const PINNED = {
   g2: 'yfwyv-nyaaa-aaaal-qxpyq-cai',
 };
 
-/** Complete observed sources, not the three-service upgrade allowlist. The
+/** Complete observed sources, not a fixed-count upgrade allowlist. The
  * original G1 is explicitly pinned; every registered group stays in the list.
  * This makes no placement, authority grant or readiness claim. */
 export function directorySources(snapshot) {
@@ -51,14 +50,42 @@ export function directorySources(snapshot) {
   return sources.sort((a, b) => a.groupId.localeCompare(b.groupId));
 }
 
-/** Must run before any installation or journal mutation, independently of the
- * activation gate. Additional groups may be inspected, never silently omitted
- * or upgraded by this exact three-target release. */
-export function requireReleaseSourceCoverage(sources) {
-  if (!Array.isArray(sources) || sources.length !== 2 ||
-      ['g1', 'g2'].some(group => sources.filter(s => s.groupId === group && s.canisterId === PINNED[group]).length !== 1)) {
-    throw new Error('Complete source inventory exceeds or differs from the approved three lookup targets; no changes permitted');
+/** Exact coverage against independently read registry evidence, never a subset. */
+export function requireReleaseSourceCoverage(sources, snapshot) {
+  const expected = snapshot ? directorySources(snapshot) : sources;
+  if (!Array.isArray(sources) || !sources.length || sources.length > 100 ||
+      new Set(sources.map(s => s.groupId)).size !== sources.length ||
+      new Set(sources.map(s => s.canisterId)).size !== sources.length ||
+      !sources.some(s => s.groupId === 'g1' && s.canisterId === PINNED.g1) ||
+      sources.some(s => !s.groupId || s.groupId.length > 64 || s.groupId.includes('\u001f') || !s.canisterId || s.canisterId === PINNED.identity ||
+        (s.groupId === 'g2' && s.canisterId !== PINNED.g2)) || digest(sources) !== digest(expected)) {
+    throw new Error('Exact complete supported source inventory required; no changes permitted');
   }
+}
+export const PRIMARY_SUBNET = 'e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe';
+export function lookupUpgradeArgs(target,path,governor){
+  const args=upgradeArgs(target,path,governor);
+  if(target.name==='identity_access')args[args.indexOf('--args')+1]=`(record { governor = principal "${governor}" })`;
+  return args;
+}
+/** Build the only permitted upgrade set from complete live placements. */
+export function lookupReleaseTargets(snapshot, hashes) {
+  const sources = directorySources(snapshot); requireReleaseSourceCoverage(sources, snapshot);
+  const text = p => typeof p === 'string' ? p : p?.toText?.();
+  const first = snapshot.placements[0];
+  if (!first || snapshot.placements.some(p => p.deployment_id !== first.deployment_id || p.deployment_revision !== first.deployment_revision ||
+      p.host !== first.host || p.network_kind !== first.network_kind)) throw new Error('Common exact directory deployment required');
+  const targets = [{ groupId:'shared',name:'identity_access',canisterId:PINNED.identity,subnetId:PRIMARY_SUBNET,newHash:hashes.identity_access }];
+  for (const source of sources) {
+    const placement = snapshot.placements.find(p => p.group_id === source.groupId);
+    const domain = placement?.domains.find(d => d.domain === 'club_domain');
+    const subnetId = source.groupId === 'g1' && !placement ? PRIMARY_SUBNET : text(domain?.subnet);
+    if (placement && (!subnetId || !placement.approved_subnets?.some(p => text(p) === subnetId) ||
+        (!placement.additional_subnets_enabled && subnetId !== text(placement.primary_subnet)))) throw new Error('Unapproved membership source subnet');
+    targets.push({ ...source,name:'club_domain',subnetId,newHash:hashes.club_domain });
+  }
+  validateTargets(targets, sources);
+  return targets;
 }
 
 export function validateRequest(action, confirmation) {
@@ -66,33 +93,39 @@ export function validateRequest(action, confirmation) {
   if (action === 'upgrade' && confirmation?.trim() !== CONFIRMATION) throw new Error(`Type ${CONFIRMATION}`);
 }
 
-/** Fail before any live upgrade, not after installing modules and discovering
- * that the source inventory/grants and readiness verifier are unavailable. */
+/** Implementation contract marker; not a live readiness assertion. */
 export function requireLookupReleaseAcceptance() {
-  throw new Error('Lookup upgrade is not ready: exact source configuration, legacy ownership and verified-current release acceptance are required. No canisters changed.');
+  // Local implementation gate, not live readiness. The identity-owned enable
+  // operation still verifies the complete snapshot before recording release.
+  return 'snapshot-checked-private-pages-v1';
 }
 
-export function validateTargets(targets) {
-  if (targets.length !== 3 || new Set(targets.map(t => t.canisterId)).size !== 3 ||
+export function validateTargets(targets, sources = targets?.filter(t => t.name === 'club_domain').map(t => ({groupId:t.groupId,canisterId:t.canisterId}))) {
+  requireReleaseSourceCoverage(sources);
+  if (!Array.isArray(targets) || targets.length !== sources.length + 1 || new Set(targets.map(t => t.canisterId)).size !== targets.length ||
       targets.filter(t => t.name === 'identity_access' && t.groupId === 'shared' && t.canisterId === PINNED.identity).length !== 1 ||
-      ['g1', 'g2'].some(group => targets.filter(t => t.groupId === group && t.canisterId === PINNED[group] && t.name === 'club_domain').length !== 1) ||
-      targets.some(t => !t.subnetId || !/^[a-f0-9]{64}$/.test(t.newHash))) throw new Error('Exact three existing lookup targets required');
+      sources.some(source => targets.filter(t => t.name === 'club_domain' && t.groupId === source.groupId && t.canisterId === source.canisterId).length !== 1) ||
+      targets.some(t => !t.subnetId || !/^[a-f0-9]{64}$/.test(t.newHash))) throw new Error('Exact existing identity and all membership source targets required');
 }
 
 export function validateJournal(journal, binding) {
-  validateTargets(binding.targets);
-  if (digest(journal.binding) !== digest(binding) || typeof journal.complete !== 'boolean' || journal.steps?.length !== 3 ||
-      new Set(journal.steps.map(s => s.canisterId)).size !== 3) throw new Error('Foreign or incomplete lookup release journal');
+  const sources = binding.sources ?? binding.targets.filter(t => t.name === 'club_domain').map(t => ({groupId:t.groupId,canisterId:t.canisterId}));
+  validateTargets(binding.targets, sources);
+  if (digest(journal.binding) !== digest(binding) || typeof journal.complete !== 'boolean' || journal.steps?.length !== binding.targets.length ||
+      new Set(journal.steps.map(s => s.canisterId)).size !== binding.targets.length) throw new Error('Foreign or incomplete lookup release journal');
   for (const t of binding.targets) {
     const s = journal.steps.find(s => s.canisterId === t.canisterId);
     if (!s || s.groupId !== t.groupId || s.name !== t.name || s.subnetId !== t.subnetId || s.newHash !== t.newHash ||
         !/^[a-f0-9]{64}$/.test(s.oldHash) || !/^[a-f0-9]{64}$/.test(s.settingsHash) || !['ready', 'pending', 'complete'].includes(s.phase)) throw new Error('Invalid lookup release step');
   }
   if (journal.complete && journal.steps.some(s => s.phase !== 'complete')) throw new Error('Unsettled completed journal');
-  if (journal.fill && (typeof journal.fill !== 'object' || ['g1', 'g2'].some(g => typeof journal.fill[g] !== 'boolean'))) throw new Error('Invalid fill record');
+  if (journal.fill && (typeof journal.fill !== 'object' || Object.keys(journal.fill).length !== sources.length || sources.some(s => typeof journal.fill[s.groupId] !== 'boolean'))) throw new Error('Invalid fill record');
   // Even a fully acknowledged historical fill is not global currentness.
   if (journal.ready === true) throw new Error('Historical membership fill cannot certify lookup readiness');
-  requireHistoricalCheckpoint(journal, ['g1', 'g2'].map(groupId => ({ groupId, canisterId: PINNED[groupId] })));
+  if (journal.activation && (journal.activation.release !== binding.release ||
+      !/^[a-f0-9]{40}$/.test(journal.activation.release ?? '') || !['pending','complete'].includes(journal.activation.phase) ||
+      !journal.complete || !journal.replicaAcceptance?.snapshotVerified || !journal.replicaAcceptance?.restorationGuardVerified)) throw new Error('Invalid lookup activation checkpoint');
+  requireHistoricalCheckpoint(journal, sources);
 }
 
 /** Uses the real source-specific Progress contract. Completion records an
@@ -100,7 +133,7 @@ export function validateJournal(journal, binding) {
  * Source requests are durable and replay-checked, so unknown network replies
  * may retry this bounded driver; definite refusals stop the run. */
 export async function runFill(groups, call, { maxCalls = 100000, retries = 5, persist = async () => {} } = {}) {
-  if (!Array.isArray(groups) || new Set(groups).size !== groups.length || groups.some(g => !['g1', 'g2'].includes(g)) ||
+  if (!Array.isArray(groups) || new Set(groups).size !== groups.length || !groups.length || groups.length > 100 || groups.some(g => typeof g !== 'string' || !g || g.length > 64 || g.includes('\u001f')) ||
       !Number.isSafeInteger(maxCalls) || maxCalls < 1 || !Number.isSafeInteger(retries) || retries < 0) throw new Error('Exact bounded lookup source list required');
   const done = {};
   for (const groupId of groups) {

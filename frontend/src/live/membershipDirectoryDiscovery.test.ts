@@ -27,4 +27,7 @@ describe('complete caller-private membership directory', () => {
     await expect(readCompleteMembershipDirectory('member', 'full-target', async () => page(), () => { throw new Error('Signed out'); })).rejects.toThrow('Signed out');
     await expect(readCompleteMembershipDirectory('member', 'full-target', async continuation => page({ assignments: [{ clubId: 'club-a', groupId: continuation === null ? 'g1' : 'g2', revision: 1n }], next: continuation === null ? { instance: 7n, sequence: 1n } : null }), () => {})).rejects.toThrow('Conflicting');
   });
+  it('refuses a release or inventory replacement between pages',async()=>{
+    await expect(readCompleteMembershipDirectory('member','full-target',async token=>page({releaseBinding:token?'new':'old',next:token?null:{instance:7n,sequence:1n}}),()=>{})).rejects.toThrow('continuation');
+  });
 });

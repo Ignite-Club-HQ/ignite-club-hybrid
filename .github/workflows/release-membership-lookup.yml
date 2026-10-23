@@ -1,9 +1,9 @@
-name: Release permanent club lookup (both ICP groups)
+name: Release permanent club lookup (all groups)
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: Check pinned services and every membership source; upgrade remains blocked pending activation checks
+        description: Check or upgrade identity and every registered membership source plus original Group 1
         required: true
         type: choice
         default: check
@@ -51,6 +51,9 @@ jobs:
           icp identity import --from-pem "$RUNNER_TEMP/lookup.pem" --storage plaintext ignite-governor
           icp identity default ignite-governor
           test "$(icp identity principal)" = vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - name: Build only lookup release artifacts
         working-directory: deploy/mainnet
         run: |
@@ -59,9 +62,6 @@ jobs:
           icp build club_domain
           mkdir -p "$RUNNER_TEMP/lookup-wasm"
           cp .icp/cache/artifacts/identity_access .icp/cache/artifacts/club_domain "$RUNNER_TEMP/lookup-wasm/"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
       - name: Verify real consensus acceptance and snapshot restoration locally
         run: |
           set -euo pipefail
@@ -76,6 +76,25 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
           GH_TOKEN: ${{ github.token }}
         run: npx --yes tsx@4 scripts/release-membership-lookup.ts "$ACTION" "$RUNNER_TEMP/lookup-wasm" "$RUNNER_TEMP/lookup.pem" "$RUNNER_TEMP/lookup-report"
+      - name: Resolve existing delivery identity
+        if: inputs.action == 'upgrade'
+        env:
+          ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
+          PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
+        run: bash scripts/resolve-group-push-worker.sh
+      - name: Refresh governor-verified routing evidence
+        if: inputs.action == 'upgrade'
+        working-directory: frontend
+        run: npx --yes tsx@4 scripts/produce-routing-gates.ts "$RUNNER_TEMP/lookup.pem" "$RUNNER_TEMP/lookup-report/routing-gates.json"
+      - name: Save verified lookup fingerprints and routing snapshot
+        if: inputs.action == 'upgrade'
+        run: |
+          set -euo pipefail
+          git config user.name "ignite-governor-bot"
+          git config user.email "noreply@igniteclubhq.app"
+          git add deploy/groups/g2/general-opening.json frontend/src/live/generated/routingGates.ts
+          git diff --cached --quiet || git commit -m "chore: verified club lookup release snapshot [skip ci]"
+          git push
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/lookup.pem"; rm -rf "$RUNNER_TEMP/lookup-icp-home"

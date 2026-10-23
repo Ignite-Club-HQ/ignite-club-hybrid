@@ -511,11 +511,15 @@ fn directory_config()->Outcome<membership_runtime::Config>{
 }
 fn save_directory_config(config:&membership_runtime::Config){DIRECTORY_CONFIG.with(|m|m.borrow_mut().set(encode(config)));}
 async fn directory_lifecycle(binding:&group_inventory::Binding,sources:&[(String,Principal)])->Outcome<Vec<membership_acceptance::Lifecycle>>{
+    directory_lifecycle_checked(binding,sources,||Ok(())).await
+}
+async fn directory_lifecycle_checked(binding:&group_inventory::Binding,sources:&[(String,Principal)],recheck:impl Fn()->Outcome<()>)->Outcome<Vec<membership_acceptance::Lifecycle>>{
     if sources.len()>100{return Err("Directory lifecycle budget exceeded".into());}
     let mut targets=vec![ic_cdk::api::canister_self(),binding.registry];targets.extend(sources.iter().map(|(_,p)|*p));
     let mut result=vec![];
     for target in targets{
         let info=ic_cdk::management_canister::canister_info(&ic_cdk::management_canister::CanisterInfoArgs{canister_id:target,num_requested_changes:Some(0)}).await.map_err(|_|"Replica directory lifecycle unavailable")?;
+        recheck()?;
         result.push(membership_acceptance::Lifecycle{canister:target,changes:info.total_num_changes,module_hash:info.module_hash.ok_or("Directory module missing")?});
     }
     Ok(result)
@@ -565,7 +569,7 @@ async fn configure_membership_directory(binding:group_inventory::Binding,authori
             if existing.binding!=binding||existing.generation!=generation||existing.inventory_digest!=digest||existing.sources!=sources||!existing.enabled{return Err("Directory replacement requires fenced recovery; not released".into());}
             membership_acceptance::check_lifecycle(&existing.lifecycle,&lifecycle)?;existing
         },
-        Err(_)=>membership_runtime::Config{binding,generation,inventory_digest:digest,sources,pending:Default::default(),enabled:true,next_source:0,lifecycle},
+        Err(_)=>membership_runtime::Config{binding,generation,inventory_digest:digest,sources,pending:Default::default(),enabled:true,next_source:0,lifecycle,release:None},
     };
     DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().bind_inventory(verified))?;
     let grants=config.sources.iter().map(|(id,_)|config.source_binding(ic_cdk::api::canister_self(),id)).collect::<Outcome<Vec<_>>>()?;
@@ -581,7 +585,7 @@ struct DirectoryConfigurationReadback { binding:group_inventory::Binding,generat
 fn read_membership_directory_configuration()->Outcome<DirectoryConfigurationReadback>{
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     let c=directory_config()?;
-    Ok(DirectoryConfigurationReadback{binding:c.binding,generation:c.generation,inventory_digest:c.inventory_digest,sources:c.sources,enabled:c.enabled,app_enabled:false})
+    Ok(DirectoryConfigurationReadback{binding:c.binding,generation:c.generation,inventory_digest:c.inventory_digest,sources:c.sources,enabled:c.enabled,app_enabled:c.release.is_some()})
 }
 /// Caller-private diagnostic, not the release/current reader. The actor never
 /// accepts another account ID or aliases. Source/ownership and fresh account
@@ -717,10 +721,18 @@ struct DirectoryAcceptanceCheck {snapshot_verified:bool,restoration_guard_verifi
 async fn check_membership_directory_acceptance()->Outcome<DirectoryAcceptanceCheck>{
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     let config=directory_config()?;recheck_directory(&config)?;
-    let before=directory_lifecycle(&config.binding,&config.sources).await?;
+    let (_,expected,_)=verify_directory_snapshot(&config,||recheck_directory(&config)).await?;
+    Ok(DirectoryAcceptanceCheck{snapshot_verified:true,restoration_guard_verified:true,source_revisions:expected,verified_current:false,app_enabled:config.release.is_some()})
+}
+/// Shared by release AND every private page, including reply replays. The
+/// caller-specific recheck runs after each await, not only at final delivery.
+async fn verify_directory_snapshot(config:&membership_runtime::Config,recheck:impl Fn()->Outcome<()>)->Outcome<(group_inventory::Snapshot,Vec<(String,u64)>,Vec<(String,Option<Principal>)>)>{
+    recheck()?;
+    let before=directory_lifecycle_checked(&config.binding,&config.sources,&recheck).await?;
     membership_acceptance::check_lifecycle(&config.lifecycle,&before)?;
-    recheck_directory(&config)?;
-    let registry_before=read_registry_pages(&config.binding,||recheck_directory(&config)).await?;
+    recheck()?;
+    let registry_before=read_registry_pages(&config.binding,&recheck).await?;
+    let photos_before=read_directory_photo_stores(&config.binding,&recheck).await?;
     let captured=DIRECTORY_COORDINATOR.with(|c|{let c=c.borrow();c.accepted_ownership()?;c.sources()})?;
     let expected=captured.iter().map(|s|(s.id.clone(),s.binding.revision)).collect::<Vec<_>>();
     let mut scans=vec![];
@@ -728,19 +740,68 @@ async fn check_membership_directory_acceptance()->Outcome<DirectoryAcceptanceChe
         let mut stamps=vec![];
         for (source,authority) in &config.sources{
             let (revision,acknowledged,pending)=directory_source_status(&config,source,*authority).await?;
+            recheck()?;
             stamps.push(membership_acceptance::Stamp{source:source.clone(),revision,acknowledged,pending});
         }
         scans.push(stamps);
     }
     membership_acceptance::check_collect(&expected,&scans[0],&scans[1])?;
-    let registry_after=read_registry_pages(&config.binding,||recheck_directory(&config)).await?;
+    let registry_after=read_registry_pages(&config.binding,&recheck).await?;
+    let photos_after=read_directory_photo_stores(&config.binding,&recheck).await?;
+    if photos_before!=photos_after||photos_after.iter().map(|(id,_)|id).collect::<Vec<_>>()!=registry_after.groups.iter().map(|g|&g.id).collect::<Vec<_>>(){return Err("Directory photo-store inventory changed".into());}
     if registry_before!=registry_after{return Err("Directory registry changed during acceptance".into());}
-    let after=directory_lifecycle(&config.binding,&config.sources).await?;
+    let after=directory_lifecycle_checked(&config.binding,&config.sources,&recheck).await?;
     membership_acceptance::check_lifecycle(&config.lifecycle,&after)?;
-    recheck_directory(&config)?;
+    recheck()?;
     let final_sources=DIRECTORY_COORDINATOR.with(|c|{let c=c.borrow();c.accepted_ownership()?;c.sources()})?;
     if expected!=final_sources.iter().map(|s|(s.id.clone(),s.binding.revision)).collect::<Vec<_>>(){return Err("Directory builds changed during acceptance".into());}
-    Ok(DirectoryAcceptanceCheck{snapshot_verified:true,restoration_guard_verified:true,source_revisions:expected,verified_current:false,app_enabled:false})
+    Ok((registry_after,expected,photos_after))
+}
+async fn read_directory_photo_stores(binding:&group_inventory::Binding,recheck:impl Fn()->Outcome<()>)->Outcome<Vec<(String,Option<Principal>)>>{
+    let mut cursor:Option<String>=None;let mut stores=vec![];
+    loop{
+        recheck()?;
+        let reply=ic_cdk::call::Call::bounded_wait(binding.registry,"read_group_registry_page").with_args(&(&binding.target_alias,Some(binding.registry_revision),&cursor,64u32)).await.map_err(|_|"Directory photo registry unavailable")?;
+        recheck()?;
+        let page:Outcome<membership_wire::PhotoRegistryPage>=reply.candid().map_err(|_|"Invalid directory photo registry")?;let page=page?;
+        if page.revision!=binding.registry_revision||page.groups.len()>64||stores.len()+page.groups.len()>100||page.next_cursor.as_ref().is_some_and(|n|cursor.as_ref().is_some_and(|c|n<=c)){return Err("Directory photo registry changed".into());}
+        stores.extend(page.groups.into_iter().map(|g|(g.id,g.photo_store)));
+        match page.next_cursor{None=>return Ok(stores),Some(next)=>cursor=Some(next)}
+    }
+}
+/// Release permission is identity-owned, not a browser flag or saved report.
+/// Repeating an acknowledged release is safe; a different release is refused.
+#[ic_cdk::update]
+async fn enable_membership_directory(release:String)->Outcome<DirectoryAcceptanceCheck>{
+    require_governor(&state(),ic_cdk::api::msg_caller())?;
+    if release.len()!=40||!release.bytes().all(|v|v.is_ascii_digit()||(b'a'..=b'f').contains(&v)){return Err("Exact release commit required".into());}
+    let config=directory_config()?;
+    if config.release.as_ref().is_some_and(|prior|prior!=&release){return Err("Different lookup release already enabled".into());}
+    let (_,expected,_)=verify_directory_snapshot(&config,||recheck_directory(&config)).await?;
+    let mut current=directory_config()?;recheck_directory(&config)?;
+    current.release=Some(release);save_directory_config(&current);
+    Ok(DirectoryAcceptanceCheck{snapshot_verified:true,restoration_guard_verified:true,source_revisions:expected,verified_current:false,app_enabled:true})
+}
+#[ic_cdk::update]
+async fn read_my_membership_directory(consumer:u64,token:Option<membership_wire::Token>)->Outcome<membership_wire::ReleasedReply>{
+    let caller=ic_cdk::api::msg_caller();let viewer=membership_lookup_viewer(caller)?;
+    let config=directory_config()?;let release=config.release.clone().ok_or("Membership lookup not released; existing discovery required")?;
+    let recheck=||->Outcome<()>{
+        recheck_directory(&config)?;
+        if membership_lookup_viewer(caller)?!=viewer{return Err("Lookup caller account changed during verification".into());}Ok(())
+    };
+    let (registry,_,photo_stores)=verify_directory_snapshot(&config,&recheck).await?;recheck()?;
+    // No await from the last eligibility/source checks through session commit.
+    let (page,next,instance)=DIRECTORY_COORDINATOR.with(|c|DIRECTORY_SESSIONS.with(|s|{
+        let mut sessions=s.borrow_mut();
+        let (page,next)=c.borrow().private_page(&mut sessions,caller,viewer.clone(),consumer,membership_wire::continuation(token),ic_cdk::api::time())?;
+        let instance=sessions.instance(caller,consumer)?;Ok::<_,String>((page,next,instance))
+    }))?;
+    let mut page=membership_wire::diagnostic(caller,&viewer,config.generation,config.binding.registry_revision,config.inventory_digest,page,next);
+    // Current means the independently verified snapshot interval of this page,
+    // never permanent freshness or authorization to read club resources.
+    page.verified_current=true;
+    Ok(membership_wire::ReleasedReply{page,instance,release,registry,photo_stores})
 }
 /// Governor-only bounded ownership acceptance. Every live source status and
 /// complete registry is checked before local acceptance; no observer supplies
@@ -748,6 +809,9 @@ async fn check_membership_directory_acceptance()->Outcome<DirectoryAcceptanceChe
 #[ic_cdk::update]
 async fn advance_membership_directory_ownership()->Outcome<membership_coordinator::OwnershipProgress>{
     require_governor(&state(),ic_cdk::api::msg_caller())?;
+    advance_directory_ownership().await
+}
+async fn advance_directory_ownership()->Outcome<membership_coordinator::OwnershipProgress>{
     let config=directory_config()?;recheck_directory(&config)?;
     if config.sources.len()>100{return Err("Ownership source-status budget exceeded".into());}
     let check=||recheck_directory(&config);
@@ -798,7 +862,10 @@ extern "C" fn membership_directory_global_timer(){
         config.next_source=(at+1)%config.sources.len();save_directory_config(&config);
         // Cleanup is bounded and happens independently of allocation success.
         let _=DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().reclaim_retired());
-        if let Err(error)=advance_directory_source(source).await{ic_cdk::println!("Directory refresh deferred: {}",error);}
+        match advance_directory_source(source).await{
+            Ok(progress) if progress.phase=="acknowledged"=>{let _=advance_directory_ownership().await;},
+            Err(error)=>ic_cdk::println!("Directory refresh deferred: {}",error),_=>{},
+        }
     }));
 }
 fn removal_intent(account_id: &str) -> Option<removal_barrier::Intent> {

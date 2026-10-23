@@ -8,6 +8,7 @@ export type DirectoryPage = {
   generation: bigint;
   directoryRevision: bigint;
   registryFingerprint: string;
+  releaseBinding?: string;
   instance: bigint;
   verifiedCurrent: boolean;
   assignments: DirectoryAssignment[];
@@ -35,7 +36,7 @@ export async function readCompleteMembershipDirectory(
         (continuation !== null && page.instance !== continuation.instance) ||
         page.assignments.length + page.legacyClubs.length > 100 ||
         (page.next !== null && (page.next.instance !== page.instance || page.next.sequence !== (continuation?.sequence ?? 0n) + 1n))) throw new Error('Membership directory is incomplete or changed');
-    const current = JSON.stringify([String(page.instance), String(page.accountVersion), String(page.generation), String(page.directoryRevision), page.registryFingerprint]);
+    const current = JSON.stringify([String(page.instance), String(page.accountVersion), String(page.generation), String(page.directoryRevision), page.registryFingerprint, page.releaseBinding]);
     if (binding !== undefined && current !== binding) throw new Error('Membership directory continuation changed');
     binding = current;
     for (const row of page.assignments) {
