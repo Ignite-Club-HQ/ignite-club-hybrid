@@ -1,4 +1,5 @@
 ## Approved multi-group recovery — 22 October 2026
+- [ ] Profile points: share reward club/Pro discovery and weekly/activity history, avoid false Pro locks while unresolved, show ready history independently and provide retry for failed reads.
 - [x] View Rewards: share the summary/drawer catalogue by account/backend/club, decode ICP club options, bound unresolved reads with manual retry, preserve loaded catalogues during refresh and surface Supabase errors instead of empty data. 19 focused checks pass; signed-in live rewards unavailable here.
 - [x] Restrict Home New Event and Post Photo/Video club choices to the active theme club in both modes; clear conflicting selections, preserve explicit team/mini-league links, and retain unfiltered choices without a theme club. Local choice/selection checks pass; signed-in live Home flow unavailable here.
 - [x] News More/detail repair: reuse loaded article's own club for an audience-checked read, retain authorized cold-link/competition discovery, and distinguish request failure from confirmed absence with retry. No permissions/canister/publication changes; signed-in live News readback remains unavailable.
