@@ -216,6 +216,7 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
       address: ADDRESSES[e.k % ADDRESSES.length], miniLeagueId: null,
       startsAtMs: e.start.getTime(), endsAtMs: e.start.getTime() + 3_600_000,
     } as any);
+    if (created?.id) eventIds.push(created.id as string);
     step("Creating events", ++evDone, events.length);
   });
 
