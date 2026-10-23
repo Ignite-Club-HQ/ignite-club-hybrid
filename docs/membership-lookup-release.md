@@ -59,9 +59,17 @@ The app's ordinary lookup switch remains off, so navigation makes no new lookup
 calls and continues using existing discovery. Diagnostic replies explicitly
 say they are not verified-current.
 
-Identity transport now includes explicitly pinned original Group 1 without
-inventing a placement. Exclusive legacy-location acceptance and the verified-current/
-old-restored-state release contract remain unfinished. Additional registered groups
+Identity transport includes explicitly pinned original Group 1 without
+inventing a placement. Ownership acceptance implementation is complete locally:
+the governor-only `advance_membership_directory_ownership` operation reuses
+complete retained Club rows, checks exclusive IDs across every source (including
+tombstones), persists bounded progress across upgrades, and binds acceptance to
+exact source revisions/status and inventory. Missing assignments can resolve only
+for the pinned original G1 after this acceptance; no router placement is written.
+Any changed source invalidates acceptance. The generated release driver journals
+its result, never `ready: true`. Signed live acceptance has not run.
+
+The verified-current/old-restored-state release contract remains unfinished. Additional registered groups
 are inspected, but cannot be silently ignored or added to this three-target upgrade.
 The protected upgrade still refuses before making changes.
 
@@ -87,6 +95,12 @@ journal persistence stop the fill. There is no invented global fill API.
 Historical acknowledgement may leave newer changes pending. Even both groups
 acknowledging does not establish currentness or exclusive legacy ownership.
 The runner therefore cannot emit a readiness record or enable the app.
+
+After source fill, the runner now invokes the generated ownership operation
+until its bounded traversal completes, verifies the exact digest/source list and
+unchanged revisions, and records the ownership result. This reuses the existing
+trees rather than adding another per-club index or filling club records again.
+Ownership acceptance is not currentness/recovery approval; upgrade remains gated.
 
 ## If it fails
 
