@@ -59,6 +59,13 @@ jobs:
           icp build club_domain
           mkdir -p "$RUNNER_TEMP/lookup-wasm"
           cp .icp/cache/artifacts/identity_access .icp/cache/artifacts/club_domain "$RUNNER_TEMP/lookup-wasm/"
+      - name: Verify real consensus acceptance and snapshot restoration locally
+        run: |
+          set -euo pipefail
+          cargo test -p identity_access --lib
+          cargo build --release --target wasm32-unknown-unknown -p identity_access -p shard_router
+          node frontend/node_modules/@dfinity/pic/postinstall.mjs
+          SHARD_ROUTER_WASM="$GITHUB_WORKSPACE/target/wasm32-unknown-unknown/release/shard_router.wasm" IDENTITY_ACCESS_WASM="$GITHUB_WORKSPACE/target/wasm32-unknown-unknown/release/identity_access.wasm" CLUB_DOMAIN_WASM="$RUNNER_TEMP/lookup-wasm/club_domain" node frontend/scripts/test-membership-acceptance-replica.mjs
       - name: Check every membership source or run the protected lookup release
         working-directory: frontend
         env:

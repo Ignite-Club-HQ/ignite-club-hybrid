@@ -26,7 +26,7 @@ import { membershipOwnershipTransport } from './membership-ownership-transport';
 import { checkLegacyOwnership } from '../../scripts/membership-legacy-ownership.mjs';
 import { fingerprint } from '../../scripts/membership-source-configuration.mjs';
 import { runOwnershipAcceptance } from '../../scripts/membership-ownership-acceptance.mjs';
-import { requireCompleteFill, checkHistoricalAcceptance } from '../../scripts/membership-acceptance-checks.mjs';
+import { requireCompleteFill, checkHistoricalAcceptance, checkReplicaAcceptance } from '../../scripts/membership-acceptance-checks.mjs';
 
 const [action, artifacts, pem, directory] = process.argv.slice(2);
 validateRequest(action, process.env.CONFIRMATION);
@@ -183,5 +183,10 @@ const acceptance = await checkHistoricalAcceptance({ sources, completed, ownersh
   status: (source: { groupId: string }) => sourceActor(source).read_membership_discovery_status(), observe });
 journal.acceptance = acceptance;await persist();
 writeFileSync(resolve(directory, 'acceptance.json'), JSON.stringify(acceptance, null, 2));
+const replicaAcceptance = await checkReplicaAcceptance(sources, completed, {
+  gate, check: () => fillActor.check_membership_directory_acceptance(),
+});
+journal.replicaAcceptance = replicaAcceptance;await persist();
+writeFileSync(resolve(directory, 'replica-acceptance.json'), JSON.stringify(replicaAcceptance, null, 2));
 journal.ready = false; await persist();
-throw new Error('Historical coverage/ownership and repeated catch-up readbacks checked; atomic read freshness and independent restored-state fencing remain required. No readiness record or app activation.');
+throw new Error('Coverage/ownership, consensus snapshot and replica-history restoration guards checked; released per-page reader/app activation remain separate. No readiness record or app activation.');
