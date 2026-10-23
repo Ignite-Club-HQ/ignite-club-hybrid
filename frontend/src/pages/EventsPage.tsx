@@ -1181,8 +1181,6 @@ export default function EventsPage() {
       className="py-6 space-y-6 [overflow-anchor:none]"
       data-schedule-scroll-anchor="disabled"
     >
-      {leagueDiscovery.isPending && isIcpAuthBackend && <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" />Loading league events…</div>}
-      {isIcpAuthBackend && (filter === 'all' || filter === 'game') && fixtureQuery.isFetching && <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" />Loading competition fixtures…</div>}
       <QueryErrorBanner hasError={isIcpAuthBackend && (filter === 'all' || filter === 'game') && (fixtureQuery.isError || (fixtureQuery.data?.failed.length ?? 0) > 0)} onRetry={() => fixtureQuery.refetch().then(() => undefined)} message="Some competition fixtures couldn't be refreshed." />
       <QueryErrorBanner hasError={leagueDiscovery.isError} onRetry={() => leagueDiscovery.refetch().then(() => undefined)} message="League events couldn't be refreshed." />
 
@@ -1288,7 +1286,6 @@ export default function EventsPage() {
         </div>
       </div>
 
-      {isIcpAuthBackend && memberScheduleQuery.isFetching && memberScheduleQuery.data && <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" />Loading more club events…</div>}
       <QueryErrorBanner
         hasError={isOnline && eventsIsError && !isFetching}
         onRetry={async () => {
