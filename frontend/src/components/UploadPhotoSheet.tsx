@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { compressImage, formatFileSize } from "@/lib/imageCompression";
 import { isVideoFile, validateVideo, generateVideoThumbnail } from "@/lib/videoUtils";
 import { useClubTheme } from "@/hooks/useClubTheme";
+import { creationClubChoices } from "@/lib/creationClubChoices";
 import { Capacitor } from "@capacitor/core";
 import { isCancelledSelectionError, getReadableUploadError } from "@/lib/uploadErrorUtils";
 import { pickNativePhoto, shouldUseNativePicker as shouldUseNativeIOSPicker, ensurePhotoLibraryPermission, PhotoPermissionDeniedError, isPhotoPermissionError } from "@/lib/nativePhotoPicker";
@@ -99,6 +100,9 @@ export function UploadPhotoSheet({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { activeClubFilter } = useClubTheme();
+  // Explicit chat/team upload links keep their own context; gallery/Home
+  // uploads follow the app's selected club.
+  const themeCreationClubId = defaultClubId || defaultTeamId ? null : activeClubFilter;
   
   const [selectedClubId, setSelectedClubId] = useState<string>("");
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
@@ -417,20 +421,18 @@ export function UploadPhotoSheet({
   }, [isAppAdmin, selectedClubId, userRoles, userTeams]);
 
   // Show all clubs; free ones are visually locked so users know they need Pro
-  const availableClubs = (() => {
-    let clubs = userClubs;
-    if (activeClubFilter && clubs?.some((club) => club.id === activeClubFilter)) {
-      clubs = clubs.filter(club => club.id === activeClubFilter);
-    }
-    return clubs;
-  })();
+  const availableClubs = creationClubChoices(userClubs, themeCreationClubId);
 
   // Auto-select filtered club when active
   useEffect(() => {
-    if (activeClubFilter && availableClubs?.some(c => c.id === activeClubFilter) && !selectedClubId) {
-      setSelectedClubId(activeClubFilter);
+    if (open && themeCreationClubId && selectedClubId !== themeCreationClubId) {
+      setSelectedClubId(themeCreationClubId);
+      setSelectedTeamId("");
+      setSelectedMiniLeagueId("");
+      setSelectedEventId("");
+      setSelectedCompetitionId("");
     }
-  }, [activeClubFilter, availableClubs, selectedClubId]);
+  }, [open, themeCreationClubId, selectedClubId]);
 
   // Auto-select first team for non-privileged users who can't post club-wide
   useEffect(() => {
@@ -1436,7 +1438,7 @@ export function UploadPhotoSheet({
                         <button
                           key={club.id}
                           type="button"
-                          disabled={uploading || !!activeClubFilter || isLocked}
+                          disabled={uploading || !!themeCreationClubId || isLocked}
                           onClick={() => {
                             if (isLocked) return;
                             setSelectedClubId(club.id);
@@ -1449,7 +1451,7 @@ export function UploadPhotoSheet({
                               ? "border-primary bg-primary/5"
                               : "border-border bg-card hover:border-muted-foreground/50",
                             isLocked && "opacity-60 cursor-not-allowed border-dashed",
-                            (uploading || !!activeClubFilter) && "opacity-50 cursor-not-allowed"
+                            (uploading || !!themeCreationClubId) && "opacity-50 cursor-not-allowed"
                           )}
                         >
                           <div className="flex items-center gap-3">

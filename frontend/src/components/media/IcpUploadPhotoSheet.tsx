@@ -13,6 +13,8 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { mimeToExtension } from "@/lib/binaryUtils";
+import { useClubTheme } from "@/hooks/useClubTheme";
+import { creationClubChoices } from "@/lib/creationClubChoices";
 
 export interface IcpUploadClubOption {
   id: string;
@@ -77,6 +79,8 @@ export function IcpUploadPhotoSheet({
   defaultCompetitionId,
   onPendingChange,
 }: IcpUploadPhotoSheetProps) {
+  const { activeClubFilter } = useClubTheme();
+  const availableClubs = creationClubChoices(clubs, activeClubFilter) ?? [];
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [caption, setCaption] = useState("");
@@ -89,9 +93,16 @@ export function IcpUploadPhotoSheet({
 
   useEffect(() => {
     if (!open) return;
-    setClubId((prev) => prev || defaultClubId || clubs[0]?.id || "");
+    if (activeClubFilter && clubId !== activeClubFilter) {
+      setClubId(activeClubFilter);
+      setTeamId("");
+      setMiniLeagueId("");
+      setCompetitionId("");
+    } else if (!clubId) {
+      setClubId(defaultClubId || availableClubs[0]?.id || "");
+    }
     if (defaultCompetitionId) setCompetitionId(defaultCompetitionId);
-  }, [open, defaultClubId, defaultCompetitionId, clubs]);
+  }, [open, defaultClubId, defaultCompetitionId, availableClubs, activeClubFilter, clubId]);
 
   useEffect(() => {
     if (!open) {
@@ -334,11 +345,11 @@ export function IcpUploadPhotoSheet({
               Select Club <span className="text-destructive">*</span>
             </Label>
             <div className="grid gap-2">
-              {clubs.map((club) => (
+              {availableClubs.map((club) => (
                 <button
                   key={club.id}
                   type="button"
-                  disabled={uploading}
+                  disabled={uploading || !!activeClubFilter}
                   onClick={() => {
                     setClubId(club.id);
                     setTeamId("");
