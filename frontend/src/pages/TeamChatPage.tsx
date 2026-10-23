@@ -519,7 +519,7 @@ export default function TeamChatPage() {
   const mapLiveTeamRows = async (ctx: any, rows: any[]): Promise<Message[]> => {
     const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
     const profilesRead = withReadDeadline(fetchProfilesWithCache(authorIds), 'Chat profiles', 1500)
-      .catch(() => getProfilesFromCache(authorIds));
+      .catch(() => getProfilesFromCache(authorIds).cached);
     const reactionsRead = teamId ? withReadDeadline(listLiveReactions(ctx, teamId), 'Chat reactions', 1500).catch(() => []) : Promise.resolve([]);
     const [profilesMap, liveReactions] = await Promise.all([profilesRead, reactionsRead]);
     // Reactions persist on the canister; restore them on every refetch.

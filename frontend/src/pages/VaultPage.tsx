@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { withReadDeadline } from "@/live/readDeadline";
 import { listLiveMiniLeaguesByClub, listMyLiveMiniLeagues, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { listLiveTeams, getLiveTeam, getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
 import { listLiveTeamSubscriptions, liveHasAnyPro } from "@/live/features/proAccess";
@@ -95,6 +96,7 @@ function SupabaseVaultPage() {
   const { activeClubFilter } = useClubTheme();
   const [currentView, setCurrentView] = useState<FolderView>({ type: "root" });
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [entryRetry, setEntryRetry] = useState(0);
   const [vaultSearchQuery, setVaultSearchQuery] = useState("");
   const debouncedVaultSearchQuery = useDebounce(vaultSearchQuery, 300);
   useEffect(() => { setVaultSearchQuery(""); }, [currentView]);
@@ -504,11 +506,12 @@ function SupabaseVaultPage() {
 
   // Load folder from URL parameter
   useEffect(() => {
+    let cancelled = false;
     const loadFolderFromUrl = async () => {
       if (!urlFolderId || initialLoadComplete || !userClubs) return;
       
       try {
-        const result = await withFeatureBackend("vault", {
+        const result = await withReadDeadline(withFeatureBackend("vault", {
           supabase: async () => {
             // Fetch the folder to get its details
             const { data: folder, error } = await supabase
@@ -517,7 +520,8 @@ function SupabaseVaultPage() {
               .eq("id", urlFolderId)
               .maybeSingle();
 
-            if (error || !folder) return null;
+            if (error) throw error;
+            if (!folder) return null;
 
             // Build folder path by traversing parent folders
             const path: { id: string; name: string }[] = [];
@@ -556,12 +560,15 @@ function SupabaseVaultPage() {
           // parent-chain walk and the team/club name joins done here —
           // the canister returns the flat VaultFolder record only.
           icp: async (ctx) => {
-            const folder = await getLiveVaultFolder(ctx, urlFolderId!);
+            const folder = await getLiveVaultFolder(ctx, urlFolderId);
             if (!folder) return null;
 
             const path: { id: string; name: string }[] = [];
+            const visited = new Set<string>([folder.id]);
             let currentFolderId: string | null = folder.parent_id.length ? folder.parent_id[0] : null;
             while (currentFolderId) {
+              if (visited.has(currentFolderId) || visited.size >= 100) throw new Error("Invalid folder path");
+              visited.add(currentFolderId);
               const parentFolder = await getLiveVaultFolder(ctx, currentFolderId);
               if (!parentFolder) break;
               path.unshift({ id: parentFolder.id, name: parentFolder.name });
@@ -571,8 +578,8 @@ function SupabaseVaultPage() {
 
             const teamId = folder.team.length ? folder.team[0] : null;
             const [clubProfile, teams] = await Promise.all([
-              getLiveClubProfile(ctx, folder.club),
-              teamId ? listLiveTeams(ctx, folder.club) : Promise.resolve([]),
+              withReadDeadline(getLiveClubProfile(ctx, folder.club), 'Vault club label', 1500).catch(() => []),
+              teamId ? withReadDeadline(getLiveTeam(ctx, teamId), 'Vault team label', 1500).catch(() => []) : Promise.resolve([]),
             ]);
             const clubName = clubProfile.length ? clubProfile[0].name : "Unknown Club";
             const team = teamId ? teams.find((t: any) => t.id === teamId) : null;
@@ -591,14 +598,15 @@ function SupabaseVaultPage() {
                 deleted_at: null,
                 chat_group_id: null,
                 drive_folder_id: null,
-                teams: team ? { id: team.id, name: team.name, club_id: folder.club } : null,
+                teams: teamId ? { id: teamId, name: team?.name ?? "Team", club_id: folder.club } : null,
                 clubs: { id: folder.club, name: clubName },
               },
               path,
               clubName,
             };
           },
-        }, { vaultFolderId: urlFolderId ?? "" });
+        }, { vaultFolderId: urlFolderId }), 'Vault folder');
+        if (cancelled) return;
 
         if (!result) {
           toast.error("Folder not found or access denied");
@@ -632,21 +640,22 @@ function SupabaseVaultPage() {
         
         setInitialLoadComplete(true);
       } catch (error) {
+        if (cancelled) return;
         console.error("Error loading folder:", error);
-        toast.error("Failed to load folder");
-        navigate("/vault", { replace: true });
-        setInitialLoadComplete(true);
+        toast.error("Failed to load folder", { action: { label: "Try again", onClick: () => setEntryRetry(value => value + 1) } });
       }
     };
 
     loadFolderFromUrl();
-  }, [urlFolderId, userClubs, initialLoadComplete, navigate]);
+    return () => { cancelled = true; };
+  }, [urlFolderId, userClubs, initialLoadComplete, navigate, entryRetry]);
 
   // Handle direct navigation via query parameters (?club=X or ?team=X)
   useEffect(() => {
+    let cancelled = false;
     const loadFromQueryParams = async () => {
       const competitionId = searchParams.get("competition");
-      if (urlFolderId || initialLoadComplete || ((!userClubs || userClubs.length === 0) && !competitionId)) return;
+      if (urlFolderId || initialLoadComplete || (!userClubs && !competitionId)) return;
 
       const clubId = searchParams.get("club");
       const teamId = searchParams.get("team");
@@ -674,25 +683,23 @@ function SupabaseVaultPage() {
           // Navigate directly to mini-league vault folder
           const league = await withFeatureBackend("mini_leagues", {
             supabase: async () => {
-              const { data } = await supabase
+              const { data, error } = await supabase
                 .from("mini_leagues")
                 .select("id, name, club_id")
                 .eq("id", miniLeagueId)
                 .maybeSingle();
+              if (error) throw error;
               return data;
             },
             icp: async (ctx) => {
-              try {
-                const l = await getLiveMiniLeague(ctx, miniLeagueId);
-                return { id: l.id, name: l.name, club_id: l.club_id };
-              } catch {
-                return null;
-              }
+              const l = await getLiveMiniLeague(ctx, miniLeagueId);
+              return { id: l.id, name: l.name, club_id: l.club_id };
             },
           }, { miniLeagueId });
+          if (cancelled) return;
 
           if (league) {
-            const club = userClubs.find(c => c.id === league.club_id);
+            const club = userClubs?.find(c => c.id === league.club_id);
             if (club) {
               setCurrentView({
                 type: "mini-league",
@@ -708,26 +715,24 @@ function SupabaseVaultPage() {
           // Navigate directly to team vault
           const team = await withFeatureBackend("vault", {
             supabase: async () => {
-              const { data } = await supabase
+              const { data, error } = await supabase
                 .from("teams")
                 .select("id, name, club_id")
                 .eq("id", teamId)
                 .maybeSingle();
+              if (error) throw error;
               return data;
             },
             icp: async (ctx) => {
-              try {
-                const [team] = await getLiveTeam(ctx, teamId);
-                if (!team) return null;
-                return { id: team.id, name: team.name, club_id: team.club_id };
-              } catch {
-                return null;
-              }
+              const [team] = await getLiveTeam(ctx, teamId);
+              if (!team) return null;
+              return { id: team.id, name: team.name, club_id: team.club_id };
             },
           }, { teamId });
+          if (cancelled) return;
 
           if (team) {
-            const club = userClubs.find(c => c.id === team.club_id);
+            const club = userClubs?.find(c => c.id === team.club_id);
             if (club) {
               setCurrentView({
                 type: "team",
@@ -742,7 +747,7 @@ function SupabaseVaultPage() {
           }
         } else if (clubId) {
           // Navigate directly to club vault
-          const club = userClubs.find(c => c.id === clubId);
+          const club = userClubs?.find(c => c.id === clubId);
           if (club) {
             setCurrentView({
               type: "club",
@@ -754,14 +759,18 @@ function SupabaseVaultPage() {
           }
         }
       } catch (error) {
+        if (cancelled) return;
         console.error("Error loading from query params:", error);
+        toast.error("Failed to open Vault", { action: { label: "Try again", onClick: () => setEntryRetry(value => value + 1) } });
+        return;
       }
 
       setInitialLoadComplete(true);
     };
 
     loadFromQueryParams();
-  }, [urlFolderId, userClubs, initialLoadComplete, searchParams, setSearchParams]);
+    return () => { cancelled = true; };
+  }, [urlFolderId, userClubs, initialLoadComplete, searchParams, setSearchParams, entryRetry]);
 
   const shareFolder = async (folderId: string) => {
     const shareUrl = getShareUrl("folder", folderId);
