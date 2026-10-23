@@ -1,3 +1,6 @@
+## Safe GitHub setup transfer — 23 October 2026
+- [ ] Plan and verify one-way Actions/secrets transfer from `Ignite-Club-HQ/ignite-club-hybrid` to `Ignite-Club-HQ/ignite-club-hq-prod`; preserve destination entries and main, stage automation inactive, no app merge or activation. Awaiting plan approval; no transfer performed.
+
 ## Approved multi-group recovery — 22 October 2026
 - [x] Removed club-switch global invalidation cascade: Home retains its account-wide authorized event inventory and filters immediately; exact event-ID Next Up attendance/child/duty queries survive, ambiguous club content still purges. Focused checks prove new-club cards appear without a feed request, old-club cards disappear, pending reads remain shared and mutation freshness is retained. Preview build OK; signed-in phone 15–20-second timing remains unverified, no publication/canister changes.
 - [x] Explicit club-picker changes leave open chats/events/teams/clubs/news/photos/Vault content immediately for the relevant list, before cache purge and without ownership reads; lists, same-club selections, All Clubs and restoration/notification navigation remain unchanged. 45 focused checks pass in each backend mode; preview build OK. Signed-in phone flow remains unverified; no publication/canister changes.

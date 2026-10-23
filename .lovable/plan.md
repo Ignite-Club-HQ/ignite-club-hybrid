@@ -1,16 +1,16 @@
 # Safe transfer of GitHub secrets and Actions to prod
 
 ## Scope
-Prepare `Ignite-Club-HQ/ignite-club-hq-prod` before the later app merge. Copy missing GitHub repository secrets, variables and workflow setup only. Do not replace prod’s main branch, merge the app, change Supabase/Lovable/Codemagic settings, deploy canisters, change controllers, fund services or stop current production automation.
+Transfer in one direction only: **from `Ignite-Club-HQ/ignite-club-hybrid` to `Ignite-Club-HQ/ignite-club-hq-prod`**, before the later app merge. Copy missing GitHub repository secrets, variables and workflow setup only. Never transfer prod’s setup back into hybrid. Do not replace prod’s main branch, merge the app, change Supabase/Lovable/Codemagic settings, deploy canisters, change controllers, fund services or stop current production automation.
 
 ## 1. Read-only inventory first
-- Verify the source and destination repositories, access, default branches and current commit IDs through the connected GitHub account.
+- Verify `Ignite-Club-HQ/ignite-club-hybrid` as the source and `Ignite-Club-HQ/ignite-club-hq-prod` as the destination, plus access, default branches and current commit IDs through the connected GitHub account. Stop if either exact repository cannot be verified.
 - Inventory repository and relevant environment/organization secret **names**, variables, workflow files, active schedules, running jobs and branch protections. Never read or print secret values.
 - Produce a missing/conflicting/identical report. An existing destination secret with the same name is **not** proof of an identical value; leave it untouched and flag any deploy identity or canister-target ambiguity as an activation blocker.
 - Capture a recoverable baseline of destination workflow files and readable settings without exporting secrets.
 
 ## 2. Harden the one-click tool before running it
-- Make this transfer strictly **add-only**: no overwrite option, deletion, force-push or app-source copy. Pin the exact destination and reviewed source commit.
+- Make this transfer strictly **add-only**: no overwrite option, deletion, force-push or app-source copy. Pin both exact repository names and the reviewed hybrid source commit; refuse reversed or different repositories.
 - Fail closed on permission errors, incomplete inventories or unexpected destination changes; never interpret an unsuccessful lookup as “missing”.
 - Add a read-only preview and an explicit approved inventory of names/files to copy. Transfer only approved missing items, not every source variable blindly.
 - Use a temporary, minimally scoped `TARGET_REPO_PAT` in the source repository through secure GitHub secret entry. The connected GitHub API can inspect and dispatch the workflow, but the current runner still requires this token; no token goes into chat or committed files.
