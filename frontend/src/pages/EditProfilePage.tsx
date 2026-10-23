@@ -40,6 +40,7 @@ export default function EditProfilePage() {
   const [saving, setSaving] = useState(false);
   const [leaderboardOptOut, setLeaderboardOptOut] = useState(false);
   const [country, setCountry] = useState<string>("");
+  const [contactEmail, setContactEmail] = useState("");
 
   useEffect(() => {
     if (profile) {
@@ -49,6 +50,30 @@ export default function EditProfilePage() {
       setCountry(((profile as any).country as string | null) ?? "");
     }
   }, [profile]);
+
+  // ICP mode collects no account email; the optional contact email lives in
+  // the member's own encrypted PII record and powers e.g. competition
+  // welcome emails after their team accepts an entry.
+  useEffect(() => {
+    if (!isIcpLive) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ getCurrentInternetIdentity }, { getActiveIcpTarget }, { readLiveContactEmail }] = await Promise.all([
+          import("@/live/internetIdentityAuth"),
+          import("@/live/targetRegistry"),
+          import("@/live/features/memberWelcomeEmail"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return;
+        const email = await readLiveContactEmail({ identity, target: getActiveIcpTarget() } as any);
+        if (!cancelled && email) setContactEmail(email);
+      } catch {
+        // No contact email on file — leave the field empty.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isIcpLive]);
 
   const isNative = shouldUseNativePicker();
 
