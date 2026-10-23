@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
@@ -78,7 +78,7 @@ vi.mock("@/hooks/useScheduleBroadcastListener", () => ({ useScheduleBroadcastLis
 vi.mock("@/hooks/useClubTheme", () => ({ useClubTheme: () => ({ activeClubFilter: null, setActiveClubTheme: vi.fn() }) }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 
-vi.mock("@/components/events/EventCard", () => ({ EventCard: () => null }));
+vi.mock("@/components/events/EventCard", () => ({ EventCard: ({ event }: { event: { title: string } }) => <div>{event.title}</div> }));
 vi.mock("@/components/ClubTeamFilter", () => ({ ClubTeamFilter: () => null }));
 vi.mock("@/components/QueryErrorBanner", () => ({ QueryErrorBanner: () => null }));
 vi.mock("@/components/events/EventsHeaderSponsorStrip", () => ({ EventsHeaderSponsorStrip: () => null }));
@@ -109,19 +109,24 @@ vi.mock("@/lib/eventTypeLabel", () => ({ getEventTypeLabel: () => "" }));
 
 // ---- supabase mock: generic, records every table queried ----
 const queriedTables: string[] = [];
-function makeQueryBuilder() {
+let supabaseEventRows: unknown[] = [];
+let supabaseRoleRows: unknown[] = [];
+function makeQueryBuilder(table: string) {
   const builder: any = {
     select: () => builder,
     eq: () => builder,
     in: () => builder,
     order: () => builder,
-    then: (resolve: any) => resolve({ data: [], error: null }),
+    gte: () => builder,
+    lte: () => builder,
+    is: () => builder,
+    then: (resolve: any) => resolve({ data: table === 'events' ? supabaseEventRows : table === 'user_roles' ? supabaseRoleRows : [], error: null }),
   };
   return builder;
 }
 const fromMock = vi.fn((table: string) => {
   queriedTables.push(table);
-  return makeQueryBuilder();
+  return makeQueryBuilder(table);
 });
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -149,6 +154,8 @@ function renderPage() {
 
 beforeEach(() => {
   localStorage.clear();
+  supabaseEventRows = [];
+  supabaseRoleRows = [];
   scheduleMocks.events.mockReset(); scheduleMocks.events.mockResolvedValue([]);
   scheduleMocks.grants.mockReset(); scheduleMocks.grants.mockResolvedValue([]);
   scheduleMocks.duties.mockReset(); scheduleMocks.duties.mockResolvedValue([]);
@@ -173,6 +180,39 @@ beforeEach(() => {
 });
 
 describe("EventsPage roster-derived team scope routing", () => {
+  it.each(['icp', 'supabase'])('event-type filters reuse loaded %s events and fixtures', async (mode) => {
+    eventsRoutedToIcp = mode === 'icp';
+    const types = ['training', 'game', 'social'];
+    const tomorrow = Date.now() + 86400000;
+    if (eventsRoutedToIcp) {
+      scheduleMocks.grants.mockResolvedValue([{ club: ['club-1'], team: [], role: 'club_member' }]);
+      getLiveAccountRosterScopeMock.mockResolvedValue({ teamIds: [], clubIds: [], childIds: [] });
+      scheduleMocks.events.mockResolvedValue(types.map(type => ({ id: type, title: `${type} event`, event_type: type,
+        starts_at_ms: BigInt(tomorrow), ends_at_ms: BigInt(tomorrow + 3600000), updated_at_ms: BigInt(Date.now()), deleted: false,
+        club_id: 'club-1', team_id: [], address: [], location: [], mini_league_id: [], cancelled: false, series_id: [], opponent: [], description: '' })));
+      scheduleMocks.profile.mockResolvedValue([{ name: 'Cats', sport: [] }]);
+    } else {
+      supabaseRoleRows = [{ role: 'club_member', club_id: 'club-1', team_id: null }];
+      localStorage.setItem('ignite_schedule_memberships_v1:principal-abc', JSON.stringify({ roles: [{ role: 'club_member', club_id: 'club-1', team_id: null }], teamIds: [], clubIds: ['club-1'], clubAdminClubIds: [], leagueAdminClubIds: [], miniLeagueIds: [], isAppAdmin: false }));
+      supabaseEventRows = types.map(type => ({ id: type, title: `${type} event`, type, event_date: new Date(tomorrow).toISOString(),
+        club_id: 'club-1', team_id: null, mini_league_id: null, is_cancelled: false, is_recurring: false, clubs: { name: 'Cats', sport: null } }));
+    }
+    const client = renderPage();
+    await screen.findByText('training event');
+    await waitFor(() => expect(client.getQueryCache().getAll().filter(query => query.queryKey[0] === 'events' || query.queryKey[0] === 'icp-schedule-fixtures').every(query => query.state.fetchStatus === 'idle')).toBe(true));
+    const reads = eventsRoutedToIcp ? scheduleMocks.events.mock.calls.length : queriedTables.filter(table => table === 'events').length;
+    const fixtureReads = competitionMocks.listLivePublicCompetitions.mock.calls.length;
+    for (const type of types) {
+      fireEvent.click(screen.getByRole('button', { name: `Filter by ${type}` }));
+      expect(screen.getByText(`${type} event`)).toBeInTheDocument();
+      for (const other of types.filter(value => value !== type)) expect(screen.queryByText(`${other} event`)).toBeNull();
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by all events' }));
+    for (const type of types) expect(screen.getByText(`${type} event`)).toBeInTheDocument();
+    expect(eventsRoutedToIcp ? scheduleMocks.events.mock.calls.length : queriedTables.filter(table => table === 'events').length).toBe(reads);
+    expect(competitionMocks.listLivePublicCompetitions.mock.calls.length).toBe(fixtureReads);
+    expect(reads).toBeGreaterThan(0);
+  });
   it('renders ready Group 1 events before Group 2 or the Group 1 profile finishes', async () => {
     eventsRoutedToIcp = true;
     scheduleMocks.grants.mockResolvedValue([{ club: ['g1'], team: [], role: 'club_member' }, { club: ['g2'], team: [], role: 'club_member' }]);
