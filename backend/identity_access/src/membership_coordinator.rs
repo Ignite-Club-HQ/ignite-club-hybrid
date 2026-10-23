@@ -23,6 +23,10 @@ struct Build {namespace:u64,binding:Binding,published:bool,
     #[serde(default)] subject_cursor:Option<String>,#[serde(default)] indexed:bool,
     #[serde(default)] unresolved_locations:bool,#[serde(default)] locations_checked:bool,
     #[serde(default)] location_checks_from_start:bool}
+#[derive(Clone,Debug,Serialize,Deserialize)]
+struct OwnershipAcceptance { pin:[u8;32],source:usize,cursor:Option<String>,club:Option<String>,other:usize,clubs:u64,complete:bool }
+#[derive(Clone,Debug,candid::CandidType,Deserialize)]
+pub struct OwnershipProgress { pub scanned:u64,pub clubs:u64,pub complete:bool,pub inventory_digest:Vec<u8>,pub source_revisions:Vec<(String,u64)>,pub verified_current:bool }
 pub struct Coordinator<M:Memory+Clone> {
     rows:StableBTreeMap<String,Vec<u8>,M>,pool:Pool<M>,journal:Journal<M>,
 }
@@ -150,9 +154,74 @@ impl<M:Memory+Clone> Coordinator<M>{
         build.unresolved_locations=true;self.save(source,&build);Ok(())
     }
     pub fn require_resolved_locations(&self)->Outcome<()>{
+        if self.accepted_ownership().is_ok(){return Ok(());}
         for source in self.sources()?{
             if self.build(&source.id).is_none_or(|b|b.unresolved_locations||!b.locations_checked){return Err("Club ownership coverage unresolved; existing discovery required".into());}
         }Ok(())
+    }
+    /// Ownership is a separate exact-source acceptance, not a freshness or
+    /// recovery release. A single constant-size row replaces no source data.
+    fn ownership_pin(&self,sources:&[Source],original:Option<Principal>)->Outcome<[u8;32]>{
+        let inv=self.inventory()?;
+        Ok(Sha256::digest(encode(&("exclusive-retained-clubs-v1",inv,sources.iter().map(|s|(&s.id,&s.binding)).collect::<Vec<_>>(),original))).into())
+    }
+    fn ownership_sources(&self,original:Option<Principal>)->Outcome<Vec<Source>>{
+        let sources=self.sources()?;
+        for source in &sources{
+            let b=self.build(&source.id).ok_or("Ownership source missing")?;
+            if !b.locations_checked||!b.location_checks_from_start||
+                (b.unresolved_locations&&!(source.id=="g1"&&Some(source.binding.authority)==original)){
+                return Err("Nonlegacy assignment or unchecked ownership source".into());
+            }
+        }
+        Ok(sources)
+    }
+    pub fn advance_ownership(&mut self,original:Option<Principal>)->Outcome<OwnershipProgress>{
+        let sources=self.ownership_sources(original)?;
+        let pin=self.ownership_pin(&sources,original)?;
+        let mut progress:OwnershipAcceptance=self.rows.get(&"ownership:progress".into()).map(|b|decode(&b))
+            .filter(|p:&OwnershipAcceptance|p.pin==pin).unwrap_or(OwnershipAcceptance{pin,source:0,cursor:None,club:None,other:0,clubs:0,complete:false});
+        let mut scanned=0;
+        // One source transition, club fetch or cross-source claim check is one
+        // budget unit. Even thousands of sources cannot multiply this budget.
+        while scanned<100&&!progress.complete{
+            scanned+=1;
+            let Some(source)=sources.get(progress.source) else{progress.complete=true;break;};
+            if let Some(club)=&progress.club{
+                if progress.other==sources.len(){
+                    progress.cursor=progress.club.take();progress.other=0;
+                    progress.clubs=progress.clubs.checked_add(1).ok_or("Ownership count exhausted")?;
+                    continue;
+                }
+                let other=&sources[progress.other];
+                if progress.other!=progress.source&&self.builder(&other.id,&other.binding)?.ownership_claim(&other.binding,club)?.is_some(){
+                    // Do not persist partial progress on conflict. A previously
+                    // accepted pin is invalid as soon as any source changes.
+                    return Err("Club ID claimed by multiple membership sources".into());
+                }
+                progress.other+=1;
+            }else{
+                match self.builder(&source.id,&source.binding)?.next_ownership_club(&source.binding,progress.cursor.clone())?{
+                    Some((club,flags))=>{
+                        if flags!=1&&flags!=2{return Err("Conflicting live/deleted club rows".into());}
+                        progress.club=Some(club);progress.other=0;
+                    },
+                    None=>{progress.source+=1;progress.cursor=None;},
+                }
+            }
+        }
+        // This synchronous operation has no interleaving await. Bind every
+        // source including empty sources, not only a caller's member groups.
+        self.rows.insert("ownership:progress".into(),encode(&progress));
+        if progress.complete{self.rows.insert("ownership:accepted".into(),encode(&(pin,original)));}
+        Ok(OwnershipProgress{scanned,clubs:progress.clubs,complete:progress.complete,inventory_digest:self.inventory()?.digest.to_vec(),
+            source_revisions:sources.iter().map(|s|(s.id.clone(),s.binding.revision)).collect(),verified_current:false})
+    }
+    pub fn accepted_ownership(&self)->Outcome<()>{
+        let (pin,original):([u8;32],Option<Principal>)=self.rows.get(&"ownership:accepted".into()).map(|b|decode(&b)).ok_or("Exclusive ownership not accepted")?;
+        let sources=self.ownership_sources(original)?;
+        if pin!=self.ownership_pin(&sources,original)?{return Err("Ownership acceptance superseded by source revision".into());}
+        Ok(())
     }
     /// Called only by the authenticated runtime after accepting the terminal
     /// source page. Older stable builds default to unchecked, never verified.
@@ -255,6 +324,42 @@ impl<M:Memory+Clone> Coordinator<M>{
     type Mem=VirtualMemory<VectorMemory>;
     fn open(m:&MemoryManager<VectorMemory>)->Coordinator<Mem>{Coordinator::open(m.get(MemoryId::new(0)),Pool::open(m.get(MemoryId::new(1)),m.get(MemoryId::new(2)),10000,32).unwrap(),m.get(MemoryId::new(3)))}
     fn viewer(p:Principal)->Viewer{Viewer{account:"member".into(),version:1,aliases:vec![p]}}
+    #[test]fn bounded_exclusive_legacy_acceptance_survives_upgrade_and_rejects_new_notifications(){
+        let manager=MemoryManager::init(VectorMemory::default());let (s,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&s,&pin,&a,1).unwrap()).unwrap();
+        let edges=(0..205).map(|n|Edge::Club{id:format!("legacy{n:03}"),deleted:n==204}).collect();
+        finish(&mut c,"g1",a[1],1,edges);finish(&mut c,"g0",a[0],1,vec![Edge::Club{id:"new".into(),deleted:false}]);
+        let binding=c.build("g1").unwrap().binding;c.unresolved_location("g1",&binding).unwrap();
+        assert!(c.advance_ownership(None).is_err());assert!(c.accepted_ownership().is_err());
+        let p=c.advance_ownership(Some(a[1])).unwrap();assert_eq!(p.scanned,100);assert!(!p.complete);assert!(!p.verified_current);drop(c);
+        let mut c=open(&manager);let mut calls=1;
+        loop{let p=c.advance_ownership(Some(a[1])).unwrap();assert!(p.scanned<=100);calls+=1;if p.complete{assert_eq!(p.clubs,206);break;}assert!(calls<20);}
+        c.accepted_ownership().unwrap();c.require_resolved_locations().unwrap();drop(c);
+        let mut c=open(&manager);c.accepted_ownership().unwrap();
+        let mut newer=c.build("g0").unwrap().binding;newer.revision=2;c.observe_invalidation("g0",&newer).unwrap();
+        assert!(c.accepted_ownership().is_err());assert!(c.require_resolved_locations().is_err());assert!(c.advance_ownership(Some(a[1])).is_err());
+        finish(&mut c,"g0",a[0],2,vec![Edge::Club{id:"changed".into(),deleted:false}]);assert!(c.accepted_ownership().is_err());
+        loop{if c.advance_ownership(Some(a[1])).unwrap().complete{break;}}
+        c.accepted_ownership().unwrap();
+    }
+    #[test]fn duplicate_clubs_including_tombstones_never_accept_ownership(){
+        for deleted in [false,true]{
+            let manager=MemoryManager::init(VectorMemory::default());let (s,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
+            c.bind_inventory(verify_inventory(&s,&pin,&a,1).unwrap()).unwrap();
+            finish(&mut c,"g0",a[0],1,vec![Edge::Club{id:"same".into(),deleted:false}]);
+            finish(&mut c,"g1",a[1],1,vec![Edge::Club{id:"same".into(),deleted}]);
+            assert!(c.advance_ownership(Some(a[1])).is_err());assert!(c.accepted_ownership().is_err());
+        }
+    }
+    #[test]fn incomplete_unchecked_and_nonlegacy_missing_assignments_cannot_be_accepted(){
+        let manager=MemoryManager::init(VectorMemory::default());let (s,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&s,&pin,&a,1).unwrap()).unwrap();finish(&mut c,"g1",a[1],1,vec![]);
+        assert!(c.advance_ownership(Some(a[1])).is_err());
+        finish(&mut c,"g0",a[0],1,vec![]);let binding=c.build("g0").unwrap().binding;
+        c.unresolved_location("g0",&binding).unwrap();assert!(c.advance_ownership(Some(a[1])).is_err());
+        let mut b=c.build("g0").unwrap();b.unresolved_locations=false;b.location_checks_from_start=false;c.save("g0",&b);
+        assert!(c.advance_ownership(Some(a[1])).is_err());assert!(c.accepted_ownership().is_err());
+    }
     #[test]fn original_mainnet_pin_matches_exact_existing_canisters_and_deployment(){
         let (_,mut pin,_)=group_inventory::tests::fixture();pin.registry=Principal::from_text("jcdfe-vqaaa-aaaal-qxloq-cai").unwrap();
         pin.target_alias="mainnet".into();pin.deployment_id="mainnet".into();pin.host="https://icp-api.io".into();

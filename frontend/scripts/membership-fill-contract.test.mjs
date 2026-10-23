@@ -6,11 +6,21 @@ import { runFill } from '../../scripts/membership-lookup-release-policy.mjs';
 import { configureDirectorySources } from '../../scripts/membership-source-configuration.mjs';
 import { Principal } from '@icp-sdk/core/principal';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
+import { runOwnershipAcceptance } from '../../scripts/membership-ownership-acceptance.mjs';
 
 const service = idlFactory({ IDL });
 const method = service._fields.find(([name]) => name === 'advance_membership_directory_source')?.[1];
 assert.ok(method, 'existing source-specific driver must exist in generated Candid');
 const wireReply = reply => IDL.decode(method.retTypes, IDL.encode(method.retTypes, [reply]))[0];
+test('generated ownership operation has no observer proof input and records exact historical acceptance only', async () => {
+  const ownership = service._fields.find(([name]) => name === 'advance_membership_directory_ownership')?.[1];assert.ok(ownership);
+  assert.equal(ownership.argTypes.length, 0);
+  const inventoryDigest = new Uint8Array(32).fill(3);
+  const p = { scanned: 100n, clubs: 206n, complete: true, inventory_digest: inventoryDigest, source_revisions: [['g1', 7n], ['g2', 9n]], verified_current: false };
+  const reply = IDL.decode(ownership.retTypes, IDL.encode(ownership.retTypes, [{ Ok: p }]))[0];
+  const result = await runOwnershipAcceptance(async () => reply, { inventoryDigest, sources: [{ groupId: 'g1' }, { groupId: 'g2' }] });
+  assert.equal(result.clubs, 206n);assert.equal(result.ready, false);assert.equal(result.appEnabled, false);
+});
 
 test('generated source-specific Candid replies drive both fills without a synthetic complete flag', async () => {
   const calls = [], saved = [];

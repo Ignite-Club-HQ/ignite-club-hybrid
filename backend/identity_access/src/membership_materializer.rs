@@ -157,6 +157,19 @@ impl<M: Memory> Builder<M> {
         }
         Ok((subjects,at,BATCH))
     }
+    /// Exhaustive retained Club rows (including tombstones), independent of
+    /// member pairs. Ownership checks never infer absence from filtered pairs.
+    pub fn next_ownership_club(&self,binding:&Binding,cursor:Option<String>)->Result<Option<(String,u8)>,String>{
+        let status=self.status();
+        if !status.complete||!status.terminal||status.binding.as_ref()!=Some(binding){return Err("Incomplete ownership source or binding drift".into());}
+        if cursor.as_deref().is_some_and(|id|!valid_id(id)){return Err("Invalid ownership cursor".into());}
+        Ok(after(&self.clubs,&cursor,None).map(|id|{let value=self.clubs.get(&id).unwrap_or(0);(id,value)}))
+    }
+    pub fn ownership_claim(&self,binding:&Binding,club:&str)->Result<Option<u8>,String>{
+        let status=self.status();
+        if !valid_id(club)||!status.complete||!status.terminal||status.binding.as_ref()!=Some(binding){return Err("Incomplete ownership source or binding drift".into());}
+        Ok(self.clubs.get(&club.to_string()))
+    }
     // App-wide roles are retained separately; a caller-private coordinator
     // must page active clubs for such accounts instead of expanding globally.
     pub fn app_wide(&self,subject:Principal)->Result<bool,String>{
