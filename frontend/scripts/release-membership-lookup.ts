@@ -1,7 +1,7 @@
-/** Existing identity_access + two club_domain upgrade and bounded membership
- * fill only. No creation, wiring, photo/PII/messaging changes or opening.
- * Upgrade remains blocked before mutation until release acceptance exists.
- * Historical fill is diagnostic only; the app-side lookup stays disabled. */
+/** Existing identity plus ALL registered club sources/original G1 only.
+ * Journaled upgrades, separate directory grants, bounded fill/ownership,
+ * snapshot/lifecycle acceptance and exact release enable; no group opening,
+ * creation, photo-key change, deletion or app publication. */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -30,8 +30,7 @@ import { requireCompleteFill, checkHistoricalAcceptance, checkReplicaAcceptance 
 
 const [action, artifacts, pem, directory] = process.argv.slice(2);
 validateRequest(action, process.env.CONFIRMATION);
-// Refuse BEFORE management calls, journal writes or installation. The current
-// runner has no atomic read-freshness or independent restored-state verifier.
+// Local contract gate; live enable still requires identity-owned verification.
 if (action === 'upgrade') requireLookupReleaseAcceptance();
 if (!artifacts || !pem || !directory) throw new Error('Artifacts, existing key and report directory required');
 const root = new URL('../../', import.meta.url);
@@ -48,6 +47,33 @@ const agent = await HttpAgent.create({ host: 'https://icp-api.io', identity });
 const router = Actor.createActor<_SERVICE>(idlFactory, { agent, canisterId: shared.shard_router });
 const registry = () => readPinnedGroupRegistry((rev, cursor, limit) => router.read_group_registry_page('mainnet', rev, cursor, limit));
 const initial = await registry();
+// Validate the exact complete service/subnet inventory before any upgrade,
+// not after installing and discovering identity would reject the binding.
+const domains = ['club_domain','events_domain','messaging_domain','vault_domain','competition_domain','club_points_domain','mini_league_domain','media_metadata','insights_domain','notification_queue','pii_access_control','timer_jobs','secret_workload_identity'];
+const serviceIds = new Set<string>();
+let workload: string | undefined;
+let subnetPolicy: string | undefined;
+for (const group of initial.groups) {
+  const placement = initial.placements.find(p=>p.group_id===group.id);
+  if (!placement || group.domains.length!==domains.length || placement.domains.length!==domains.length ||
+      new Set(group.domains.map(d=>d.domain)).size!==domains.length || new Set(placement.domains.map(d=>d.domain)).size!==domains.length) throw new Error('Complete unique membership source service inventory required');
+  const approved=placement.approved_subnets.map(p=>p.toText()).sort();
+  const policy=JSON.stringify([placement.primary_subnet.toText(),approved,placement.additional_subnets_enabled]);
+  if (!approved.length || new Set(approved).size!==approved.length || !approved.includes(placement.primary_subnet.toText()) ||
+      (subnetPolicy!==undefined && subnetPolicy!==policy)) throw new Error('Exact common approved subnet policy required');
+  subnetPolicy=policy;
+  for(const d of group.domains){
+    const id=d.canister.toText(),placed=placement.domains.find(p=>p.domain===d.domain);
+    if(!domains.includes(d.domain)||['aaaaa-aa','2vxsx-fae',PINNED.identity].includes(id)||!placed||placed.canister.toText()!==id||
+      !approved.includes(placed.subnet.toText())||(!placement.additional_subnets_enabled&&placed.subnet.toText()!==placement.primary_subnet.toText())) throw new Error('Invalid membership source authority/placement');
+    if(d.domain==='secret_workload_identity'){
+      if(workload!==undefined&&workload!==id)throw new Error('Shared workload differs');
+      if(workload===undefined&&serviceIds.has(id))throw new Error('Shared workload collision');
+      workload=id;
+    }else if(serviceIds.has(id))throw new Error('Membership source service collision');
+    serviceIds.add(id);
+  }
+}
 const observedSources = directorySources(initial);
 // Independent complete-source gate BEFORE any upgrade/journal write. Check
 // may inspect G3 and later groups; this release never upgrades them implicitly.

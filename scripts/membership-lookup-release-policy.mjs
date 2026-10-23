@@ -1,9 +1,7 @@
 // Protected release policy for the permanent membership lookup.
-// Exact three targets: the shared identity_access coordinator and the
-// existing club_domain membership source in each group. Nothing else may be
-// upgraded, created, rewired or opened by this release. Historical source
-// completion cannot certify readiness; upgrades remain blocked until the
-// source configuration and verified-current release contract are implemented.
+// Exact inventory-derived targets: pinned shared identity plus every existing
+// registered club source/original G1. Nothing else is upgraded or opened.
+// Historical completion never certifies readiness; enable is identity-owned.
 import { digest, executeUpgrades } from './subscription-upgrade-policy.mjs';
 import { requireHistoricalCheckpoint } from './membership-acceptance-checks.mjs';
 import { upgradeArgs } from './group2-upgrade-rules.mjs';
@@ -16,7 +14,7 @@ export const PINNED = {
   g2: 'yfwyv-nyaaa-aaaal-qxpyq-cai',
 };
 
-/** Complete observed sources, not the three-service upgrade allowlist. The
+/** Complete observed sources, not a fixed-count upgrade allowlist. The
  * original G1 is explicitly pinned; every registered group stays in the list.
  * This makes no placement, authority grant or readiness claim. */
 export function directorySources(snapshot) {
@@ -95,8 +93,7 @@ export function validateRequest(action, confirmation) {
   if (action === 'upgrade' && confirmation?.trim() !== CONFIRMATION) throw new Error(`Type ${CONFIRMATION}`);
 }
 
-/** Fail before any live upgrade, not after installing modules and discovering
- * that the source inventory/grants and readiness verifier are unavailable. */
+/** Implementation contract marker; not a live readiness assertion. */
 export function requireLookupReleaseAcceptance() {
   // Local implementation gate, not live readiness. The identity-owned enable
   // operation still verifies the complete snapshot before recording release.
