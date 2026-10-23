@@ -30,7 +30,7 @@ describe('poll scope and recovery', () => {
     expect(alex.closest('section')?.textContent).toContain('Sunday');
     expect(screen.getByText('Paul').closest('section')?.textContent).toContain('Saturday');
     fireEvent.click(screen.getByRole('button', { name: 'Close votes' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveAttribute('data-state', 'closed'));
     client.clear();
   });
   it('joins the poll read started before rendering and reopens from the same cached result', async () => {
