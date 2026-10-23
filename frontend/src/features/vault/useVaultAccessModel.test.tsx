@@ -98,6 +98,14 @@ beforeEach(() => {
 });
 
 describe("useVaultAccessModel — access decision", () => {
+  it("opens for an app admin without waiting for unrelated Pro scans", async () => {
+    fetchVaultAppAdmin.mockResolvedValue(true);
+    fetchVaultAnyProAccess.mockReturnValue(new Promise(() => {}));
+    const { result } = renderAccessModel();
+    await waitFor(() => expect(result.current.isAppAdmin).toBe(true));
+    await waitFor(() => expect(result.current.isLoadingAccess).toBe(false));
+    expect(result.current.canAccessVault).toBe(true);
+  });
   it("grants an app admin access regardless of role or Pro entitlement", async () => {
     fetchVaultAppAdmin.mockResolvedValue(true);
     const { result } = renderAccessModel();
