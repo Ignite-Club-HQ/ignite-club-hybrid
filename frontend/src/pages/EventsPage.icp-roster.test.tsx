@@ -110,6 +110,7 @@ vi.mock("@/lib/eventTypeLabel", () => ({ getEventTypeLabel: () => "" }));
 // ---- supabase mock: generic, records every table queried ----
 const queriedTables: string[] = [];
 let supabaseEventRows: unknown[] = [];
+let supabaseRoleRows: unknown[] = [];
 function makeQueryBuilder(table: string) {
   const builder: any = {
     select: () => builder,
@@ -119,7 +120,7 @@ function makeQueryBuilder(table: string) {
     gte: () => builder,
     lte: () => builder,
     is: () => builder,
-    then: (resolve: any) => resolve({ data: table === 'events' ? supabaseEventRows : [], error: null }),
+    then: (resolve: any) => resolve({ data: table === 'events' ? supabaseEventRows : table === 'user_roles' ? supabaseRoleRows : [], error: null }),
   };
   return builder;
 }
@@ -154,6 +155,7 @@ function renderPage() {
 beforeEach(() => {
   localStorage.clear();
   supabaseEventRows = [];
+  supabaseRoleRows = [];
   scheduleMocks.events.mockReset(); scheduleMocks.events.mockResolvedValue([]);
   scheduleMocks.grants.mockReset(); scheduleMocks.grants.mockResolvedValue([]);
   scheduleMocks.duties.mockReset(); scheduleMocks.duties.mockResolvedValue([]);
@@ -190,6 +192,7 @@ describe("EventsPage roster-derived team scope routing", () => {
         club_id: 'club-1', team_id: [], address: [], location: [], mini_league_id: [], cancelled: false, series_id: [], opponent: [], description: '' })));
       scheduleMocks.profile.mockResolvedValue([{ name: 'Cats', sport: [] }]);
     } else {
+      supabaseRoleRows = [{ role: 'club_member', club_id: 'club-1', team_id: null }];
       localStorage.setItem('ignite_schedule_memberships_v1:principal-abc', JSON.stringify({ roles: [{ role: 'club_member', club_id: 'club-1', team_id: null }], teamIds: [], clubIds: ['club-1'], clubAdminClubIds: [], leagueAdminClubIds: [], miniLeagueIds: [], isAppAdmin: false }));
       supabaseEventRows = types.map(type => ({ id: type, title: `${type} event`, type, event_date: new Date(tomorrow).toISOString(),
         club_id: 'club-1', team_id: null, mini_league_id: null, is_cancelled: false, is_recurring: false, clubs: { name: 'Cats', sport: null } }));
