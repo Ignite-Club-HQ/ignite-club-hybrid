@@ -41,6 +41,8 @@ import { selectCachedProfileById } from "@/lib/profileCache";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { recordPointsHistory } from "@/lib/pointsHistory";
 import { useUserClubPoints } from "@/hooks/useClubPoints";
+import { useRewardClubDirectory } from "@/hooks/useRewardClubDirectory";
+import { useProfilePointsHistory } from "@/hooks/useProfilePointsHistory";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { redeemLiveReward, fulfillLiveRedemption, subjectForChild, subjectForUser } from "@/live/features/points";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
@@ -132,79 +134,8 @@ export default function RewardRedemptionCard() {
   // Check if app admin
   const { isAppAdmin } = useIsAppAdmin();
 
-  // Fetch clubs user belongs to (filtered by active club if set)
-  const { data: userClubs = [], isLoading: isLoadingClubs } = useQuery({
-    queryKey: ["user-clubs-for-rewards", user?.id, activeClubFilter],
-    staleTime: 5 * 60 * 1000, // 5 minutes - show cached data instantly
-    queryFn: async () => {
-      if (isFeatureRoutedToIcp("points")) {
-        return withFeatureBackend("points", {
-          supabase: async () => [],
-          icp: async (ctx) => liveRewardClubs(ctx, activeClubFilter ? [activeClubFilter] : await liveMyRewardClubIds(ctx)),
-        }, { shared: "person" }) as any;
-      }
-      // If active club filter, only return that club
-      if (activeClubFilter) {
-        const { data: club } = await supabase
-          .from("clubs")
-          .select("id, name, logo_url, points_display_name, points_icon_url")
-          .eq("id", activeClubFilter)
-          .single();
-
-        if (!club) return [];
-
-        // Fetch subscription for this club
-        const { data: subscription } = await supabase
-          .from("club_subscriptions")
-          .select("club_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
-          .eq("club_id", activeClubFilter)
-          .maybeSingle();
-
-        const hasPro = subscription?.is_pro || subscription?.is_pro_football || 
-                       subscription?.admin_pro_override || subscription?.admin_pro_football_override;
-        return [{ ...club, hasPro: !!hasPro }];
-      }
-
-      // Get club IDs from user roles (direct club membership or via teams)
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("club_id, team_id, teams(club_id)")
-        .eq("user_id", user!.id);
-
-      if (!roles) return [];
-
-      // Collect all club IDs
-      const clubIds = new Set<string>();
-      roles.forEach(role => {
-        if (role.club_id) clubIds.add(role.club_id);
-        if (role.teams?.club_id) clubIds.add(role.teams.club_id);
-      });
-
-      if (clubIds.size === 0) return [];
-
-      // Fetch club details with subscription info
-      const { data: clubs } = await supabase
-        .from("clubs")
-        .select("id, name, logo_url, points_display_name, points_icon_url")
-        .in("id", Array.from(clubIds));
-
-      // Fetch subscriptions for these clubs
-      const { data: subscriptions } = await supabase
-        .from("club_subscriptions")
-        .select("club_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
-        .in("club_id", Array.from(clubIds));
-
-      // Merge subscription data with clubs
-      const clubsWithPro = (clubs || []).map(club => {
-        const sub = subscriptions?.find(s => s.club_id === club.id);
-        const hasPro = sub?.is_pro || sub?.is_pro_football || sub?.admin_pro_override || sub?.admin_pro_football_override;
-        return { ...club, hasPro: !!hasPro };
-      });
-
-      return clubsWithPro;
-    },
-    enabled: !!user,
-  });
+  const { data: userClubs = [], isLoading: isLoadingClubs, isError: clubsError, refetch: retryClubs } = useRewardClubDirectory(user?.id, activeClubFilter);
+  const sharedPointsHistory = useProfilePointsHistory(user?.id, activeClubFilter);
 
   // Fetch available rewards for selected club (exclude player_of_match rewards - those can only be awarded, not redeemed)
   const { data: availableRewards = [], isLoading: rewardsLoading } = useQuery({
@@ -311,37 +242,10 @@ export default function RewardRedemptionCard() {
     enabled: !!user,
   });
 
-  // Weekly points delta (last 7 days) for the user
-  const { data: weeklyDelta = 0 } = useQuery({
-    queryKey: ["points-weekly-delta", user?.id, activeClubFilter],
-    queryFn: async () => {
-      if (isFeatureRoutedToIcp("points")) {
-        const { liveMyPointsHistory } = await import("@/lib/icpRewardsReads");
-        return withFeatureBackend("points", {
-          supabase: async () => 0,
-          icp: async (ctx) => {
-            const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
-            const rows = await liveMyPointsHistory(ctx, user!.id, activeClubFilter);
-            return rows
-              .filter((r) => r.amount > 0 && new Date(r.created_at).getTime() >= since)
-              .reduce((sum, r) => sum + r.amount, 0);
-          },
-        }, { shared: "person" });
-      }
-      const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      let q = supabase
-        .from("points_history")
-        .select("amount")
-        .eq("user_id", user!.id)
-        .gt("amount", 0)
-        .gte("created_at", sinceIso);
-      if (activeClubFilter) q = q.eq("club_id", activeClubFilter);
-      const { data } = await q;
-      return (data || []).reduce((sum: number, row: any) => sum + (row.amount || 0), 0);
-    },
-    enabled: !!user,
-    staleTime: 5 * 60 * 1000,
-  });
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const weeklyDelta = (sharedPointsHistory.data ?? [])
+    .filter((row) => row.amount > 0 && Date.parse(row.created_at) >= since)
+    .reduce((sum, row) => sum + row.amount, 0);
 
   // Next reward thresholds across the user's clubs (sorted ascending by points)
   const { data: rewardThresholds = [] } = useQuery({
@@ -1013,11 +917,12 @@ export default function RewardRedemptionCard() {
           )}
 
           {/* PRIMARY ACTION + CLUB CONTEXT */}
-          {isLoadingClubsWithNoCache ? (
+          {clubsError && !hasClubs ? (
+            <Button variant="secondary" onClick={(event) => { event.stopPropagation(); void retryClubs(); }}>Try again</Button>
+          ) : isLoadingClubsWithNoCache ? (
             <div className="bg-primary-foreground/10 rounded-lg p-3">
               <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-primary-foreground" />
-                <p className="text-sm text-primary-foreground">Loading clubs...</p>
+                <div className="h-5 w-40 animate-pulse rounded bg-primary-foreground/20" aria-label="Loading reward clubs" />
               </div>
             </div>
           ) : hasClubs && proClubs.length > 0 ? (

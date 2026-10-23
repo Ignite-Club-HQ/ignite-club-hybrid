@@ -24,6 +24,8 @@ import { PointsActivityFeed, type PointsActivityItem } from "@/components/profil
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { useUserClubPoints } from "@/hooks/useClubPoints";
+import { useRewardClubDirectory } from "@/hooks/useRewardClubDirectory";
+import { useProfilePointsHistory } from "@/hooks/useProfilePointsHistory";
 import { useNotificationNudge } from "@/hooks/useNotificationNudge";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
@@ -127,67 +129,9 @@ export default function ProfilePage() {
     enabled: !!user,
   });
 
-  // Check if user has pro access
-  const { data: hasProAccess } = useQuery({
-    queryKey: ["has-pro-access", user?.id, activeClubFilter],
-    queryFn: async () => {
-      if (isFeatureRoutedToIcp("points")) {
-        return withFeatureBackend("points", {
-          supabase: async () => false,
-          icp: async (ctx) => {
-            const { liveMyRewardClubIds } = await import("@/lib/icpRewardsReads");
-            const { isLiveClubPro } = await import("@/live/features/club");
-            const ids = activeClubFilter ? [activeClubFilter] : await liveMyRewardClubIds(ctx);
-            const { readMembershipInScope } = await import("@/live/membershipRouting");
-            const flags = await Promise.all(ids.map((id) => readMembershipInScope(ctx, { clubId: id }, scoped => isLiveClubPro(scoped, id))));
-            return flags.some(Boolean);
-          },
-        }, { shared: "person" });
-      }
-      if (activeClubFilter) {
-        const { data: subscription } = await supabase
-          .from("club_subscriptions")
-          .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
-          .eq("club_id", activeClubFilter)
-          .maybeSingle();
-
-        return !!(subscription?.is_pro || subscription?.is_pro_football || 
-                  subscription?.admin_pro_override || subscription?.admin_pro_football_override);
-      }
-
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("club_id, team_id")
-        .eq("user_id", user!.id);
-
-      if (!roles || roles.length === 0) return false;
-
-      const directClubIds = roles.map(r => r.club_id).filter(Boolean) as string[];
-      const teamIds = roles.map(r => r.team_id).filter(Boolean) as string[];
-      let teamClubIds: string[] = [];
-      
-      if (teamIds.length > 0) {
-        const { data: teams } = await supabase
-          .from("teams")
-          .select("club_id")
-          .in("id", teamIds);
-        teamClubIds = (teams || []).map(t => t.club_id).filter(Boolean) as string[];
-      }
-
-      const allClubIds = [...new Set([...directClubIds, ...teamClubIds])];
-      if (allClubIds.length === 0) return false;
-
-      const { data: subscriptions } = await supabase
-        .from("club_subscriptions")
-        .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
-        .in("club_id", allClubIds);
-
-      return (subscriptions || []).some(sub => 
-        sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override
-      );
-    },
-    enabled: !!user,
-  });
+  const rewardDirectory = useRewardClubDirectory(user?.id, activeClubFilter);
+  const hasProAccess = rewardDirectory.data === undefined
+    ? undefined : rewardDirectory.data.some((club) => club.hasPro);
 
   // Fetch user's clubs and teams
   const { data: myClubsAndTeams } = useQuery({
@@ -271,36 +215,7 @@ export default function ProfilePage() {
     enabled: !!user,
   });
 
-  // Fetch points history
-  const { data: pointsHistoryData, isLoading: pointsHistoryLoading } = useQuery({
-    queryKey: ["points-history", user?.id, activeClubFilter],
-    queryFn: async () => {
-      return withFeatureBackend("points", {
-        supabase: async () => {
-          let query = supabase
-            .from("points_history")
-            .select(`id, amount, balance_after, source_type, source_id, description, created_at, club_id, clubs:club_id (name)`)
-            .eq("user_id", user!.id)
-            .order("created_at", { ascending: false })
-            .limit(100);
-
-          if (activeClubFilter) {
-            query = query.eq("club_id", activeClubFilter);
-          }
-
-          const { data, error } = await query;
-          if (error) throw error;
-          return data || [];
-        },
-        icp: async (ctx) => {
-          // Fans out over the caller's clubs for "All Clubs" and joins club names.
-          const { liveMyPointsHistory } = await import("@/lib/icpRewardsReads");
-          return liveMyPointsHistory(ctx, user!.id, activeClubFilter);
-        },
-      }, { shared: "person" });
-    },
-    enabled: !!user,
-  });
+  const { data: pointsHistoryData, isLoading: pointsHistoryLoading, isError: pointsHistoryError, refetch: retryPointsHistory } = useProfilePointsHistory(user?.id, activeClubFilter);
 
   // Legacy duty history
   const { data: dutyHistory } = useQuery({
@@ -850,7 +765,9 @@ export default function ProfilePage() {
             <PointsActivityFeed
               open={pointsHistoryOpen}
               onOpenChange={setPointsHistoryOpen}
-              loading={pointsHistoryLoading || redemptionsLoading}
+              loading={pointsHistoryLoading && pointsHistory.length === 0}
+              error={pointsHistoryError}
+              onRetry={() => void retryPointsHistory()}
               items={pointsHistory}
               balance={balance}
               earned={pointsEarned}
@@ -864,6 +781,15 @@ export default function ProfilePage() {
             />
           );
         })()
+      ) : hasProAccess === undefined ? (
+        <Card>
+          <CardHeader><CardTitle className="text-lg">Points History</CardTitle></CardHeader>
+          <CardContent>
+            {rewardDirectory.isError ? (
+              <Button variant="outline" onClick={() => void rewardDirectory.refetch()}>Try again</Button>
+            ) : <div className="h-5 w-32 animate-pulse rounded bg-muted" aria-label="Checking points access" />}
+          </CardContent>
+        </Card>
       ) : (
         <Card className="opacity-75">
           <CardHeader className="pb-3">
