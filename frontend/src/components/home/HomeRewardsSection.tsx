@@ -88,6 +88,8 @@ interface HomeRewardsSectionProps {
   rewardsDialogOpen: boolean;
   selectedRewardClubId: string | null;
   rewardsLoading: boolean;
+  rewardsError?: boolean;
+  onRetryRewards?: () => void;
   availableRewards: HomeReward[];
   rewardClubs: HomeRewardClub[];
   isAppAdmin: boolean;
@@ -145,6 +147,8 @@ export function HomeRewardsSection({
   rewardsDialogOpen,
   selectedRewardClubId,
   rewardsLoading,
+  rewardsError,
+  onRetryRewards,
   availableRewards,
   rewardClubs,
   isAppAdmin,
@@ -392,7 +396,12 @@ export function HomeRewardsSection({
                   </p>
                 )}
               </div>
-            ) : rewardsLoading ? (
+            ) : rewardsError && availableRewards.length === 0 ? (
+              <div className="space-y-3 py-8 text-center">
+                <p className="text-sm text-muted-foreground">Couldn’t load rewards. Please try again.</p>
+                <Button variant="outline" onClick={onRetryRewards}>Try again</Button>
+              </div>
+            ) : rewardsLoading && availableRewards.length === 0 ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>

@@ -97,7 +97,7 @@ describe("Home reward reads", () => {
     const pending = clientFor({ reward_redemptions: { data: null, error: new Error("offline") } });
     await expect(fetchPendingHomeRedemptions(pending.client, "user-1")).resolves.toEqual([]);
     const available = clientFor({ club_rewards: { data: null, error: new Error("offline") } });
-    await expect(fetchAvailableHomeRewards(available.client, "club-1")).resolves.toEqual([]);
+    await expect(fetchAvailableHomeRewards(available.client, "club-1")).rejects.toThrow("offline");
   });
 });
 

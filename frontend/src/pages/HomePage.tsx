@@ -74,6 +74,7 @@ import {
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { logHomeOpenLatency, resetHomeOpenLog } from "@/lib/homeOpenLatency";
 import { recordPointsHistory } from "@/lib/pointsHistory";
+import { homeRewardQuery } from "@/features/home/homeRewardQuery";
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { findNearbyGameEvent } from "@/hooks/useNearbyGameEvent";
 import { useClubTheme, hasClubThemeCached } from "@/hooks/useClubTheme";
@@ -937,11 +938,12 @@ export default function HomePage() {
             ]);
             return clubIds.flatMap((clubId, index) => {
               const profile = profiles[index];
-              if (!profile) return [];
+              const club = profile?.[0];
+              if (!club) return [];
               return [{
                 id: clubId,
-                name: profile.name,
-                logo_url: profile.logo_url?.[0] ?? null,
+                name: club.name,
+                logo_url: club.logo_url?.[0] ?? null,
                 hasPro: liveHasAnyPro(subs.get(clubId)),
               }];
             });
@@ -983,17 +985,9 @@ export default function HomePage() {
   const isRewardsProLocked = !isAppAdmin && userClubs.length > 0 && rewardClubs.length > 0 && !hasAnyRewardClubPro;
 
   // Fetch rewards for selected club
-  const { data: availableRewards = [], isLoading: rewardsLoading } = useQuery({
-    queryKey: ["home-available-rewards", selectedRewardClubId],
-    queryFn: async () => {
-      // Routed via withFeatureBackend("points", ...). On ICP, rewards render
-      // without a sponsor badge (no canister-side sponsor join).
-      return fetchAvailableHomeRewardsForBackend(supabase, null, selectedRewardClubId!);
-    },
-    enabled: !!selectedRewardClubId,
-    staleTime: 5 * 60 * 1000,
-    placeholderData: (prev) => prev,
-  });
+  const { data: availableRewards = [], isLoading: rewardsLoading, isError: rewardsError, refetch: retryRewards } = useQuery(
+    homeRewardQuery(supabase, user?.id, resolveAuthBackend(), selectedRewardClubId),
+  );
 
   // Fetch the next reward info across user's clubs
   const { data: nextRewardInfo = null } = useQuery<{ points_required: number; name: string } | null>({
@@ -1003,7 +997,13 @@ export default function HomePage() {
       if (proClubIds.length === 0) return null;
       // Routed via withFeatureBackend("points", ...); ICP branch issues one
       // list_rewards call per eligible club (no bulk cross-club query exists).
-      return fetchNextHomeRewardInfoForBackend(supabase, null, proClubIds);
+      // The summary and drawer share one complete per-club catalogue request,
+      // including role verification; opening rewards never repeats that work.
+      const lists = await Promise.all(proClubIds.map((clubId) =>
+        queryClient.fetchQuery(homeRewardQuery(supabase, user?.id, resolveAuthBackend(), clubId)),
+      ));
+      const first = lists.flat().sort((a, b) => a.points_required - b.points_required)[0];
+      return first ? { points_required: first.points_required, name: first.name } : null;
     },
     enabled: rewardClubs.length > 0,
     staleTime: 5 * 60 * 1000,
@@ -2327,6 +2327,8 @@ export default function HomePage() {
               rewardsDialogOpen,
               selectedRewardClubId,
               rewardsLoading,
+              rewardsError,
+              onRetryRewards: () => void retryRewards(),
               availableRewards,
               rewardClubs,
               isAppAdmin,

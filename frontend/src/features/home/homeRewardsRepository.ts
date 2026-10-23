@@ -27,13 +27,14 @@ export async function fetchPendingHomeRedemptions(client: any, userId: string) {
 }
 
 export async function fetchAvailableHomeRewards(client: any, clubId: string) {
-  const { data } = await client
+  const { data, error } = await client
     .from("club_rewards")
     .select("*, sponsors(id, name, logo_url)")
     .eq("club_id", clubId)
     .eq("is_active", true)
     .neq("reward_type", "player_of_match")
     .order("points_required", { ascending: true });
+  if (error) throw error;
   return data ?? [];
 }
 
