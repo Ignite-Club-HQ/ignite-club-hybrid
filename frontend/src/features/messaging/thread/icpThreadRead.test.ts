@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { readIcpThreadPage } from './icpThreadRead';
+import { readIcpThreadPage, readIcpGroupMetadata } from './icpThreadRead';
 describe('ICP existing thread opening', () => {
+  it('distinguishes confirmed missing metadata from a retryable admission failure', async () => {
+    expect(await readIcpGroupMetadata(async () => { throw new Error('Get group metadata failed: Group metadata not found'); })).toBeNull();
+    const denied = new Error('Account admission denied or unavailable');
+    await expect(readIcpGroupMetadata(async () => { throw denied; })).rejects.toBe(denied);
+    expect(await readIcpGroupMetadata(async () => ({ name: 'Giddy Goat' }))).toEqual({ name: 'Giddy Goat' });
+  });
   it('returns readable messages without invoking a stalled provisioning mutation', async () => {
     const provision = vi.fn(() => new Promise(() => {}));
     const read = vi.fn().mockResolvedValue({ messages: [{ id: 'saved-message' }] });

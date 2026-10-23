@@ -609,7 +609,7 @@ export default function HomePage() {
           onProgress: feed => {
             if (signal.aborted || !user?.id) return;
             queryClient.setQueryData(eventKeys.home(user.id), (previous: typeof feed | undefined) => {
-              if (previous?.events?.length) return previous;
+              if (previous?.events?.length && !previous.incomplete) return previous;
               return feed;
             });
           },

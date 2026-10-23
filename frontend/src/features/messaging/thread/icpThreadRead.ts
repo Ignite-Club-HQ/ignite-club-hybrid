@@ -10,3 +10,11 @@ export async function readIcpThreadPage<T>(read: () => Promise<T>, provision?: (
     return read();
   }
 }
+
+export async function readIcpGroupMetadata<T>(read: () => Promise<T>): Promise<T | null> {
+  try { return await read(); }
+  catch (error) {
+    if (error instanceof Error && error.message === "Get group metadata failed: Group metadata not found") return null;
+    throw error;
+  }
+}

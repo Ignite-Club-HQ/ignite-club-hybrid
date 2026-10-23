@@ -1,6 +1,7 @@
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Suspense } from "react";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
+import { readIcpGroupMetadata } from "@/features/messaging/thread/icpThreadRead";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
 import { consumePendingChatJump, getLastConsumedPendingChatJumpTs, subscribePendingChatJump, type PendingChatJumpPayload } from "@/lib/pendingChatJump";
@@ -388,8 +389,8 @@ export default function GroupChatPage() {
           supabase: async () => null,
           icp: async (ctx) => {
             if (!groupId) return null;
-            try {
-              const metadata = await getLiveGroupMetadata(ctx, groupId);
+              const metadata = await readIcpGroupMetadata(() => getLiveGroupMetadata(ctx, groupId));
+              if (!metadata) return null;
               return {
                 id: metadata.conversationId,
                 name: metadata.name,
@@ -402,10 +403,6 @@ export default function GroupChatPage() {
                 category: null,
                 join_policy: null,
               } as ChatGroup;
-            } catch (error) {
-              if (error instanceof Error && error.message === "Get group metadata failed: Group metadata not found") return null;
-              throw error;
-            }
           },
         }, { conversationId: groupId ?? "" });
       }
