@@ -6,6 +6,7 @@ import { splitPageWindow } from "@/lib/chatPageWindow";
 import { getCachedMessages, cacheMessages } from "@/lib/messageCache";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { isUsableCachedThread } from "@/lib/chatThreadLoadState";
+import { assertReadNotAborted } from "@/live/readDeadline";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
@@ -48,7 +49,9 @@ export const mapLiveGroupRows = async (
   groupId: string,
   rows: any[],
   onMessagesReady?: (messages: GroupMessage[]) => void,
+  signal?: AbortSignal,
 ): Promise<GroupMessage[]> => {
+  assertReadNotAborted(signal);
   const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
   // Author photos and reactions enrich the thread; they must not delay its text.
   if (onMessagesReady) {
@@ -71,6 +74,7 @@ export const mapLiveGroupRows = async (
     fetchProfilesWithCache(authorIds),
     listLiveReactions(ctx, groupId).catch(() => []),
   ]);
+  assertReadNotAborted(signal);
   // Reactions persist on the canister; restore them on every refetch.
   // Tolerate older canisters that lack list_reactions.
   const reactionsByMessage = new Map<string, any[]>();
@@ -129,6 +133,7 @@ const fetchGroupMessages = async ({
   supabaseClient,
   signal,
 }: Omit<UseGroupMessagesQueryOptions, "openedFromNotificationRef">): Promise<GroupMessagesQueryData> => {
+  assertReadNotAborted(signal);
   markChatFetch();
   if (!groupId || !userId) {
     throw new Error("Group message query requires a group and user");
@@ -269,9 +274,11 @@ const fetchGroupMessages = async ({
   return withFeatureBackend("messaging", {
     supabase: fetchFromSupabase,
     icp: async (ctx): Promise<GroupMessagesQueryData> => {
+      assertReadNotAborted(signal);
       // Newest-first page: the canister returns the newest `pageSize` rows
       // plus a backward cursor when older history remains.
       const page = await listLiveLatestMessagesPage(ctx, groupId, null, pageSize);
+      assertReadNotAborted(signal);
       prefetchMessagePolls(queryClient, page.messages, userId, { conversationId: groupId }, true, ctx);
       const olderCursor =
         Array.isArray(page.next_sequence) && page.next_sequence.length > 0
@@ -286,7 +293,7 @@ const fetchGroupMessages = async ({
             messages: readyMessages, reactions: [], olderCursor,
             hasOlderMessages: olderCursor !== null,
           });
-      });
+      }, signal);
       // mapLiveGroupRows embeds canister reactions per message; flatten the
       // same rows for consumers that read the flat reactions list.
       const reactions = messages.flatMap((m: any) =>

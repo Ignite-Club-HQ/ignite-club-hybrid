@@ -60,7 +60,7 @@ export async function generalRoutingStatus(ctx: FeatureBackendContext): Promise<
   if (cache && cache.key === key && Date.now() - cache.atMs < TTL_MS) return cache.value;
   // Concurrent callers on page load share one check (it reads the registry twice).
   if (inflight?.key !== key) {
-    const p = compute(ctx).finally(() => { if (inflight?.p === p) inflight = null; });
+    const p = (await import('./readDeadline')).withReadDeadline(compute(ctx), 'Routing approval').finally(() => { if (inflight?.p === p) inflight = null; });
     inflight = { key, p };
   }
   const value = await inflight.p;

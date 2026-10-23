@@ -6,6 +6,7 @@ import type { GroupDescriptor, ClubAssignment, GroupDomain } from './groupRoutin
 import { GROUP_DOMAINS } from './groupRouting';
 import { resolveDeploymentClubDomain, groupRouteScope, type GroupDeployment, type GroupDeploymentBinding, type DeploymentBoundTable } from './groupDeployment';
 import { readCompleteMembershipDirectory, type DirectoryPage, type DirectoryContinuation } from './membershipDirectoryDiscovery';
+import { withReadDeadline } from './readDeadline';
 
 export type GroupRegistry = { revision: bigint; groups: GroupDescriptor[]; deployment: GroupDeployment; bindings: GroupDeploymentBinding[] };
 export type GroupSessionTransport = {
@@ -182,7 +183,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     if (!fresh && !(strict && registryCheckedAt === openedAt) && Date.now() - registryCheckedAt < RECHECK_WINDOW_MS) return;
     if (!fresh && registryCheck) return registryCheck;
     const run = (async () => {
-      const current = await transport.readRegistry();
+      const current = await withReadDeadline(transport.readRegistry(), 'Routing verification');
       live();
       if (registryFingerprint(current) !== initialRegistry) throw new Error('Group registry changed; reopen session');
       registryCheckedAt = Date.now();
@@ -204,7 +205,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       // Let siblings whose replies land in the same turn join this check.
       await Promise.resolve(); await Promise.resolve();
       entry.tick = ++checkTick;
-      const current = await transport.readRegistry();
+      const current = await withReadDeadline(transport.readRegistry(), 'Routing verification');
       live();
       if (registryFingerprint(current) !== initialRegistry) throw new Error('Group registry changed; reopen session');
       registryCheckedAt = Date.now();
@@ -224,7 +225,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     const waiting = fresh ? [] : unique.map(id => assignmentInflight.get(id)).filter((p): p is Promise<void> => !!p);
     const stale = unique.filter(id => (fresh || now - checkedAt(id) >= RECHECK_WINDOW_MS) && (fresh || !assignmentInflight.has(id)));
     if (stale.length) {
-      const run = validateAssignments(stale).then(() => { for (const id of stale) assignmentCheckedAt.set(id, Date.now()); });
+      const run = withReadDeadline(validateAssignments(stale), 'Club verification').then(() => { for (const id of stale) assignmentCheckedAt.set(id, Date.now()); });
       for (const id of stale) assignmentInflight.set(id, run);
       try { await run; } finally { for (const id of stale) if (assignmentInflight.get(id) === run) assignmentInflight.delete(id); }
     }
