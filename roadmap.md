@@ -475,3 +475,7 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [ ] Group 2 competition/events deployment: blocked by the existing workflow's all-thirteen-service scope. Do not run Upgrade Group 2 (closed) on this request; it upgrades unrelated services. Requires a dedicated protected exact competition/events release path before dispatch.
 - [ ] Authenticated welcome-email delivery and fixture-card navigation acceptance: unavailable without an Internet Identity session; successful canister upgrade/probes alone do not establish app or email-delivery release acceptance.
 - [x] 11:41 UTC: restored shared club routing, membership cache, theme picker and Clubs page to the 03:19 UTC behaviour (removed 20s hard deadlines and all-or-nothing club lists). Signed-in ICP acceptance pending.
+
+## ICP chat participants panel — 24 October 2026
+- [x] Chat details "Participants" showed "No participants found" in ICP mode: the members query was disabled whenever the auth backend was ICP (Supabase has no Internet Identity rows). It now runs for signed-in ICP users and reads chat membership from the messaging canister (team/club id as conversation id), team roles from club_domain team role grants, club admins from list_club_admin_threads, and names/avatars from identity_access profiles. Typecheck, ICP guard check and 36 chat test files in both backend modes passed.
+- [ ] Signed-in Internet Identity acceptance of team/group/club participant lists pending.
