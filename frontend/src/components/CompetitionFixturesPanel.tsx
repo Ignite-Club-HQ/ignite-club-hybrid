@@ -162,7 +162,9 @@ export function buildCompetitionLadderRows(
   );
 }
 
-export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, entries, source }: Props) {
+export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, entries, source, competitionStatus }: Props) {
+  const canImport = !competitionStatus || competitionStatus === "draft";
+  const [importOpen, setImportOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -1103,8 +1105,9 @@ function FixturesFilterAndList({
   const groups: { key: string; label: string; items: any[] }[] = [];
   const indexByKey = new Map<string, number>();
   for (const m of filteredMatches) {
-    const key = m.round_number != null ? `r${m.round_number}` : "unscheduled";
-    const label = m.round_number != null ? `Round ${m.round_number}` : "Other matches";
+    const finalsLabel = m.round_number == null ? getCompetitionFinalsLabel(m.notes) : null;
+    const key = m.round_number != null ? `r${m.round_number}` : finalsLabel ? `f:${finalsLabel.toLowerCase()}` : "unscheduled";
+    const label = m.round_number != null ? `Round ${m.round_number}` : finalsLabel ?? "Other matches";
     let idx = indexByKey.get(key);
     if (idx == null) {
       idx = groups.length;
