@@ -1,5 +1,6 @@
 /** Display discovery only: destinations still authorize every content operation. */
 import type { QueryClient } from '@tanstack/react-query';
+import { withReadDeadline } from './readDeadline';
 export const MEMBERSHIP_RECONCILE_MS = 15 * 60 * 1000;
 type Entry = { value?: unknown; checkedAt: number; pending?: Promise<unknown>; load: () => Promise<unknown> };
 const entries = new Map<string, Entry>();
@@ -16,7 +17,7 @@ export function bindMembershipDiscovery(client0: QueryClient): void { client = c
 function reconcile(key: string, entry: Entry): Promise<unknown> {
   if (entry.pending) return entry.pending;
   const captured = generation;
-  const pending = Promise.resolve().then(entry.load).then(value => {
+  const pending = withReadDeadline(Promise.resolve().then(entry.load), 'Membership discovery').then(value => {
     if (captured !== generation || entries.get(key) !== entry) throw new Error('Membership discovery changed');
     const changed = entry.value !== undefined && fingerprint(entry.value) !== fingerprint(value);
     entry.value = value;

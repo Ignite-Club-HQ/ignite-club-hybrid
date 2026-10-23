@@ -249,7 +249,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       const memberGroups = new Set([...clubs].map(id => routing.assignments.get(id)?.groupId));
       const reads = registry.groups.filter(g => memberGroups.has(g.id)).map(g => read(targetFor(g.id)));
       if (legacyClubs.size) reads.push(read(context));
-      const parts = await Promise.all(reads);
+      const parts = await Promise.all(reads.map(read => withReadDeadline(read, 'Member content')));
       live();
       const rows = parts.flat();
       if (rows.length > maxRows) throw new Error('Member-group read exceeds row budget');
@@ -342,7 +342,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
       live();
       await assertRegistryUnchanged();
-      const parts = await Promise.all(registry.groups.map(g => read(targetFor(g.id))));
+      const parts = await Promise.all(registry.groups.map(g => withReadDeadline(read(targetFor(g.id)), 'Group content')));
       // Fresh: a registry change while replies were in flight must discard them.
       // Sibling reads that finished before one fresh check started share it.
       await confirmUnchangedAfter(++checkTick);

@@ -235,8 +235,8 @@ export function createClubDispatcher(deps: DispatchDeps) {
       // Each group answers for itself: one failing group no longer empties
       // every other group's results. All failing still throws (keeps cache).
       type Part = { ok: true; value: T } | { ok: false; error: unknown };
-      const attempt = async (ctx: FeatureBackendContext): Promise<Part> => { try { return { ok: true, value: await fn(ctx) }; } catch (error) { return { ok: false, error }; } };
-      const [shared, groups] = await Promise.all([deps.legacy(feature, '', fn).then((value): Part => ({ ok: true, value }), (error): Part => ({ ok: false, error })), s.readEveryGroup(domain, async ctx => [await attempt(ctx)], Number.MAX_SAFE_INTEGER)]);
+      const attempt = async (ctx: FeatureBackendContext): Promise<Part> => { try { return { ok: true, value: await withReadDeadline(fn(ctx), 'Group content') }; } catch (error) { return { ok: false, error }; } };
+      const [shared, groups] = await Promise.all([withReadDeadline(deps.legacy(feature, '', fn), 'Shared content').then((value): Part => ({ ok: true, value }), (error): Part => ({ ok: false, error })), s.readEveryGroup(domain, async ctx => [await attempt(ctx)], Number.MAX_SAFE_INTEGER)]);
       const parts = [shared, ...groups];
       if (requireComplete) {
         const failure = parts.find(p => !p.ok);
@@ -247,7 +247,8 @@ export function createClubDispatcher(deps: DispatchDeps) {
       return merge(ok.map(p => p.value));
     },
     /** Scope by event, chat, team or club; resolves the owning club first. */
-    readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
+    readFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, fn0: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
+      const fn = (ctx: FeatureBackendContext) => fn0(ctx && typeof ctx === 'object' ? markScopedContext(ctx) : ctx);
       if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', fn);
       const { s, club } = await resolveScoped(deps, scope);
       if (club && !s.isAssigned(club) && !s.isLegacyMember?.(club) && !('clubId' in scope)) {
@@ -298,7 +299,8 @@ export function createClubDispatcher(deps: DispatchDeps) {
       try { return await s.createInGroup(placement, 'club_domain', fn); }
       finally { cached?.session.then(x => x.dispose(), () => {}); cached = null; }
     },
-    read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
+    read: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, fn0: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> => {
+      const fn = (ctx: FeatureBackendContext) => fn0(ctx && typeof ctx === 'object' ? markScopedContext(ctx) : ctx);
       if (!await active()) return deps.legacy(feature, clubId, fn);
       const { s } = await sessionKnowing(deps, clubId);
       return s.isAssigned(clubId) ? s.readClub(clubId, domain, fn) : deps.legacy(feature, clubId, fn);
