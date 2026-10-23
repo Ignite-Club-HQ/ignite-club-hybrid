@@ -49,6 +49,14 @@ function clientResult(result: { data: any; error: any }) {
 }
 
 describe.runIf(backendMocks.mode === "supabase")("event detail repository", () => {
+  it("passes only the event request's cancellation signal to its database read", async () => {
+    const controller = new AbortController();
+    const maybeSingle = vi.fn().mockResolvedValue({ data: { id: 'event-1' }, error: null });
+    const abortSignal = vi.fn(() => ({ maybeSingle }));
+    const client = { from: () => ({ select: () => ({ eq: () => ({ abortSignal }) }) }) };
+    await fetchEventDetail(client, 'event-1', controller.signal);
+    expect(abortSignal).toHaveBeenCalledWith(controller.signal);
+  });
   beforeEach(() => {
     backendMocks.events.mockReset();
   });

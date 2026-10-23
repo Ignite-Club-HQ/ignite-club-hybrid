@@ -4,6 +4,15 @@ vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: mocks.profiles })
 vi.mock('@/live/features/messaging', () => ({ listLiveLatestMessagesPage: vi.fn(), listLiveReactions: mocks.reactions }));
 import { mapLiveGroupRows } from './useGroupMessagesQuery';
 describe('ICP group message enrichment', () => {
+  it('does not start enrichment for an abandoned chat', async () => {
+    mocks.profiles.mockClear(); mocks.reactions.mockClear();
+    const controller = new AbortController(); controller.abort();
+    const ready = vi.fn();
+    await expect(mapLiveGroupRows({}, 'peanut', [], ready, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(ready).not.toHaveBeenCalled();
+    expect(mocks.profiles).not.toHaveBeenCalled();
+    expect(mocks.reactions).not.toHaveBeenCalled();
+  });
   it('publishes authorized message text before delayed profiles and reactions resolve', async () => {
     let finishProfiles: ((value: Map<string, unknown>) => void) | undefined;
     let finishReactions: ((value: unknown[]) => void) | undefined;

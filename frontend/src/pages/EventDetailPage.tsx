@@ -14,7 +14,6 @@ import { resolveEventCapabilities } from "@/features/events/eventCapabilities";
 import { fetchEventDetail } from "@/features/events/eventDetailRepository";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
-import { abortAllInFlightRestGets } from "@/lib/supabaseAuthRetry";
 import { Share } from "@capacitor/share";
 import { Capacitor } from "@capacitor/core";
 import { getShareUrl } from "@/lib/shareUtils";
@@ -216,7 +215,7 @@ export default function EventDetailPage() {
 
   const { data: event, isLoading, error: eventError, isFetching: isEventFetching } = useQuery({
     queryKey: ["event", useIcpLab ? "icp" : "supabase", localIcpPersona, id],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (useIcpLab && id) {
         try {
           return await getLocalEvent(localIcpPersona, id);
@@ -228,7 +227,8 @@ export default function EventDetailPage() {
         }
       }
 
-      return fetchEventDetail(supabase, id!);
+      if (!id) return null;
+      return fetchEventDetail(supabase, id, signal);
     },
     enabled: !!id,
     retry: (failureCount, err: any) => {
@@ -275,25 +275,7 @@ export default function EventDetailPage() {
       }, { eventId: id! }),
   });
 
-  // Watchdog: after an Android WebView background freeze the event fetch can
-  // stay permanently pending (its abort timer was frozen), leaving this page
-  // stuck on skeletons until a force-quit. While we have no event and are
-  // still loading, abort zombie REST GETs and re-issue every 6s.
-  const isStuckOnEventSpinner = !event && isLoading;
-  useEffect(() => {
-    if (!isStuckOnEventSpinner || !id) return;
-    const kick = () => {
-      const aborted = abortAllInFlightRestGets("event-detail-watchdog");
-      console.warn("[EventDetailPage] watchdog-refetch", {
-        t: new Date().toISOString(),
-        eventId: id,
-        abortedInFlight: aborted,
-      });
-      queryClient.refetchQueries({ queryKey: eventKeys.detail(id) });
-    };
-    const timer = setInterval(kick, 6000);
-    return () => clearInterval(timer);
-  }, [isStuckOnEventSpinner, id, queryClient]);
+
 
 
 

@@ -12,6 +12,7 @@ import { generalRoutingStatus, generalRoutingDeploymentAlias } from './generalAc
 import { clearOwnerTestRouting, readOwnerTestRouteCached } from './ownerTestRouting';
 import { markScopedContext } from './scopedContext';
 import { clearRoleGrantsMemo } from './roleGrantsMemo';
+import { withReadDeadline } from './readDeadline';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
@@ -49,8 +50,9 @@ export const MAX_DEVICE_OWNERS = 2000;
 const owners = new Map<string, string | null>(); // kind:id -> club (null = shared canisters)
 const inflight = new Map<string, Promise<string | null>>();
 let loadedFor: string | null = null;
+let dispatchGeneration = 0;
 let cached: { principal: string; targetKey: string; session: Promise<Session>; ready: boolean } | null = null;
-export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; unplaced.clear(); hostedChecked.clear(); reopening = null; }
+export function clearGroupDispatchCache() { dispatchGeneration++; cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; unplaced.clear(); hostedChecked.clear(); reopening = null; }
 // Clubs confirmed (after one reopen) to have no group assignment: legacy/shared.
 const unplaced = new Set<string>();
 const hostedChecked = new Set<string>();
@@ -90,12 +92,15 @@ async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendCont
     Object.entries(ctx.target.canisterIds ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
   if (!cached || cached.principal !== principal || cached.targetKey !== targetKey) {
     clearGroupDispatchCache();
-    const entry = { principal, targetKey, session: deps.open(ctx), ready: false };
+    const opening = deps.open(ctx);
+    const entry = { principal, targetKey, session: withReadDeadline(opening, 'Club routing'), ready: false };
     cached = entry;
-    entry.session.then(() => { entry.ready = true; }, () => {});
+    entry.session.then(() => { entry.ready = true; }, () => { if (cached === entry) cached = null; });
+    opening.then(session => { if (cached !== entry) session.dispose(); }, () => {});
   }
   hydrate(deps, principal);
-  try { return { ctx, s: await cached.session, principal }; } catch (e) { cached = null; throw e; }
+  const entry = cached;
+  try { return { ctx, s: await entry.session, principal }; } catch (e) { if (cached === entry) cached = null; throw e; }
 }
 
 /** Resolve a scope to its club. A remembered owner (device cache) whose club
@@ -131,6 +136,8 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
   const pending = inflight.get(key); if (pending) return pending;
   if (!deps.lookup) throw new Error('Entity lookup unavailable');
   const lookup = deps.lookup;
+  const generation = dispatchGeneration;
+  let probeLive = true;
   const probe = (async () => {
     const found = [...new Set(await s.readEveryGroup(ENTITY_DOMAIN[kind], async ctx => { const c = await lookup(ctx, kind, id); return c ? [c] : []; }, 2))];
     if (found.length > 1) throw new Error(`${kind} claimed by more than one group`);
@@ -141,11 +148,13 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
       if (!sharedClub) throw new Error(`${kind} not found or not authorized`);
       return null;
     }
+    if (!probeLive || dispatchGeneration !== generation) throw new Error('Club routing session changed');
     owners.set(key, club); if (club) persist(deps, principal);
     return club;
   })();
-  inflight.set(key, probe);
-  try { return await probe; } finally { inflight.delete(key); }
+  const bounded = withReadDeadline(probe, 'Content location');
+  inflight.set(key, bounded);
+  try { return await bounded; } finally { probeLive = false; if (inflight.get(key) === bounded) inflight.delete(key); }
 }
 
 export function createClubDispatcher(deps: DispatchDeps) {
