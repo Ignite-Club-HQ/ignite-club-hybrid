@@ -517,13 +517,21 @@ export default function GroupChatPage() {
   const { data: canRenameCompetitionChat } = useQuery({
     queryKey: ["can-rename-competition-chat", groupId, user?.id],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        // ICP: the messaging canister answers competition-admin authorization
+        // for this conversation directly.
+        return withFeatureBackend("messaging", {
+          supabase: async () => false,
+          icp: (ctx) => isLiveCompetitionAdmin(ctx, groupId!),
+        }, { conversationId: groupId! });
+      }
       const { data } = await (supabase.rpc as any)("can_rename_competition_chat", {
         _user_id: user!.id,
         _group_id: groupId,
       });
       return !!data;
     },
-    enabled: !!groupId && !!user?.id && !!competitionGroupId && !useIcpLab,
+    enabled: !!groupId && !!user?.id && !!competitionGroupId,
     staleTime: 5 * 60 * 1000,
   });
   const [showRenameDialog, setShowRenameDialog] = useState(false);
