@@ -1108,7 +1108,8 @@ export default function GroupChatPage() {
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {
       const currentProfile = profileRef.current;
-      await queryClient.cancelQueries({ queryKey: ["group-messages", groupId] });
+      // Cancel synchronously without holding the next draft behind cancellation.
+      void queryClient.cancelQueries({ queryKey: ["group-messages", groupId] });
 
       // Mutation-specific temp id so overlapping sends roll back independently.
       const tempId = createSendTempId();
