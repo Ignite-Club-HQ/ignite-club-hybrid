@@ -51,6 +51,9 @@ import { FixturePreview } from "@/components/competition/FixturePreview";
 import { AddFinalsRoundMenuItem } from "@/components/competition/AddFinalsRoundMenuItem";
 import { EditMatchDetailsDialog } from "@/components/competition/EditMatchDetailsDialog";
 import { ImportPlayHQFixturesDialog } from "@/components/competitions/ImportPlayHQFixturesDialog";
+import { ImportFixturesMenuItem, ImportFixturesSheet } from "@/components/competitions/ImportFixturesMenuItem";
+import { getCompetitionFinalsLabel } from "@/lib/competitionFinalsLabel";
+import { shouldIgnoreFixtureCardClick } from "@/lib/fixtureCardClick";
 
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -69,6 +72,7 @@ interface Props {
   divisions: any[];
   entries: any[]; // includes teams:team_id(id,name)
   source?: string;
+  competitionStatus?: string;
 }
 
 export function buildCompetitionLadderRows(
