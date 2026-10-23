@@ -10,6 +10,12 @@ import { getLiveClubProfile } from './features/club';
 
 export type Settled<T> = { values: T[]; failed: number };
 
+/** Progress is display-only; only complete results may replace saved inventories. */
+export function completeClubRows<T>(result: Settled<T>): T[] {
+  if (result.failed) throw new Error('Some clubs could not be loaded; please try again.');
+  return result.values;
+}
+
 /** Promise.allSettled that keeps successes; throws only when every item failed. */
 export async function settleAll<T>(items: readonly Promise<T>[]): Promise<Settled<T>> {
   const results = await Promise.allSettled(items);

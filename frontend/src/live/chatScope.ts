@@ -1,6 +1,7 @@
 /** Which club a chat belongs to, for group routing. Pure (no ICP imports):
  * safe in the app's start-up bundle. */
 import type { ClubScope } from "./featureRouter";
+import { writeOnce } from './clubScope';
 
 /** Chat kind + id as used across the app (scope_type / scope.kind). */
 export function scopeForChat(kind: string | null | undefined, id: string | null | undefined): ClubScope | undefined {
@@ -32,5 +33,5 @@ export function currentChatScope(): ClubScope | undefined {
 
 /** Add a write marker to an optional chat scope. */
 export function chatWrite(scope: ClubScope | undefined): ClubScope | undefined {
-  return scope ? { ...scope, writeKey: "once", attempts: 1 } : undefined;
+  return scope ? writeOnce(scope) : undefined;
 }
