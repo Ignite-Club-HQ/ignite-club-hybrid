@@ -1,4 +1,5 @@
 import { readContentInScope } from "@/live/contentRouting";
+import { assertReadNotAborted, withReadDeadline } from "@/live/readDeadline";
 import { settleAll } from "@/live/crossGroupClubs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,9 +41,9 @@ export async function fetchGalleryCardPhotoIds(
 }
 
 export async function fetchMediaFeedPage(
-  options: MediaFeedFilters & { offset: number; pageSize: number },
+  options: MediaFeedFilters & { offset: number; pageSize: number; signal?: AbortSignal; onProgress?: (page: { photos: any[]; nextCursor: number | undefined; incomplete?: boolean }) => void },
   client: IgniteSupabaseClient = supabase,
-): Promise<{ photos: any[]; nextCursor: number | undefined }> {
+): Promise<{ photos: any[]; nextCursor: number | undefined; incomplete?: boolean }> {
   if (options.cardId && (options.cardPhotoIds?.length ?? 0) === 0) {
     return { photos: [], nextCursor: undefined };
   }
@@ -80,8 +81,9 @@ export async function fetchMediaFeedPage(
         return [...new Set(grants.map(grantClubId).filter((c): c is string => !!c))];
       })();
       // Each club's photos come from its own group; one failing club never empties the feed.
-      const parts = (await settleAll(clubIds.map(clubId => readContentInScope(ctx, "media", { clubId }, scoped => listLiveAssets(scoped, clubId))))).values;
-      const assets = [...new Map(parts.flat().map(asset => [asset.id, asset])).values()];
+      const loaded = new Map<string, Awaited<ReturnType<typeof listLiveAssets>>>();
+      const mapPage = (incomplete: boolean) => {
+      const assets = [...new Map([...loaded.values()].flat().map(asset => [asset.id, asset])).values()];
       const photos = assets
         .filter(asset => !asset.deleted && (!options.cardId || options.cardPhotoIds?.includes(asset.id)))
         .filter(asset => !options.teamId || asset.team_id?.[0] === options.teamId)
@@ -105,9 +107,18 @@ export async function fetchMediaFeedPage(
         .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
       const page = photos.slice(options.offset, options.offset + options.pageSize);
       return {
-        photos: page,
+        photos: page, incomplete,
         nextCursor: page.length === options.pageSize ? options.offset + options.pageSize : undefined,
       };
+      };
+      const settled = await settleAll(clubIds.map(clubId => withReadDeadline(readContentInScope(ctx, "media", { clubId }, scoped => listLiveAssets(scoped, clubId)), "Club photos", 20_000, options.signal).then(assets => {
+        assertReadNotAborted(options.signal);
+        loaded.set(clubId, assets);
+        options.onProgress?.(mapPage(true));
+        return assets;
+      })));
+      assertReadNotAborted(options.signal);
+      return mapPage(settled.failed > 0);
     },
   }, options.clubId ? { clubId: options.clubId } : options.competitionId ? { competitionId: options.competitionId } : options.eventId ? { eventId: options.eventId } : options.teamId ? { teamId: options.teamId } : { shared: "person" });
 }

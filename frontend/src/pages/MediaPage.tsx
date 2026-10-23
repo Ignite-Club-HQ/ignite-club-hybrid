@@ -595,7 +595,7 @@ function SupabaseMediaPage() {
     refetch: refetchPhotos,
   } = useInfiniteQuery({
     queryKey: photosQueryKey,
-    queryFn: async ({ pageParam = 0 }) => {
+    queryFn: async ({ pageParam = 0, signal }) => {
       if (cardId && (cardPhotoIds?.length ?? 0) === 0) {
         return { photos: [], nextCursor: undefined };
       }
@@ -611,7 +611,7 @@ function SupabaseMediaPage() {
       // branch inside fetchMediaFeedPage; the ICP branch has no long-poll to
       // abort.
       const budget = createChatFetchBudget(15_000);
-      let result: { photos: any[]; nextCursor: number | undefined };
+      let result: { photos: any[]; nextCursor: number | undefined; incomplete?: boolean };
       let error: any = null;
       try {
         result = await fetchMediaFeedPage({
@@ -624,7 +624,11 @@ function SupabaseMediaPage() {
           cardId: cardId ?? null,
           cardPhotoIds,
           offset: pageParam,
-          pageSize: PHOTOS_PER_PAGE,
+          pageSize: PHOTOS_PER_PAGE, signal,
+          onProgress: next => {
+            if (signal.aborted || pageParam !== 0) return;
+            queryClient.setQueryData(photosQueryKey, (old: any) => old?.pages?.length ? old : { pages: [next], pageParams: [0] });
+          },
         });
       } catch (err) {
         error = err;
@@ -639,7 +643,7 @@ function SupabaseMediaPage() {
 
       // Cache first page results for offline access
       const icpClubFeed = isIcpMode && !!selectedClubFilter;
-  if (pageParam === 0 && data && (icpClubFeed || !selectedClubFilter) && !selectedTeamFilter && !urlEventId && !urlCompetitionId && !dateFromKey && !dateToKey && !cardId) {
+  if (pageParam === 0 && !result.incomplete && data && (icpClubFeed || !selectedClubFilter) && !selectedTeamFilter && !urlEventId && !urlCompetitionId && !dateFromKey && !dateToKey && !cardId) {
         cachePhotos(null, icpClubFeed ? selectedClubFilter : null, null, data.map(p => ({
           id: p.id,
           file_url: p.file_url || p.image_url,
