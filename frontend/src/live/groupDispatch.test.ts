@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createClubDispatcher, clearGroupDispatchCache, clubDispatch } from './groupDispatch';
 import { OFF } from './groupActivation';
 import { GROUP_DOMAINS } from './groupRouting';
+import { isScopedContext } from './scopedContext';
 
 const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n, removalWiring: { revision: 1n, groupIds: ["a"], checkedAtMs: 0 } };
 function deps(gates = OFF, principal = 'p1') {
@@ -15,6 +16,24 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it.each(['moved', 'legacy-club'])('marks both read entrypoints scoped for %s', async club => {
+    const { d, session } = deps(ON);
+    session.readClub.mockImplementation(async (_club, _domain, read) => read({}));
+    const dispatcher = createClubDispatcher({ ...d, legacy: async (_feature, _club, read) => read({} as never) } as never);
+    expect(await dispatcher.read('membership', club, 'club_domain', async ctx => isScopedContext(ctx))).toBe(true);
+    expect(await dispatcher.readFor('membership', { clubId: club }, 'club_domain', async ctx => isScopedContext(ctx))).toBe(true);
+  });
+  it('bounds a stalled shared fanout leg while retaining successful group results', async () => {
+    const { d, session } = deps(ON);
+    const dispatcher = createClubDispatcher({ ...d, legacy: () => new Promise(() => {}),
+      open: async () => ({ ...session, readEveryGroup: async (_domain, read) => read({} as never) }) } as never);
+    vi.useFakeTimers();
+    try {
+      const pending = dispatcher.readAcross('events', 'events_domain', async () => ['group-event'], parts => parts.flat());
+      await vi.advanceTimersByTimeAsync(20_001);
+      expect(await pending).toEqual(['group-event']);
+    } finally { vi.useRealTimers(); }
+  });
   it('expires a stalled membership refresh, retains the ready session and disposes late replacements', async () => {
     const { d, session } = deps(ON);
     const dispatcher = createClubDispatcher(d);

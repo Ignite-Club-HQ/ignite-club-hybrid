@@ -24,6 +24,17 @@ function fixture() {
 }
 
 describe('cross-group reads', () => {
+  it.each(['readMemberGroups', 'readEveryGroup'] as const)('bounds stalled %s reads and permits a later retry', async method => {
+    const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
+    vi.useFakeTimers();
+    try {
+      const pending = s[method]('events_domain', () => new Promise<[]>(() => {}));
+      const rejection = expect(pending).rejects.toThrow('timed out');
+      await vi.advanceTimersByTimeAsync(20_001);
+      await rejection;
+      expect(await s[method]('events_domain', async () => ['event'])).toContain('event');
+    } finally { vi.useRealTimers(); }
+  });
   it('keeps verified original-group membership separate from unknown ownership', async () => {
     const f = fixture();
     f.transport.readLegacyMemberships = vi.fn(async () => ({ clubs: ['original-club'], next: null, aclRevision: 1n }));

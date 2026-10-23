@@ -271,24 +271,24 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
     expect(calls).toEqual([]);
   });
 
-  it("fails closed when competition access cannot be established", async () => {
+  it("preserves competition read failures for retry without reporting denial", async () => {
     accessMocks.vaultFolders.mockRejectedValue(new Error("competition access unavailable"));
     const { client, calls } = scriptedClient({});
 
     await expect(fetchVaultCompetitionAccess("competition-a", "principal-a", client))
-      .resolves.toEqual({ isMember: false, canManage: false });
+      .rejects.toThrow("competition access unavailable");
 
     expect(accessMocks.competitionAdmin).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
   });
 
-  it("preserves competition membership but denies management when admin lookup fails", async () => {
+  it("preserves manager lookup failures rather than falsely denying management", async () => {
     accessMocks.vaultFolders.mockResolvedValue([]);
     accessMocks.competitionAdmin.mockRejectedValue(new Error("manager lookup unavailable"));
     const { client, calls } = scriptedClient({});
 
     await expect(fetchVaultCompetitionAccess("competition-a", "principal-a", client))
-      .resolves.toEqual({ isMember: true, canManage: false });
+      .rejects.toThrow("manager lookup unavailable");
     expect(calls).toEqual([]);
   });
 });
