@@ -434,3 +434,8 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [x] Read-only live dashboard at /admin/group-infrastructure: per-group and per-canister memory vs tested limits, fuel, club counts, photo-store fullness; 30s live refresh; group inventory from the governor-verified routing snapshot + shared deployment IDs. Add/remove/open/stop stay in GitHub workflows (deploy key never in the app).
 - [x] Deprecated duplicates: Canister Health page now redirects to the panel (memory history/trend/forecast moved with it); Placement Settings lost its Photo Stores and Canister Balances cards and links to the panel instead.
 - [ ] Owner verification: publish, open Admin → Group Infrastructure, confirm both groups report live.
+
+## Supabase-mode parity review vs ignite-club-hq-prod — 23 October 2026
+- [ ] Thorough review that this repo's Supabase mode does everything the main branch of ignite-club-hq-prod does (assessment only — do NOT move code to the other repo yet).
+- Known gaps found so far: drills feature (AdminDrillsPage, /admin/drills route, ~39 drill files in prod) and competition admin chat page (CompetitionAdminChatPage, /messages/competition-admin/:conversationId route) are absent here.
+- Awaiting background audits: component inventory, feature-area parity, Supabase backend surface (functions/migrations/config), hooks/lib/features inventories.
