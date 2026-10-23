@@ -28,6 +28,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { CompetitionFixturesPanel, CompetitionLadderPanel } from "@/components/CompetitionFixturesPanel";
 import CompetitionPlayerStatsPanel from "@/components/competitions/CompetitionPlayerStatsPanel";
 import { CreateCompetitionEventButton } from "@/components/competitions/CreateCompetitionEventButton";
+import { CompetitionEventsList } from "@/components/competitions/CompetitionEventsList";
 import { CompetitionShareJoinLink } from "@/components/CompetitionShareJoinLink";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
