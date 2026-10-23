@@ -95,10 +95,10 @@ falls back rather than hiding clubs.
 
 ## Verification completed locally
 
-- 124 identity unit tests, 63 operator/generated-wire tests, 56 app tests pass.
+- 124 identity unit tests, 63 operator/generated-wire tests, 58 app tests pass.
 - Real populated three-source rehearsal passes single-group, multi-group and
   empty callers; sequential pages; suspension during awaits and replay; membership
-  changes; exact release retries; same-code source and joint identity/source
+  changes and automatic released-directory recovery; exact release retries; same-code source and joint identity/source
   restoration refusal.
 - 17 active Candid contracts match; workflow YAML parses and preview builds.
 

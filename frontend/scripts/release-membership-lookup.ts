@@ -141,7 +141,7 @@ if (!api(`git/matching-refs/heads/${branch}`).some((r: { ref: string }) => r.ref
 const path = 'contents/membership-lookup-release.json';
 const entries = api(`contents?ref=${branch}`);
 let stored = entries.some((e: { name: string }) => e.name === 'membership-lookup-release.json') ? api(`${path}?ref=${branch}`) : null;
-const binding = { release, governor: GROUP2_GOVERNOR, router: shared.shard_router, configurationRevision: String(initial.configurationRevision), configuration, sources: observedSources, targets };
+const binding = { release, governor: GROUP2_GOVERNOR, router: shared.shard_router, registryRevision: String(initial.revision), directoryBinding: JSON.parse(fingerprint(directoryBinding)), configurationRevision: String(initial.configurationRevision), configuration, sources: observedSources, targets };
 let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
 if (journal && digest(journal.binding) !== digest(binding)) throw new Error('Another release journal exists; do not reset it. Review its settled outcomes before a separate release.');
 if (!journal) {
