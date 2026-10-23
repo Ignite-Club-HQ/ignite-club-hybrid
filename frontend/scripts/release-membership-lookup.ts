@@ -17,8 +17,8 @@ import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/d
 import type { _SERVICE as IdentityService } from '../src/lab/bindings/identity_access/declarations/identity_access.did';
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
-import { GROUP2_GOVERNOR, verifyUpgradeStatus, upgradeArgs, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
-import { digest, validateRequest, validateTargets, validateJournal, executeUpgrades, runFill, PINNED, requireLookupReleaseAcceptance, directorySources, requireReleaseSourceCoverage, lookupReleaseTargets } from '../../scripts/membership-lookup-release-policy.mjs';
+import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
+import { digest, validateRequest, validateTargets, validateJournal, executeUpgrades, runFill, PINNED, requireLookupReleaseAcceptance, directorySources, requireReleaseSourceCoverage, lookupReleaseTargets, lookupUpgradeArgs } from '../../scripts/membership-lookup-release-policy.mjs';
 import { configureDirectorySources } from '../../scripts/membership-source-configuration.mjs';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import type { _SERVICE as ClubService } from '../src/lab/bindings/club_domain/declarations/club_domain.did';
@@ -128,7 +128,7 @@ const persist = async () => {
 };
 await persist();
 await executeUpgrades(journal, { gate, observe, persist, verifyKeys: async () => {}, install: async (s: Target) => {
-  const result = spawnSync('icp', upgradeArgs(s, resolve(artifacts, s.name), GROUP2_GOVERNOR), { cwd: directory, stdio: 'inherit' });
+  const result = spawnSync('icp', lookupUpgradeArgs(s, resolve(artifacts, s.name), GROUP2_GOVERNOR), { cwd: directory, stdio: 'inherit' });
   if (result.status !== 0) throw new Error('Upgrade reply failed or unknown; pending journal retained, no automatic replay');
 } });
 // Actual generated Candid contract, one bounded source request at a time.
@@ -141,6 +141,18 @@ const sourceActors = new Map(sources.map(s => [s.groupId, Actor.createActor<Club
 const sourceActor = (source: { groupId: string }) => {
   const actor = sourceActors.get(source.groupId); if (!actor) throw new Error('Unknown exact source'); return actor;
 };
+// An unknown/completed enable must not replay configuration or stale fill
+// against an already released identity. Exact release retry rechecks reality.
+if (journal.activation) {
+  await gate();
+  const resumed = await fillActor.enable_membership_directory(release);
+  if ('Err' in resumed || !resumed.Ok.app_enabled || !resumed.Ok.snapshot_verified || !resumed.Ok.restoration_guard_verified) throw new Error('Lookup activation reconciliation refused; intent retained');
+  await gate();
+  journal.activation.phase = 'complete'; await persist();
+  writeFileSync(resolve(directory, 'release.json'), JSON.stringify({ release, sources: observedSources, appReaderReleased: true, signedUserVerified: false, published: false }, null, 2));
+  console.log('Exact lookup release reconciled without replaying grants or installs; user verification and publication remain separate.');
+  process.exit(0);
+}
 const configured = await configureDirectorySources(directoryBinding, sources, 1n, {
   identity: Principal.fromText(PINNED.identity),
   gate,

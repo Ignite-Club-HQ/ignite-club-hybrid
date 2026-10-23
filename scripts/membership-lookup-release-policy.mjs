@@ -6,6 +6,7 @@
 // source configuration and verified-current release contract are implemented.
 import { digest, executeUpgrades } from './subscription-upgrade-policy.mjs';
 import { requireHistoricalCheckpoint } from './membership-acceptance-checks.mjs';
+import { upgradeArgs } from './group2-upgrade-rules.mjs';
 export { digest, executeUpgrades };
 
 export const CONFIRMATION = 'RELEASE MEMBERSHIP LOOKUP';
@@ -64,6 +65,11 @@ export function requireReleaseSourceCoverage(sources, snapshot) {
   }
 }
 export const PRIMARY_SUBNET = 'e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe';
+export function lookupUpgradeArgs(target,path,governor){
+  const args=upgradeArgs(target,path,governor);
+  if(target.name==='identity_access')args[args.indexOf('--args')+1]=`(record { governor = principal "${governor}" })`;
+  return args;
+}
 /** Build the only permitted upgrade set from complete live placements. */
 export function lookupReleaseTargets(snapshot, hashes) {
   const sources = directorySources(snapshot); requireReleaseSourceCoverage(sources, snapshot);
@@ -119,6 +125,9 @@ export function validateJournal(journal, binding) {
   if (journal.fill && (typeof journal.fill !== 'object' || Object.keys(journal.fill).length !== sources.length || sources.some(s => typeof journal.fill[s.groupId] !== 'boolean'))) throw new Error('Invalid fill record');
   // Even a fully acknowledged historical fill is not global currentness.
   if (journal.ready === true) throw new Error('Historical membership fill cannot certify lookup readiness');
+  if (journal.activation && (journal.activation.release !== binding.release ||
+      !/^[a-f0-9]{40}$/.test(journal.activation.release ?? '') || !['pending','complete'].includes(journal.activation.phase) ||
+      !journal.complete || !journal.replicaAcceptance?.snapshotVerified || !journal.replicaAcceptance?.restorationGuardVerified)) throw new Error('Invalid lookup activation checkpoint');
   requireHistoricalCheckpoint(journal, sources);
 }
 
