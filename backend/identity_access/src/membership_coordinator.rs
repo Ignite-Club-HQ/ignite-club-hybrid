@@ -229,13 +229,13 @@ impl<M:Memory+Clone> Coordinator<M>{
             let source=format!("g{n}");let b=c.begin(&source,*authority,1).unwrap();
             c.ingest(&source,*authority,&b,0,vec![Edge::Club{id:format!("club{n}"),deleted:false},Edge::Role{subject:user,club:Some(format!("club{n}"))}],true).unwrap();
             assert!(c.publish(&source,&b).is_err());while c.advance(&source,&b).unwrap()>0{}
-            c.publish(&source,&b).unwrap();assert!(c.sources().is_err());c.acknowledge(&source,&b,1).unwrap();
+            c.publish(&source,&b).unwrap();assert!(c.sources().is_err());c.acknowledge(&source,&b,1).unwrap();c.finish_location_checks(&source,&b).unwrap();
         }
         let (first,next)=c.private_page(&mut sessions,user,viewer(user),1,None,1).unwrap();assert_eq!(first.rows[0].club,"club0");assert_eq!(next.as_ref().map(|t|t.sequence),Some(1));drop(c);
         let mut c=open(&manager);let (second,next)=c.private_page(&mut sessions,user,viewer(user),1,next,1).unwrap();assert_eq!(second.rows[0].club,"club1");assert!(next.is_none());
         let b=c.begin("g0",authorities[0],2).unwrap();assert!(c.private_page(&mut sessions,user,viewer(user),1,None,2).is_err());
         c.ingest("g0",authorities[0],&b,0,vec![Edge::Club{id:"club0".into(),deleted:false}],true).unwrap();while c.advance("g0",&b).unwrap()>0{}
-        c.publish("g0",&b).unwrap();assert!(c.acknowledge("g0",&b,1).is_err());c.acknowledge("g0",&b,2).unwrap();let (page,next)=c.private_page(&mut sessions,user,viewer(user),1,None,2).unwrap();assert_eq!(page.rows[0].club,"club1");assert!(next.is_none());
+        c.publish("g0",&b).unwrap();assert!(c.acknowledge("g0",&b,1).is_err());c.acknowledge("g0",&b,2).unwrap();c.finish_location_checks("g0",&b).unwrap();let (page,next)=c.private_page(&mut sessions,user,viewer(user),1,None,2).unwrap();assert_eq!(page.rows[0].club,"club1");assert!(next.is_none());
     }
     #[test]fn foreign_authority_stale_callback_and_inventory_replacement_never_publish(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,authorities)=group_inventory::tests::fixture();
