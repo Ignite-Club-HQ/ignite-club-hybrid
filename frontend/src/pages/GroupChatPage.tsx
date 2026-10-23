@@ -78,6 +78,7 @@ import { ChatPageSkeleton } from "@/components/chat/ChatPageSkeleton";
 import { GroupChatComposerFooter } from "@/components/chat/GroupChatComposerFooter";
 import type { ScheduleTarget } from "@/hooks/useScheduledMessages";
 import EditGroupDialog from "@/components/chat/EditGroupDialog";
+import { RenameChatGroupDialog } from "@/components/chat/RenameChatGroupDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1943,6 +1944,16 @@ export default function GroupChatPage() {
         pollDialogOpen={pollDialogOpen}
         onPollDialogOpenChange={setPollDialogOpen}
       />
+
+      {/* Rename competition chat (name only) */}
+      {canRenameCompetitionChat && group && (
+        <RenameChatGroupDialog
+          groupId={group.id}
+          currentName={group.name}
+          open={showRenameDialog}
+          onOpenChange={setShowRenameDialog}
+        />
+      )}
 
       {/* Edit Group Dialog */}
       {isAdmin && group && (
