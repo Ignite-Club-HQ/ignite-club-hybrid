@@ -466,6 +466,7 @@ export function IcpMediaFeedPage() {
   // Follow the top-left club switcher: when the app is filtered to one club,
   // the feed must not show other clubs' media.
   const { activeClubFilter } = useClubTheme();
+  const effectiveClubId = activeClubFilter ?? selectedClubId;
   useEffect(() => {
     setSelectedClubId(activeClubFilter ?? "all");
     setSelectedTeamId("all");
@@ -684,7 +685,7 @@ export function IcpMediaFeedPage() {
     return all
       .filter((post) => {
         if (competitionId && post.competitionId !== competitionId) return false;
-        if (selectedClubId !== "all" && post.clubId !== selectedClubId) return false;
+        if (effectiveClubId !== "all" && post.clubId !== effectiveClubId) return false;
         if (selectedTeamId === "all") return true;
         if (selectedTeamId.startsWith("ml:")) return post.miniLeagueId === selectedTeamId.slice(3);
         return post.teamId === selectedTeamId;
@@ -698,7 +699,7 @@ export function IcpMediaFeedPage() {
           resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id], loading: false } : a,
         ),
       }));
-  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url]);
+  }, [feedQuery.data?.posts, effectiveClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url]);
 
   // Read comments from the freshest feed copy, not the snapshot taken when
   // the sheet opened, and keep just-sent comments until the canister has them.
@@ -716,8 +717,10 @@ export function IcpMediaFeedPage() {
   }, [commentPost, feedQuery.data?.posts, commentsQuery.data, pendingComments, principal, profile?.display_name, profile?.avatar_url]);
 
   const options = feedQuery.data?.options;
-  const hasFilters = (options?.clubs.length ?? 0) > 1 || (options?.teams.length ?? 0) > 0;
-  const hasActiveFilters = selectedClubId !== "all" || selectedTeamId !== "all";
+  const filterTeams = options?.teams.filter(team => effectiveClubId === "all" || team.club_id === effectiveClubId) ?? [];
+  const filterMiniLeagues = options?.miniLeagues.filter(league => effectiveClubId === "all" || league.club_id === effectiveClubId) ?? [];
+  const hasFilters = (!activeClubFilter && (options?.clubs.length ?? 0) > 1) || filterTeams.length > 0 || filterMiniLeagues.length > 0;
+  const hasActiveFilters = (!activeClubFilter && selectedClubId !== "all") || selectedTeamId !== "all";
 
   // Feed-level lightbox: one flat photo list across visible posts.
   const flatPhotos = useMemo(
@@ -875,12 +878,13 @@ export function IcpMediaFeedPage() {
               <ClubTeamFilter
                 expanded
                 clubs={options.clubs}
-                teams={options.teams}
-                miniLeagues={options.miniLeagues}
-                selectedClubId={selectedClubId}
+                teams={filterTeams}
+                miniLeagues={filterMiniLeagues}
+                selectedClubId={effectiveClubId}
+                showClubFilter={!activeClubFilter}
                 selectedTeamId={selectedTeamId}
                 onClubChange={(id) => {
-                  setSelectedClubId(id);
+                  setSelectedClubId(activeClubFilter ?? id);
                   setSelectedTeamId("all");
                 }}
                 onTeamChange={setSelectedTeamId}
