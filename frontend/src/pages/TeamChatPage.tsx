@@ -1697,6 +1697,7 @@ export default function TeamChatPage() {
         return queuedSend();
       }
       
+      const sendKey = crypto.randomUUID();
       const confirmedMessage = await withFeatureBackend("messaging", {
         supabase: async () => {
           const { data, error } = await supabase.from("team_messages").insert({
@@ -1724,10 +1725,10 @@ export default function TeamChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          const saved = await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
+          const saved = await sendLiveMessage(ctx, teamId ?? '', text, sendKey, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, teamId!, user!.id).catch(() => { /* best-effort engagement counter */ });
           return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };},
-      }, { teamId: teamId! });
+      }, { teamId: teamId ?? '', writeKey: sendKey, attempts: 1 });
       return deliveredSend(confirmedMessage ?? undefined);
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {

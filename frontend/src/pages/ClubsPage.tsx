@@ -195,8 +195,9 @@ export default function ClubsPage() {
             }) as Club;
             // Show each club as soon as its own group answers instead of
             // waiting for the slowest group.
-            const { values } = await readClubsInOwnGroups(ctx, await liveClubIds(ctx),
+            const { values, failed } = await readClubsInOwnGroups(ctx, await liveClubIds(ctx),
               (loaded) => queryClient.setQueryData(["clubs"], loaded.map(toClub)));
+            if (failed) throw new Error('Some clubs could not be loaded; please try again.');
             return values.map(toClub);
           },
         }, { shared: "person" });

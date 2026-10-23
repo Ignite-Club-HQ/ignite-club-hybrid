@@ -1512,6 +1512,7 @@ export default function ClubChatPage() {
         return queuedSend();
       }
       
+      const sendKey = crypto.randomUUID();
       const confirmedMessage = await withFeatureBackend("messaging", {
         supabase: async () => {
           const { data, error } = await supabase.from("club_messages").insert({
@@ -1537,10 +1538,10 @@ export default function ClubChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          const saved = await sendLiveMessage(ctx, clubId!, text, `${clubId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
+          const saved = await sendLiveMessage(ctx, clubId ?? '', text, sendKey, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, clubId!, user!.id).catch(() => { /* best-effort engagement counter */ });
           return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };},
-      }, { clubId: clubId! });
+      }, { clubId: clubId ?? '', writeKey: sendKey, attempts: 1 });
       return deliveredSend(confirmedMessage ?? undefined);
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {
