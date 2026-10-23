@@ -18,6 +18,7 @@ vi.mock('@/live/features/media', () => ({
   addLiveComment: vi.fn(), addLiveReaction: vi.fn(), deleteLiveAsset: vi.fn(), removeLiveReaction: vi.fn(),
 }));
 import { loadLiveMediaFeed, type MediaFeedContinuation } from './IcpMediaFeedPage';
+import { retainMediaFeed } from './retainMediaFeed';
 const ctx = {} as FeatureBackendContext;
 const photo = { id: 'photo-1', club_id: 'club-1', owner: { toText: () => 'uploader' }, kind: 'photo', mime: 'image/jpeg',
   created_at_ms: 10n, team_id: [], mini_league_id: [], competition_id: [], caption: [], album_id: [], blob_ref: [], deleted: false };
@@ -27,6 +28,27 @@ beforeEach(() => {
   mocks.memberIds.mockResolvedValue(['club-1']); mocks.profiles.mockResolvedValue({ values: [club], failed: 0 });
 });
 describe('media loading stages', () => {
+  it('keeps visible gallery photos throughout a second-source refresh', async () => {
+    const cached = await loadLiveMediaFeed(ctx);
+    mocks.memberIds.mockResolvedValue(['club-1', 'club-2']);
+    let finish: ((value: unknown) => void) | undefined;
+    mocks.profiles.mockImplementation((_ctx, ids: string[]) => ids[0] === 'club-1'
+      ? new Promise(resolve => { finish = resolve; })
+      : Promise.resolve({ values: [{ ...club, id: 'club-2' }], failed: 0 }));
+    mocks.assets.mockImplementation((_ctx, id) => Promise.resolve(id === 'club-1' ? [photo] : []));
+    let displayed = cached;
+    const snapshots: string[][] = [];
+    const pending = loadLiveMediaFeed(ctx, next => {
+      displayed = retainMediaFeed(displayed, next);
+      snapshots.push(displayed.posts.flatMap(post => post.assets.map(asset => asset.id)));
+    });
+    await vi.waitFor(() => expect(snapshots.length).toBeGreaterThan(0));
+    expect(snapshots.every(ids => ids.includes('photo-1'))).toBe(true);
+    finish?.({ values: [club], failed: 0 });
+    displayed = retainMediaFeed(displayed, await pending);
+    expect(displayed.posts[0].assets[0].id).toBe('photo-1');
+    expect(snapshots.every(ids => ids.includes('photo-1'))).toBe(true);
+  });
   it('loads one page per club, then merges split albums only on explicit continuation', async () => {
     const cursor = { club_id: 'club-1', revision: 1n, before: 'photo-1' };
     mocks.assets.mockResolvedValueOnce({ assets: [{ ...photo, album_id: ['album'] }], next: cursor, bounded: true })
