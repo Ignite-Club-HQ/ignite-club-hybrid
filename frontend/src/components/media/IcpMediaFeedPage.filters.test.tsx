@@ -5,7 +5,8 @@ vi.mock('@/hooks/useClubTheme', () => ({ useClubTheme: () => ({ activeClubFilter
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'member' }, profile: null }) }));
 vi.mock('react-router-dom', () => ({ useSearchParams: () => [new URLSearchParams(), vi.fn()] }));
 vi.mock('@/live/mediaDecrypt', () => ({ storedIcpPrincipal: () => 'member' }));
-vi.mock('@tanstack/react-query', () => ({
+vi.mock('@tanstack/react-query', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@tanstack/react-query')>(),
   useQuery: (options: { queryKey: string[] }) => {
     state.reads(options.queryKey);
     return options.queryKey[0] === 'icp-principal' ? { data: 'member' } : {
