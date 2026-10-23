@@ -48,7 +48,7 @@ const itemClass = ({ isActive }: { isActive: boolean }) =>
  * keeps the existing BottomNav untouched.
  */
 export function DesktopNavRail() {
-  const { unreadMessagesCount } = useAuth();
+  const unreadMessagesCount = useNavMessagesBadgeCount();
   const { activeThemeData } = useClubTheme();
   const navigate = useNavigate();
   const { hasClubs, canAccessVault, canPitchBoard, teamIds, boardTeams } = useDesktopNavAccess();
