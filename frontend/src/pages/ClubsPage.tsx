@@ -1,6 +1,6 @@
 import { readDiscoveredRemovedClubs } from "@/live/accountDiscovery";
 import { invalidateTeamLists } from "@/lib/invalidateTeamLists";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Users, Plus, Crown, ChevronRight, Search, X, Info, RotateCcw, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -18,7 +18,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
-import { readClubsInOwnGroups, settleAll, grantClubId, type LiveClubRow } from "@/live/crossGroupClubs";
+import { readClubsInOwnGroups, completeClubRows, settleAll, grantClubId, type LiveClubRow } from "@/live/crossGroupClubs";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import type { FeatureBackendContext } from "@/live/featureRouter";
 
@@ -27,7 +27,6 @@ async function liveClubIds(ctx: FeatureBackendContext): Promise<string[]> {
   const grants = await getLiveMyRoleGrants(ctx);
   return [...new Set(grants.map((g) => grantClubId(g)).filter((c): c is string => !!c))];
 }
-import { PageLoading } from "@/components/ui/page-loading";
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
 import { useClubTheme } from "@/hooks/useClubTheme";
@@ -75,6 +74,9 @@ export default function ClubsPage() {
   const [purgeTarget, setPurgeTarget] = useState<{ id: string; name: string } | null>(null);
   const [purgeConfirmText, setPurgeConfirmText] = useState("");
   const [purging, setPurging] = useState(false);
+  const [clubProgress, setClubProgress] = useState<{ account: string; rows: Club[] } | null>(null);
+  const clubReadGeneration = useRef(0);
+  useEffect(() => () => { clubReadGeneration.current++; }, [user?.id, useIcpLab]);
 
   // Recently removed clubs (soft-deleted by this user, within 30 days, not permanently hidden)
   const { data: removedClubs } = useQuery({
@@ -173,10 +175,12 @@ export default function ClubsPage() {
   };
 
 
-  const { data: clubs, isLoading } = useQuery({
+  const { data: savedClubs, isError: clubsFailed, refetch: retryClubs } = useQuery({
     queryKey: ["clubs"],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (useIcpLab) {
+        const generation = ++clubReadGeneration.current;
+        const account = user?.id ?? '';
         // One shared grants read (all groups at once, memoized for every
         // query on the page), then each club straight from its own group —
         // no per-query fan-out and no Group 1 club looked up in Group 2.
@@ -195,9 +199,14 @@ export default function ClubsPage() {
             }) as Club;
             // Show each club as soon as its own group answers instead of
             // waiting for the slowest group.
-            const { values } = await readClubsInOwnGroups(ctx, await liveClubIds(ctx),
-              (loaded) => queryClient.setQueryData(["clubs"], loaded.map(toClub)));
-            return values.map(toClub);
+            const result = await readClubsInOwnGroups(ctx, await liveClubIds(ctx), (loaded) => {
+              if (!signal.aborted && generation === clubReadGeneration.current) {
+                setClubProgress({ account, rows: loaded.map(toClub) });
+              }
+            });
+            const complete = completeClubRows(result).map(toClub);
+            if (!signal.aborted && generation === clubReadGeneration.current) setClubProgress(null);
+            return complete;
           },
         }, { shared: "person" });
       }
@@ -215,6 +224,8 @@ export default function ClubsPage() {
     },
     enabled: !!user,
   });
+  const progress = clubProgress?.account === user?.id ? clubProgress.rows : [];
+  const clubs = useIcpLab && progress.length ? [...new Map([...(savedClubs ?? []), ...progress].map(club => [club.id, club])).values()] : savedClubs;
 
   // Fetch active sponsors for all clubs
   const { data: sponsors } = useQuery({
@@ -350,10 +361,6 @@ export default function ClubsPage() {
     ? matchSearch(clubs?.filter((club) => !userRoles?.some((role) => role.club_id === club.id)))
     : [];
 
-  if (isLoading) {
-    return <PageLoading message="Loading clubs..." />;
-  }
-
   return (
     <div className="py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -366,6 +373,13 @@ export default function ClubsPage() {
           </Link>
         )}
       </div>
+
+      {clubsFailed && (
+        <Alert><AlertDescription className="flex items-center justify-between gap-3">
+          Some clubs could not be loaded.
+          <Button variant="ghost" size="sm" onClick={() => void retryClubs()}><RotateCcw className="h-4 w-4 mr-1" />Try again</Button>
+        </AlertDescription></Alert>
+      )}
 
       {/* Create Team Tip */}
       {fromCreateTeam && (

@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { chatScopeFromPath, scopeForChat } from "./chatScope";
+import { chatScopeFromPath, scopeForChat, chatWrite } from "./chatScope";
 
 describe("chat scope", () => {
+  it('does not merge two consecutive chat writes or invent a missing scope', () => {
+    expect(chatWrite({ conversationId: 'room' })?.writeKey).not.toBe(chatWrite({ conversationId: 'room' })?.writeKey);
+    expect(chatWrite(undefined)).toBeUndefined();
+  });
   it("each chat page maps to its club, team or conversation", () => {
     expect(chatScopeFromPath("/messages/club/c1")).toEqual({ clubId: "c1" });
     expect(chatScopeFromPath("/messages/t1")).toEqual({ teamId: "t1" });

@@ -82,7 +82,7 @@ describe('poll scope and recovery', () => {
     expect(mocks.dispatch.mock.calls[0][2]).toEqual({ conversationId: 'peanut' });
     fireEvent.click(screen.getByText('Saturday'));
     await waitFor(() => expect(mocks.vote).toHaveBeenCalledWith({ target: 'group-1' }, 'poll-a', 0));
-    expect(mocks.dispatch.mock.calls[1][2]).toEqual({ conversationId: 'peanut', writeKey: 'once', attempts: 1 });
+    expect(mocks.dispatch.mock.calls[1][2]).toEqual({ conversationId: 'peanut', writeKey: expect.stringMatching(/^once-/), attempts: 1 });
     expect(client.getQueryData(['poll', 'poll-a', 'parent', JSON.stringify({ conversationId: 'peanut' })])).toBeDefined();
     client.clear();
   });

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { settleAll } from './crossGroupClubs';
+import { settleAll, completeClubRows } from './crossGroupClubs';
 
 describe('cross-group partial results', () => {
+  it('does not certify a successful one-club result as the complete inventory when another club failed', () => {
+    expect(() => completeClubRows({ values: ['giddy-goat'], failed: 1 })).toThrow('Some clubs');
+    expect(completeClubRows({ values: ['giddy-goat', 'riverdogs'], failed: 0 })).toEqual(['giddy-goat', 'riverdogs']);
+  });
   it('keeps clubs that loaded when another club fails', async () => {
     const r = await settleAll([Promise.resolve('g1-club'), Promise.reject(new Error('g2 down'))]);
     expect(r).toEqual({ values: ['g1-club'], failed: 1 });
