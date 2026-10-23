@@ -247,6 +247,7 @@ persistent actor class Main(governorInit : Principal) = this {
     competitionJoinLinks := competitionJoinLinks.filter(func(x) = not (inC(x.competition_id)));
     competitionOfficialEmailInvites := competitionOfficialEmailInvites.filter(func(x) = not (inC(x.competition_id)));
     competitionWelcomeJobs := competitionWelcomeJobs.filter(func(x) = not (inC(x.competition_id)));
+    competitionMemberWelcomeJobs := competitionMemberWelcomeJobs.filter(func(x) = not (inC(x.competition_id)));
     eoiSubmissions := eoiSubmissions.filter(func(x) = not (x.club_id == c));
     divisionSettings := divisionSettings.filter(func(x) = not (inC(x.competition_id)));
     competitionLadderSettings := competitionLadderSettings.filter(func(x) = not (inC(x.competition_id)));
@@ -285,6 +286,7 @@ persistent actor class Main(governorInit : Principal) = this {
         or s.join_links.any(func(x) = not (inC(x.competition_id)))
         or s.official_invites.any(func(x) = not (inC(x.competition_id)))
         or s.welcome_jobs.any(func(x) = not (inC(x.competition_id)))
+        or (s.member_welcome_jobs ?? []).any(func(x) = not (inC(x.competition_id)))
         or s.eoi.any(func(x) = not (x.club_id == c))
         or s.divisions.any(func(x) = not (inC(x.competition_id)))
         or s.ladders.any(func(x) = not (inC(x.competition_id)))
@@ -308,6 +310,7 @@ persistent actor class Main(governorInit : Principal) = this {
     competitionJoinLinks := competitionJoinLinks.concat(s.join_links);
     competitionOfficialEmailInvites := competitionOfficialEmailInvites.concat(s.official_invites);
     competitionWelcomeJobs := competitionWelcomeJobs.concat(s.welcome_jobs);
+    competitionMemberWelcomeJobs := competitionMemberWelcomeJobs.concat(s.member_welcome_jobs ?? []);
     eoiSubmissions := eoiSubmissions.concat(s.eoi);
     divisionSettings := divisionSettings.concat(s.divisions);
     competitionLadderSettings := competitionLadderSettings.concat(s.ladders);
