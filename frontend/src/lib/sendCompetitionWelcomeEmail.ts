@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 /**
  * Sends the competition welcome email (e.g. Women's Masters) to an existing
@@ -16,6 +17,10 @@ export async function sendCompetitionWelcomeEmail(opts: {
   roleName: string;
 }): Promise<void> {
   try {
+    await withFeatureBackend("membership", {
+      // ICP welcome jobs use memberWelcomeEmail, not Supabase auth user IDs.
+      icp: async () => {},
+      supabase: async () => {
     let clubName = opts.clubName ?? null;
     if (!clubName) {
       const { data } = await supabase.from("clubs").select("name").eq("id", opts.clubId).maybeSingle();
@@ -37,6 +42,8 @@ export async function sendCompetitionWelcomeEmail(opts: {
         },
       },
     });
+      },
+    }, { clubId: opts.clubId });
   } catch (err) {
     console.warn("[competitionWelcome] email failed", err);
   }

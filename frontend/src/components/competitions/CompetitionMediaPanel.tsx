@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { compressImage } from "@/lib/imageCompression";
 import { pickNativePhoto, shouldUseNativePicker } from "@/lib/nativePhotoPicker";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 const VIDEO_EXT = /\.(mp4|mov|m4v|webm|3gp|avi)(\?|$)/i;
@@ -34,7 +35,13 @@ const storagePathFromUrl = (url: string): string | null => {
   return i >= 0 ? decodeURIComponent(url.slice(i + marker.length).split("?")[0]) : null;
 };
 
-export default function CompetitionMediaPanel({ competitionId, canManage }: Props) {
+// Legacy Supabase panel; the live ICP competition page owns its canister media.
+export default function CompetitionMediaPanel(props: Props) {
+  if (resolveAuthBackend() === "icp") return null;
+  return <SupabaseCompetitionMediaPanel {...props} />;
+}
+
+function SupabaseCompetitionMediaPanel({ competitionId, canManage }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -47,8 +54,9 @@ export default function CompetitionMediaPanel({ competitionId, canManage }: Prop
     queryKey: ["competition-media-member", competitionId, user?.id],
     enabled: !!user,
     queryFn: async () => {
+      if (!user) return false;
       const { data, error } = await (supabase.rpc as any)("is_competition_member", {
-        _user_id: user!.id,
+        _user_id: user.id,
         _competition_id: competitionId,
       });
       if (error) throw error;
