@@ -9,6 +9,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/useDebounce";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -22,6 +24,15 @@ interface ParentCandidate {
   avatar_url: string | null;
   role: string;
   onThisTeam: boolean;
+}
+
+interface ClubChildMatch {
+  child_id: string;
+  name: string;
+  year_of_birth: number | null;
+  team_names: string[];
+  guardian_names: string[];
+  on_this_team: boolean;
 }
 
 interface Props {
@@ -61,6 +72,9 @@ export default function AddPlayerToParentSheet({
   const [search, setSearch] = useState("");
   const [childName, setChildName] = useState("");
   const [yearOfBirth, setYearOfBirth] = useState("");
+  const [confirmNew, setConfirmNew] = useState(false);
+  const debouncedName = useDebounce(childName, 300);
+  const isIcp = resolveAuthBackend() === "icp";
 
   const teamParents: ParentCandidate[] = useMemo(() => {
     const map = new Map<string, ParentCandidate>();
