@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), results: vi.fn(), vote: vi.fn() }));
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), results: vi.fn(), vote: vi.fn(), icp: true }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'parent' } }) }));
-vi.mock('@/live/loadBackendRouting', () => ({ isFeatureRoutedToIcp: () => true }));
+vi.mock('@/live/loadBackendRouting', () => ({ isFeatureRoutedToIcp: () => mocks.icp }));
 vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: mocks.dispatch }));
 vi.mock('@/live/features/messaging', () => ({ getLivePollResults: mocks.results, voteLivePoll: mocks.vote, closeLivePoll: vi.fn(), deleteLivePoll: vi.fn() }));
 vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: async () => new Map([
@@ -13,7 +13,25 @@ vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: async () => new M
 import { PollCard } from './PollCard';
 import { prefetchMessagePolls } from '@/lib/pollReadRepository';
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
+beforeEach(() => { mocks.icp = true; });
 describe('poll scope and recovery', () => {
+  it('shows Supabase voters using the already-loaded poll votes', async () => {
+    mocks.icp = false;
+    window.history.replaceState({}, '', '/groups/peanut');
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['poll', 'sb-poll', 'parent', JSON.stringify({ conversationId: 'peanut' })], {
+      poll: { id: 'sb-poll', question: 'Training day?', allow_multiple: true, created_by: 'coach', created_at: '2026-10-23T00:00:00Z', closed_at: null, closes_at: null },
+      options: [{ id: 'sat', label: 'Saturday', position: 0 }, { id: 'sun', label: 'Sunday', position: 1 }],
+      votes: [{ id: 'v1', option_id: 'sat', user_id: 'parent' }, { id: 'v2', option_id: 'sun', user_id: 'member-2' }],
+      closed: false, voterDetailsAvailable: true,
+    });
+    render(<QueryClientProvider client={client}><PollCard pollId="sb-poll" /></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button', { name: 'View votes' }));
+    expect((await screen.findByText('Paul')).closest('section')?.textContent).toContain('Saturday');
+    expect((await screen.findByText('Alex')).closest('section')?.textContent).toContain('Sunday');
+    expect(mocks.results).not.toHaveBeenCalled();
+    client.clear();
+  });
   it('opens the bottom drawer with voters under their selected option', async () => {
     window.history.replaceState({}, '', '/groups/peanut');
     mocks.results.mockResolvedValue({ poll: { id: 'poll-voters', question: 'Training day?', options: ['Saturday', 'Sunday'], creator: { toText: () => 'coach' }, created_at_ms: 1000n, closed: false }, counts: [1, 1], votes: [[
