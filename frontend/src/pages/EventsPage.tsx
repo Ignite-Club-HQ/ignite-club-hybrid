@@ -110,7 +110,9 @@ async function getLiveEventMemberships(
   // Team grants/roster rows whose club isn't known yet — resolve via the team.
   await Promise.all(
     teamIds.map(async (teamId) => {
-      // Cheap check: if any known club lists this team we skip the fetch.
+      // A role's own club/team pair already establishes this relationship.
+      // Do not repeat owner discovery and a team fetch for those grants.
+      if (roles.some(role => role.team_id === teamId && role.club_id)) return;
       try {
         const teamOpt = await readMembershipInScope(ctx, { teamId }, (scoped) => getLiveTeam(scoped, teamId));
         const clubId = (teamOpt as any)?.[0]?.club_id as string | undefined;
