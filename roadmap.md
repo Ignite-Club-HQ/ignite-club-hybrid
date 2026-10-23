@@ -1,5 +1,5 @@
 ## Weekly multi-group health report
-- [ ] Extend read-only report to all provisioned groups and dedicated photo stores, label shared services, deduplicate targets and verify inventory/read-failure tests plus live report.
+- [x] Extended read-only weekly report to base mainnet/shared services and every group provision inventory, including dedicated photo stores, with principal deduplication and invalid-inventory/read-failure handling. All 11 tests pass; live report read all 32 canisters (13 per group, five shared services and frontend). Five low-balance warnings; no fuel purchases, canister changes or workflow dispatch. Existing 1T warning threshold is not proof of inter-canister call affordability or the cause of chat failures.
 
 ## Follow-up page-loading audit — 23 October 2026
 - [x] 10:46 UTC renewed incident source repairs: identity-bound sessions, typed drift retirement without mutation replay, copied read/write scopes, per-operation keys, owning-group queued/chat sends, and complete-only selector/club caching with quiet local progress/retry. 17 focused files pass in both modes (ICP 137/Supabase 153); exact ICP guards pass. Details in docs/icp-page-opening-followup-2026-10-23.md. No canister changes or publication.
