@@ -323,6 +323,7 @@ impl<M:Memory+Clone> Coordinator<M>{
     #[test]fn private_pages_refuse_until_club_ownership_coverage_is_resolved(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let user=Principal::from_slice(&[99,1]);let mut c=open(&manager);
         c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();
+        finish(&mut c,"g1",a[1],1,vec![]);
         let binding=c.begin("g0",a[0],1).unwrap();
         c.ingest("g0",a[0],&binding,0,vec![Edge::Club{id:"member".into(),deleted:false},Edge::Role{subject:user,club:Some("member".into())}],true).unwrap();
         while c.advance("g0",&binding).unwrap()>0{}c.publish("g0",&binding).unwrap();c.acknowledge("g0",&binding,1).unwrap();
