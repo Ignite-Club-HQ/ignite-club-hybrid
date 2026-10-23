@@ -6,7 +6,8 @@ export function retainMediaFeed<T extends {
   hasMore?: boolean;
 }>(previous: T | undefined, next: T): T {
   if (!previous || !next.sources) return next;
-  const rows = new Map(next.posts.map(post => [post.id, post]));
+  const denied = new Set(next.sources.filter(source => source.state === 'denied').map(source => source.clubId));
+  const rows = new Map(next.posts.filter(post => !denied.has(post.clubId)).map(post => [post.id, post]));
   for (const source of next.sources) {
     if (source.state === 'denied') continue;
     const refreshed = next.posts.filter(post => post.clubId === source.clubId);

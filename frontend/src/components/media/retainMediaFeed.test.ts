@@ -10,7 +10,7 @@ describe('gallery refresh retention', () => {
     expect(result.posts.map(p => p.id)).toEqual(['fresh', 'older']);
   });
   it('does not retain denied or no-longer-member club photos', () => {
-    expect(retainMediaFeed({ posts: [photo('denied'), photo('removed', 'b')] }, { posts: [], sources: [{ clubId: 'a', state: 'denied' }] }).posts).toEqual([]);
+    expect(retainMediaFeed({ posts: [photo('denied'), photo('removed', 'b')] }, { posts: [photo('denied')], sources: [{ clubId: 'a', state: 'denied' }] }).posts).toEqual([]);
   });
   it('accepts an authoritative exhausted empty feed', () => {
     expect(retainMediaFeed({ posts: [photo('deleted')] }, { posts: [], sources: [{ clubId: 'a', state: 'ready' }], hasMore: false }).posts).toEqual([]);
