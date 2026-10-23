@@ -1,7 +1,7 @@
 /** Existing identity_access + two club_domain upgrade and bounded membership
  * fill only. No creation, wiring, photo/PII/messaging changes or opening.
- * Records verified readiness; the app-side lookup stays disabled until a
- * separate explicit enable step. */
+ * Upgrade remains blocked before mutation until release acceptance exists.
+ * Historical fill is diagnostic only; the app-side lookup stays disabled. */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -13,13 +13,18 @@ import { readPinnedGroupRegistry } from '../src/live/groupRegistryPager';
 import { groupApprovalConfiguration } from '../src/live/groupApproval';
 import { idlFactory } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import type { _SERVICE } from '../src/lab/bindings/shard_router/declarations/shard_router.did';
+import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
+import type { _SERVICE as IdentityService } from '../src/lab/bindings/identity_access/declarations/identity_access.did';
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, validateGroup2Inventory, verifyUpgradeStatus, upgradeArgs, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
-import { digest, validateRequest, validateTargets, validateJournal, executeUpgrades, runFill, PINNED } from '../../scripts/membership-lookup-release-policy.mjs';
+import { digest, validateRequest, validateTargets, validateJournal, executeUpgrades, runFill, PINNED, requireLookupReleaseAcceptance } from '../../scripts/membership-lookup-release-policy.mjs';
 
 const [action, artifacts, pem, directory] = process.argv.slice(2);
 validateRequest(action, process.env.CONFIRMATION);
+// Refuse BEFORE management calls, journal writes or installation. The current
+// runner has no exact source-grant configuration or current-readiness verifier.
+if (action === 'upgrade') requireLookupReleaseAcceptance();
 if (!artifacts || !pem || !directory) throw new Error('Artifacts, existing key and report directory required');
 const root = new URL('../../', import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), 'utf8'));
@@ -107,20 +112,19 @@ await executeUpgrades(journal, { gate, observe, persist, verifyKeys: async () =>
   const result = spawnSync('icp', upgradeArgs(s, resolve(artifacts, s.name), GROUP2_GOVERNOR), { cwd: directory, stdio: 'inherit' });
   if (result.status !== 0) throw new Error('Upgrade reply failed or unknown; pending journal retained, no automatic replay');
 } });
-// Fill existing memberships from both groups before recording readiness.
-// The coordinator's governor-only fill driver resumes from its durable
-// position; each group must report complete with a settled final call.
-const fillIdl = () => IDL.Service({ advance_membership_directory: IDL.Func([], [IDL.Variant({ Ok: IDL.Record({ scanned: IDL.Nat, complete: IDL.Bool }), Err: IDL.Text })], []) });
-const fillActor = () => Actor.createActor(fillIdl, { agent, canisterId: PINNED.identity }) as unknown as { advance_membership_directory(): Promise<{ Ok: { scanned: bigint; complete: boolean } } | { Err: string }> };
-await runFill((['g1', 'g2'] as const).filter(g => !journal.fill[g]), async () => fillActor().advance_membership_directory(),
-  { persist: async groupId => { journal.fill[groupId] = true; await persist(); } });
-const settled = await fillActor().advance_membership_directory();
-if (!('Ok' in settled) || !settled.Ok.complete || settled.Ok.scanned !== 0n) throw new Error('Membership directory fill not settled');
+// Actual generated Candid contract, one bounded source request at a time.
+// Do not skip previous historical completion: a newer revision may be pending.
+const fillActor = Actor.createActor<IdentityService>(identityIdl, { agent, canisterId: PINNED.identity });
+await runFill(['g1', 'g2'], async (groupId: string) => {
+  await gate();
+  const progress = await fillActor.advance_membership_directory_source(groupId);
+  await gate();
+  return progress;
+}, { persist: async (groupId: string, revision: bigint) => {
+  journal.fill[groupId] = true;
+  journal.acknowledgedRevisions = { ...journal.acknowledgedRevisions, [groupId]: String(revision) };
+  await persist();
+} });
 await gate();
-journal.ready = true; await persist();
-writeFileSync(new URL('deploy/groups/g2/membership-lookup-readiness.json', root), JSON.stringify({
-  release, governor: GROUP2_GOVERNOR, configurationRevision: String(initial.configurationRevision),
-  targets: targets.map(t => ({ groupId: t.groupId, name: t.name, canisterId: t.canisterId, moduleHash: t.newHash })),
-  fill: journal.fill, ready: true, appEnabled: false,
-}, null, 2) + '\n');
-console.log('Lookup services upgraded and existing memberships filled and verified. The app keeps today\'s club discovery until a separate explicit enable step.');
+journal.ready = false; await persist();
+throw new Error('Historical source fill acknowledged; ownership and verified-current acceptance are still required. No readiness record or app activation.');

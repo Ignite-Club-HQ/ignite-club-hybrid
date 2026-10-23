@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Check or upgrade only the shared account service and the two existing club services
+        description: Check the three existing lookup services; upgrade is blocked until lookup release checks are complete
         required: true
         type: choice
         default: check
@@ -31,7 +31,7 @@ jobs:
         env:
           ACTION: ${{ inputs.action }}
           CONFIRMATION: ${{ inputs.confirmation }}
-        run: node --input-type=module -e 'import {validateRequest} from "./scripts/membership-lookup-release-policy.mjs"; validateRequest(process.env.ACTION,process.env.CONFIRMATION)'
+        run: node --input-type=module -e 'import {validateRequest,requireLookupReleaseAcceptance} from "./scripts/membership-lookup-release-policy.mjs"; validateRequest(process.env.ACTION,process.env.CONFIRMATION); if(process.env.ACTION === "upgrade") requireLookupReleaseAcceptance()'
       - name: Install pinned tools and existing dependencies
         run: |
           npm install -g @icp-sdk/icp-cli@1.7.0 @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
@@ -66,15 +66,6 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
           GH_TOKEN: ${{ github.token }}
         run: npx --yes tsx@4 scripts/release-membership-lookup.ts "$ACTION" "$RUNNER_TEMP/lookup-wasm" "$RUNNER_TEMP/lookup.pem" "$RUNNER_TEMP/lookup-report"
-      - name: Save verified lookup readiness record
-        if: inputs.action == 'upgrade'
-        run: |
-          set -euo pipefail
-          git config user.name "ignite-governor-bot"
-          git config user.email "noreply@igniteclubhq.app"
-          git add deploy/groups/g2/membership-lookup-readiness.json
-          git diff --cached --quiet || git commit -m "chore: verified membership lookup readiness [skip ci]"
-          git push
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/lookup.pem"; rm -rf "$RUNNER_TEMP/lookup-icp-home"

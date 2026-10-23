@@ -1,9 +1,9 @@
 // Protected release policy for the permanent membership lookup.
 // Exact three targets: the shared identity_access coordinator and the
 // existing club_domain membership source in each group. Nothing else may be
-// upgraded, created, rewired or opened by this release. Verification records
-// readiness only; the app-side lookup stays disabled until a separate
-// explicit enable step.
+// upgraded, created, rewired or opened by this release. Historical source
+// completion cannot certify readiness; upgrades remain blocked until the
+// source configuration and verified-current release contract are implemented.
 import { digest, executeUpgrades } from './subscription-upgrade-policy.mjs';
 export { digest, executeUpgrades };
 
@@ -17,6 +17,12 @@ export const PINNED = {
 export function validateRequest(action, confirmation) {
   if (!['check', 'upgrade'].includes(action)) throw new Error('Choose check or upgrade');
   if (action === 'upgrade' && confirmation?.trim() !== CONFIRMATION) throw new Error(`Type ${CONFIRMATION}`);
+}
+
+/** Fail before any live upgrade, not after installing modules and discovering
+ * that the source inventory/grants and readiness verifier are unavailable. */
+export function requireLookupReleaseAcceptance() {
+  throw new Error('Lookup upgrade is not ready: exact source configuration, legacy ownership and verified-current release acceptance are required. No canisters changed.');
 }
 
 export function validateTargets(targets) {
@@ -37,25 +43,36 @@ export function validateJournal(journal, binding) {
   }
   if (journal.complete && journal.steps.some(s => s.phase !== 'complete')) throw new Error('Unsettled completed journal');
   if (journal.fill && (typeof journal.fill !== 'object' || ['g1', 'g2'].some(g => typeof journal.fill[g] !== 'boolean'))) throw new Error('Invalid fill record');
-  // Readiness is never recorded while upgrades or the membership fill are unfinished.
-  if (journal.ready === true && (!journal.complete || !journal.fill?.g1 || !journal.fill?.g2)) throw new Error('Readiness requires completed upgrades and fill');
+  // Even a fully acknowledged historical fill is not global currentness.
+  if (journal.ready === true) throw new Error('Historical membership fill cannot certify lookup readiness');
 }
 
-/** Bounded, idempotent membership fill: each call resumes from the source's
- * durable position; refusals stop the run, transient failures retry. */
+/** Uses the real source-specific Progress contract. Completion records an
+ * acknowledged historical revision only, never global freshness/readiness.
+ * Source requests are durable and replay-checked, so unknown network replies
+ * may retry this bounded driver; definite refusals stop the run. */
 export async function runFill(groups, call, { maxCalls = 100000, retries = 5, persist = async () => {} } = {}) {
+  if (!Array.isArray(groups) || new Set(groups).size !== groups.length || groups.some(g => !['g1', 'g2'].includes(g)) ||
+      !Number.isSafeInteger(maxCalls) || maxCalls < 1 || !Number.isSafeInteger(retries) || retries < 0) throw new Error('Exact bounded lookup source list required');
   const done = {};
   for (const groupId of groups) {
     let calls = 0, failures = 0;
+    let acknowledged;
     for (;;) {
       if (++calls > maxCalls) throw new Error(`Membership fill did not finish for ${groupId}`);
       let reply;
       try { reply = await call(groupId); failures = 0; }
       catch (e) { if (++failures > retries) throw e; continue; }
+      if (!reply || typeof reply !== 'object') throw new Error('Invalid membership progress reply');
       if ('Err' in reply) throw new Error(`Membership fill refused for ${groupId}: ${reply.Err}`);
-      if (reply.Ok.complete) break;
+      const progress = reply.Ok;
+      if (!progress || progress.source !== groupId || !['pull', 'materialize', 'published', 'acknowledged'].includes(progress.phase) ||
+          typeof progress.revision !== 'bigint' || progress.revision < 1n || progress.revision > 18446744073709551615n ||
+          typeof progress.scanned !== 'bigint' || progress.scanned < 0n || progress.scanned > 100n) throw new Error(`Invalid membership progress for ${groupId}`);
+      if (progress.phase === 'acknowledged') { acknowledged = progress.revision; break; }
     }
-    done[groupId] = true; await persist(groupId);
+    await persist(groupId, acknowledged);
+    done[groupId] = acknowledged;
   }
   return done;
 }

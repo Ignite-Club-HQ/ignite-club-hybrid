@@ -1,9 +1,10 @@
 # Releasing the permanent club lookup
 
-One protected GitHub run upgrades the account service and both groups' club
-services, fills the lookup with every existing membership, verifies it, and
-records readiness. It does **not** switch the app to the lookup — that is a
-separate explicit step after readiness is recorded.
+The release is **not ready to run in upgrade mode**. The draft workflow now
+refuses upgrade before installing tools, restoring the signing key or changing
+any canister. Existing club discovery stays active. Check mode inspects only
+the three pinned service targets and routing configuration; it does not verify
+lookup readiness, source grants or memberships.
 
 ## Before you run
 
@@ -11,39 +12,44 @@ separate explicit step after readiness is recorded.
   has never run).
 - The run needs the existing `DEPLOYER_PEM` GitHub secret; no new secrets.
 
-## The single run
+## Read-only check
 
 1. Open the repository on GitHub → **Actions** → **Release permanent club
    lookup (both ICP groups)**.
-2. Click **Run workflow**, choose **upgrade**.
-3. Type exactly: `RELEASE MEMBERSHIP LOOKUP`
-4. Click the green **Run workflow** button and approve if GitHub asks.
+2. Click **Run workflow**, choose **check**, leave confirmation empty.
+3. Click the green **Run workflow** button and approve if GitHub asks.
 
-A **check** run (no confirmation) only verifies the live services match what
-the release expects and changes nothing.
+A green **check** means the target inspection passed, not that the new lookup
+is ready. Do not run **upgrade** yet; it deliberately stops without changes.
 
-## What the run does
+## Essential work before upgrade
 
-- Upgrades only three existing services: the shared account service
+- The intended upgrade scope is only three existing services: the shared account service
   (`identity_access`) and each group's club service (`club_domain`). No other
   service is touched, created or rewired.
-- Fills the lookup from both groups' existing memberships, resuming from a
-  saved position if interrupted — re-running after a failure carries on; it
-  never starts over or duplicates work.
-- Verifies the filled lookup against the live services before recording
-  readiness. If verification fails, nothing is recorded and the app keeps
-  using today's club search.
+- Configure the exact complete authority inventory and separate source grants;
+  refuse missing Group 1 or additional registered sources rather than ignoring them.
+- Cross-check owner-supplied Group 1 names against authoritative club IDs and
+  complete source inventories. Names identify candidates, not verified ownership;
+  they must never write placements or move clubs or their photo keys.
+- Verify current private reads and interrupted/old-state refusal, then connect
+  the opt-in app reader with complete existing discovery on uncertainty.
 
-## Success
+## Fill driver now connected
 
-- The run ends with a green tick and commits a readiness record
-  (`deploy/groups/g2/membership-lookup-readiness.json`).
-- Members see no change yet: the app keeps using today's club discovery until
-  the lookup is explicitly enabled in a later app release.
+The runner uses the existing generated `advance_membership_directory_source`
+contract, separately for `g1` and `g2`. Each call resumes bounded durable work;
+only the exact source's `acknowledged` phase records its historical revision.
+Malformed replies, foreign sources, refusals, retry exhaustion and failed
+journal persistence stop the fill. There is no invented global fill API.
+
+Historical acknowledgement may leave newer changes pending. Even both groups
+acknowledging does not establish currentness or exclusive legacy ownership.
+The runner therefore cannot emit a readiness record or enable the app.
 
 ## If it fails
 
-- Send a screenshot of the failed step. Re-running the same workflow resumes
-  safely; it refuses to guess about any step whose outcome is unknown.
+- Send a screenshot of the failed check. Upgrade currently refuses intentionally;
+  rerunning it cannot bypass the missing release checks.
 - A red run never leaves the app without club discovery — the current search
   stays active throughout.

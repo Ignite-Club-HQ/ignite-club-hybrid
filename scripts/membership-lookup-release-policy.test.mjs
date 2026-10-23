@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { validateRequest, validateTargets, validateJournal, runFill, digest, PINNED } from './membership-lookup-release-policy.mjs';
+import { validateRequest, validateTargets, validateJournal, runFill, digest, PINNED, requireLookupReleaseAcceptance } from './membership-lookup-release-policy.mjs';
 
 const targets = [
   { canisterId: PINNED.identity, groupId: 'shared', name: 'identity_access', subnetId: 'subnet', newHash: 'a'.repeat(64) },
@@ -39,25 +39,54 @@ test('rejects foreign, incomplete, substituted or unsettled journals', () => {
   assert.throws(() => validateJournal(journal({ steps: journal().steps.map(s => ({ ...s, oldHash: 'not-a-hash' })) }), binding));
 });
 
-test('readiness is never recorded before upgrades and fill complete', () => {
-  validateJournal(journal({ ready: true }), binding);
+test('historical fill never certifies readiness, even after both groups complete', () => {
+  assert.throws(() => validateJournal(journal({ ready: true }), binding), /cannot certify/);
   assert.throws(() => validateJournal(journal({ ready: true, complete: false }), binding));
   assert.throws(() => validateJournal(journal({ ready: true, fill: { g1: true, g2: false } }), binding));
   assert.throws(() => validateJournal(journal({ fill: { g1: 'yes', g2: true } }), binding));
 });
 
-test('fill resumes across transient failures until both groups report complete', async () => {
+test('fill uses each exact source and persists only its acknowledged revision', async () => {
   const left = { g1: 3, g2: 1 }; let flaky = true;
+  const persisted = [];
   const done = await runFill(['g1', 'g2'], async g => {
     if (g === 'g2' && flaky) { flaky = false; throw new Error('timeout'); }
-    left[g]--; return { Ok: { scanned: 100, complete: left[g] <= 0 } };
-  });
-  assert.deepEqual(done, { g1: true, g2: true });
+    left[g]--; return { Ok: { source: g, revision: g === 'g1' ? 7n : 11n, scanned: 100n, phase: left[g] <= 0 ? 'acknowledged' : 'materialize' } };
+  }, { persist: async (g, revision) => { persisted.push([g, revision]); } });
+  assert.deepEqual(done, { g1: 7n, g2: 11n });
+  assert.deepEqual(persisted, [['g1', 7n], ['g2', 11n]]);
 });
 
 test('fill stops on refusal and never loops forever', async () => {
   await assert.rejects(() => runFill(['g1'], async () => ({ Err: 'Governor required' })), /refused/);
-  await assert.rejects(() => runFill(['g1'], async () => ({ Ok: { scanned: 0, complete: false } }), { maxCalls: 3 }), /did not finish/);
+  await assert.rejects(() => runFill(['g1'], async () => ({ Ok: { source: 'g1', revision: 1n, scanned: 0n, phase: 'published' } }), { maxCalls: 3 }), /did not finish/);
+});
+
+test('upgrade is blocked before live mutation until release acceptance exists', () => {
+  assert.throws(requireLookupReleaseAcceptance, /No canisters changed/);
+});
+
+test('fill rejects wrong sources, fabricated completion, malformed and unbounded progress', async () => {
+  const valid = { source: 'g1', revision: 1n, scanned: 0n, phase: 'acknowledged' };
+  for (const progress of [{ ...valid, source: 'g2' }, { scanned: 0n, complete: true }, { ...valid, revision: 0n }, { ...valid, scanned: 101n }, { ...valid, scanned: -1n }, { ...valid, phase: 'complete' }, { ...valid, revision: 1 }]) {
+    let persisted = false;
+    await assert.rejects(() => runFill(['g1'], async () => ({ Ok: progress }), { persist: async () => { persisted = true; } }), /Invalid membership progress/);
+    assert.equal(persisted, false);
+  }
+  await assert.rejects(() => runFill(['g1'], async () => null), /Invalid membership progress/);
+  await assert.rejects(() => runFill(['g1', 'g1'], async () => ({ Ok: valid })), /source list/);
+  await assert.rejects(() => runFill(['g3'], async () => ({ Ok: valid })), /source list/);
+});
+
+test('unknown replies exhaust retries and failed persistence stops the next source', async () => {
+  let attempts = 0;
+  await assert.rejects(() => runFill(['g1'], async () => { attempts++; throw new Error('timeout'); }, { retries: 2 }), /timeout/);
+  assert.equal(attempts, 3);
+  const called = [];
+  await assert.rejects(() => runFill(['g1', 'g2'], async g => {
+    called.push(g); return { Ok: { source: g, revision: 1n, scanned: 0n, phase: 'acknowledged' } };
+  }, { persist: async () => { throw new Error('readback failed'); } }), /readback failed/);
+  assert.deepEqual(called, ['g1']);
 });
 
 test('journal binding digest covers the exact target set', () => {
