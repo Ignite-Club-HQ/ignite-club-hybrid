@@ -57,8 +57,17 @@ const competitionIdlFactory = ({ IDL }: { IDL: typeof import("npm:@icp-sdk/core@
   });
   return IDL.Service({
     get_competition_welcome_email_job: IDL.Func([IDL.Text], [IDL.Variant({ Ok: Job, Err: IDL.Text })], ["query"]),
+    get_member_welcome_email_job: IDL.Func([IDL.Text], [IDL.Variant({ Ok: Job, Err: IDL.Text })], ["query"]),
   });
 };
+
+async function loadMemberJob(canisterId: string, token: string): Promise<CompetitionJobResult> {
+  const agent = await HttpAgent.create({ host: Deno.env.get("ICP_HOST") ?? "https://icp-api.io" });
+  const actor = Actor.createActor(competitionIdlFactory, { agent, canisterId }) as {
+    get_member_welcome_email_job: (token: string) => Promise<CompetitionJobResult>;
+  };
+  return actor.get_member_welcome_email_job(token);
+}
 
 async function loadCompetitionJob(canisterId: string, token: string): Promise<CompetitionJobResult> {
   const agent = await HttpAgent.create({ host: Deno.env.get("ICP_HOST") ?? "https://icp-api.io" });
