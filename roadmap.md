@@ -1,5 +1,6 @@
 ## Safe GitHub setup transfer — 23 October 2026
-- [ ] Investigate reported consecutive ICP Team chat send failure: reproduced failed-preview resurrection in shared pending keeper; fix rollback isolation and expose recognized rejection reasons. Actual live rejection cause requires signed-in ICP evidence; repository copy remains paused.
+- [x] Repair reproduced failed-preview resurrection: shared pending keeper distinguishes manual rollback from fetched snapshots; first/second overlapping failure regressions and existing draft tests pass (34 tests), reproduction now retains only the still-pending row, preview build OK. Team chat surfaces recognized rejection reasons without raw transport details. No canister deploy or publication.
+- [ ] Verify original ICP send rejection end-to-end: screenshot and available preview logs do not contain the canister rejection; no signed-in Internet Identity session is available. Actual sending failure is not yet proven resolved. Repository copy remains paused.
 - [ ] Approved copy-only Actions/secrets transfer from `Ignite-Club-HQ/ignite-club-hybrid` to `Ignite-Club-HQ/ignite-club-hq-prod`; hybrid unchanged; prod additions only, nothing removed or overwritten. Source verified through Paul's GitHub API; exact destination returned HTTP 404 at 08:08 UTC, so execution stopped before any GitHub writes. Blocked on verified destination URL/access; original secret values and safe inactive copy path still required. No transfer performed.
 
 ## Approved multi-group recovery — 22 October 2026
