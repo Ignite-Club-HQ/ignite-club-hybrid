@@ -67,8 +67,6 @@ import {
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { completeHomeAccountRecovery } from "@/features/home/accountRecoveryCompletion";
 import {
-  fetchAvailableHomeRewardsForBackend,
-  fetchNextHomeRewardInfoForBackend,
   fetchPendingHomeRedemptionsForBackend,
 } from "@/features/home/homeRewardsRepository";
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
