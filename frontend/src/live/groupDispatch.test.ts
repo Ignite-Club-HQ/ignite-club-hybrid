@@ -3,12 +3,14 @@ import { createClubDispatcher, clearGroupDispatchCache, clubDispatch } from './g
 import { OFF } from './groupActivation';
 import { GROUP_DOMAINS } from './groupRouting';
 import { isScopedContext } from './scopedContext';
+import { StaleGroupSessionError } from './groupSessionError';
 
 const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n, removalWiring: { revision: 1n, groupIds: ["a"], checkedAtMs: 0 } };
 function deps(gates = OFF, principal = 'p1') {
+  const identity = { getPrincipal: () => ({ toText: () => principal }) };
   const session = { readClub: vi.fn(async () => 'group'), writeClub: vi.fn(async () => 'group'), isAssigned: (c: string) => c === 'moved', dispose: vi.fn() };
   const d = { gates: () => gates, legacy: vi.fn(async () => 'legacy') as never,
-    context: async () => ({ identity: { getPrincipal: () => ({ toText: () => principal }) }, target: {
+    context: async () => ({ identity, target: {
       alias: 'mainnet', host: 'https://icp-api.io', networkKind: 'public_mainnet', canisterIds: {},
     } }) as never, open: vi.fn(async () => session) };
   return { d, session };
@@ -16,6 +18,42 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it('opens a fresh session after identity renewal under the same principal', async () => {
+    const { d, session } = deps(ON);
+    const initial = await d.context();
+    let identity = initial.identity;
+    const open = vi.fn(async ctx => ({ ...session,
+      readClub: async (_club, _domain, read) => read(ctx) }));
+    const dispatcher = createClubDispatcher({ ...d, context: async () => ({ ...initial, identity }), open } as never);
+    expect(await dispatcher.read('events', 'moved', 'events_domain', async ctx => ctx.identity)).toBe(identity);
+    identity = { getPrincipal: () => ({ toText: () => 'p1' }) } as never;
+    expect(await dispatcher.read('events', 'moved', 'events_domain', async ctx => ctx.identity)).toBe(identity);
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+  it.each(['read', 'write'] as const)('retires a drifted session after %s without replaying a mutation', async method => {
+    const { d, session } = deps(ON);
+    const stale = { ...session, readClub: vi.fn().mockRejectedValue(new StaleGroupSessionError()),
+      writeClub: vi.fn().mockRejectedValue(new StaleGroupSessionError()) };
+    d.open.mockResolvedValueOnce(stale).mockResolvedValue(session);
+    const dispatcher = createClubDispatcher(d);
+    const write = vi.fn(async () => 'saved');
+    const operation = method === 'read'
+      ? dispatcher.read('events', 'moved', 'events_domain', write)
+      : dispatcher.write('messaging', 'moved', 'messaging_domain', 'key', write, 1);
+    await expect(operation).rejects.toThrow('registry changed');
+    expect(write).not.toHaveBeenCalled();
+    expect(await dispatcher.read('events', 'moved', 'events_domain', write)).toBe('group');
+    expect(d.open).toHaveBeenCalledTimes(2);
+  });
+  it.each(['moved', 'legacy-club'])('marks both write entrypoints scoped without poisoning the original context for %s', async club => {
+    const { d, session } = deps(ON);
+    const context = {} as never;
+    session.writeClub.mockImplementation(async (_club, _domain, _key, write) => write(context, 'key'));
+    const dispatcher = createClubDispatcher({ ...d, legacy: async (_feature, _club, write) => write(context) } as never);
+    expect(await dispatcher.write('membership', club, 'club_domain', 'key', async ctx => isScopedContext(ctx), 1)).toBe(true);
+    expect(await dispatcher.writeFor('membership', { clubId: club }, 'club_domain', 'key', async ctx => isScopedContext(ctx), 1)).toBe(true);
+    expect(isScopedContext(context)).toBe(false);
+  });
   it.each(['moved', 'legacy-club'])('marks both read entrypoints scoped for %s', async club => {
     const { d, session } = deps(ON);
     session.readClub.mockImplementation(async (_club, _domain, read) => read({}));

@@ -4,11 +4,13 @@ const mockSupabase = await vi.hoisted(async () => {
   const { createMockSupabaseClient } = await import("@/test/mockSupabaseClient");
   return createMockSupabaseClient();
 });
-const { mockIcpMode, currentIdentity, sendLiveMessage } = vi.hoisted(() => ({
+const { mockIcpMode, currentIdentity, sendLiveMessage, dispatch } = vi.hoisted(() => ({
   mockIcpMode: process.env.IGNITE_TEST_BACKEND_MODE === "icp",
   currentIdentity: vi.fn(),
   sendLiveMessage: vi.fn(),
+  dispatch: vi.fn(),
 }));
+vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: (...args: unknown[]) => dispatch(...args) }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: mockSupabase }));
 vi.mock("@/live/loadBackendRouting", () => ({
   isFeatureRoutedToIcp: () => mockIcpMode,
@@ -156,6 +158,10 @@ describe.runIf(mockIcpMode)("offline message queue — ICP replay boundary", () 
     vi.clearAllMocks();
     currentIdentity.mockResolvedValue(null);
     sendLiveMessage.mockReset().mockResolvedValue(undefined);
+    dispatch.mockImplementation(async (_feature, providers, scope) => {
+      const identity = await currentIdentity();
+      return providers.icp({ identity, target: { alias: 'shared' in scope ? 'test' : 'group-2' } });
+    });
   });
 
   it("retains queued messages without attempting Supabase replay", async () => {
@@ -185,6 +191,14 @@ describe.runIf(mockIcpMode)("offline message queue — ICP replay boundary", () 
     );
     expect(getQueuedMessages()).toEqual([]);
     expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+  it.each([['team', { teamId: 'scope' }], ['club', { clubId: 'scope' }], ['group', { conversationId: 'scope' }]] as const)('replays %s in its owning group with the original write key', async (type, scope) => {
+    currentIdentity.mockResolvedValue({ principal: 'principal-1' });
+    const queued = enqueue(type, 'scope');
+    expect(await syncQueuedMessages()).toEqual({ synced: 1, failed: 0 });
+    expect(dispatch).toHaveBeenCalledWith('messaging', expect.any(Object), { ...scope, writeKey: queued.id, attempts: 1 });
+    expect(sendLiveMessage.mock.calls[0][0].target.alias).toBe('group-2');
+    expect(sendLiveMessage.mock.calls[0][3]).toBe(queued.id);
   });
 
   it("retains failed canister replays twice and discards after the third failure", async () => {

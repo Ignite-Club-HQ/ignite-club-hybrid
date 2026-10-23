@@ -118,7 +118,7 @@ describe.runIf(!supabaseMode)("atomic event create workflow — ICP", () => {
     }));
     expect(eventMocks.scopes).toEqual([{
       feature: "events",
-      scope: { clubId: "club-1", writeKey: "once", attempts: 1 },
+      scope: { clubId: "club-1", writeKey: expect.stringMatching(/^once-/), attempts: 1 },
     }]);
     expect(rpc).not.toHaveBeenCalled();
   });

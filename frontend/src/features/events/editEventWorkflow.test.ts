@@ -266,7 +266,7 @@ describe.runIf(!supabaseMode)("event workflows — ICP", () => {
     }));
     expect(eventMocks.scopes).toEqual([{
       feature: "events",
-      scope: { eventId: "event-1", writeKey: "once", attempts: 1 },
+      scope: { eventId: "event-1", writeKey: expect.stringMatching(/^once-/), attempts: 1 },
     }]);
     expect(client.from).not.toHaveBeenCalled();
     expect(client.rpc).not.toHaveBeenCalled();
