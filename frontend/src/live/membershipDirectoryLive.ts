@@ -42,16 +42,20 @@ export function convertReleasedDirectoryReply(reply: ReleasedReply, caller: stri
   const expected = JSON.parse(fingerprint) as GroupRegistry;
   const registry = reply.registry;
   const text = (v: unknown) => String(v);
+  const unique = (values: string[]) => new Set(values).size === values.length;
+  if (!unique(registry.groups.map(g=>g.id)) || !unique(registry.placements.map(p=>p.group_id)) ||
+      !unique(reply.photo_stores.map(([id])=>id)) || reply.photo_stores.length !== expected.groups.length) throw new Error('Duplicate directory registry entries');
   if (text(registry.revision) !== text(expected.revision) || text(page.registry_revision) !== text(expected.revision) ||
       registry.groups.length !== expected.groups.length || registry.placements.length !== expected.bindings.length) throw new Error('Lookup registry changed');
   for (const g of registry.groups) {
     const match = expected.groups.find(v => v.id === g.id);
-    if (!match || match.targetAlias !== g.target_alias || match.domains.length !== g.domains.length ||
+    const store = reply.photo_stores.find(([id])=>id===g.id);
+    if (!match || !store || store[1][0]?.toText() !== match.photoStore || !unique(g.domains.map(d=>d.domain)) || match.targetAlias !== g.target_alias || match.domains.length !== g.domains.length ||
         g.domains.some(d => !match.domains.some(v => v.domain === d.domain && v.canisterId === d.canister.toText()))) throw new Error('Lookup group inventory changed');
   }
   for (const p of registry.placements) {
     const match = expected.bindings.find(v => v.groupId === p.group_id), d = expected.deployment;
-    if (!match || p.host !== d.host || p.network_kind !== d.networkKind || p.deployment_id !== d.id ||
+    if (!match || !unique(p.domains.map(v=>v.domain)) || !unique(p.approved_subnets.map(v=>v.toText())) || p.host !== d.host || p.network_kind !== d.networkKind || p.deployment_id !== d.id ||
         text(p.deployment_revision) !== text(d.revision) || p.primary_subnet.toText() !== d.primarySubnet ||
         p.additional_subnets_enabled !== d.additionalSubnetsEnabled ||
         JSON.stringify(p.approved_subnets.map(v => v.toText()).sort()) !== JSON.stringify([...d.approvedSubnets].sort()) ||

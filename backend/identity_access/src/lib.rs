@@ -721,17 +721,18 @@ struct DirectoryAcceptanceCheck {snapshot_verified:bool,restoration_guard_verifi
 async fn check_membership_directory_acceptance()->Outcome<DirectoryAcceptanceCheck>{
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     let config=directory_config()?;recheck_directory(&config)?;
-    let (_,expected)=verify_directory_snapshot(&config,||recheck_directory(&config)).await?;
+    let (_,expected,_)=verify_directory_snapshot(&config,||recheck_directory(&config)).await?;
     Ok(DirectoryAcceptanceCheck{snapshot_verified:true,restoration_guard_verified:true,source_revisions:expected,verified_current:false,app_enabled:config.release.is_some()})
 }
 /// Shared by release AND every private page, including reply replays. The
 /// caller-specific recheck runs after each await, not only at final delivery.
-async fn verify_directory_snapshot(config:&membership_runtime::Config,recheck:impl Fn()->Outcome<()>)->Outcome<(group_inventory::Snapshot,Vec<(String,u64)>)>{
+async fn verify_directory_snapshot(config:&membership_runtime::Config,recheck:impl Fn()->Outcome<()>)->Outcome<(group_inventory::Snapshot,Vec<(String,u64)>,Vec<(String,Option<Principal>)>)>{
     recheck()?;
     let before=directory_lifecycle_checked(&config.binding,&config.sources,&recheck).await?;
     membership_acceptance::check_lifecycle(&config.lifecycle,&before)?;
     recheck()?;
     let registry_before=read_registry_pages(&config.binding,&recheck).await?;
+    let photos_before=read_directory_photo_stores(&config.binding,&recheck).await?;
     let captured=DIRECTORY_COORDINATOR.with(|c|{let c=c.borrow();c.accepted_ownership()?;c.sources()})?;
     let expected=captured.iter().map(|s|(s.id.clone(),s.binding.revision)).collect::<Vec<_>>();
     let mut scans=vec![];
@@ -746,13 +747,27 @@ async fn verify_directory_snapshot(config:&membership_runtime::Config,recheck:im
     }
     membership_acceptance::check_collect(&expected,&scans[0],&scans[1])?;
     let registry_after=read_registry_pages(&config.binding,&recheck).await?;
+    let photos_after=read_directory_photo_stores(&config.binding,&recheck).await?;
+    if photos_before!=photos_after||photos_after.iter().map(|(id,_)|id).collect::<Vec<_>>()!=registry_after.groups.iter().map(|g|&g.id).collect::<Vec<_>>(){return Err("Directory photo-store inventory changed".into());}
     if registry_before!=registry_after{return Err("Directory registry changed during acceptance".into());}
     let after=directory_lifecycle_checked(&config.binding,&config.sources,&recheck).await?;
     membership_acceptance::check_lifecycle(&config.lifecycle,&after)?;
     recheck()?;
     let final_sources=DIRECTORY_COORDINATOR.with(|c|{let c=c.borrow();c.accepted_ownership()?;c.sources()})?;
     if expected!=final_sources.iter().map(|s|(s.id.clone(),s.binding.revision)).collect::<Vec<_>>(){return Err("Directory builds changed during acceptance".into());}
-    Ok((registry_after,expected))
+    Ok((registry_after,expected,photos_after))
+}
+async fn read_directory_photo_stores(binding:&group_inventory::Binding,recheck:impl Fn()->Outcome<()>)->Outcome<Vec<(String,Option<Principal>)>>{
+    let mut cursor:Option<String>=None;let mut stores=vec![];
+    loop{
+        recheck()?;
+        let reply=ic_cdk::call::Call::bounded_wait(binding.registry,"read_group_registry_page").with_args(&(&binding.target_alias,Some(binding.registry_revision),&cursor,64u32)).await.map_err(|_|"Directory photo registry unavailable")?;
+        recheck()?;
+        let page:Outcome<membership_wire::PhotoRegistryPage>=reply.candid().map_err(|_|"Invalid directory photo registry")?;let page=page?;
+        if page.revision!=binding.registry_revision||page.groups.len()>64||stores.len()+page.groups.len()>100||page.next_cursor.as_ref().is_some_and(|n|cursor.as_ref().is_some_and(|c|n<=c)){return Err("Directory photo registry changed".into());}
+        stores.extend(page.groups.into_iter().map(|g|(g.id,g.photo_store)));
+        match page.next_cursor{None=>return Ok(stores),Some(next)=>cursor=Some(next)}
+    }
 }
 /// Release permission is identity-owned, not a browser flag or saved report.
 /// Repeating an acknowledged release is safe; a different release is refused.
@@ -762,7 +777,7 @@ async fn enable_membership_directory(release:String)->Outcome<DirectoryAcceptanc
     if release.len()!=40||!release.bytes().all(|v|v.is_ascii_digit()||(b'a'..=b'f').contains(&v)){return Err("Exact release commit required".into());}
     let config=directory_config()?;
     if config.release.as_ref().is_some_and(|prior|prior!=&release){return Err("Different lookup release already enabled".into());}
-    let (_,expected)=verify_directory_snapshot(&config,||recheck_directory(&config)).await?;
+    let (_,expected,_)=verify_directory_snapshot(&config,||recheck_directory(&config)).await?;
     let mut current=directory_config()?;recheck_directory(&config)?;
     current.release=Some(release);save_directory_config(&current);
     Ok(DirectoryAcceptanceCheck{snapshot_verified:true,restoration_guard_verified:true,source_revisions:expected,verified_current:false,app_enabled:true})
@@ -775,7 +790,7 @@ async fn read_my_membership_directory(consumer:u64,token:Option<membership_wire:
         recheck_directory(&config)?;
         if membership_lookup_viewer(caller)?!=viewer{return Err("Lookup caller account changed during verification".into());}Ok(())
     };
-    let (registry,_)=verify_directory_snapshot(&config,&recheck).await?;recheck()?;
+    let (registry,_,photo_stores)=verify_directory_snapshot(&config,&recheck).await?;recheck()?;
     // No await from the last eligibility/source checks through session commit.
     let (page,next,instance)=DIRECTORY_COORDINATOR.with(|c|DIRECTORY_SESSIONS.with(|s|{
         let mut sessions=s.borrow_mut();
@@ -786,7 +801,7 @@ async fn read_my_membership_directory(consumer:u64,token:Option<membership_wire:
     // Current means the independently verified snapshot interval of this page,
     // never permanent freshness or authorization to read club resources.
     page.verified_current=true;
-    Ok(membership_wire::ReleasedReply{page,instance,release,registry})
+    Ok(membership_wire::ReleasedReply{page,instance,release,registry,photo_stores})
 }
 /// Governor-only bounded ownership acceptance. Every live source status and
 /// complete registry is checked before local acceptance; no observer supplies
