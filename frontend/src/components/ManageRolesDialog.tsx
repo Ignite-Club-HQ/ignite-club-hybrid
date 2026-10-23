@@ -1,4 +1,5 @@
 import { writeOnce } from "@/live/clubScope";
+import { sendCompetitionWelcomeEmail } from "@/lib/sendCompetitionWelcomeEmail";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck, Check, AlertTriangle } from "lucide-react";
@@ -184,6 +185,10 @@ export default function ManageRolesDialog({
             }));
             const { error } = await supabase.from("user_roles").insert(rows);
             if (error) throw error;
+            void sendCompetitionWelcomeEmail({
+              userId, recipientName: userName, teamId, teamName, clubId,
+              roleName: additions.map((r) => r.label).join(", "),
+            });
           }
           if (removals.length > 0) {
             const ids = removals.map((r) => r.id);

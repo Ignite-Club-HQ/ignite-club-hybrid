@@ -48,6 +48,7 @@ import { createEventTransaction } from "@/features/events/createEventWorkflow";
 import { type SavedLocation } from "@/components/AddressAutocomplete";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { EventAudienceSelector } from "@/components/event/EventAudienceSelector";
+import { useOrganisableCompetitions, useCompetitionAcceptedCount } from "@/components/competitions/CompetitionEventPicker";
 import { OpponentInput } from "@/components/OpponentInput";
 import { DutyMemberSelect } from "@/components/DutyMemberSelect";
 import { useClubTheme } from "@/hooks/useClubTheme";
@@ -260,6 +261,11 @@ function SupabaseCreateEventPage() {
   const [clubId, setClubId] = useState(themeCreationClubId || presetClubId || "");
   const [teamId, setTeamId] = useState("");
   const [dutyTeamId, setDutyTeamId] = useState<string | null>(null);
+  // Competition-wide events are a Supabase-mode feature (create_competition_event RPC).
+  const [competitionId, setCompetitionId] = useState("");
+  const isSupabaseMode = resolveAuthBackend() !== "icp";
+  const { data: organisableCompetitions = [] } = useOrganisableCompetitions(isSupabaseMode);
+  const { data: competitionTeamCount = 0 } = useCompetitionAcceptedCount(competitionId);
   const [miniLeagueId, setMiniLeagueId] = useState(presetMiniLeagueId || "");
   const [eventDateTime, setEventDateTime] = useState(() => {
     if (prefillDate) return prefillDate;
@@ -1101,6 +1107,35 @@ function SupabaseCreateEventPage() {
       return;
     }
 
+    // Competition-wide event: one event, invites everyone on entered teams.
+    if (competitionId && type !== "mini_league") {
+      setSaving(true);
+      const start = new Date(eventDateTime);
+      const { data, error } = await supabase.rpc("create_competition_event" as any, {
+        p_competition_id: competitionId,
+        p_title: title.trim(),
+        p_type: type === "game" || type === "training" ? type : "social",
+        p_event_date: start.toISOString(),
+        p_location: address.trim() || null,
+        p_description: description.trim() || null,
+        p_end_time: timeToTimestamp(endTime, start),
+      });
+      setSaving(false);
+      if (error) {
+        toast({ title: "Couldn't create event", description: error.message, variant: "destructive" });
+        return;
+      }
+      const n = Number(data ?? 0);
+      toast({
+        title: "Competition event created",
+        description: n > 0 ? `${n} ${n === 1 ? "person has" : "people have"} been invited.` : "No one to invite yet.",
+      });
+      refreshEventCaches(queryClient, user!.id);
+      queryClient.invalidateQueries({ queryKey: ["competition-events", competitionId] });
+      navigate("/events");
+      return;
+    }
+
     // Require mini league selection for mini league events
     if (type === "mini_league" && !miniLeagueId) {
       toast({
@@ -1524,6 +1559,10 @@ function SupabaseCreateEventPage() {
                     supportsClubWideScope={supportsClubWideScope}
                     disabled={!clubId}
                     defaultMode="team"
+                    competitions={!isFromMiniLeague ? organisableCompetitions : undefined}
+                    competitionId={competitionId}
+                    onCompetitionIdChange={setCompetitionId}
+                    competitionTeamCount={competitionTeamCount}
                   />
                 )}
 

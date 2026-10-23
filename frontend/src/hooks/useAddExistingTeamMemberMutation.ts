@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import { sendCompetitionWelcomeEmail } from "@/lib/sendCompetitionWelcomeEmail";
 import type { BulkChild } from "@/components/members/ChildAndSecondGuardianFields";
 import {
   ensureSecondParent,
@@ -550,6 +551,12 @@ export function useAddExistingTeamMemberMutation({
         } catch (error) {
           console.error("[AddMember] Failed to send team-invite email to primary parent:", error);
         }
+      } else if (selectedRole === "parent" && selectedUser && !result.roleWasDuplicate) {
+        // Parent added without children: still send the competition welcome (if any).
+        void sendCompetitionWelcomeEmail({
+          userId: selectedUser.id, recipientName: selectedUser.display_name, teamId, teamName,
+          clubId: clubId as string, clubName: clubBranding?.name, roleName: "Parent",
+        });
       }
 
       if (selectedRole !== "parent" && selectedUser && !result.roleWasDuplicate) {

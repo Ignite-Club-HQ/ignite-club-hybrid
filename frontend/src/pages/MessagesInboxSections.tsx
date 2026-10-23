@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { Building2, Check, MessageCircle, Search, WifiOff } from "lucide-react";
 import { ContactClubButton } from "@/components/ContactClubButton";
+import { ContactCompetitionAdminsList } from "@/components/competitions/ContactCompetitionAdminsButton";
 import DiscoverGroupsList from "@/components/chat/DiscoverGroupsList";
 import { SponsorOrAdCarousel } from "@/components/SponsorOrAdCarousel";
 import {
@@ -481,6 +482,7 @@ export function MessagesInboxSections({
         )}
 
         {!showSkeletonLoading && <ContactClubButton clubFilter={activeClubFilter} />}
+        {!showSkeletonLoading && <ContactCompetitionAdminsList clubFilter={activeClubFilter} />}
         {!showSkeletonLoading && (typeFilter === "all" || typeFilter === "groups") && (
           <DiscoverGroupsList activeClubFilter={effectiveClubFilter} />
         )}

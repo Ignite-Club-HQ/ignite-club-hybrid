@@ -28,6 +28,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { CompetitionFixturesPanel, CompetitionLadderPanel } from "@/components/CompetitionFixturesPanel";
 import CompetitionPlayerStatsPanel from "@/components/competitions/CompetitionPlayerStatsPanel";
 import { CreateCompetitionEventButton } from "@/components/competitions/CreateCompetitionEventButton";
+import { CompetitionEventsList } from "@/components/competitions/CompetitionEventsList";
 import { CompetitionShareJoinLink } from "@/components/CompetitionShareJoinLink";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
@@ -667,6 +668,9 @@ function SupabaseCompetitionDetailPage() {
         />
       )}
 
+      {!isIcp && competition.status !== "draft" && <CompetitionEventsList competitionId={id!} />}
+
+
       {isAdmin && !organizerHasPro && !proLoading && organizerClubId && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-start gap-3">
           <Crown className="h-5 w-5 text-primary mt-0.5 shrink-0" />
@@ -712,7 +716,7 @@ function SupabaseCompetitionDetailPage() {
         </TabsList>
 
         <TabsContent value="fixtures" className="space-y-2">
-          <CompetitionFixturesPanel competitionId={id!} isAdmin={canManage} divisions={divisions} entries={entries} source={competition.source} />
+          <CompetitionFixturesPanel competitionId={id!} isAdmin={canManage} divisions={divisions} entries={entries} source={competition.source} competitionStatus={competition.status} />
         </TabsContent>
 
         {canViewLadder && (

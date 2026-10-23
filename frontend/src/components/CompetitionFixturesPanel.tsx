@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trophy, CalendarPlus, Save, ChevronDown, ChevronRight, Trash2, Pencil, Settings2, MapPin, Check } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -51,6 +51,9 @@ import { FixturePreview } from "@/components/competition/FixturePreview";
 import { AddFinalsRoundMenuItem } from "@/components/competition/AddFinalsRoundMenuItem";
 import { EditMatchDetailsDialog } from "@/components/competition/EditMatchDetailsDialog";
 import { ImportPlayHQFixturesDialog } from "@/components/competitions/ImportPlayHQFixturesDialog";
+import { ImportFixturesMenuItem, ImportFixturesSheet } from "@/components/competitions/ImportFixturesMenuItem";
+import { getCompetitionFinalsLabel } from "@/lib/competitionFinalsLabel";
+import { shouldIgnoreFixtureCardClick } from "@/lib/fixtureCardClick";
 
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -69,6 +72,7 @@ interface Props {
   divisions: any[];
   entries: any[]; // includes teams:team_id(id,name)
   source?: string;
+  competitionStatus?: string;
 }
 
 export function buildCompetitionLadderRows(
@@ -158,7 +162,9 @@ export function buildCompetitionLadderRows(
   );
 }
 
-export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, entries, source }: Props) {
+export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, entries, source, competitionStatus }: Props) {
+  const canImport = !competitionStatus || competitionStatus === "draft";
+  const [importOpen, setImportOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -197,7 +203,7 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
         supabase: async () => {
           const { data, error } = await supabase
             .from("competition_matches")
-            .select("*, home:home_team_id(id, name, logo_url), away:away_team_id(id, name, logo_url), competition_divisions:division_id(name), competition_match_results(home_score, away_score)")
+            .select("*, home:home_team_id(id, name, logo_url), away:away_team_id(id, name, logo_url), competition_divisions:division_id(name), competition_match_results(home_score, away_score), fixture_events:events!events_competition_match_id_fkey(id)")
             .eq("competition_id", competitionId)
             .order("round_number", { ascending: true, nullsFirst: false })
             .order("scheduled_at", { ascending: true, nullsFirst: false });
@@ -609,6 +615,7 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
                     <CalendarPlus className="h-4 w-4 mr-2" /> Generate round-robin
                   </DropdownMenuItem>
                   <AddMatchMenuItem competitionId={competitionId} entries={entries} divisions={divisions} />
+                  {canImport && <ImportFixturesMenuItem onOpen={() => setImportOpen(true)} />}
                   <ImportPlayHQFixturesDialog
                     competitionId={competitionId}
                     entries={entries}
@@ -620,6 +627,7 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
 
                 </DropdownMenuContent>
               </DropdownMenu>
+              {canImport && <ImportFixturesSheet competitionId={competitionId} entries={entries} divisions={divisions} open={importOpen} setOpen={setImportOpen} />}
             </div>
           ) : (
             <Card className="w-full">
@@ -1099,8 +1107,9 @@ function FixturesFilterAndList({
   const groups: { key: string; label: string; items: any[] }[] = [];
   const indexByKey = new Map<string, number>();
   for (const m of filteredMatches) {
-    const key = m.round_number != null ? `r${m.round_number}` : "unscheduled";
-    const label = m.round_number != null ? `Round ${m.round_number}` : "Other matches";
+    const finalsLabel = m.round_number == null ? getCompetitionFinalsLabel(m.notes) : null;
+    const key = m.round_number != null ? `r${m.round_number}` : finalsLabel ? `f:${finalsLabel.toLowerCase()}` : "unscheduled";
+    const label = m.round_number != null ? `Round ${m.round_number}` : finalsLabel ?? "Other matches";
     let idx = indexByKey.get(key);
     if (idx == null) {
       idx = groups.length;
@@ -1414,6 +1423,7 @@ function RoundSection({
 function MatchRow({ match, isAdmin, competitionId, entries, divisions, hideRoundBadge = false, source }: { match: any; isAdmin: boolean; competitionId: string; entries: any[]; divisions: any[]; hideRoundBadge?: boolean; source?: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [editDetailsOpen, setEditDetailsOpen] = useState(false);
   const [home, setHome] = useState<string>(match.home_score?.toString() ?? "");
@@ -1513,8 +1523,16 @@ function MatchRow({ match, isAdmin, competitionId, entries, divisions, hideRound
 
 
   const isScheduled = !isCompleted && !isCancelled && !isPostponed && !isInProgress;
+  const linkedEventId: string | null = match.home_event_id ?? match.away_event_id ?? match.fixture_events?.[0]?.id ?? null;
   return (
-    <Card className={`overflow-hidden w-full box-border shadow-sm hover:shadow-md transition-shadow ${isCancelled ? "opacity-60" : ""}`}>
+    <Card
+      className={`overflow-hidden w-full box-border shadow-sm hover:shadow-md transition-shadow ${linkedEventId && !editing ? "cursor-pointer" : ""} ${isCancelled ? "opacity-60" : ""}`}
+      onClick={(e) => {
+        if (!linkedEventId || editing) return;
+        if (shouldIgnoreFixtureCardClick(e.currentTarget, e.target as Element)) return;
+        navigate(`/events/${linkedEventId}`);
+      }}
+    >
       <CardContent className="px-4 pt-4 pb-3.5 space-y-4">
         {/* 1. Time — compact metadata row */}
         {!editing && (

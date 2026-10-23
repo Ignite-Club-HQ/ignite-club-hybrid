@@ -1,4 +1,5 @@
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
+import { dmBlockMessage, fetchDmBlockReason } from "@/lib/dmBlockReason";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react";
 import { consumePendingChatJump, getLastConsumedPendingChatJumpTs, subscribePendingChatJump, type PendingChatJumpPayload } from "@/lib/pendingChatJump";
@@ -520,6 +521,14 @@ export default function DirectMessagePage() {
     enabled: !!otherUserId && authReady,
     staleTime: 30 * 1000, // Shorter stale time - 30 seconds
     refetchOnMount: "always", // Force refetch on every mount (true is a no-op while staleTime is unmet)
+  });
+
+  // Why DMs are blocked (Supabase mode only — the dm_block_reason RPC is Postgres).
+  const { data: dmBlockReason } = useQuery({
+    queryKey: ["dm-block-reason", otherUserId],
+    queryFn: () => fetchDmBlockReason(otherUserId!),
+    enabled: canDM === false && !!otherUserId && authReady && resolveAuthBackend() !== "icp",
+    staleTime: 30 * 1000,
   });
 
   // Memoize query key to prevent ChatMessage memo breaks
@@ -1659,12 +1668,15 @@ export default function DirectMessagePage() {
             </div>
             <div>
               <h3 className="font-semibold text-lg flex items-center justify-center gap-2">
-                <Crown className="h-5 w-5 text-primary" />
-                Pro Feature
+                {(dmBlockReason === "no_shared_pro_club" || !dmBlockReason) && (
+                  <Crown className="h-5 w-5 text-primary" />
+                )}
+                {dmBlockReason === "no_shared_pro_club" || !dmBlockReason
+                  ? "Pro Feature"
+                  : "Can't start this chat"}
               </h3>
               <p className="text-muted-foreground mt-1 max-w-md">
-                Direct messages require both users to be members of a Pro club. 
-                Upgrade your club to Pro to unlock this feature.
+                {dmBlockMessage(dmBlockReason)}
               </p>
             </div>
             <Button onClick={() => navigate("/messages")}>Back to Messages</Button>
