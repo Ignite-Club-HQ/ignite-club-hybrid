@@ -674,14 +674,7 @@ function SupabaseMediaPage() {
   const photosStuck = isOnline && (loadingPhotos || isFetchingPhotos);
   useChatStuckWatchdog(photosStuck, [photosQueryKey], "media-photos");
 
-  // Eagerly prefetch the next page once the first page is in so the user
-  // doesn't see a loading shimmer when they reach the end of the first batch.
-  useEffect(() => {
-    if (photosSuccess && hasNextPage && !isFetchingNextPage) {
-      const t = setTimeout(() => fetchNextPage(), 0);
-      return () => clearTimeout(t);
-    }
-  }, [photosSuccess, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  // Older pages are prefetched near the scroll position, not drained eagerly.
   const { data: highlightedPhoto, refetch: refetchHighlightedPhoto } = useQuery({
     queryKey: ["highlighted-photo", user?.id, highlightedPhotoId],
     queryFn: async () => {
@@ -885,7 +878,7 @@ function SupabaseMediaPage() {
           fetchNextPage();
         }
       },
-      { threshold: 0.1, rootMargin: "400px" }
+      { threshold: 0.1, rootMargin: "1000px" }
     );
 
     if (loadMoreRef.current) {
@@ -1756,11 +1749,7 @@ function SupabaseMediaPage() {
               can fire as soon as hasNextPage flips true (e.g. when server data
               arrives after initial cached photos render). */}
           {(hasNextPage || isFetchingNextPage || loadingPhotos || isShowingCachedData) && (
-            <div ref={loadMoreRef} className="flex min-h-8 justify-center py-2" aria-live="polite">
-              {isFetchingNextPage ? (
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              ) : null}
-            </div>
+            <div ref={loadMoreRef} className="min-h-8 py-2" aria-hidden="true" />
           )}
           {!hasNextPage && !loadingPhotos && !isShowingCachedData && photos.length > 0 && (
             <p className="text-center text-muted-foreground text-sm py-4">No more photos</p>

@@ -47,6 +47,7 @@ import { galleryCommentFromReceipt, mergeGalleryComments } from "./galleryCommen
 import { readMediaSources, type MediaSourceStatus } from './mediaSourceState';
 import { updateMemberReaction } from './reactionUpdates';
 import type { MediaPageCursor } from '@/live/mediaPaging';
+import { retainMediaFeed } from './retainMediaFeed';
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -444,6 +445,7 @@ export function IcpMediaFeedPage() {
   const principal = principalQuery.data ?? undefined;
   const queryClient = useQueryClient();
   const continuationRef = useRef<MediaFeedContinuation>({});
+  const olderSentinel = useRef<HTMLDivElement>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
 
   const [filterOpen, setFilterOpen] = useState(false);
@@ -490,12 +492,13 @@ export function IcpMediaFeedPage() {
           throw new Error("unreachable");
         },
         icp: (ctx) => loadLiveMediaFeed(ctx, next => {
-          if (!signal.aborted) queryClient.setQueryData(["icp-media-feed", principal], next);
+          if (!signal.aborted) queryClient.setQueryData<LiveMediaFeed>(["icp-media-feed", principal], previous => retainMediaFeed(previous, next));
         }, continuation, signal),
       }, { shared: "person" });
       if (signal.aborted) throw new Error("Media request cancelled");
-      if (principal) writeFeedSnapshot(principal, feed);
-      return feed;
+      const retained = retainMediaFeed(queryClient.getQueryData<LiveMediaFeed>(["icp-media-feed", principal]), feed);
+      if (principal) writeFeedSnapshot(principal, retained);
+      return retained;
     },
   });
 
@@ -506,10 +509,21 @@ export function IcpMediaFeedPage() {
     try {
       const feed = await continuation.loadMore();
       if (continuationRef.current !== continuation) return;
-      queryClient.setQueryData(['icp-media-feed', principal], feed);
-      if (principal) writeFeedSnapshot(principal, feed);
+      const retained = retainMediaFeed(queryClient.getQueryData<LiveMediaFeed>(['icp-media-feed', principal]), feed);
+      queryClient.setQueryData(['icp-media-feed', principal], retained);
+      if (principal) writeFeedSnapshot(principal, retained);
     } finally { setLoadingOlder(false); }
   };
+
+  useEffect(() => {
+    const sentinel = olderSentinel.current;
+    if (!sentinel || !feedQuery.data?.hasMore || loadingOlder || feedQuery.isFetching) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) void loadOlder();
+    }, { rootMargin: '1000px', threshold: 0 });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [principal, feedQuery.data?.hasMore, feedQuery.data?.posts.length, loadingOlder, feedQuery.isFetching]);
 
   const invalidate = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["icp-media-feed"] }),
@@ -775,10 +789,10 @@ export function IcpMediaFeedPage() {
       </div>
 
       <main className="mx-auto w-full max-w-lg flex-1">
-        {feedQuery.isLoading && (
-          <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            <p className="text-sm">Loading media…</p>
+        {feedQuery.isLoading && !feedQuery.data?.posts.length && (
+          <div className="space-y-6" aria-label="Photos loading">
+            <PhotoSkeleton />
+            <PhotoSkeleton />
           </div>
         )}
 
@@ -791,9 +805,6 @@ export function IcpMediaFeedPage() {
               Try again
             </Button>
           </div>
-        )}
-        {feedQuery.data?.sources?.some(source => source.state === "loading") && (
-          <div role="status" className="flex items-center gap-2 py-3 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm">Loading more media…</span></div>
         )}
         {feedQuery.data?.sources?.some(source => source.state === 'failed' || source.state === 'denied') && !feedQuery.data.sources?.some(source => source.state === "loading") && (
           <div className="flex items-center justify-between gap-3 py-3" role="status">
@@ -850,12 +861,7 @@ export function IcpMediaFeedPage() {
           ))}
         </div>
         {feedQuery.data?.hasMore && (
-          <div className="flex justify-center py-6">
-            <Button variant="outline" disabled={loadingOlder || feedQuery.isFetching} onClick={() => void loadOlder()}>
-              {loadingOlder ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Images className="mr-2 h-4 w-4" />}
-              Load older media
-            </Button>
-          </div>
+          <div ref={olderSentinel} className="h-8" aria-hidden="true" />
         )}
       </main>
 
