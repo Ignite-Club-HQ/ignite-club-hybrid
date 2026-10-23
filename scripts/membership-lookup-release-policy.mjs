@@ -65,7 +65,12 @@ export function requireReleaseSourceCoverage(sources, snapshot) {
 export const PRIMARY_SUBNET = 'e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe';
 export function lookupUpgradeArgs(target,path,governor){
   const args=upgradeArgs(target,path,governor);
-  if(target.name==='identity_access')args[args.indexOf('--args')+1]=`(record { governor = principal "${governor}" })`;
+  if(target.name==='identity_access'){
+    // Rust identity uses stable memory, not Motoko EOP heap persistence.
+    const persistence=args.indexOf('--wasm-memory-persistence');
+    if(persistence>=0)args.splice(persistence,2);
+    args[args.indexOf('--args')+1]=`(record { governor = principal "${governor}" })`;
+  }
   return args;
 }
 /** Build the only permitted upgrade set from complete live placements. */
