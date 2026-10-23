@@ -91,6 +91,41 @@ paste them into chat.
    runs compete to commit `deploy/frontend/.icp/data/mappings/ic.ids.json`.
    Keep the trigger in one repo only.
 
+## 4a. Secrets to migrate (checklist)
+
+Copy every value below from this repo/project to the new one. Values are
+encrypted in both stores — read them from the current Supabase project's
+secrets page or your password manager; never paste them into chat.
+
+**A. GitHub Actions — new repo → Settings → Secrets and variables → Actions:**
+- [ ] `DEPLOYER_PEM` — ICP deploy identity (all deploy/admin workflows)
+- [ ] `ICP_PUSH_WORKER_SEED` — derives the push-worker's ICP principal. Move
+      the **same value**: the canister grants were made to the principal
+      derived from this seed, so an identical seed keeps them valid. A new
+      seed means re-running the grant step (scripts/deploy-mainnet.sh ~line 135).
+- [ ] `FCM_SERVICE_ACCOUNT_JSON` — Firebase push delivery
+- [ ] The two repository **variables** (see table above)
+
+**B. Supabase Edge Function secrets — prod project → Dashboard → Edge
+Functions → Secrets** (or `supabase secrets set NAME=value --project-ref <prod-ref>`):
+- [ ] `ICP_PUSH_WORKER_SEED` — read at runtime by `verify-iap-receipt-icp`
+- [ ] `FCM_SERVICE_ACCOUNT_JSON` — same function
+- [ ] `RESEND_API_KEY` — `send-welcome-email`, `send-welcome-email-icp`
+- [ ] `WELCOME_EMAIL_FROM` — same two functions
+- [ ] `IAP_ATTESTATION_HMAC_SECRET` — `verify-iap-receipt-icp`
+- [ ] `APPLE_SHARED_SECRET` — `verify-iap-receipt-icp`
+- [ ] `CLUB_DOMAIN_CANISTER_ID`, `COMPETITION_DOMAIN_CANISTER_ID`,
+      `NOTIFICATION_QUEUE_CANISTER_ID`, `ICP_HOST` — canister targets; only
+      needed if overriding the in-code defaults
+
+**C. Lovable project secrets** (if the Lovable project itself moves or is
+re-pointed): `IGNITE_SUPABASE_DEPLOY_TOKEN` must target the **prod** Supabase
+project; the Google Maps connector keys stay as-is.
+
+**After moving:** deploy `verify-iap-receipt-icp`, `send-welcome-email`, and
+`send-welcome-email-icp` to the prod project, then smoke-test one push
+delivery and one welcome email before switching traffic.
+
 ## 5. The single biggest risk: the canister ID tables
 
 `deploy/mainnet/.icp/data/mappings/ic.ids.json` and
