@@ -595,7 +595,7 @@ export default function ProfilePage() {
           aria-label="Edit profile"
         >
           <h1 className="text-2xl font-bold truncate">{profile?.display_name}</h1>
-          <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
+          {!isIcpAuth && <p className="text-sm text-muted-foreground truncate">{user?.email}</p>}
         </button>
       </div>
 

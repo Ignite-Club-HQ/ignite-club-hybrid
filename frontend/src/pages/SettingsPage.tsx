@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Loader2, User, Bell, Moon, Sun, Smartphone, Download, Send, MessageSquare, Calendar, Image, Users, LayoutGrid, Mail, Gift, Trophy, Settings, Fingerprint, ChevronRight, Lock, HelpCircle, Eye, Sparkles, Accessibility } from "lucide-react";
+import { ArrowLeft, Loader2, User, Bell, Moon, Sun, Smartphone, Download, Send, MessageSquare, Calendar, Image, Users, LayoutGrid, Mail, Gift, Trophy, Settings, Fingerprint, ChevronRight, Lock, HelpCircle, Eye, Sparkles, Accessibility, Copy } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Capacitor } from "@capacitor/core";
 import { Button } from "@/components/ui/button";
@@ -538,24 +538,26 @@ export default function SettingsPage() {
                 <Fingerprint className="h-5 w-5 text-primary" />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="font-medium">Your sign-in ID</span>
+                <span className="font-medium">Principal ID</span>
                 <p className="text-xs text-muted-foreground">
                   Signed in at {typeof window !== "undefined" ? window.location.host : ""}
                 </p>
               </div>
               <Button
                 variant="outline"
-                size="sm"
+                size="icon"
+                aria-label="Copy principal ID"
+                title="Copy principal ID"
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(user.id);
-                    toast({ title: "Sign-in ID copied" });
+                    toast({ title: "Principal ID copied" });
                   } catch {
                     toast({ title: "Couldn't copy", description: user.id });
                   }
                 }}
               >
-                Copy
+                <Copy className="h-4 w-4" />
               </Button>
             </div>
             <p className="text-xs font-mono break-all text-muted-foreground">{user.id}</p>
