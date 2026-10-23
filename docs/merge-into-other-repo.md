@@ -142,6 +142,14 @@ the target), and finishes with a compare report. Keep the same
 `ICP_PUSH_WORKER_SEED` value so existing canister grants stay valid.
 Workflow guards: `scripts/migrate-repo-setup-workflow.test.mjs`.
 
+**Target-repo protection (both paths):** nothing on the target is ever
+deleted — no secret/variable deletes, no force-push, and file staging is
+scoped to the copied paths only, so target-only files cannot be removed.
+The default mode is **skip-if-exists**: any secret, variable or differing
+file already on the target is left untouched and reported. Replacing
+existing entries requires the explicit `existing=overwrite` workflow input
+(or `--overwrite` locally).
+
 **Manual/local path:** `scripts/migrate-github-repo.mjs` does the same from
 your machine. It needs a PAT with `repo` + `workflow` scope on both repos
 (`GITHUB_TOKEN`), plus `SOURCE_REPO` and `TARGET_REPO` as `owner/name`.
