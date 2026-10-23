@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 interface ContactableCompetition {
   id: string;
@@ -27,6 +29,21 @@ export function useOpenCompetitionAdminChat() {
     if (busyId) return;
     setBusyId(competitionId);
     try {
+      if (resolveAuthBackend() === "icp") {
+        // ICP: the messaging canister creates/re-syncs the caller's private
+        // thread with the competition's admins (participants resolved
+        // on-chain from the competition role store — never from the browser).
+        const { ensureLiveCompetitionAdminThread } = await import("@/live/features/messaging");
+        const conversationId = await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("Supabase admin chat is not used in ICP mode");
+          },
+          icp: (ctx) =>
+            ensureLiveCompetitionAdminThread(ctx, competitionId, ctx.identity.getPrincipal().toText()),
+        }, { competitionId });
+        navigate(`/groups/${conversationId}`);
+        return;
+      }
       const { data, error } = await (supabase as any).rpc("get_or_create_competition_admin_chat", {
         p_competition_id: competitionId,
       });
