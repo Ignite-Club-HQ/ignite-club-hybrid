@@ -29,8 +29,18 @@ import { useOnlineSet } from "@/hooks/useUserPresence";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { removeLiveGroupMember, leaveLiveGroup } from "@/live/features/messaging";
-import { removeLiveRoleGrant } from "@/live/features/membership";
+import {
+  getLiveGroupMetadata,
+  leaveLiveGroup,
+  listLiveClubAdminThreads,
+  removeLiveGroupMember,
+} from "@/live/features/messaging";
+import {
+  listLiveRoleGrants,
+  listLiveTeamRoleGrants,
+  removeLiveRoleGrant,
+} from "@/live/features/membership";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import {
   refreshChatManagedTeamMembership,
   refreshChatRemovedTeamMember,
@@ -123,7 +133,7 @@ export function ChatParticipantsList({
   inline = false,
 }: ChatParticipantsListProps) {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, profile: myProfile } = useAuth();
   const useIcpLab = isFeatureRoutedToIcp("messaging");
   const navigate = useNavigate();
   const previousCountRef = useRef<number | null>(null);
