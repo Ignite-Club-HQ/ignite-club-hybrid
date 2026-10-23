@@ -2,6 +2,7 @@ import { Suspense, type ComponentProps } from "react";
 import { ChevronRight, FolderOpen } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ContactClubButton } from "@/components/ContactClubButton";
+import { ContactCompetitionAdminsList } from "@/components/competitions/ContactCompetitionAdminsButton";
 import { HomeQuickActionsFab } from "@/components/HomeQuickActionsFab";
 import { MiniLeagueGameWidgets } from "@/components/MiniLeagueGameWidgets";
 import { NextUpCarousel } from "@/components/NextUpCarousel";
@@ -255,6 +256,7 @@ export function HomeDashboardOverview({
           </LazyMount>
           <LazyMount minHeight={48}>
             <ContactClubButton clubFilter={activeClubFilter} compact />
+            <ContactCompetitionAdminsList clubFilter={activeClubFilter} compact />
           </LazyMount>
         </>
       )}
