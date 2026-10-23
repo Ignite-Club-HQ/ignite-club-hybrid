@@ -1,0 +1,96 @@
+name: Upgrade competition events (Group 2)
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Check existing targets or upgrade only competition and events services in Group 2
+        required: true
+        type: choice
+        default: check
+        options: [check, upgrade]
+      confirmation:
+        description: Type UPGRADE GROUP 2 COMPETITION EVENTS for upgrade; leave empty for check
+        required: false
+        default: ''
+permissions:
+  contents: write
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    environment: group-2-admin-controls
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Validate explicit request
+        env:
+          ACTION: ${{ inputs.action }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: node --input-type=module -e 'import {validateRequest} from "./scripts/history-upgrade-policy.mjs"; validateRequest(process.env.ACTION,process.env.CONFIRMATION)'
+      - name: Install pinned tools and existing project dependencies
+        run: |
+          npm install -g @icp-sdk/icp-cli@1.7.0 @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
+          node scripts/ensure-frontend-deps.mjs
+          icp canister install --help | grep -q -- --wasm-memory-persistence
+      - name: Test exact-target and interrupted-upgrade safeguards
+        run: node --test scripts/history-upgrade-policy.test.mjs scripts/group2-journal.test.mjs scripts/group2-upgrade-rules.test.mjs frontend/scripts/media-key-deploy-rules.test.mjs frontend/scripts/media-key-mainnet.test.mjs
+      - name: Restore existing governor only
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM"
+          umask 077
+          echo "ICP_HOME=$RUNNER_TEMP/history-icp-home" >> "$GITHUB_ENV"
+          export ICP_HOME="$RUNNER_TEMP/history-icp-home"
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$RUNNER_TEMP/history.pem"
+          icp identity import --from-pem "$RUNNER_TEMP/history.pem" --storage plaintext ignite-governor
+          icp identity default ignite-governor
+          test "$(icp identity principal)" = vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae
+      - name: Build only competition and events recipe artifacts
+        working-directory: deploy/mainnet
+        run: |
+          set -euo pipefail
+          icp build competition_domain events_domain
+          mkdir -p "$RUNNER_TEMP/history-wasm"
+          cp .icp/cache/artifacts/competition_domain .icp/cache/artifacts/events_domain "$RUNNER_TEMP/history-wasm/"
+      - name: Check or upgrade existing two Group 2 canisters
+        working-directory: frontend
+        env:
+          ACTION: ${{ inputs.action }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ github.token }}
+        run: npx --yes tsx@4 scripts/upgrade-competition-history.ts "$ACTION" "$RUNNER_TEMP/history-wasm" "$RUNNER_TEMP/history.pem" "$RUNNER_TEMP/history-report"
+      - name: Resolve existing delivery identity
+        if: inputs.action == 'upgrade'
+        env:
+          ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
+          PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
+        run: bash scripts/resolve-group-push-worker.sh
+      - name: Refresh governor-verified routing snapshot
+        if: inputs.action == 'upgrade'
+        working-directory: frontend
+        run: npx --yes tsx@4 scripts/produce-routing-gates.ts "$RUNNER_TEMP/history.pem" "$RUNNER_TEMP/history-report/routing-gates.json"
+      - name: Save verified fingerprints and snapshot
+        if: inputs.action == 'upgrade'
+        run: |
+          set -euo pipefail
+          git config user.name "ignite-governor-bot"
+          git config user.email "noreply@igniteclubhq.app"
+          git add deploy/groups/g2/general-opening.json frontend/src/live/generated/routingGates.ts
+          git diff --cached --quiet || git commit -m "chore: verified competition/events upgrade snapshot [skip ci]"
+          git push
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/history.pem"; rm -rf "$RUNNER_TEMP/history-icp-home"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: history-upgrade-report
+          path: ${{ runner.temp }}/history-report
+          if-no-files-found: ignore
