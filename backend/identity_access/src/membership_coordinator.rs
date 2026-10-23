@@ -320,6 +320,19 @@ impl<M:Memory+Clone> Coordinator<M>{
         let mut foreign=newer.clone();foreign.authority=a[0];foreign.revision=100;assert!(c.observe_invalidation("g1",&foreign).is_err());assert!(c.sources().is_ok());
         foreign=newer;foreign.generation+=1;assert!(c.observe_invalidation("g1",&foreign).is_err());assert!(c.sources().is_ok());
     }
+    #[test]fn private_pages_refuse_until_club_ownership_coverage_is_resolved(){
+        let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let user=Principal::from_slice(&[99,1]);let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();
+        let binding=c.begin("g0",a[0],1).unwrap();
+        c.ingest("g0",a[0],&binding,0,vec![Edge::Club{id:"member".into(),deleted:false},Edge::Role{subject:user,club:Some("member".into())}],true).unwrap();
+        while c.advance("g0",&binding).unwrap()>0{}c.publish("g0",&binding).unwrap();c.acknowledge("g0",&binding,1).unwrap();
+        let mut sessions=Sessions::open(manager.get(MemoryId::new(4)));
+        // Fully published and acknowledged, but ownership never checked: no answer.
+        assert!(c.private_page(&mut sessions,user,viewer(user),1,None,1).is_err());
+        c.unresolved_location("g0",&binding).unwrap();assert!(c.private_page(&mut sessions,user,viewer(user),1,None,1).is_err());
+        c.finish_location_checks("g0",&binding).unwrap();
+        let (page,next)=c.private_page(&mut sessions,user,viewer(user),1,None,1).unwrap();assert_eq!(page.rows[0].club,"member");assert!(next.is_none());
+    }
     #[test]fn unresolved_legacy_ownership_survives_reopen_and_cannot_certify_readiness(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();
         finish(&mut c,"g0",a[0],1,vec![]);finish(&mut c,"g1",a[1],1,vec![]);
