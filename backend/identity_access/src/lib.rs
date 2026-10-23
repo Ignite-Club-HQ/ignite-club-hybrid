@@ -25,6 +25,7 @@ mod membership_transport;
 mod membership_runtime;
 mod membership_locations;
 mod membership_wire;
+mod membership_acceptance;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -509,6 +510,16 @@ fn directory_config()->Outcome<membership_runtime::Config>{
     DIRECTORY_CONFIG.with(|m|if m.borrow().get().is_empty(){Err("Membership directory unconfigured".into())}else{Ok(decode(m.borrow().get()))})
 }
 fn save_directory_config(config:&membership_runtime::Config){DIRECTORY_CONFIG.with(|m|m.borrow_mut().set(encode(config)));}
+async fn directory_lifecycle(binding:&group_inventory::Binding,sources:&[(String,Principal)])->Outcome<Vec<membership_acceptance::Lifecycle>>{
+    if sources.len()>100{return Err("Directory lifecycle budget exceeded".into());}
+    let mut targets=vec![ic_cdk::api::canister_self(),binding.registry];targets.extend(sources.iter().map(|(_,p)|*p));
+    let mut result=vec![];
+    for target in targets{
+        let info=ic_cdk::management_canister::canister_info(&ic_cdk::management_canister::CanisterInfoArgs{canister_id:target,num_requested_changes:Some(0)}).await.map_err(|_|"Replica directory lifecycle unavailable")?;
+        result.push(membership_acceptance::Lifecycle{canister:target,changes:info.total_num_changes,module_hash:info.module_hash.ok_or("Directory module missing")?});
+    }
+    Ok(result)
+}
 fn recheck_directory(config:&membership_runtime::Config)->Outcome<()> {
     let current=directory_config()?;
     // Pending notifications may advance during awaits; they never alter the
@@ -543,12 +554,18 @@ async fn configure_membership_directory(binding:group_inventory::Binding,authori
         membership_coordinator::verify_inventory_with_original(&first,&binding,&authorities,generation,original)?
     }else{membership_coordinator::verify_inventory(&first,&binding,&authorities,generation)?};
     let digest=verified.digest().to_vec();let sources=verified.source_bindings();
+    // Pin independent replica history BEFORE any source build. Restored
+    // application counters or a same-Wasm snapshot cannot replay this pin.
+    let lifecycle=directory_lifecycle(&binding,&sources).await?;
+    let lifecycle_after=directory_lifecycle(&binding,&sources).await?;
+    membership_acceptance::check_lifecycle(&lifecycle,&lifecycle_after)?;
     recheck()?;
     let config=match directory_config(){
         Ok(existing)=>{
-            if existing.binding!=binding||existing.generation!=generation||existing.inventory_digest!=digest||existing.sources!=sources||!existing.enabled{return Err("Directory replacement requires fenced recovery; not released".into());}existing
+            if existing.binding!=binding||existing.generation!=generation||existing.inventory_digest!=digest||existing.sources!=sources||!existing.enabled{return Err("Directory replacement requires fenced recovery; not released".into());}
+            membership_acceptance::check_lifecycle(&existing.lifecycle,&lifecycle)?;existing
         },
-        Err(_)=>membership_runtime::Config{binding,generation,inventory_digest:digest,sources,pending:Default::default(),enabled:true,next_source:0},
+        Err(_)=>membership_runtime::Config{binding,generation,inventory_digest:digest,sources,pending:Default::default(),enabled:true,next_source:0,lifecycle},
     };
     DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().bind_inventory(verified))?;
     let grants=config.sources.iter().map(|(id,_)|config.source_binding(ic_cdk::api::canister_self(),id)).collect::<Outcome<Vec<_>>>()?;
@@ -691,6 +708,40 @@ async fn advance_directory_source(source:String)->Outcome<membership_runtime::Pr
 }
 #[derive(CandidType,Deserialize)]
 struct DirectoryCleanup { scanned:u64, complete:bool }
+#[derive(CandidType,Deserialize)]
+struct DirectoryAcceptanceCheck {snapshot_verified:bool,restoration_guard_verified:bool,source_revisions:Vec<(String,u64)>,verified_current:bool,app_enabled:bool}
+/// Governor-only real acceptance check. Two separated complete consensus
+/// revision scans bracket a shared snapshot instant; independent management
+/// history rejects upgrade/restore ABA, including restoration of identity.
+#[ic_cdk::update]
+async fn check_membership_directory_acceptance()->Outcome<DirectoryAcceptanceCheck>{
+    require_governor(&state(),ic_cdk::api::msg_caller())?;
+    let config=directory_config()?;recheck_directory(&config)?;
+    let before=directory_lifecycle(&config.binding,&config.sources).await?;
+    membership_acceptance::check_lifecycle(&config.lifecycle,&before)?;
+    recheck_directory(&config)?;
+    let registry_before=read_registry_pages(&config.binding,||recheck_directory(&config)).await?;
+    let captured=DIRECTORY_COORDINATOR.with(|c|{let c=c.borrow();c.accepted_ownership()?;c.sources()})?;
+    let expected=captured.iter().map(|s|(s.id.clone(),s.binding.revision)).collect::<Vec<_>>();
+    let mut scans=vec![];
+    for _ in 0..2{
+        let mut stamps=vec![];
+        for (source,authority) in &config.sources{
+            let (revision,acknowledged,pending)=directory_source_status(&config,source,*authority).await?;
+            stamps.push(membership_acceptance::Stamp{source:source.clone(),revision,acknowledged,pending});
+        }
+        scans.push(stamps);
+    }
+    membership_acceptance::check_collect(&expected,&scans[0],&scans[1])?;
+    let registry_after=read_registry_pages(&config.binding,||recheck_directory(&config)).await?;
+    if registry_before!=registry_after{return Err("Directory registry changed during acceptance".into());}
+    let after=directory_lifecycle(&config.binding,&config.sources).await?;
+    membership_acceptance::check_lifecycle(&config.lifecycle,&after)?;
+    recheck_directory(&config)?;
+    let final_sources=DIRECTORY_COORDINATOR.with(|c|{let c=c.borrow();c.accepted_ownership()?;c.sources()})?;
+    if expected!=final_sources.iter().map(|s|(s.id.clone(),s.binding.revision)).collect::<Vec<_>>(){return Err("Directory builds changed during acceptance".into());}
+    Ok(DirectoryAcceptanceCheck{snapshot_verified:true,restoration_guard_verified:true,source_revisions:expected,verified_current:false,app_enabled:false})
+}
 /// Governor-only bounded ownership acceptance. Every live source status and
 /// complete registry is checked before local acceptance; no observer supplies
 /// club claims or proofs. This never enables the verified-current reader.
