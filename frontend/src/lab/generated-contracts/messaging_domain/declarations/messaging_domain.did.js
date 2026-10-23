@@ -235,6 +235,7 @@ export const idlFactory = ({ IDL }) => {
     'cooldown_days' : IDL.Nat32,
   });
   const PollResults = IDL.Record({
+    'votes' : IDL.Opt(IDL.Vec(PollVote)),
     'poll' : Poll,
     'total_votes' : IDL.Nat32,
     'counts' : IDL.Vec(IDL.Nat32),
