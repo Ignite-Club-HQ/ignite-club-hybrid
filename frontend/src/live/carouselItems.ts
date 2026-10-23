@@ -33,7 +33,7 @@ export async function fetchIcpCarouselItems(ctx: FeatureBackendContext, clubFilt
     try {
       const profile = await club(item.club_id);
       if (profile?.deleted_at_ms.length) items.delete(`${item.type}:${item.id}`);
-      else if (profile) items.set(`${item.type}:${item.id}`, { ...items.get(`${item.type}:${item.id}`), ...item, club_name: profile.name, club_logo_url: profile.logo_url[0] ?? null, sport: profile.sport[0] ?? null });
+      else if (profile) items.set(`${item.type}:${item.id}`, { ...item, ...items.get(`${item.type}:${item.id}`), club_name: profile.name, club_logo_url: profile.logo_url[0] ?? null, sport: profile.sport[0] ?? null });
       publish();
     } catch { assertReadNotAborted(signal); incomplete = true; }
   };
@@ -51,7 +51,7 @@ export async function fetchIcpCarouselItems(ctx: FeatureBackendContext, clubFilt
         try {
           const sub = await read(readMembershipInScope(ctx, { clubId: team.club_id }, scoped => getLiveTeamSubscription(scoped, id)), 'Carousel trial');
           const current = items.get(`team:${id}`);
-          if (current) { items.set(`team:${id}`, { ...current, isOnTrial: !!(sub?.is_pro && sub.trial_ends_at_ms) }); publish(); }
+          if (current) { items.set(`team:${id}`, { ...current, isOnTrial: !!(sub?.is_pro && sub.trial_ends_at_ms.length) }); publish(); }
         } catch { assertReadNotAborted(signal); incomplete = true; }
       })()]);
     } catch { assertReadNotAborted(signal); incomplete = true; }

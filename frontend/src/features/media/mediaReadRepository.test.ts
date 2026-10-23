@@ -14,6 +14,7 @@ const mediaReadMocks = vi.hoisted(() => ({
   listAssets: vi.fn(),
   listComments: vi.fn(),
   listReactions: vi.fn(),
+  grants: vi.fn(),
 }));
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 const icpContext = { identity: {}, target: { alias: "test" } };
@@ -28,6 +29,7 @@ vi.mock("@/live/features/media", () => ({
   listLiveReactions: (...args: unknown[]) => mediaReadMocks.listReactions(...args),
   liveAssetSource: (asset: { storage_path: string }) => ({ kind: "supabase", storagePath: asset.storage_path }),
 }));
+vi.mock("@/live/features/membership", () => ({ getLiveMyRoleGrants: () => mediaReadMocks.grants() }));
 
 type Client = SupabaseClient<Database>;
 type Result = { data: any; error: any };
@@ -142,6 +144,22 @@ describe.runIf(supabaseMode)("Media read repository — Supabase", () => {
 });
 
 describe.runIf(!supabaseMode)("Media read repository — ICP", () => {
+  it("publishes ready clubs before a stalled source and preserves incompleteness", async () => {
+    mediaReadMocks.backend = "icp";
+    mediaReadMocks.grants.mockResolvedValue([{ club: ["club-a"] }, { club: ["club-b"] }]);
+    mediaReadMocks.listAssets.mockImplementation((_ctx, id) => id === "club-b" ? new Promise(() => {}) : Promise.resolve([{
+      id: "photo-a", deleted: false, club_id: "club-a", storage_path: "clubs/club-a/photo-a", kind: "photo", owner: { toText: () => "principal-a" },
+    }]));
+    vi.useFakeTimers();
+    try {
+      const onProgress = vi.fn();
+      const pending = fetchMediaFeedPage({ ...noFilters, offset: 0, pageSize: 9, onProgress });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(onProgress.mock.calls[0][0]).toMatchObject({ photos: [{ id: "photo-a" }], incomplete: true });
+      await vi.advanceTimersByTimeAsync(20_001);
+      expect(await pending).toMatchObject({ photos: [{ id: "photo-a" }], incomplete: true });
+    } finally { vi.useRealTimers(); }
+  });
   beforeEach(() => {
     mediaReadMocks.backend = "icp";
     mediaReadMocks.listAssets.mockReset();

@@ -1,4 +1,3 @@
-import { mergeLists } from "@/live/featureRouter";
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { LogoImage } from "@/components/ui/logo-image";
 import { useQuery } from "@tanstack/react-query";
@@ -20,10 +19,9 @@ import { filterDeletedTeams } from "@/lib/deletedTeamTombstones";
 import { clearMyTeamsCarouselCache } from "@/lib/invalidateTeamLists";
 import { format, isToday, isTomorrow, parseISO, differenceInDays } from "date-fns";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
-import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
-import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
+import { getLiveTeam } from "@/live/features/club";
 import { listLiveEvents } from "@/live/features/events";
 
 import { fetchIcpCarouselItems } from "@/live/carouselItems";
@@ -492,6 +490,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   // Fetch teams & leagues
   const { data: rawItems = snapshot?.items ?? [], isLoading, isFetching, isError } = useQuery({
     queryKey: ["my-teams-premium-v2", user?.id, activeClubFilter],
+    meta: { persist: !isIcp },
     retry: isIcp ? false : 3,
     initialData: snapshot?.items,
     initialDataUpdatedAt: snapshotWithTs?.timestamp,

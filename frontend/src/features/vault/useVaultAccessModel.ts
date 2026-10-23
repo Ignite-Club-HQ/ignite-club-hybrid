@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FolderView } from "./useVaultExport";
 import type { VaultRoleRecord } from "./types";
 import {
@@ -97,6 +97,7 @@ export function useVaultAccessModel({
   activeClubFilter,
   onAutoNavigateToClub,
 }: UseVaultAccessModelOptions): UseVaultAccessModelResult {
+  const queryClient = useQueryClient();
   const { isAppAdmin: isAppAdminFromHook, isLoading: isLoadingAppAdminHook, error: appAdminError } = useIsAppAdmin();
   // Mirror the old raw query's `undefined` while the lookup is in flight so
   // every `isAppAdmin ?? false` / `!!isAppAdmin` call site keeps working.
@@ -121,7 +122,7 @@ export function useVaultAccessModel({
 
   const { data: userClubs, isLoading: isLoadingClubs } = useQuery({
     queryKey: vaultKeys.clubsForUser(userId, isAppAdmin),
-    queryFn: () => userId ? fetchVaultAccessibleClubs(userId, !!isAppAdmin) : [],
+    queryFn: () => userId ? withReadDeadline(fetchVaultAccessibleClubs(userId, !!isAppAdmin), "Vault clubs") : [],
     enabled: !!userId && isAppAdmin !== undefined,
   });
 
@@ -235,6 +236,7 @@ export function useVaultAccessModel({
     ? anyProError
     : (!currentContextHasPro && (clubProError || teamProError)) || (competitionId && competitionError));
   const retryAccess = () => {
+    void queryClient.refetchQueries({ queryKey: ["is-app-admin", userId], exact: true });
     void retryRoles();
     if (currentView.type === "root") void retryAnyPro();
     if (contextClubId) void retryClubPro();
