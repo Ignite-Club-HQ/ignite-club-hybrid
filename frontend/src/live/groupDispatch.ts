@@ -137,6 +137,7 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
   if (!deps.lookup) throw new Error('Entity lookup unavailable');
   const lookup = deps.lookup;
   const generation = dispatchGeneration;
+  let probeLive = true;
   const probe = (async () => {
     const found = [...new Set(await s.readEveryGroup(ENTITY_DOMAIN[kind], async ctx => { const c = await lookup(ctx, kind, id); return c ? [c] : []; }, 2))];
     if (found.length > 1) throw new Error(`${kind} claimed by more than one group`);
@@ -147,13 +148,13 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
       if (!sharedClub) throw new Error(`${kind} not found or not authorized`);
       return null;
     }
-    if (dispatchGeneration !== generation) throw new Error('Club routing session changed');
+    if (!probeLive || dispatchGeneration !== generation) throw new Error('Club routing session changed');
     owners.set(key, club); if (club) persist(deps, principal);
     return club;
   })();
   const bounded = withReadDeadline(probe, 'Content location');
   inflight.set(key, bounded);
-  try { return await bounded; } finally { if (inflight.get(key) === bounded) inflight.delete(key); }
+  try { return await bounded; } finally { probeLive = false; if (inflight.get(key) === bounded) inflight.delete(key); }
 }
 
 export function createClubDispatcher(deps: DispatchDeps) {

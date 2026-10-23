@@ -15,6 +15,31 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it('a stalled chat content read does not block an event in the same group', async () => {
+    const { d, session } = deps(ON);
+    const dispatch = createClubDispatcher(d);
+    let finish: ((value: string) => void) | undefined;
+    session.readClub.mockImplementation(async (_club, domain) => domain === 'messaging_domain'
+      ? new Promise<string>(resolve => { finish = resolve; }) : 'event-ready');
+    const chat = dispatch.read('messaging', 'moved', 'messaging_domain', async () => 'chat');
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    expect(await dispatch.read('events', 'moved', 'events_domain', async () => 'event')).toBe('event-ready');
+    finish?.('chat-ready'); await chat;
+  });
+  it('a late failed session opening cannot clear a newer session', async () => {
+    const { d, session } = deps(ON);
+    let rejectOld: ((error: Error) => void) | undefined;
+    d.open.mockImplementationOnce(() => new Promise((_, reject) => { rejectOld = reject; }));
+    const dispatch = createClubDispatcher(d);
+    const old = dispatch.memberClubIds().catch(() => undefined);
+    await vi.waitFor(() => expect(rejectOld).toBeDefined());
+    clearGroupDispatchCache();
+    await dispatch.memberClubIds();
+    rejectOld?.(new Error('abandoned chat opening')); await old;
+    await dispatch.memberClubIds();
+    expect(d.open).toHaveBeenCalledTimes(2);
+    expect(session.dispose).not.toHaveBeenCalled();
+  });
   it('cold discovery refresh joins an already opening session', async () => {
     const { d, session } = deps(ON);
     let finish: ((value: typeof session) => void) | undefined;
