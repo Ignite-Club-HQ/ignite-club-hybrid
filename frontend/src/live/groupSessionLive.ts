@@ -8,7 +8,7 @@ import { openGroupSession, type GroupRegistry } from './groupSession';
 import { GROUP_DOMAINS, type GroupDomain } from './groupRouting';
 import type { EntityKind } from './groupDispatch';
 import { membershipTransport } from './membershipTransport';
-import { MEMBERSHIP_LOOKUP_RELEASE_ENABLED, readReleasedMembershipDirectory } from './membershipDirectoryLive';
+import { MEMBERSHIP_LOOKUP_RELEASE_ENABLED, releasedMembershipDirectoryReader } from './membershipDirectoryLive';
 
 export async function openLiveGroupReadSession(ctx: FeatureBackendContext, ownerGroupId?: 'g2') {
   const { connectLiveShardRouter, connectLiveClubDomain } = await import('./domains');
@@ -100,7 +100,7 @@ export async function openLiveGroupReadSession(ctx: FeatureBackendContext, owner
       if ('Err' in reply) throw new Error(reply.Err);
       return { clubId: reply.Ok.club_id, groupId: reply.Ok.group_id, revision: reply.Ok.revision };
     },
-  }, { enabled: MEMBERSHIP_LOOKUP_RELEASE_ENABLED, read: readReleasedMembershipDirectory }));
+  }, { enabled: MEMBERSHIP_LOOKUP_RELEASE_ENABLED && !ownerGroupId, read: releasedMembershipDirectoryReader() }));
 }
 /** Which club owns an event, chat or team in this group's canister (null = not held here). */
 export async function lookupEntityClub(ctx: FeatureBackendContext, kind: EntityKind, id: string): Promise<string | null> {
