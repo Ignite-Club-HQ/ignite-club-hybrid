@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const state = vi.hoisted(() => ({ failed: false, calls: [] as Array<[string, string]>, clubWait: null as Promise<void> | null, teamStarted: null as (() => void) | null }));
+const state = vi.hoisted(() => ({ failed: false, calls: [] as Array<[string, string]>, clubWait: null as Promise<void> | null, slowClub: null as string | null, slowWait: null as Promise<void> | null, teamStarted: null as (() => void) | null }));
 vi.mock('../contentRouting', () => ({ readContentInScope: async (_ctx: unknown, feature: string, scope: any, fn: any) => {
   const owner = scope.clubId ?? (scope.teamId === 'team-b' ? 'club-b' : scope.teamId === 'team-a' ? 'club-a' : 'shared');
   state.calls.push([feature, owner]);
@@ -9,7 +9,7 @@ vi.mock('../contentRouting', () => ({ readContentInScope: async (_ctx: unknown, 
 vi.mock('./membership', () => ({ getLiveMyRoleGrants: async () => ['a', 'b'].map(id => ({ role: 'player', club: [`club-${id}`], team: [`team-${id}`] })) }));
 vi.mock('./club', () => ({
   listLivePersonalTeams: async () => [],
-  getLiveClubProfile: async (ctx: any, id: string) => { if (ctx.target.alias !== id) throw new Error('wrong club group'); await state.clubWait; return [{ id, name: id, deleted_at_ms: [] }]; },
+  getLiveClubProfile: async (ctx: any, id: string) => { if (ctx.target.alias !== id) throw new Error('wrong club group'); await state.clubWait; if (id === state.slowClub) await state.slowWait; return [{ id, name: id, deleted_at_ms: [] }]; },
   getLiveTeam: async (ctx: any, id: string) => { state.teamStarted?.(); const club = id.replace('team', 'club'); if (ctx.target.alias !== club) throw new Error('wrong team group'); return [{ id, name: id, club_id: club, deleted_at_ms: [] }]; },
 }));
 vi.mock('./events', () => ({ listLiveEvents: async (ctx: any, club: string | null, team: string | null) => {
@@ -20,7 +20,21 @@ vi.mock('./events', () => ({ listLiveEvents: async (ctx: any, club: string | nul
 vi.mock('./vault', () => ({}));
 import { fetchLiveHomeFeed } from './homeFeed';
 describe('multi-club home content', () => {
-  beforeEach(() => { state.failed = false; state.calls = []; state.clubWait = null; state.teamStarted = null; });
+  beforeEach(() => { state.failed = false; state.calls = []; state.clubWait = null; state.teamStarted = null; state.slowClub = null; state.slowWait = null; });
+  it('publishes verified club A events while club B remains unresolved and never marks that snapshot complete', async () => {
+    state.slowClub = 'club-b';
+    let finish: (() => void) | undefined;
+    state.slowWait = new Promise<void>(resolve => { finish = resolve; });
+    const progress = vi.fn();
+    const pending = fetchLiveHomeFeed({} as never, { onProgress: progress });
+    try {
+      await vi.waitFor(() => expect(progress).toHaveBeenCalled());
+      const partial = progress.mock.calls[0][0];
+      expect(partial.events.map((event: any) => event.id)).toEqual(['club-a-event']);
+      expect(partial.incomplete).toBe(true);
+    } finally { finish?.(); }
+    expect((await pending).events.map(event => event.id)).toEqual(['club-a-event', 'club-b-event']);
+  });
   it('starts team validation before slower club validation completes', async () => {
     let releaseClubs: (() => void) | undefined;
     state.clubWait = new Promise<void>(resolve => { releaseClubs = resolve; });

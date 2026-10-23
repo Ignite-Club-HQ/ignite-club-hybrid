@@ -154,6 +154,22 @@ describe("useVaultAccessModel — access decision", () => {
 });
 
 describe("useVaultAccessModel — scoped Pro entitlement", () => {
+  it("opens an authorized club while unrelated any-Pro discovery remains pending", async () => {
+    fetchVaultUserRoles.mockResolvedValue([{ role: "coach", club_id: "club-a", team_id: null }]);
+    fetchVaultClubHasPro.mockResolvedValue(true);
+    fetchVaultAnyProAccess.mockReturnValue(new Promise(() => {}));
+    const { result } = renderAccessModel({ currentView: clubView });
+    await waitFor(() => expect(result.current.isLoadingAccess).toBe(false));
+    expect(result.current.canAccessVault).toBe(true);
+  });
+  it("opens a Pro club team without waiting for its redundant team subscription", async () => {
+    fetchVaultUserRoles.mockResolvedValue([{ role: "coach", club_id: "club-a", team_id: "team-a" }]);
+    fetchVaultClubHasPro.mockResolvedValue(true);
+    fetchVaultTeamHasPro.mockReturnValue(new Promise(() => {}));
+    const { result } = renderAccessModel({ currentView: teamView });
+    await waitFor(() => expect(result.current.isLoadingAccess).toBe(false));
+    expect(result.current.canAccessVault).toBe(true);
+  });
   it("scopes club-view Pro entitlement to the club subscription only", async () => {
     fetchVaultClubHasPro.mockResolvedValue(true);
     const { result } = renderAccessModel({ currentView: clubView });

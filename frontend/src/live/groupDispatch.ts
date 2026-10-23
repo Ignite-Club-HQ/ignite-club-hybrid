@@ -139,7 +139,7 @@ async function resolveClub(deps: DispatchDeps, s: Session, principal: string, sc
   const generation = dispatchGeneration;
   let probeLive = true;
   const probe = (async () => {
-    const found = [...new Set(await s.readEveryGroup(ENTITY_DOMAIN[kind], async ctx => { const c = await lookup(ctx, kind, id); return c ? [c] : []; }, 2))];
+    const found = [...new Set(await s.readEveryGroup(ENTITY_DOMAIN[kind], async ctx => { const c = await lookup(ctx && typeof ctx === 'object' ? markScopedContext(ctx) : ctx, kind, id); return c ? [c] : []; }, 2))];
     if (found.length > 1) throw new Error(`${kind} claimed by more than one group`);
     const club = found[0] ?? null;
     if (!club && ['team', 'photo', 'galleryCard', 'news', 'competitionMatch', 'eoi', 'vaultFile', 'vaultFolder', 'notification', 'scheduledMessage'].includes(kind)) {
@@ -184,7 +184,12 @@ export function createClubDispatcher(deps: DispatchDeps) {
           const targetKey = JSON.stringify([ctx.target.alias, ctx.target.host, ctx.target.networkKind,
             Object.entries(ctx.target.canisterIds ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
           if (targetKey !== previous.targetKey) throw new Error('Membership target changed');
-          const next = await deps.open(ctx);
+          const opening = deps.open(ctx);
+          let expired = false;
+          opening.then(session => { if (expired) session.dispose(); }, () => {});
+          let next: Session;
+          try { next = await withReadDeadline(opening, 'Membership discovery'); }
+          catch (error) { expired = true; throw error; }
           if (cached !== previous) { next.dispose(); return; }
           cached = { ...previous, session: Promise.resolve(next) };
           unplaced.clear(); hostedChecked.clear();

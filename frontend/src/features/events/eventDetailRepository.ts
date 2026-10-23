@@ -40,9 +40,9 @@ export async function fetchEventDetail(client: any, eventId: string, signal?: Ab
       const events = await listLiveEvents(ctx);
       assertReadNotAborted(signal);
       const raw = events.find((event) => event.id === eventId);
-      return raw ? toEventDetailShape(raw) : null;
+      return raw ? toEventDetailShape(raw, signal) : null;
     },
-  }, { eventId }), 'Event loading');
+  }, { eventId }), 'Event loading', 20_000, signal);
 }
 
 /**
@@ -50,25 +50,26 @@ export async function fetchEventDetail(client: any, eventId: string, signal?: Ab
  * detail page expects the Supabase row shape (event_date ISO, plain ids,
  * teams/clubs joins). Translate here so every consumer gets one shape.
  */
-async function toEventDetailShape(e: any) {
+async function toEventDetailShape(e: any, signal?: AbortSignal) {
   const opt = (v: unknown) => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
   const teamId = opt(e.team_id) as string | null;
   const cachedTeam = teamId ? getCachedTeam(teamId) : null;
   const cachedClub = getCachedClub(e.club_id);
   const [team, clubName] = await Promise.all([
-    cachedTeam?.club_id === e.club_id ? Promise.resolve(cachedTeam) : teamId ? withFeatureBackend("membership", {
+    cachedTeam?.club_id === e.club_id ? Promise.resolve(cachedTeam) : teamId ? withReadDeadline(withFeatureBackend("membership", {
       supabase: async () => null,
       icp: async ctx => {
         return (await getLiveTeam(ctx, teamId))[0] ?? null;
       },
-    }, { clubId: e.club_id }).catch(() => null) : Promise.resolve(null),
-    cachedClub ? Promise.resolve(cachedClub.name) : withFeatureBackend("membership", {
+    }, { clubId: e.club_id }), 'Event team label', 1500, signal).catch(() => null) : Promise.resolve(null),
+    cachedClub ? Promise.resolve(cachedClub.name) : withReadDeadline(withFeatureBackend("membership", {
       supabase: async () => null,
       icp: async ctx => {
         return (await getLiveClubProfile(ctx, e.club_id))[0]?.name ?? null;
       },
-    }, { clubId: e.club_id }).catch(() => null),
+    }, { clubId: e.club_id }), 'Event club label', 1500, signal).catch(() => null),
   ]);
+  assertReadNotAborted(signal);
   const type = ["game", "training", "social", "mini_league"].includes(e.event_type) ? e.event_type : "training";
   return {
     id: e.id,

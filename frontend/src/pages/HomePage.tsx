@@ -591,7 +591,7 @@ export default function HomePage() {
 
   const { data: membershipAndEvents, isLoading, isFetching, isFetched } = useQuery({
     queryKey: eventKeys.home(user?.id),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (useIcpLab && user?.id) {
         return fixtureData.getLocalLabHomeSnapshot(user.id);
       }
@@ -604,7 +604,16 @@ export default function HomePage() {
         // chat presence already has a canister wrapper (livePresenceHeartbeat)
         // used elsewhere — neither is part of this consolidated query.
         supabase: fetchHomeFromSupabase,
-        icp: (ctx) => fetchLiveHomeFeed(ctx),
+        icp: (ctx) => fetchLiveHomeFeed(ctx, {
+          signal,
+          onProgress: feed => {
+            if (signal.aborted || !user?.id) return;
+            queryClient.setQueryData(eventKeys.home(user.id), (previous: typeof feed | undefined) => {
+              if (previous?.events?.length && !previous.incomplete) return previous;
+              return feed;
+            });
+          },
+        }),
       }, { shared: "person" });
     },
     enabled: !!user,
@@ -635,7 +644,7 @@ export default function HomePage() {
   // The verified-empty path in the queryFn clears the snapshot explicitly, so
   // genuine "left every club" states still persist.
   useEffect(() => {
-    if (!user?.id || !membershipAndEvents) return;
+    if (!user?.id || !membershipAndEvents || ('incomplete' in membershipAndEvents && membershipAndEvents.incomplete === true)) return;
     const m = membershipAndEvents.memberships as { clubIds?: string[]; teamIds?: string[] } | undefined;
     const isEmpty = (m?.clubIds?.length ?? 0) === 0 && (m?.teamIds?.length ?? 0) === 0;
     if (isEmpty) {

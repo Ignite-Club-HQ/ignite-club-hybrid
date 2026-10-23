@@ -10,7 +10,12 @@ const liveMocks = vi.hoisted(() => ({
   getActiveIcpTarget: vi.fn(),
   getLiveTeam: vi.fn(),
   getLiveClubProfile: vi.fn(),
+  dispatch: vi.fn(),
 }));
+vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (feature: string, providers: any, scope: any) => {
+  liveMocks.dispatch(feature, scope);
+  return providers.icp({ identity: {}, target: { canisterIds: { club_domain: "owning-group" } } });
+} }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => liveMocks.mode }));
 vi.mock("@/live/internetIdentityAuth", () => ({ getCurrentInternetIdentity: liveMocks.getCurrentInternetIdentity }));
 vi.mock("@/live/targetRegistry", () => ({ getActiveIcpTarget: liveMocks.getActiveIcpTarget }));
@@ -166,7 +171,8 @@ describe("useTeamChatTeamData", () => {
     );
     await waitFor(() => expect(result.current.team?.name).toBe("ICP Team"));
     expect(result.current.team?.clubs?.name).toBe("ICP Club");
-    expect(liveMocks.getLiveTeam).toHaveBeenCalledWith({ identity, target }, "team-icp");
+    expect(liveMocks.dispatch).toHaveBeenCalledWith("membership", { teamId: "team-icp" });
+    expect(liveMocks.getLiveTeam).toHaveBeenCalledWith({ identity: {}, target: { canisterIds: { club_domain: "owning-group" } } }, "team-icp");
     expect(supabaseClient.from).not.toHaveBeenCalled();
   });
 });

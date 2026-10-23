@@ -15,6 +15,28 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it('expires a stalled membership refresh, retains the ready session and disposes late replacements', async () => {
+    const { d, session } = deps(ON);
+    const dispatcher = createClubDispatcher(d);
+    await dispatcher.memberClubIds();
+    let finish: ((value: typeof session) => void) | undefined;
+    const late = { ...session, dispose: vi.fn() };
+    d.open.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    vi.useFakeTimers();
+    try {
+      const pending = dispatcher.refreshMembershipSession();
+      const rejection = expect(pending).rejects.toThrow('Membership discovery timed out');
+      await vi.advanceTimersByTimeAsync(20_001);
+      await rejection;
+      expect(await dispatcher.read('events', 'moved', 'events_domain', async () => 'event')).toBe('group');
+      finish?.(late);
+      await Promise.resolve();
+      expect(late.dispose).toHaveBeenCalledOnce();
+      await dispatcher.refreshMembershipSession();
+      expect(d.open).toHaveBeenCalledTimes(3);
+      expect(session.dispose).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
   it('a late owner probe cannot populate a replacement session', async () => {
     const { d, session } = deps(ON);
     let finish: ((value: string | null) => void) | undefined;
