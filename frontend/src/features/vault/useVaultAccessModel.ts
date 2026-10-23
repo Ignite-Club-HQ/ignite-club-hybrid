@@ -118,7 +118,7 @@ export function useVaultAccessModel({
 
   const { data: userClubs, isLoading: isLoadingClubs } = useQuery({
     queryKey: vaultKeys.clubsForUser(userId, isAppAdmin),
-    queryFn: () => fetchVaultAccessibleClubs(userId!, !!isAppAdmin),
+    queryFn: () => userId ? fetchVaultAccessibleClubs(userId, !!isAppAdmin) : [],
     enabled: !!userId && isAppAdmin !== undefined,
   });
 
@@ -161,7 +161,7 @@ export function useVaultAccessModel({
   const competitionId = currentView.type === "competition" ? currentView.competitionId : null;
   const { data: competitionAccess, isLoading: isLoadingCompetitionAccess } = useQuery({
     queryKey: ["vault-competition-access", userId, competitionId],
-    queryFn: () => fetchVaultCompetitionAccess(competitionId!, userId!),
+    queryFn: () => competitionId && userId ? fetchVaultCompetitionAccess(competitionId, userId) : null,
     enabled: !!userId && !!competitionId,
     staleTime: 30_000,
   });
@@ -174,7 +174,7 @@ export function useVaultAccessModel({
   // Check if the current club has Pro
   const { data: currentClubHasPro, isLoading: isLoadingClubHasPro } = useQuery({
     queryKey: vaultKeys.clubHasPro(contextClubId),
-    queryFn: () => fetchVaultClubHasPro(contextClubId!),
+    queryFn: () => contextClubId ? fetchVaultClubHasPro(contextClubId) : false,
     enabled: contextClubId !== null,
   });
 
@@ -183,7 +183,7 @@ export function useVaultAccessModel({
   // Check if the current team has Pro (for teams in non-Pro clubs)
   const { data: currentTeamHasPro, isLoading: isLoadingTeamHasPro } = useQuery({
     queryKey: vaultKeys.teamHasPro(contextTeamId),
-    queryFn: () => fetchVaultTeamHasPro(contextTeamId!),
+    queryFn: () => contextTeamId ? fetchVaultTeamHasPro(contextTeamId) : false,
     enabled: contextTeamId !== null,
   });
 
@@ -197,14 +197,16 @@ export function useVaultAccessModel({
   // in (the root-view entitlement gate; distinct from `currentContextHasPro`).
   const { data: proAccessInfo, isLoading: isLoadingProClub } = useQuery({
     queryKey: ["pro-access-info", userId],
-    queryFn: () => fetchVaultAnyProAccess(userId!),
+    queryFn: () => userId ? fetchVaultAnyProAccess(userId) : false,
     enabled: !!userId,
   });
 
   const hasProClub = proAccessInfo ?? false;
 
   const isLoadingAccess =
-    isLoadingAppAdmin || isLoadingRoles || (!isAppAdmin && (isLoadingProClub || isLoadingClubHasPro || isLoadingTeamHasPro || isLoadingCompetitionAccess));
+    isLoadingAppAdmin || isLoadingRoles || (!isAppAdmin && (currentView.type === "root"
+      ? isLoadingProClub
+      : ((!currentContextHasPro && (isLoadingClubHasPro || isLoadingTeamHasPro)) || isLoadingCompetitionAccess)));
 
   // Vault access requires: 1) Pro subscription in current context AND 2) Admin/coach role
   const vaultAccessContextHasPro = currentView.type === "root" ? hasProClub : currentContextHasPro;

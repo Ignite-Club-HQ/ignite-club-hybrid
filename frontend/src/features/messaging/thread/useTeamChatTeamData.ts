@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCachedTeam, getCachedClub, cacheTeam, cacheClub } from "@/lib/clubTeamCache";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withReadDeadline } from "@/live/readDeadline";
 
 /**
  * Minimal Supabase client surface this hook needs. Callers pass their page's
@@ -43,23 +44,24 @@ export function useTeamChatTeamData({
   } = useQuery({
     queryKey: ["team", teamId],
     queryFn: async () => {
+      if (!teamId) return null;
       if (useIcpLab && teamId) {
         return getLocalLabChatTeam(teamId);
       }
 
       if (resolveAuthBackend() === "icp") {
         // Internet Identity sign-ins: the team lives on the club canister.
-        const [{ getCurrentInternetIdentity }, { getActiveIcpTarget }, club] = await Promise.all([
-          import("@/live/internetIdentityAuth"),
-          import("@/live/targetRegistry"),
+        const [{ withFeatureBackend }, club] = await Promise.all([
+          import("@/live/featureRouter"),
           import("@/live/features/club"),
         ]);
-        const identity = await getCurrentInternetIdentity();
-        if (!identity) throw new Error("Internet Identity session required");
-        const ctx = { identity, target: getActiveIcpTarget() };
-        const [liveTeam] = (await club.getLiveTeam(ctx as any, teamId!)) as any[];
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Internet Identity team session required"); },
+          icp: async ctx => {
+        const [liveTeam] = await club.getLiveTeam(ctx, teamId);
         if (!liveTeam) return null;
-        const [profile] = ((await club.getLiveClubProfile(ctx as any, liveTeam.club_id).catch(() => [])) ?? []) as any[];
+        const cachedClub = getCachedClub(liveTeam.club_id);
+        const [profile] = cachedClub ? [cachedClub] : await withReadDeadline(club.getLiveClubProfile(ctx, liveTeam.club_id), 'Chat club label', 1500).catch(() => []);
         return {
           id: liveTeam.id,
           name: liveTeam.name,
@@ -68,15 +70,17 @@ export function useTeamChatTeamData({
           clubs: {
             id: liveTeam.club_id,
             name: profile?.name ?? "",
-            logo_url: profile?.logo_url?.[0] ?? null,
+            logo_url: cachedClub?.logo_url ?? (Array.isArray(profile?.logo_url) ? profile.logo_url[0] ?? null : profile?.logo_url ?? null),
           },
         };
+          },
+        }, { teamId });
       }
 
       const { data, error } = await supabaseClient
         .from("teams")
         .select("*, clubs!club_id (name, id, logo_url)")
-        .eq("id", teamId!)
+        .eq("id", teamId)
         .maybeSingle();
       if (error) throw error;
       return data ?? null;

@@ -387,8 +387,9 @@ export default function GroupChatPage() {
         return withFeatureBackend("messaging", {
           supabase: async () => null,
           icp: async (ctx) => {
+            if (!groupId) return null;
             try {
-              const metadata = await getLiveGroupMetadata(ctx, groupId!);
+              const metadata = await getLiveGroupMetadata(ctx, groupId);
               return {
                 id: metadata.conversationId,
                 name: metadata.name,
@@ -401,12 +402,12 @@ export default function GroupChatPage() {
                 category: null,
                 join_policy: null,
               } as ChatGroup;
-            } catch {
-              // Not yet created on the canister — header/menus fall back gracefully.
-              return null;
+            } catch (error) {
+              if (error instanceof Error && error.message === "Get group metadata failed: Group metadata not found") return null;
+              throw error;
             }
           },
-        }, { conversationId: groupId! });
+        }, { conversationId: groupId ?? "" });
       }
 
       const { data, error } = await supabase
