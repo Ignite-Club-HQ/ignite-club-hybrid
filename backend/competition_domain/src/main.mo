@@ -108,6 +108,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var competitionJoinLinks : [Types.CompetitionJoinLink];
   var competitionOfficialEmailInvites : [Types.CompetitionOfficialEmailInvite];
   var competitionWelcomeJobs : [Types.CompetitionWelcomeJob];
+  var competitionMemberWelcomeJobs : [Types.CompetitionMemberWelcomeJob];
   var eoiSubmissions : [Types.EoiSubmission];
 
   func eoiHex(b : Blob) : Text {
@@ -219,6 +220,7 @@ persistent actor class Main(governorInit : Principal) = this {
       join_links = competitionJoinLinks.filter(func(x) = inC(x.competition_id));
       official_invites = competitionOfficialEmailInvites.filter(func(x) = inC(x.competition_id));
       welcome_jobs = competitionWelcomeJobs.filter(func(x) = inC(x.competition_id));
+      member_welcome_jobs = ?competitionMemberWelcomeJobs.filter(func(x) = inC(x.competition_id));
       eoi = eoiSubmissions.filter(func(x) = x.club_id == c);
       divisions = divisionSettings.filter(func(x) = inC(x.competition_id));
       ladders = competitionLadderSettings.filter(func(x) = inC(x.competition_id));
