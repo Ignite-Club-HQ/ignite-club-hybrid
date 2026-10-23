@@ -48,6 +48,13 @@ export interface Binding {
 export type DenialReason = { 'Erased' : null } |
   { 'Rekeyed' : null } |
   { 'Unlinked' : null };
+export interface DirectoryAcceptanceCheck {
+  'verified_current' : boolean,
+  'snapshot_verified' : boolean,
+  'restoration_guard_verified' : boolean,
+  'source_revisions' : Array<[string, bigint]>,
+  'app_enabled' : boolean,
+}
 export interface DirectoryCleanup { 'scanned' : bigint, 'complete' : boolean }
 /**
  * Exact operator readback of the separate directory configuration. Does not
@@ -271,57 +278,59 @@ export type Result = { 'Ok' : Account } |
   { 'Err' : string };
 export type Result_1 = { 'Ok' : Access } |
   { 'Err' : string };
-export type Result_10 = { 'Ok' : Array<SourceBinding> } |
+export type Result_10 = { 'Ok' : DirectoryAcceptanceCheck } |
   { 'Err' : string };
-export type Result_11 = { 'Ok' : State } |
+export type Result_11 = { 'Ok' : Array<SourceBinding> } |
   { 'Err' : string };
-export type Result_12 = { 'Ok' : Array<ExternalSiteBinding> } |
+export type Result_12 = { 'Ok' : State } |
   { 'Err' : string };
-export type Result_13 = { 'Ok' : Array<Entitlement> } |
+export type Result_13 = { 'Ok' : Array<ExternalSiteBinding> } |
   { 'Err' : string };
-export type Result_14 = { 'Ok' : Profile } |
+export type Result_14 = { 'Ok' : Array<Entitlement> } |
   { 'Err' : string };
-export type Result_15 = { 'Ok' : [] | [TermsAcceptance] } |
+export type Result_15 = { 'Ok' : Profile } |
   { 'Err' : string };
-export type Result_16 = { 'Ok' : Array<RoleGrant> } |
+export type Result_16 = { 'Ok' : [] | [TermsAcceptance] } |
   { 'Err' : string };
-export type Result_17 = { 'Ok' : Ticket } |
+export type Result_17 = { 'Ok' : Array<RoleGrant> } |
   { 'Err' : string };
-export type Result_18 = { 'Ok' : Evidence } |
+export type Result_18 = { 'Ok' : Ticket } |
   { 'Err' : string };
-export type Result_19 = { 'Ok' : Array<[string, string]> } |
+export type Result_19 = { 'Ok' : Evidence } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : null } |
   { 'Err' : string };
-export type Result_20 = { 'Ok' : DirectoryConfigurationReadback } |
+export type Result_20 = { 'Ok' : Array<[string, string]> } |
   { 'Err' : string };
-export type Result_21 = { 'Ok' : Reply } |
+export type Result_21 = { 'Ok' : DirectoryConfigurationReadback } |
   { 'Err' : string };
-export type Result_22 = { 'Ok' : Array<PrincipalEligibility> } |
+export type Result_22 = { 'Ok' : Reply } |
   { 'Err' : string };
-export type Result_23 = { 'Ok' : PrincipalEligibility } |
+export type Result_23 = { 'Ok' : Array<PrincipalEligibility> } |
   { 'Err' : string };
-export type Result_24 = { 'Ok' : RemovalHistoryManifest } |
+export type Result_24 = { 'Ok' : PrincipalEligibility } |
   { 'Err' : string };
-export type Result_25 = { 'Ok' : RemovalHistoryPage } |
+export type Result_25 = { 'Ok' : RemovalHistoryManifest } |
   { 'Err' : string };
-export type Result_26 = { 'Ok' : RemovalInventory } |
+export type Result_26 = { 'Ok' : RemovalHistoryPage } |
   { 'Err' : string };
-export type Result_27 = { 'Ok' : DirectoryCleanup } |
+export type Result_27 = { 'Ok' : RemovalInventory } |
   { 'Err' : string };
-export type Result_28 = { 'Ok' : Entitlement } |
+export type Result_28 = { 'Ok' : DirectoryCleanup } |
   { 'Err' : string };
-export type Result_29 = { 'Ok' : bigint } |
+export type Result_29 = { 'Ok' : Entitlement } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : Receipt } |
   { 'Err' : string };
-export type Result_30 = { 'Ok' : Array<ProfileSearchResult> } |
+export type Result_30 = { 'Ok' : bigint } |
   { 'Err' : string };
-export type Result_31 = { 'Ok' : PrivacyConsent } |
+export type Result_31 = { 'Ok' : Array<ProfileSearchResult> } |
   { 'Err' : string };
-export type Result_32 = { 'Ok' : TermsAcceptance } |
+export type Result_32 = { 'Ok' : PrivacyConsent } |
   { 'Err' : string };
-export type Result_33 = { 'Ok' : Array<Receipt> } |
+export type Result_33 = { 'Ok' : TermsAcceptance } |
+  { 'Err' : string };
+export type Result_34 = { 'Ok' : Array<Receipt> } |
   { 'Err' : string };
 export type Result_4 = { 'Ok' : OwnershipProgress } |
   { 'Err' : string };
@@ -473,6 +482,12 @@ export interface _SERVICE {
   'bind_external_site' : ActorMethod<[string, string, string], Result_8>,
   'cancel_account_deletion' : ActorMethod<[string], Result_2>,
   'check_field_access' : ActorMethod<[string, string], Result_9>,
+  /**
+   * Governor-only real acceptance check. Two separated complete consensus
+   * revision scans bracket a shared snapshot instant; independent management
+   * history rejects upgrade/restore ABA, including restoration of identity.
+   */
+  'check_membership_directory_acceptance' : ActorMethod<[], Result_10>,
   'commit_account_deletion' : ActorMethod<[string], Result_2>,
   /**
    * Configures transport only. Does not enable a public reader or certify
@@ -480,7 +495,7 @@ export interface _SERVICE {
    */
   'configure_membership_directory' : ActorMethod<
     [Binding, Array<Principal>, bigint],
-    Result_10
+    Result_11
   >,
   /**
    * Public: remaining cycles (shown in admin settings).
@@ -489,17 +504,17 @@ export interface _SERVICE {
   'disable_group2_admission' : ActorMethod<[], Result_2>,
   'disable_membership_directory' : ActorMethod<[], Result_2>,
   'erase_account' : ActorMethod<[string], Result_2>,
-  'export_state' : ActorMethod<[], Result_11>,
-  'get_external_bindings' : ActorMethod<[string], Result_12>,
+  'export_state' : ActorMethod<[], Result_12>,
+  'get_external_bindings' : ActorMethod<[string], Result_13>,
   /**
    * The caller's own entitlement records (active and expired).
    */
-  'get_my_entitlements' : ActorMethod<[], Result_13>,
+  'get_my_entitlements' : ActorMethod<[], Result_14>,
   'get_privacy_consent' : ActorMethod<[string, string], Result_9>,
   /**
    * The caller's own profile, or an error when none has been set yet.
    */
-  'get_profile' : ActorMethod<[], Result_14>,
+  'get_profile' : ActorMethod<[], Result_15>,
   /**
    * Batch profile lookup by account id (principal text / user id), used by
    * the frontend profile cache to resolve many ids in one round trip.
@@ -510,7 +525,7 @@ export interface _SERVICE {
    * The terms acceptance record for an arbitrary account: the account owner
    * or the governor only.
    */
-  'get_terms_acceptance' : ActorMethod<[string], Result_15>,
+  'get_terms_acceptance' : ActorMethod<[string], Result_16>,
   'grant_role' : ActorMethod<
     [string, string, [] | [string], [] | [string]],
     Result_2
@@ -538,31 +553,31 @@ export interface _SERVICE {
   /**
    * Every role grant held by the caller, across all clubs/teams.
    */
-  'my_roles' : ActorMethod<[], Result_16>,
+  'my_roles' : ActorMethod<[], Result_17>,
   /**
    * The caller's own terms acceptance record, or `None` when they have never
    * accepted (used by the legal re-acceptance gate for Internet Identity
    * users).
    */
-  'my_terms_acceptance' : ActorMethod<[], Result_15>,
+  'my_terms_acceptance' : ActorMethod<[], Result_16>,
   /**
    * Separate governor-only trust pin for the already-released deletion timing
    * protocol. Existing history/lifecycle gates remain unchanged.
    */
   'pin_owner_test_deletion_registry' : ActorMethod<[Binding], Result_2>,
-  'prepare_account_deletion' : ActorMethod<[string, bigint], Result_17>,
+  'prepare_account_deletion' : ActorMethod<[string, bigint], Result_18>,
   'read_account_removal_intent' : ActorMethod<[string], Result_6>,
-  'read_group_inventory_evidence' : ActorMethod<[bigint], Result_18>,
+  'read_group_inventory_evidence' : ActorMethod<[bigint], Result_19>,
   /**
    * Governor-only narrow opening evidence, not a lifecycle release or grant.
    */
-  'read_group_opening_configuration' : ActorMethod<[], Result_19>,
+  'read_group_opening_configuration' : ActorMethod<[], Result_20>,
   /**
    * Only configured canisters may ask for another caller's links. No browser
    * supplies an account id or a principal list; the index is authoritative.
    */
   'read_linked_account' : ActorMethod<[Principal], Result>,
-  'read_membership_directory_configuration' : ActorMethod<[], Result_20>,
+  'read_membership_directory_configuration' : ActorMethod<[], Result_21>,
   /**
    * Caller-private diagnostic, not the release/current reader. The actor never
    * accepts another account ID or aliases. Source/ownership and fresh account
@@ -570,34 +585,34 @@ export interface _SERVICE {
    */
   'read_my_membership_directory_diagnostic' : ActorMethod<
     [bigint, [] | [Token]],
-    Result_21
+    Result_22
   >,
   /**
    * Only the pinned router may check a human before owner-test creation. This
    * narrow predicate neither registers a reader nor releases global admission.
    */
   'read_owner_test_creation_eligible' : ActorMethod<[Principal], Result_9>,
-  'read_principal_eligibilities' : ActorMethod<[Array<Principal>], Result_22>,
+  'read_principal_eligibilities' : ActorMethod<[Array<Principal>], Result_23>,
   /**
    * Consensus reads; never create an account or grant resource permissions.
    * Versions are account-scoped evidence, NOT globally atomic access tokens.
    */
-  'read_principal_eligibility' : ActorMethod<[Principal], Result_23>,
+  'read_principal_eligibility' : ActorMethod<[Principal], Result_24>,
   /**
    * Local-only consensus recovery evidence. Reader lists/club receipts are NOT
    * a complete deployment inventory or an in-flight drain acknowledgement.
    */
-  'read_removal_history_manifest' : ActorMethod<[], Result_24>,
+  'read_removal_history_manifest' : ActorMethod<[], Result_25>,
   'read_removal_history_page' : ActorMethod<
     [bigint, RemovalHistoryCursor, number],
-    Result_25
+    Result_26
   >,
-  'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_26>,
+  'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_27>,
   /**
    * Subject-bound consensus ownership read; never implicitly registers an account.
    */
   'read_service_account' : ActorMethod<[Principal], Result>,
-  'reclaim_membership_directory' : ActorMethod<[], Result_27>,
+  'reclaim_membership_directory' : ActorMethod<[], Result_28>,
   /**
    * Caller-authenticated: redeems a signed attestation minted by the
    * session-free IAP verification endpoint after it confirms an Apple
@@ -613,7 +628,7 @@ export interface _SERVICE {
    */
   'redeem_entitlement' : ActorMethod<
     [string, string, bigint, string, string],
-    Result_28
+    Result_29
   >,
   'register_account' : ActorMethod<[], Result>,
   /**
@@ -626,7 +641,7 @@ export interface _SERVICE {
    * number of records changed (or that would change when `dry_run`).
    * Any NEW stored principal / principal-text field must be added here.
    */
-  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_29>,
+  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_30>,
   /**
    * Governor-only: revokes a verifier principal.
    */
@@ -654,7 +669,7 @@ export interface _SERVICE {
    * can grant roles without a second lookup. Profiles without an account or
    * with a blank name are skipped.
    */
-  'search_profiles' : ActorMethod<[string, number], Result_30>,
+  'search_profiles' : ActorMethod<[string, number], Result_31>,
   /**
    * Admin-gated (governor or an account holding the `app_admin` role):
    * suspends or reactivates an account. `Suspended` accounts are rejected by
@@ -674,7 +689,7 @@ export interface _SERVICE {
    * it stays dismissed across devices. Creates a blank profile entry if the
    * caller has never called `set_profile`.
    */
-  'set_club_switcher_hint_seen' : ActorMethod<[], Result_14>,
+  'set_club_switcher_hint_seen' : ActorMethod<[], Result_15>,
   /**
    * Governor- or verifier-only: records a Pro entitlement for an arbitrary
    * principal. Used by a trusted server-side writer; client-submitted IAP
@@ -682,7 +697,7 @@ export interface _SERVICE {
    */
   'set_entitlement' : ActorMethod<
     [Principal, string, string, bigint, string],
-    Result_28
+    Result_29
   >,
   'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_2>,
   'set_exclusion_scoped' : ActorMethod<
@@ -691,12 +706,12 @@ export interface _SERVICE {
   >,
   'set_family' : ActorMethod<[string, string], Result_2>,
   'set_group_inventory_binding' : ActorMethod<[Binding, bigint], Result_2>,
-  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_31>,
+  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_32>,
   /**
    * Sets (or replaces) the caller's profile. The account must already exist —
    * sign-in provisioning calls register_account first.
    */
-  'set_profile' : ActorMethod<[string, [] | [string]], Result_14>,
+  'set_profile' : ActorMethod<[string, [] | [string]], Result_15>,
   'set_removal_supplemental_inventory' : ActorMethod<
     [Array<Supplemental>, bigint],
     Result_2
@@ -708,19 +723,19 @@ export interface _SERVICE {
    * caller's currently recorded version is rejected, so a stale client can
    * never roll the recorded acceptance backwards.
    */
-  'set_terms_acceptance' : ActorMethod<[number], Result_32>,
+  'set_terms_acceptance' : ActorMethod<[number], Result_33>,
   /**
    * Sets (or clears) the caller's UI theme preference, so it follows the
    * account across devices. Creates a blank profile entry if the caller has
    * never called `set_profile`.
    */
-  'set_theme_preference' : ActorMethod<[[] | [string]], Result_14>,
+  'set_theme_preference' : ActorMethod<[[] | [string]], Result_15>,
   'settle_account_deletion' : ActorMethod<[string], Result_2>,
   /**
    * Fresh, authenticated full-inventory seal verification. This does not erase
    * data, release registry locks, restore histories or activate a group.
    */
-  'verify_account_removal_seals' : ActorMethod<[string], Result_33>,
+  'verify_account_removal_seals' : ActorMethod<[string], Result_34>,
   'whoami' : ActorMethod<[], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
