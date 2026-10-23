@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { currentChatScope, chatWrite } from "@/live/chatScope";
-import { BarChart3, Check, Clock, Lock, Loader2, MoreVertical, Trash2 } from "lucide-react";
+import { BarChart3, Check, Clock, Lock, Loader2, MoreVertical, Trash2, Users, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
@@ -11,6 +11,9 @@ import { pollQueryOptions } from "@/lib/pollReadRepository";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerClose } from "@/components/ui/drawer";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { fetchProfilesWithCache } from "@/lib/profileCache";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +29,7 @@ export function PollCard({ pollId }: PollCardProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [busyOptionId, setBusyOptionId] = useState<string | null>(null);
+  const [votesOpen, setVotesOpen] = useState(false);
 
   const icpMode = isFeatureRoutedToIcp("messaging");
   const scope = currentChatScope();
@@ -73,6 +77,13 @@ export function PollCard({ pollId }: PollCardProps) {
   }, [data]);
 
   const totalVotes = data?.votes.length ?? 0;
+  const voterIds = [...new Set((data?.votes ?? []).map(v => v.user_id).filter(Boolean))].sort();
+  const voterProfiles = useQuery({
+    queryKey: ["poll-voter-profiles", pollId, user?.id, JSON.stringify(scope ?? null), voterIds],
+    queryFn: () => fetchProfilesWithCache(voterIds),
+    enabled: votesOpen && voterIds.length > 0,
+    staleTime: 60_000,
+  });
   // In ICP mode the canister only tells us aggregate counts, so track the
   // voter's own selection locally (optimistic, from the vote call result).
   const [icpMyOptionIndex, setIcpMyOptionIndex] = useState<number | null>(null);
@@ -331,6 +342,53 @@ export function PollCard({ pollId }: PollCardProps) {
           </span>
         )}
       </div>
+      <div className="px-3.5 pb-2">
+        <Button variant="ghost" size="sm" className="w-full gap-2" onClick={() => setVotesOpen(true)}>
+          <Users className="h-4 w-4" />View votes
+        </Button>
+      </div>
+      <Drawer open={votesOpen} onOpenChange={setVotesOpen}>
+        <DrawerContent className="max-h-[80dvh]">
+          <DrawerHeader className="relative mx-auto w-full max-w-lg pr-14">
+            <DrawerTitle>Votes</DrawerTitle>
+            <DrawerDescription className="break-words">{poll.question}</DrawerDescription>
+            <DrawerClose asChild>
+              <Button variant="ghost" size="icon" className="absolute right-3 top-2" aria-label="Close votes">
+                <X className="h-4 w-4" />
+              </Button>
+            </DrawerClose>
+          </DrawerHeader>
+          <div className="mx-auto w-full max-w-lg overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]">
+            {icpMode && data.voterDetailsAvailable === false ? (
+              <p className="py-4 text-sm text-muted-foreground">Voter names will be available after the chat service update.</p>
+            ) : options.map(option => {
+              const votes = data.votes.filter(v => v.option_id === option.id);
+              return <section key={option.id} className="border-t border-border py-4">
+                <h3 className="flex items-start justify-between gap-3 text-sm font-semibold">
+                  <span className="break-words">{option.label}</span>
+                  <span className="shrink-0 text-muted-foreground">{votes.length}</span>
+                </h3>
+                {votes.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No votes yet</p> : (
+                  <ul className="mt-3 space-y-3">
+                    {votes.map(vote => {
+                      const profile = voterProfiles.data?.get(vote.user_id);
+                      const name = profile?.display_name || (vote.user_id === user?.id ? "You" : "Member");
+                      return <li key={vote.id} className="flex items-center gap-3">
+                        <Avatar className="h-8 w-8 shrink-0">
+                          {profile?.avatar_url && <AvatarImage src={profile.avatar_url} alt="" />}
+                          <AvatarFallback>{name.slice(0, 1).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <span className="min-w-0 break-words text-sm">{name}</span>
+                      </li>;
+                    })}
+                  </ul>
+                )}
+              </section>;
+            })}
+            {voterProfiles.isError && <Button variant="ghost" size="sm" onClick={() => void voterProfiles.refetch()}>Retry names</Button>}
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

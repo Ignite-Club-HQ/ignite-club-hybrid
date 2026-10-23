@@ -10,7 +10,7 @@ export interface PollRow {
 }
 export interface PollOptionRow { id: string; label: string; position: number }
 export interface PollVoteRow { id: string; option_id: string; user_id: string }
-export interface PollData { poll: PollRow; options: PollOptionRow[]; votes: PollVoteRow[]; closed: boolean }
+export interface PollData { poll: PollRow; options: PollOptionRow[]; votes: PollVoteRow[]; closed: boolean; voterDetailsAvailable?: boolean }
 
 export async function readIcpPoll(ctx: FeatureBackendContext, pollId: string): Promise<PollData> {
   const results = await getLivePollResults(ctx, pollId);
@@ -19,12 +19,18 @@ export async function readIcpPoll(ctx: FeatureBackendContext, pollId: string): P
   results.counts.forEach((count, idx) => {
     for (let i = 0; i < count; i += 1) votes.push({ id: `${idx}-${i}`, option_id: String(idx), user_id: '' });
   });
+  const individualVotes = results.votes?.[0];
+  if (individualVotes) {
+    votes.splice(0, votes.length, ...individualVotes.map(v => ({
+      id: `${pollId}:${v.user.toText()}`, option_id: String(v.option_index), user_id: v.user.toText(),
+    })));
+  }
   return {
     poll: { id: results.poll.id, question: results.poll.question, allow_multiple: false,
       closes_at: null, closed_at: results.poll.closed ? createdAt : null,
       created_by: results.poll.creator.toText(), created_at: createdAt },
     options: results.poll.options.map((label, position) => ({ id: String(position), label, position })),
-    votes, closed: results.poll.closed,
+    votes, closed: results.poll.closed, voterDetailsAvailable: individualVotes !== undefined,
   };
 }
 
@@ -49,7 +55,7 @@ export function pollQueryOptions(pollId: string, userId: string | undefined, sco
       if (votesRes.error) throw votesRes.error;
       if (!pollRes.data) return null;
       return { poll: pollRes.data as PollRow, options: (optsRes.data || []) as PollOptionRow[],
-        votes: (votesRes.data || []) as PollVoteRow[], closed: !!pollRes.data.closed_at };
+        votes: (votesRes.data || []) as PollVoteRow[], closed: !!pollRes.data.closed_at, voterDetailsAvailable: true };
     },
     staleTime: 15_000,
     gcTime: 24 * 60 * 60_000,

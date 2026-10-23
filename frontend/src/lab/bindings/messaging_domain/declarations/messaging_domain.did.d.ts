@@ -1038,6 +1038,7 @@ export interface Poll {
   'options' : Array<string>,
 }
 export interface PollResults {
+  'votes' : [] | [Array<PollVote>],
   'poll' : Poll,
   'total_votes' : number,
   'counts' : Uint32Array,

@@ -159,6 +159,7 @@ type PollResults =
    counts: vec nat32;
    poll: Poll;
    total_votes: nat32;
+   votes: opt vec PollVote;
  };
 type Poll = 
  record {

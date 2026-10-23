@@ -138,7 +138,7 @@ module {
     created_at_ms : Nat64;
   };
   public type PollVote = { poll_id : Text; user : Principal; option_index : Nat32 };
-  public type PollResults = { poll : Poll; counts : [Nat32]; total_votes : Nat32 };
+  public type PollResults = { poll : Poll; counts : [Nat32]; total_votes : Nat32; votes : ?[PollVote] };
 
   // --- Mute preferences (storage only; not enforced on-chain) ---
   public type MutePreference = { user : Principal; conversation_id : Text; muted : Bool };
