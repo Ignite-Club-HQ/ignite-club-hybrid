@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, Suspense } from "react";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
+import { chatSendFailureReason } from "@/lib/chatSendFailure";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { isSameDay } from "date-fns";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
@@ -1830,7 +1831,7 @@ export default function TeamChatPage() {
       });
 
       console.error("Failed to send team message", err);
-      toast.error("Failed to send message");
+      toast.error("Failed to send message", { description: chatSendFailureReason(err) });
     },
 
     onSuccess: (result, variables, context) => {

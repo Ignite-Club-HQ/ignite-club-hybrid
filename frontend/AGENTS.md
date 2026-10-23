@@ -58,7 +58,7 @@
 - domains adapts exact-signature read_account_* twins only in development on loopback targets through accountReadAdapter; remote/published actors stay identical and protected-read failures never fall back or retry. Why: rehearsal must exercise existing feature reads without releasing prototype admission.
 
 - Retired URLs: App.tsx ParamRedirect, not 404.
-- Pending sends are QueryClient-scoped; settle temp IDs from server acknowledgements, not photo presence. Why: avoid duplicates after navigation.
+- Pending sends are QueryClient-scoped; settle temp IDs from server acknowledgements, not photo presence; distinguish manual cache writes from fetched snapshots so failed-send rollbacks cannot resurrect previews. Why: avoid duplicates after navigation and stuck failed bubbles.
 - Optimistically cleared chat composers allow concurrent sends; delivery pending must not lock the next draft or its attachment controls, while empty drafts and duplicate gestures remain blocked. Why: users send consecutive messages before remote acknowledgement.
 - Profile batches: get_profile for missing linked IDs.
 - Read coordination uses bounded waits and generation-safe cleanup; cancelled chats stop enrichment and event reads cancel only themselves, never all REST requests. Why: abandoned pages must not strand shared routing or disrupt the next page; mutations never replay on read timeouts.

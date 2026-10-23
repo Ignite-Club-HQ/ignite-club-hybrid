@@ -76,13 +76,17 @@ export function installPendingSendKeeper(queryClient: QueryClient): void {
 
     for (const [id, t] of map) {
       if (now - t.at > MAX_AGE_MS || realSigs.has(sig(t.row))) map.delete(id);
-      // A local edit (failed send rollback) removed it on purpose.
-      else if (!present.has(id) && event.action.type !== "success") map.delete(id);
+      // setQueryData is also a "success" action, but marked manual by Query.
+      // A failed-send rollback must not be mistaken for a fetched snapshot:
+      // otherwise the keeper immediately resurrects the failed bubble.
+      else if (!present.has(id) && (event.action.type !== "success" || event.action.manual)) map.delete(id);
     }
     if (map.size === 0) tracked.delete(key);
     if (event.action.type !== "success") return;
 
-    const merged = mergePendingRows(messages, [...map.values()].map((t) => t.row));
+    // Manual writes may clean already-confirmed previews, but must never
+    // re-add a row explicitly removed by a local rollback.
+    const merged = mergePendingRows(messages, event.action.manual ? [] : [...map.values()].map((t) => t.row));
     if (merged) queryClient.setQueryData(query.queryKey, { ...data, messages: merged });
   });
 }
