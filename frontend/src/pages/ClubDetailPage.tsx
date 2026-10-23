@@ -516,7 +516,7 @@ export default function ClubDetailPage() {
   const { data: teams } = useQuery({
     queryKey: ["club-teams", id],
     queryFn: async () => {
-      if (useIcpLab && id) {
+      if ((useIcpLab || isFeatureRoutedToIcp("membership")) && id) {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
@@ -550,7 +550,7 @@ export default function ClubDetailPage() {
               })
               .sort((a, b) => a.name.localeCompare(b.name));
           },
-        }, { teamId: id! });
+        }, { clubId: id });
       }
       const { data, error } = await supabase
         .from("teams")
@@ -572,6 +572,16 @@ export default function ClubDetailPage() {
       const teamIds = teams?.map(t => t.id) || [];
       if (teamIds.length === 0) return [];
 
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            return [...new Set(grants.map(g => g.team[0]).filter((teamId): teamId is string => !!teamId && teamIds.includes(teamId)))];
+          },
+        }, { clubId: id! });
+      }
+
       const { data, error } = await supabase
         .from("user_roles")
         .select("team_id")
@@ -590,7 +600,7 @@ export default function ClubDetailPage() {
   const { data: teamFolders = [] } = useQuery({
     queryKey: ["team-folders", id],
     queryFn: async () => {
-      if (useIcpLab && id) {
+      if ((useIcpLab || isFeatureRoutedToIcp("membership")) && id) {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
@@ -608,7 +618,7 @@ export default function ClubDetailPage() {
               }))
               .sort((a, b) => a.sort_order - b.sort_order);
           },
-        }, { teamId: id! });
+        }, { clubId: id });
       }
       const { data, error } = await supabase
         .from("team_folders")
