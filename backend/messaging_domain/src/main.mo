@@ -2809,7 +2809,7 @@ persistent actor class Main(governorInit : Principal) = this {
             };
           };
         };
-        #Ok({ poll; counts; total_votes = total })
+        #Ok({ poll; counts; total_votes = total; votes = ?pollVotes.filter(func(v) = v.poll_id == poll_id and Nat32.toNat(v.option_index) < poll.options.size()) })
       };
     }
   };
@@ -4748,7 +4748,7 @@ persistent actor class Main(governorInit : Principal) = this {
             };
           };
         };
-        #Ok({ poll; counts; total_votes = total })
+        #Ok({ poll; counts; total_votes = total; votes = ?pollVotes.filter(func(v) = v.poll_id == poll_id and Nat32.toNat(v.option_index) < poll.options.size()) })
       };
     }
   
