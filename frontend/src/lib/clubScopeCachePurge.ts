@@ -9,10 +9,9 @@ import type { QueryClient } from "@tanstack/react-query";
  * cached and paints them instantly after the switch, sometimes for minutes
  * (staleTime) and always for at least one frame.
  *
- * When the user changes the active club filter we therefore drop the cached data
- * for everything that is not explicitly global/user-scoped. Active queries
- * refetch immediately, so the user sees skeletons then the new club's data —
- * never club A's content under club B's chrome.
+ * Drop ambiguous club-list data, but retain account inventories and explicitly
+ * event-ID-scoped Next Up reads. Home filters its authorized inventory locally;
+ * a presentation switch must not restart every identity/membership/event read.
  */
 
 /**
@@ -49,15 +48,26 @@ function isGlobalKey(key: readonly unknown[]): boolean {
   return GLOBAL_KEY_PREFIXES.some((p) => head === p || head.startsWith(p + "-") || head.startsWith(p + "_"));
 }
 
+// Next Up queries carry an exact event ID (and caller where relevant). Their
+// consumers mount only for events selected from Home's filtered inventory.
+const NEXT_UP_EVENT_KEYS = new Set([
+  "child-rsvps-card",
+  "children-for-event",
+  "event-rsvp-summary",
+  "event-rsvps-going",
+  "event-rsvps",
+]);
+
 export function purgeClubScopedQueryCache(queryClient: QueryClient) {
   const cache = queryClient.getQueryCache();
   for (const query of cache.getAll()) {
     if (isGlobalKey(query.queryKey as readonly unknown[])) continue;
+    if (NEXT_UP_EVENT_KEYS.has(String(query.queryKey[0])) && typeof query.queryKey[1] === "string") continue;
     // Remove cached data outright: inactive queries are dropped, active ones
     // remount into a loading state and refetch for the newly selected club.
     cache.remove(query);
   }
-  // Anything that survived removal (in-flight/active) is marked stale so it
-  // cannot serve club A's payload once it settles.
-  void queryClient.invalidateQueries({ refetchType: "active" });
+  // Do not invalidate surviving account/global/event-ID queries: their keys
+  // are independent of the club filter. Event mutations and membership changes
+  // retain their own invalidation paths; switching clubs is not a data change.
 }
