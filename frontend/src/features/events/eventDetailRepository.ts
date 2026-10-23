@@ -1,5 +1,6 @@
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveEvents } from "@/live/features/events";
+import { getCachedTeam, getCachedClub } from "@/lib/clubTeamCache";
 
 /** Core Event Detail read boundary. */
 export const EVENT_DETAIL_SELECT =
@@ -46,10 +47,23 @@ export async function fetchEventDetail(client: any, eventId: string) {
 async function toEventDetailShape(e: any) {
   const opt = (v: unknown) => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
   const teamId = opt(e.team_id) as string | null;
-  const { icpGetTeam, icpGetClubName } = await import("@/lib/icpClubTeamLookup");
+  const cachedTeam = teamId ? getCachedTeam(teamId) : null;
+  const cachedClub = getCachedClub(e.club_id);
   const [team, clubName] = await Promise.all([
-    teamId ? icpGetTeam(teamId).catch(() => null) : Promise.resolve(null),
-    icpGetClubName(e.club_id).catch(() => null),
+    cachedTeam?.club_id === e.club_id ? Promise.resolve(cachedTeam) : teamId ? withFeatureBackend("membership", {
+      supabase: async () => null,
+      icp: async ctx => {
+        const { getLiveTeam } = await import("@/live/features/club");
+        return (await getLiveTeam(ctx, teamId))[0] ?? null;
+      },
+    }, { clubId: e.club_id }).catch(() => null) : Promise.resolve(null),
+    cachedClub ? Promise.resolve(cachedClub.name) : withFeatureBackend("membership", {
+      supabase: async () => null,
+      icp: async ctx => {
+        const { getLiveClubProfile } = await import("@/live/features/club");
+        return (await getLiveClubProfile(ctx, e.club_id))[0]?.name ?? null;
+      },
+    }, { clubId: e.club_id }).catch(() => null),
   ]);
   const type = ["game", "training", "social", "mini_league"].includes(e.event_type) ? e.event_type : "training";
   return {
