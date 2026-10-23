@@ -56,7 +56,7 @@ try {
   let cursor=first.page.next;const clubs=first.page.rows.map(r=>r.club_id);
   while(cursor.length){const page=ok(await identity.actor.read_my_membership_directory(10n,cursor));assert.equal(page.instance,first.instance);clubs.push(...page.page.rows.map(r=>r.club_id));cursor=page.page.next;}
   assert.deepEqual(clubs,['club-0','club-1','club-2']);
-  const replay=ok(await identity.actor.read_my_membership_directory(10n,[]));assert.deepEqual(replay.page.rows.map(r=>r.club_id),['club-0']);
+  assert.ok('Err' in await identity.actor.read_my_membership_directory(10n,[]),'old start after advanced traversal must not rewind');
   identity.actor.setPrincipal(single);const own=ok(await identity.actor.read_my_membership_directory(11n,[]));assert.deepEqual(own.page.rows.map(r=>r.club_id),['club-0']);assert.equal(own.page.next.length,0);
   identity.actor.setPrincipal(stranger);const empty=ok(await identity.actor.read_my_membership_directory(12n,[]));assert.equal(empty.page.rows.length,0);assert.equal(empty.page.next.length,0);
   assert.ok('Err' in await identity.actor.read_my_membership_directory(10n,first.page.next),'foreign continuation');
