@@ -561,6 +561,14 @@ type Main =
        Err: text;
        Ok: opt LineupSnapshot;
      }) query;
+   get_match_event_ids: (match_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 event_id: text;
+                 team_id: text;
+               };
+     }) query;
    get_pitch_board_settings: (team_id: text) ->
     (variant {
        Err: text;

@@ -78,6 +78,19 @@ type Result =
    Err: text;
    Ok: Settings;
  };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
 type PlayHQStat = 
  record {
    competition_id: text;
@@ -344,6 +357,18 @@ type Main =
        Err: text;
        Ok: JoinLinkPreview;
      }) query;
+   get_member_welcome_email_job: (token: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          competition_id: text;
+          competition_name: text;
+          message: text;
+          subject: text;
+          to: text;
+        };
+     }) query;
    get_my_pending_eois: () ->
     (variant {
        Err: text;
@@ -523,6 +548,10 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -601,10 +630,19 @@ type Main =
        Err: text;
        Ok: opt text;
      });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
    read_competition_club: (id: text) -> (variant {
                                            Err: text;
                                            Ok: opt text;
                                          });
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
    read_history_match_result: (match_id: text, team_id: text, requester:
     principal) ->
     (variant {
@@ -661,6 +699,11 @@ type Main =
        Err: text;
        Ok;
      });
+   register_member_welcome_job: (competition_id: text, token: text, to:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    register_team: (competition_id: text, team_id: text, club_id: text) ->
     (variant {
        Err: text;
@@ -714,6 +757,11 @@ type Main =
     (variant {
        Err: text;
        Ok: CompetitionJoinLink;
+     });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
      });
    send_competition_broadcast: (competition_id: text, title: text, body:
     text) -> (variant {

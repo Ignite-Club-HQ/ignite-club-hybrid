@@ -357,6 +357,18 @@ type Main =
        Err: text;
        Ok: JoinLinkPreview;
      }) query;
+   get_member_welcome_email_job: (token: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          competition_id: text;
+          competition_name: text;
+          message: text;
+          subject: text;
+          to: text;
+        };
+     }) query;
    get_my_pending_eois: () ->
     (variant {
        Err: text;
@@ -687,6 +699,11 @@ type Main =
        Err: text;
        Ok;
      });
+   register_member_welcome_job: (competition_id: text, token: text, to:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    register_team: (competition_id: text, team_id: text, club_id: text) ->
     (variant {
        Err: text;
