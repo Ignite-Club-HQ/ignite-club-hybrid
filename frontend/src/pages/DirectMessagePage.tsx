@@ -523,6 +523,14 @@ export default function DirectMessagePage() {
     refetchOnMount: "always", // Force refetch on every mount (true is a no-op while staleTime is unmet)
   });
 
+  // Why DMs are blocked (Supabase mode only — the dm_block_reason RPC is Postgres).
+  const { data: dmBlockReason } = useQuery({
+    queryKey: ["dm-block-reason", otherUserId],
+    queryFn: () => fetchDmBlockReason(otherUserId!),
+    enabled: canDM === false && !!otherUserId && authReady && resolveAuthBackend() !== "icp",
+    staleTime: 30 * 1000,
+  });
+
   // Memoize query key to prevent ChatMessage memo breaks
   // Canister rows → the app's DM shape. Shared by the first page load and by
   // scroll-back paging so both render identically.
@@ -1660,12 +1668,15 @@ export default function DirectMessagePage() {
             </div>
             <div>
               <h3 className="font-semibold text-lg flex items-center justify-center gap-2">
-                <Crown className="h-5 w-5 text-primary" />
-                Pro Feature
+                {(dmBlockReason === "no_shared_pro_club" || !dmBlockReason) && (
+                  <Crown className="h-5 w-5 text-primary" />
+                )}
+                {dmBlockReason === "no_shared_pro_club" || !dmBlockReason
+                  ? "Pro Feature"
+                  : "Can't start this chat"}
               </h3>
               <p className="text-muted-foreground mt-1 max-w-md">
-                Direct messages require both users to be members of a Pro club. 
-                Upgrade your club to Pro to unlock this feature.
+                {dmBlockMessage(dmBlockReason)}
               </p>
             </div>
             <Button onClick={() => navigate("/messages")}>Back to Messages</Button>
