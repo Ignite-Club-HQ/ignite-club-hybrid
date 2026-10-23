@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Check the three existing lookup services; upgrade is blocked until lookup release checks are complete
+        description: Check pinned services and every membership source; upgrade remains blocked pending activation checks
         required: true
         type: choice
         default: check
@@ -59,7 +59,7 @@ jobs:
           icp build club_domain
           mkdir -p "$RUNNER_TEMP/lookup-wasm"
           cp .icp/cache/artifacts/identity_access .icp/cache/artifacts/club_domain "$RUNNER_TEMP/lookup-wasm/"
-      - name: Upgrade the three lookup services and fill existing memberships
+      - name: Check every membership source or run the protected lookup release
         working-directory: frontend
         env:
           ACTION: ${{ inputs.action }}
