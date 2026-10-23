@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useClubTheme } from "@/hooks/useClubTheme";
+import { useClubPickerSelection } from "@/hooks/useClubPickerSelection";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,7 +19,8 @@ import igniteIcon from "@/assets/ignite-icon.png";
 import { guardClubListResult } from "@/lib/clubListEmptyGuard";
 
 export function ClubThemeToggle() {
-  const { availableClubThemes, activeClubTheme, setActiveClubTheme, isLoading } = useClubTheme();
+  const { availableClubThemes, activeClubTheme, isLoading } = useClubTheme();
+  const setActiveClubTheme = useClubPickerSelection();
   const { user } = useAuth();
 
   // Fetch ALL user clubs (including non-Pro) to show with lock
