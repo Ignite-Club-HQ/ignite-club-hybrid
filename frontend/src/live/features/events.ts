@@ -123,6 +123,26 @@ export async function listLiveEvents(
   return actor.list_events(candidOpt(clubId), candidOpt(teamId));
 }
 
+/**
+ * Fixture-card tap-to-event: resolves the per-team event ids materialized
+ * for a competition match. The ICP Match record carries no event ids, so
+ * the client looks them up on events_domain; the canister requires the
+ * caller to belong to at least one linked club. Returns [] when the match
+ * has no materialized events yet.
+ */
+export async function getLiveMatchEventIds(
+  ctx: FeatureBackendContext,
+  matchId: string,
+): Promise<Array<{ team_id: string; event_id: string }>> {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  try {
+    return await unwrapCandid(actor.get_match_event_ids(matchId), "Get fixture events");
+  } catch (error) {
+    if ((error as Error)?.message?.includes("No fixture events")) return [];
+    throw error;
+  }
+}
+
 export async function listLiveEventDutyTeams(
   ctx: FeatureBackendContext,
   eventIds: string[],
