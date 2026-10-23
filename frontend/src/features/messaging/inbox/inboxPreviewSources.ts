@@ -359,10 +359,11 @@ async function fetchIcpChatGroupsWithMessages() {
   const setupErrors: string[] = [];
   const friendly = (err: unknown) => {
     const m = err instanceof Error ? err.message : String(err);
-    if (/could not perform remote call|out of cycles|IC0207/i.test(m)) return "isn't responding right now — please try again later";
+    // Infrastructure trouble (zero fuel, frozen or stopped canisters) is never named to users.
+    if (/could not perform remote call|out of cycles|IC0207|is stopped|frozen|destination invalid/i.test(m)) return "isn't responding right now — please try again later";
     if (/access forbidden|not authori|denied/i.test(m)) return "your access to this club's chats couldn't be confirmed";
     if (/timeout|network|fetch failed|unavailable/i.test(m)) return "the club's chats didn't respond in time";
-    return m.slice(0, 160);
+    return "couldn't be set up just now — please try again later";
   };
   await Promise.all(liveClubs.filter((c) => adminClubIds.has(c.id)).map(async (c) => {
     try {
