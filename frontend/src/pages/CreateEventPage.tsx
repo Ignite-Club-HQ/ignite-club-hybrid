@@ -51,6 +51,7 @@ import { EventAudienceSelector } from "@/components/event/EventAudienceSelector"
 import { OpponentInput } from "@/components/OpponentInput";
 import { DutyMemberSelect } from "@/components/DutyMemberSelect";
 import { useClubTheme } from "@/hooks/useClubTheme";
+import { creationClubChoices } from "@/lib/creationClubChoices";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveEvents } from "@/live/features/events";
@@ -255,7 +256,8 @@ function SupabaseCreateEventPage() {
 
   const [title, setTitle] = useState(prefillTitle || "");
   const [type, setType] = useState<EventType>(presetType || (localStorage.getItem("lastEventType") as EventType) || "training");
-  const [clubId, setClubId] = useState(presetClubId || "");
+  const themeCreationClubId = isFromMiniLeague ? null : activeClubFilter;
+  const [clubId, setClubId] = useState(themeCreationClubId || presetClubId || "");
   const [teamId, setTeamId] = useState("");
   const [dutyTeamId, setDutyTeamId] = useState<string | null>(null);
   const [miniLeagueId, setMiniLeagueId] = useState(presetMiniLeagueId || "");
@@ -487,21 +489,21 @@ function SupabaseCreateEventPage() {
   });
 
   // Auto-select filtered club when active
-  const validActiveClubFilter = activeClubFilter && clubs?.some((c) => c.id === activeClubFilter)
-    ? activeClubFilter : null;
-  const filteredClubs = validActiveClubFilter
-    ? clubs?.filter(c => c.id === activeClubFilter)
-    : clubs;
+  const filteredClubs = creationClubChoices(clubs, themeCreationClubId);
 
   // Auto-select club: prefer activeClubFilter, fallback to single club
   useEffect(() => {
-    if (clubId) return; // Already selected
-    if (validActiveClubFilter) {
-      setClubId(validActiveClubFilter);
-    } else if (filteredClubs?.length === 1) {
+    if (themeCreationClubId && clubId !== themeCreationClubId) {
+      setClubId(themeCreationClubId);
+      setTeamId("");
+      setMiniLeagueId("");
+      setDutyTeamId(null);
+      setTargetTeamIds(null);
+      setDuties([]);
+    } else if (!clubId && filteredClubs?.length === 1) {
       setClubId(filteredClubs[0].id);
     }
-  }, [validActiveClubFilter, filteredClubs, clubId]);
+  }, [themeCreationClubId, filteredClubs, clubId]);
 
   // Apply club guest defaults when club is selected
   useEffect(() => {
@@ -1310,7 +1312,7 @@ function SupabaseCreateEventPage() {
 
 
   // Check if user has any clubs to create events for (meaning they have admin/coach permission)
-  const hasPermission = clubs && clubs.length > 0;
+  const hasPermission = filteredClubs && filteredClubs.length > 0;
 
   // No permission fallback
   if (clubs !== undefined && !hasPermission) {
@@ -1506,7 +1508,7 @@ function SupabaseCreateEventPage() {
                   placeholder="Select club"
                   label="Club"
                   required
-                  disabled={!!validActiveClubFilter}
+                  disabled={!!themeCreationClubId}
                 />
                 )}
 
