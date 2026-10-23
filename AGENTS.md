@@ -10,6 +10,7 @@
 <!-- LOVABLE:END -->
 
 - Preview runs frontend/ through lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Keep root dependency-free.
+- Health merges all group inventories by ID. Why: prevent unmonitored groups.
 - Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
 - Read nested AGENTS.md in scripts/, frontend/, backend/, backend/identity_access/ and backend/media_blob_store/ before scoped changes.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.

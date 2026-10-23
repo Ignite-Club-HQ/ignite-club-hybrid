@@ -16,7 +16,7 @@
 // unreadable service is never reported as healthy.
 
 import { createRequire } from "node:module";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -32,6 +32,54 @@ const WARN_MEMORY_GB = 3;
 // balance is read through club_domain's canister_cycles proxy (club_domain is
 // added as a controller by the frontend deploy workflow).
 const FRONTEND_CANISTER_ID = "proe7-kqaaa-aaaas-qg6gq-cai";
+
+const GROUP_SERVICES = new Set([
+  "club_domain", "events_domain", "messaging_domain", "vault_domain",
+  "competition_domain", "club_points_domain", "mini_league_domain",
+  "media_metadata", "media_blob_store", "insights_domain",
+  "notification_queue", "pii_access_control", "timer_jobs",
+]);
+
+// Provision receipts are reporting inventory only, never approval to open a group.
+export function healthTargets(root) {
+  const ids = JSON.parse(readFileSync(join(root, "deploy/mainnet/.icp/data/mappings/ic.ids.json"), "utf8"));
+  const targets = new Map();
+  function add(key, id, groupId) {
+    if (typeof id !== "string" || !id.trim()) throw new Error(`Missing canister ID: ${key}`);
+    Principal.fromText(id);
+    if (targets.has(id)) return;
+    targets.set(id, { key, id, groupId });
+  }
+  for (const key of Object.keys(ids).sort()) add(key, ids[key], GROUP_SERVICES.has(key) ? "g1" : "shared");
+  const groupsDir = join(root, "deploy/groups");
+  if (existsSync(groupsDir)) {
+    for (const entry of readdirSync(groupsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (!entry.isDirectory()) continue;
+      const path = join(groupsDir, entry.name, "provision.json");
+      if (!existsSync(path)) continue;
+      const group = JSON.parse(readFileSync(path, "utf8"));
+      if (group.deploymentId !== "mainnet" || group.groupId !== entry.name ||
+          !group.canisters || typeof group.canisters !== "object" || Array.isArray(group.canisters) ||
+          Object.keys(group.canisters).length === 0) {
+        throw new Error(`Invalid mainnet group inventory: ${entry.name}`);
+      }
+      for (const key of Object.keys(group.canisters).sort()) add(`${group.groupId}/${key}`, group.canisters[key], group.groupId);
+      if (group.dedicatedBlobStore) {
+        add(`${group.groupId}/media_blob_store`, group.dedicatedBlobStore.canisterId, group.groupId);
+      }
+    }
+  }
+  return { ids, targets: [...targets.values()] };
+}
+
+export async function readHealthRows(targets, read) {
+  const settled = await Promise.allSettled(targets.map(read));
+  return settled.map((result, i) => ({
+    ...targets[i],
+    ...(result.status === "fulfilled" ? result.value : { cyclesT: null, memoryMB: null }),
+    requireMemory: true,
+  }));
+}
 
 const cyclesIdl = ({ IDL }) =>
   IDL.Service({
@@ -85,7 +133,7 @@ export function rowNote({ cyclesT: balanceT, memoryMB: memMB, requireMemory = tr
 
 export async function main() {
   const root = process.env.GITHUB_WORKSPACE || join(dirname(fileURLToPath(import.meta.url)), "..");
-  const ids = JSON.parse(readFileSync(join(root, "deploy/mainnet/.icp/data/mappings/ic.ids.json"), "utf8"));
+  const { ids, targets } = healthTargets(root);
   const agent = new HttpAgent({
     host: "https://ic0.app",
     identity: new AnonymousIdentity(),
@@ -93,26 +141,19 @@ export async function main() {
     retryTimes: 1,
   });
 
-  const keys = Object.keys(ids).sort();
-  const settled = await Promise.allSettled(
-    keys.map(async (key) => {
-      const actor = Actor.createActor(cyclesIdl, { agent, canisterId: Principal.fromText(ids[key]) });
+  const rows = await readHealthRows(targets, async ({ id }) => {
+      const actor = Actor.createActor(cyclesIdl, { agent, canisterId: Principal.fromText(id) });
       const [balance, stats] = await Promise.all([
         actor.cycles_balance(),
         actor.memory_stats().catch(() => null),
       ]);
-      return { key, id: ids[key], cyclesT: cyclesT(balance), memoryMB: memoryMB(stats), requireMemory: true };
-    }),
-  );
-  const rows = settled.map((r, i) =>
-    r.status === "fulfilled"
-      ? r.value
-      : { key: keys[i], id: ids[keys[i]], cyclesT: null, memoryMB: null, requireMemory: true },
-  );
+      return { cyclesT: cyclesT(balance), memoryMB: memoryMB(stats) };
+  });
 
   // Web-app canister via the club_domain proxy; it is never in the ID table.
   const frontend = {
     key: "frontend (web app)",
+    groupId: "shared",
     id: FRONTEND_CANISTER_ID,
     cyclesT: null,
     memoryMB: null,
@@ -151,11 +192,11 @@ export async function main() {
     problems += p;
     const bal = r.cyclesT == null ? "   ?" : `${r.cyclesT.toFixed(2)}T`.padStart(7);
     const mem = !r.requireMemory ? "     n/a" : r.memoryMB == null ? "      ?" : `${r.memoryMB.toFixed(1)} MB`.padStart(9);
-    console.log(`${r.key.padEnd(24)} ${bal} cycles  ${mem}  ${note}`);
+    console.log(`[${r.groupId}] ${r.key.padEnd(32)} ${r.id}  ${bal} cycles  ${mem}  ${note}`);
     if (note) console.log(`::warning::${r.key}: ${note}`);
   }
   console.log("=".repeat(88));
-  console.log(`Clubs on ICP: ${clubCount ?? "could not read"}`);
+  console.log(`Group 1 clubs: ${clubCount ?? "could not read"}`);
   console.log(
     problems === 0
       ? "All canisters look healthy."
@@ -169,6 +210,8 @@ export async function main() {
       JSON.stringify(
         rows.map((r) => ({
           name: r.key,
+          canister_id: r.id,
+          group_id: r.groupId,
           memory_mb: r.memoryMB == null ? null : Math.round(r.memoryMB),
           cycles_t: r.cyclesT,
           ...(r.key === "club_domain" && clubCount != null ? { clubs: clubCount } : {}),
