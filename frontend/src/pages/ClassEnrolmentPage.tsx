@@ -878,10 +878,13 @@ function SupabaseClassEnrolmentPage() {
               <p className="text-sm text-muted-foreground px-1 italic">No classes scheduled for this day.</p>
             ) : (
               classesForSelectedDate.map((cls) => {
-                const childEnrolment = selectedChildId ? getChildEnrolment(selectedChildId, cls.id) : (children.length === 1 ? getChildEnrolment(children[0].id, cls.id) : null);
+                const activeChild = selectedChildId || children[0]?.id || "";
+                const childEnrolment = activeChild ? getChildEnrolment(activeChild, cls.id) : null;
                 const selfEnrolment = getSelfEnrolment(cls.id);
                 const isEnrolled = !!childEnrolment || !!selfEnrolment;
-                const enrolment = childEnrolment || selfEnrolment;
+                // A party can still enrol when their side is allowed and not yet enrolled.
+                const canStillEnrolChild = allowsChildren(cls.team_type) && !!activeChild && !childEnrolment;
+                const canStillEnrolSelf = allowsAdults(cls.team_type) && !selfEnrolment;
 
                 return (
                   <Card key={cls.id} className={isEnrolled ? "border-primary/50 bg-primary/5" : ""}>
@@ -903,29 +906,36 @@ function SupabaseClassEnrolmentPage() {
                             </div>
                           </div>
                         </div>
-                        {isEnrolled ? (
-                          <Badge variant={enrolment?.status === "enrolled" ? "default" : "outline"} className="text-[10px] px-1.5 h-5">
-                            {enrolment?.status === "enrolled" ? "Enrolled" : "Waitlisted"}
-                          </Badge>
-                        ) : (
-                          <Button
-                            size="sm"
-                            className="h-7 text-xs px-2"
-                            onClick={() => {
-                              // Auto-enrol based on priority (child if child selector has selection, else self)
-                              if (allowsChildren(cls.team_type) && (selectedChildId || children.length === 1)) {
-                                const cid = selectedChildId || children[0].id;
-                                setEnrollingClassId(cls.id);
-                                enrolChildMutation.mutate({ childId: cid, teamId: cls.id });
-                              } else if (allowsAdults(cls.team_type)) {
-                                setEnrollingClassId(cls.id);
-                                enrolSelfMutation.mutate({ teamId: cls.id });
-                              }
-                            }}
-                          >
-                            Enrol
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {childEnrolment && (
+                            <Badge variant={childEnrolment.status === "enrolled" ? "default" : "outline"} className="text-[10px] px-1.5 h-5">
+                              {childEnrolment.status === "enrolled" ? "Enrolled" : "Waitlisted"}
+                            </Badge>
+                          )}
+                          {selfEnrolment && (
+                            <Badge variant={selfEnrolment.status === "enrolled" ? "default" : "outline"} className="text-[10px] px-1.5 h-5">
+                              You: {selfEnrolment.status === "enrolled" ? "Enrolled" : "Waitlisted"}
+                            </Badge>
+                          )}
+                          {(canStillEnrolChild || canStillEnrolSelf) && (
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs px-2"
+                              onClick={() => {
+                                // Enrol the child when their side is open, otherwise self.
+                                if (canStillEnrolChild) {
+                                  setEnrollingClassId(cls.id);
+                                  enrolChildMutation.mutate({ childId: activeChild, teamId: cls.id });
+                                } else if (canStillEnrolSelf) {
+                                  setEnrollingClassId(cls.id);
+                                  enrolSelfMutation.mutate({ teamId: cls.id });
+                                }
+                              }}
+                            >
+                              Enrol
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
