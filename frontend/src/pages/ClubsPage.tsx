@@ -175,7 +175,7 @@ export default function ClubsPage() {
   };
 
 
-  const { data: savedClubs, isLoading, isError: clubsFailed, refetch: retryClubs } = useQuery({
+  const { data: savedClubs, isError: clubsFailed, refetch: retryClubs } = useQuery({
     queryKey: ["clubs"],
     queryFn: async ({ signal }) => {
       if (useIcpLab) {
@@ -204,7 +204,9 @@ export default function ClubsPage() {
                 setClubProgress({ account, rows: loaded.map(toClub) });
               }
             });
-            return completeClubRows(result).map(toClub);
+            const complete = completeClubRows(result).map(toClub);
+            if (!signal.aborted && generation === clubReadGeneration.current) setClubProgress(null);
+            return complete;
           },
         }, { shared: "person" });
       }
