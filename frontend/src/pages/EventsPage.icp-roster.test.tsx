@@ -114,6 +114,7 @@ let supabaseRoleRows: unknown[] = [];
 function makeQueryBuilder(table: string) {
   const builder: any = {
     select: () => builder,
+    update: () => builder,
     eq: () => builder,
     in: () => builder,
     order: () => builder,

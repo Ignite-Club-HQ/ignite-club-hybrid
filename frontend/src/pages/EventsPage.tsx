@@ -35,7 +35,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { ensureFreshSession, isAuthLikeError } from "@/lib/ensureFreshSession";
 import { abortAllInFlightRestGets } from "@/lib/supabaseAuthRetry";
 import { getCachedEventsList, cacheEventsList } from "@/lib/scheduleCache";
-import { filterRecurringEvents } from "@/lib/filterRecurringEvents";
 import { sendScheduleBroadcast } from "@/lib/scheduleBroadcast";
 import { useScheduleBroadcastListener } from "@/hooks/useScheduleBroadcastListener";
 import { useAuth } from "@/hooks/useAuth";
