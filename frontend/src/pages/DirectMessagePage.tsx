@@ -523,11 +523,12 @@ export default function DirectMessagePage() {
     refetchOnMount: "always", // Force refetch on every mount (true is a no-op while staleTime is unmet)
   });
 
-  // Why DMs are blocked (Supabase mode only — the dm_block_reason RPC is Postgres).
+  // Why DMs are blocked. Supabase uses the dm_block_reason RPC; ICP derives
+  // the reason from on-chain club DM settings (see dmBlockReason.ts).
   const { data: dmBlockReason } = useQuery({
     queryKey: ["dm-block-reason", otherUserId],
     queryFn: () => fetchDmBlockReason(otherUserId!),
-    enabled: canDM === false && !!otherUserId && authReady && resolveAuthBackend() !== "icp",
+    enabled: canDM === false && !!otherUserId && authReady,
     staleTime: 30 * 1000,
   });
 

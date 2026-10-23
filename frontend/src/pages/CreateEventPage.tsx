@@ -261,10 +261,10 @@ function SupabaseCreateEventPage() {
   const [clubId, setClubId] = useState(themeCreationClubId || presetClubId || "");
   const [teamId, setTeamId] = useState("");
   const [dutyTeamId, setDutyTeamId] = useState<string | null>(null);
-  // Competition-wide events are a Supabase-mode feature (create_competition_event RPC).
+  // Competition-wide events work in both backends (Supabase RPC /
+  // competition_domain.create_competition_event on ICP).
   const [competitionId, setCompetitionId] = useState("");
-  const isSupabaseMode = resolveAuthBackend() !== "icp";
-  const { data: organisableCompetitions = [] } = useOrganisableCompetitions(isSupabaseMode);
+  const { data: organisableCompetitions = [] } = useOrganisableCompetitions(true);
   const { data: competitionTeamCount = 0 } = useCompetitionAcceptedCount(competitionId);
   const [miniLeagueId, setMiniLeagueId] = useState(presetMiniLeagueId || "");
   const [eventDateTime, setEventDateTime] = useState(() => {
@@ -1111,6 +1111,43 @@ function SupabaseCreateEventPage() {
     if (competitionId && type !== "mini_league") {
       setSaving(true);
       const start = new Date(eventDateTime);
+      if (resolveAuthBackend() === "icp") {
+        // ICP: competition_domain fans the event out to every entered team.
+        try {
+          const { createLiveCompetitionEvent } = await import("@/live/features/competitions");
+          const endIso = timeToTimestamp(endTime, start);
+          const n = await withFeatureBackend("competitions", {
+            supabase: async () => 0,
+            icp: (ctx) => createLiveCompetitionEvent(ctx, {
+              operationId: crypto.randomUUID(),
+              competitionId,
+              title: title.trim(),
+              description: description.trim(),
+              eventType: type === "game" || type === "training" ? type : "social",
+              location: address.trim() || null,
+              startsAtMs: start.getTime(),
+              endsAtMs: endIso ? new Date(endIso).getTime() : start.getTime() + 2 * 60 * 60 * 1000,
+            }),
+          }, { competitionId, writeKey: `comp-event-${competitionId}-${title.trim()}-${start.getTime()}` });
+          setSaving(false);
+          const count = Number(n ?? 0);
+          toast({
+            title: "Competition event created",
+            description: count > 0 ? `${count} ${count === 1 ? "person has" : "people have"} been invited.` : "No one to invite yet.",
+          });
+          refreshEventCaches(queryClient, user!.id);
+          queryClient.invalidateQueries({ queryKey: ["competition-events", competitionId] });
+          navigate("/events");
+        } catch (e) {
+          setSaving(false);
+          toast({
+            title: "Couldn't create event",
+            description: e instanceof Error ? e.message : String(e),
+            variant: "destructive",
+          });
+        }
+        return;
+      }
       const { data, error } = await supabase.rpc("create_competition_event" as any, {
         p_competition_id: competitionId,
         p_title: title.trim(),

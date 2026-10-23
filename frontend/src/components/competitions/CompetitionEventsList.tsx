@@ -3,13 +3,65 @@ import { Link } from "react-router-dom";
 import { CalendarDays, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend, mergeLists } from "@/live/featureRouter";
 import { Card, CardContent } from "@/components/ui/card";
 
-/** Upcoming competition-wide events (one shared event, not team copies). */
+/**
+ * Upcoming competition-wide events. Supabase stores one shared event
+ * (team_id null); ICP fans the event out as per-team copies, so the ICP
+ * branch lists events for the competition's entered teams and dedupes the
+ * copies by title + start time back into one row per competition event.
+ */
 export function CompetitionEventsList({ competitionId }: { competitionId: string }) {
+  const isIcp = resolveAuthBackend() === "icp";
   const { data: events = [] } = useQuery({
-    queryKey: ["competition-events", competitionId],
+    queryKey: ["competition-events", competitionId, isIcp],
     queryFn: async () => {
+      if (isIcp) {
+        const entries = await withFeatureBackend("competitions", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => {
+            const { listLiveCompetitionEntries } = await import("@/live/features/competitions");
+            return (await listLiveCompetitionEntries(ctx, competitionId)) as any[];
+          },
+        }, { competitionId });
+        const teamIds = entries
+          .filter((e) => e.status === "accepted" || e.status === "registered")
+          .map((e) => e.team_id as string)
+          .filter(Boolean);
+        if (teamIds.length === 0) return [];
+        const rows = await withFeatureBackend("events", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => {
+            const { listLiveEvents } = await import("@/live/features/events");
+            const perTeam = await Promise.all(
+              teamIds.map((tid) => listLiveEvents(ctx, null, tid).catch(() => [] as any[])),
+            );
+            return perTeam.flat();
+          },
+        }, { memberGroups: true, merge: mergeLists });
+        const cutoff = Date.now() - 12 * 3600 * 1000;
+        const seen = new Map<string, any>();
+        for (const e of rows as any[]) {
+          if (e.cancelled || e.deleted) continue;
+          const start = Number(e.starts_at_ms);
+          if (!Number.isFinite(start) || start < cutoff) continue;
+          const key = `${e.title}|${start}`;
+          if (!seen.has(key)) {
+            seen.set(key, {
+              id: e.id,
+              title: e.title,
+              event_date: new Date(start).toISOString(),
+              location_name: (e.location?.[0] ?? e.location ?? null) as string | null,
+              location: null,
+            });
+          }
+        }
+        return [...seen.values()]
+          .sort((a, b) => a.event_date.localeCompare(b.event_date))
+          .slice(0, 20);
+      }
       const { data, error } = await (supabase as any)
         .from("events")
         .select("id, title, event_date, location_name, location, is_cancelled")

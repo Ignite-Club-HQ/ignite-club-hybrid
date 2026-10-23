@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 interface ContactableCompetition {
   id: string;
@@ -27,6 +29,21 @@ export function useOpenCompetitionAdminChat() {
     if (busyId) return;
     setBusyId(competitionId);
     try {
+      if (resolveAuthBackend() === "icp") {
+        // ICP: the messaging canister creates/re-syncs the caller's private
+        // thread with the competition's admins (participants resolved
+        // on-chain from the competition role store — never from the browser).
+        const { ensureLiveCompetitionAdminThread } = await import("@/live/features/messaging");
+        const conversationId = await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("Supabase admin chat is not used in ICP mode");
+          },
+          icp: (ctx) =>
+            ensureLiveCompetitionAdminThread(ctx, competitionId, ctx.identity.getPrincipal().toText()),
+        }, { competitionId });
+        navigate(`/groups/${conversationId}`);
+        return;
+      }
       const { data, error } = await (supabase as any).rpc("get_or_create_competition_admin_chat", {
         p_competition_id: competitionId,
       });
@@ -86,11 +103,50 @@ function ContactCard({
 
 function useContactableCompetitions(clubFilter: string | null | undefined) {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   return useQuery({
-    queryKey: ["contactable-competitions", user?.id, clubFilter ?? null],
-    enabled: !!user,
+    queryKey: ["contactable-competitions", user?.id, clubFilter ?? null, isIcp],
+    enabled: isIcp || !!user,
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<ContactableCompetition[]> => {
+      if (isIcp) {
+        // ICP: competitions organised by the caller's clubs, plus competitions
+        // where one of the caller's clubs has an accepted/registered entry.
+        return withFeatureBackend("competitions", {
+          supabase: async () => [] as ContactableCompetition[],
+          icp: async (ctx) => {
+            const [{ listLiveMembershipClubs }, { listLiveCompetitionsMulti, listLiveCompetitionEntries }] =
+              await Promise.all([
+                import("@/live/features/membership"),
+                import("@/live/features/competitions"),
+              ]);
+            const clubs = (await listLiveMembershipClubs(ctx)) as any[];
+            const clubIds = clubs.map((c) => c.id as string).filter(Boolean);
+            if (clubIds.length === 0) return [];
+            const comps = (await listLiveCompetitionsMulti(ctx, clubIds)) as any[];
+            const out: ContactableCompetition[] = [];
+            for (const c of comps) {
+              if (c.status === "archived" || c.chat_enabled === false) continue;
+              const organizer = c.organizer_club_id ?? c.club_id ?? null;
+              let include = !clubFilter || organizer === clubFilter;
+              if (!include) {
+                const entries = (await listLiveCompetitionEntries(ctx, c.id).catch(() => [])) as any[];
+                include = entries.some(
+                  (e) => e.club_id === clubFilter && (e.status === "accepted" || e.status === "registered"),
+                );
+              }
+              if (include) {
+                out.push({
+                  id: c.id,
+                  name: c.name,
+                  logo_url: Array.isArray(c.logo_url) ? (c.logo_url[0] ?? null) : (c.logo_url ?? null),
+                });
+              }
+            }
+            return out;
+          },
+        }, { shared: "app" });
+      }
       const { data, error } = await (supabase as any).rpc("list_contactable_competitions", {
         p_club_id: clubFilter ?? null,
       });

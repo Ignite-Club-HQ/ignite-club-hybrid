@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { supabase } from "@/integrations/supabase/client";
 import { competitionFixtureKey, deriveImportedFinalsLabel, getCompetitionFinalsLabel } from "@/lib/competitionFinalsLabel";
 
@@ -98,6 +100,26 @@ interface ParsedRow {
 }
 
 async function fetchExistingKeys(competitionId: string): Promise<string[]> {
+  if (resolveAuthBackend() === "icp") {
+    return withFeatureBackend("competitions", {
+      supabase: async () => [] as string[],
+      icp: async (ctx) => {
+        const { listLiveCompetitionMatches } = await import("@/live/features/competitions");
+        const matches = (await listLiveCompetitionMatches(ctx, competitionId)) as any[];
+        const opt = (v: any) => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+        return matches
+          .filter((m) => opt(m.scheduled_at_ms) != null)
+          .map((m) => competitionFixtureKey({
+            scheduledAt: new Date(Number(opt(m.scheduled_at_ms))).toISOString(),
+            homeId: m.home_team ?? null,
+            awayId: m.away_team ?? null,
+            venue: opt(m.venue),
+            pitch: opt(m.pitch_number),
+            finalsLabel: getCompetitionFinalsLabel(opt(m.notes)),
+          }));
+      },
+    }, { competitionId });
+  }
   const { data, error } = await supabase
     .from("competition_matches")
     .select("scheduled_at, home_team_id, away_team_id, venue, pitch_number, notes")
@@ -273,6 +295,56 @@ export function ImportFixturesSheet({ competitionId, entries, divisions, open, s
       return;
     }
     const skipped = parsed.rows.length - toInsert.length;
+    if (resolveAuthBackend() === "icp") {
+      // ICP: create each match on-chain (record_match), then set its schedule
+      // details (update_match_details also materializes the fixture events).
+      try {
+        await withFeatureBackend("competitions", {
+          supabase: async () => 0,
+          icp: async (ctx) => {
+            const { recordLiveMatch, updateLiveMatchDetails } = await import("@/live/features/competitions");
+            let created = 0;
+            for (const r of toInsert) {
+              if (!r.scheduledAt || !r.homeId || !r.awayId) continue;
+              const match = (await recordLiveMatch(ctx, competitionId, r.homeId, r.awayId)) as any;
+              await updateLiveMatchDetails(ctx, match.id, {
+                homeTeamId: r.homeId,
+                awayTeamId: r.awayId,
+                divisionId: r.divisionId,
+                scheduledAtMs: r.scheduledAt.getTime(),
+                venue: r.venue || null,
+                pitchNumber: r.pitch || null,
+                roundNumber: r.round ?? null,
+                durationMinutes: null,
+                arrivalMinutesBefore: null,
+                notes: [r.finalsLabel, r.fileNotes].filter(Boolean).join(" · ") || null,
+                expectedRevision: Number(match.revision ?? 0),
+              });
+              created += 1;
+            }
+            return created;
+          },
+        }, { competitionId, writeKey: `fixture-import-${competitionId}` });
+      } catch (e) {
+        setSaving(false);
+        toast({
+          title: "Couldn't import fixtures",
+          description: e instanceof Error ? e.message : "Nothing was saved. Please check the file and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSaving(false);
+      qc.invalidateQueries({ queryKey: ["competition-match-keys", competitionId] });
+      qc.invalidateQueries({ queryKey: ["competition-matches"] });
+      toast({
+        title: "Fixtures imported",
+        description: skipped > 0 ? `${toInsert.length} added, ${skipped} already existed.` : `${toInsert.length} fixtures added.`,
+      });
+      setOpen(false);
+      setText("");
+      return;
+    }
     const rows = toInsert.flatMap((r) => r.scheduledAt ? [{
       competition_id: competitionId,
       division_id: r.divisionId,
