@@ -181,6 +181,17 @@ beforeEach(() => {
 });
 
 describe("EventsPage roster-derived team scope routing", () => {
+  it('starts the event query without resolving teams whose grants already identify their club', async () => {
+    eventsRoutedToIcp = true;
+    getLiveAccountRosterScopeMock.mockResolvedValue({ teamIds: [], clubIds: [], childIds: [] });
+    scheduleMocks.grants.mockResolvedValue([{ club: ['g1'], team: ['known-team'], role: 'player' }]);
+    getLiveTeamMock.mockImplementation(() => new Promise(() => {}));
+    const client = renderPage();
+    await waitFor(() => expect(client.getQueryCache().getAll().some(query =>
+      query.queryKey[0] === 'events' && query.queryKey[1] === 'icp-member-schedule' && query.state.data !== undefined,
+    )).toBe(true));
+    expect(scheduleMocks.events).toHaveBeenCalled();
+  });
   it.each(['icp', 'supabase'])('event-type filters reuse loaded %s events and fixtures', async (mode) => {
     eventsRoutedToIcp = mode === 'icp';
     const types = ['training', 'game', 'social'];

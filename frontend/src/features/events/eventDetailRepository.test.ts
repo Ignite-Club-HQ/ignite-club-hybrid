@@ -10,6 +10,8 @@ const backendMocks = vi.hoisted(() => ({
   events: vi.fn(),
   getTeam: vi.fn(),
   getClubName: vi.fn(),
+  cachedTeam: null as any,
+  cachedClub: null as any,
 }));
 
 vi.mock("@/live/featureRouter", () => ({
@@ -22,6 +24,20 @@ vi.mock("@/live/features/events", () => ({
 vi.mock("@/lib/icpClubTeamLookup", () => ({
   icpGetTeam: (...args: unknown[]) => backendMocks.getTeam(...args),
   icpGetClubName: (...args: unknown[]) => backendMocks.getClubName(...args),
+}));
+vi.mock("@/lib/clubTeamCache", () => ({
+  getCachedTeam: () => backendMocks.cachedTeam,
+  getCachedClub: () => backendMocks.cachedClub,
+}));
+vi.mock("@/live/features/club", () => ({
+  getLiveTeam: async (...args: unknown[]) => {
+    const team = await backendMocks.getTeam(...args);
+    return team ? [team] : [];
+  },
+  getLiveClubProfile: async (...args: unknown[]) => {
+    const name = await backendMocks.getClubName(...args);
+    return name ? [{ name }] : [];
+  },
 }));
 
 function clientResult(result: { data: any; error: any }) {
@@ -70,6 +86,22 @@ describe.runIf(backendMocks.mode === "icp")("event detail repository ICP mapping
     backendMocks.events.mockReset();
     backendMocks.getTeam.mockReset().mockResolvedValue({ id: "team-1", name: "Tigers" });
     backendMocks.getClubName.mockReset().mockResolvedValue("North Club");
+    backendMocks.cachedTeam = null;
+    backendMocks.cachedClub = null;
+  });
+
+  it("does not wait for more name requests when the owning club/team metadata is already loaded", async () => {
+    backendMocks.cachedTeam = { id: "team-1", club_id: "club-1", name: "Tigers" };
+    backendMocks.cachedClub = { id: "club-1", name: "North Club" };
+    backendMocks.events.mockResolvedValue([{
+      id: "event-icp", club_id: "club-1", team_id: ["team-1"],
+      title: "Final", event_type: "game", starts_at_ms: 1_800_000_000_000n,
+      ends_at_ms: 0n, series_id: [],
+    }]);
+    const result = await fetchEventDetail({ from: vi.fn() }, "event-icp");
+    expect(result?.teams?.name).toBe("Tigers");
+    expect(backendMocks.getTeam).not.toHaveBeenCalled();
+    expect(backendMocks.getClubName).not.toHaveBeenCalled();
   });
 
   it("maps a canister event into the shared detail row without Supabase reads", async () => {
