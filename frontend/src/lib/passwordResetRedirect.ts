@@ -17,7 +17,7 @@ export function getPasswordResetRedirectUrl(email: string): string {
   // Universal link domain for native apps (matches apple-app-site-association
   // and assetlinks.json). The deep link handler routes /verify-reset-code
   // into the app via SPA routing.
-  const NATIVE_HOST = "https://reference.invalid";
+  const NATIVE_HOST = "https://igniteclubhq.app";
 
   const base = Capacitor.isNativePlatform()
     ? NATIVE_HOST
