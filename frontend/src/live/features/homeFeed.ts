@@ -1,5 +1,5 @@
 import { readContentInScope } from "../contentRouting";
-import { settleAll } from "../crossGroupClubs";
+import { assertReadNotAborted, withReadDeadline } from "../readDeadline";
 import { memberLists } from "../featureScopes";
 import type { FeatureBackendContext } from "../featureRouter";
 import { getLiveClubProfile, getLiveTeam, listLivePersonalTeams } from "./club";
@@ -162,167 +162,94 @@ const MERGED_EVENTS_CAP = 100;
  * good snapshot instead of caching an empty feed — same contract as the
  * Supabase branch's resume-race guards.
  */
+export type LiveHomeFeed = { memberships: LiveHomeMemberships; events: LiveHomeEvent[]; incomplete?: boolean };
 export async function fetchLiveHomeFeed(
   ctx: FeatureBackendContext,
-): Promise<{ memberships: LiveHomeMemberships; events: LiveHomeEvent[] }> {
-  // Personal teams don't depend on grants — start them in parallel.
-  const personalTeamsPromise = readContentInScope(ctx, "membership", { shared: "person" }, listLivePersonalTeams);
-  const raw = deriveLiveMemberships(await getLiveMyRoleGrants(ctx));
-  // Memoise per-open lookups so tombstone checks and card-name lookups share
-  // one canister call per club/team instead of repeating them.
-  const clubCache = new Map<string, ReturnType<typeof getLiveClubProfile>>();
-  const teamCache = new Map<string, ReturnType<typeof getLiveTeam>>();
-  const clubProfile = (id: string) => {
-    if (!clubCache.has(id)) clubCache.set(id, readContentInScope(ctx, "membership", { clubId: id }, scoped => getLiveClubProfile(scoped, id)));
-    const cached = clubCache.get(id);
-    if (!cached) throw new Error("Missing club lookup");
-    return cached;
-  };
-  const teamRecord = (id: string) => {
-    if (!teamCache.has(id)) teamCache.set(id, readContentInScope(ctx, "membership", { teamId: id }, scoped => getLiveTeam(scoped, id)));
-    const cached = teamCache.get(id);
-    if (!cached) throw new Error("Missing team lookup");
-    return cached;
-  };
-
-  // Drop soft-deleted clubs/teams. Grants survive the tombstone (mirroring
-  // Supabase's orphan user_roles rows), so cross-check every club/team
-  // against its canister record's deleted_at_ms before trusting the grant —
-  // same protection as the Supabase branch's active-clubs filter. Failures
-  // throw so React Query keeps the last good snapshot.
-  const candidateClubIds = [...new Set([
-    ...raw.clubIds,
-    ...raw.clubAdminClubIds,
-    ...raw.leagueAdminClubIds,
-    ...raw.roles.map((r) => r.club_id).filter((id): id is string => !!id),
-  ])];
-  // Start event reads for every candidate scope now, in parallel with the
-  // tombstone checks; results for inactive scopes are simply discarded.
-  const eventPromises = new Map<string, Promise<LiveEvent[]>>();
-  for (const clubId of raw.clubIds) eventPromises.set(`c:${clubId}`, readContentInScope(ctx, "events", { clubId }, scoped => listLiveEvents(scoped, clubId, null)));
-  for (const teamId of raw.teamIds) eventPromises.set(`t:${teamId}`, readContentInScope(ctx, "events", { teamId }, scoped => listLiveEvents(scoped, null, teamId)));
-  for (const p of eventPromises.values()) p.catch(() => {});
-  // Each club/team is checked in its own group; one slow or refusing club no
-  // longer drops every club (only that one is left out). All failing throws.
-  const activeClubIds = new Set<string>();
-  const clubsDone = settleAll(
-    candidateClubIds.map(async (clubId) => {
-      const profile = await clubProfile(clubId);
-      const club = profile[0];
-      if (club && club.deleted_at_ms.length === 0) activeClubIds.add(clubId);
-    }),
-  );
-  const foundTeams = new Map<string, string>();
-  const teamsDone = settleAll(
-    raw.teamIds.map(async (teamId) => {
-      const teamOpt = (await teamRecord(teamId)) as unknown as Array<{
-        club_id: string;
-        deleted_at_ms: [] | [bigint];
-      }>;
-      const team = teamOpt[0];
-      if (team && team.deleted_at_ms.length === 0) {
-        foundTeams.set(teamId, team.club_id);
-      }
-    }),
-  );
-  // Team and club tombstones are independent reads. Only their final
-  // intersection depends on both; avoid a whole extra network stage.
-  await Promise.all([clubsDone, teamsDone]);
-  const activeTeamIds = new Set([...foundTeams].filter(([, club]) => activeClubIds.has(club)).map(([id]) => id));
-  // Personal (club-less) ICP teams have no club_domain role grant to surface
-  // them, so they are fetched separately and merged in directly (no club
-  // tombstone check applies — they have no club).
-  const personalTeams = await personalTeamsPromise;
-  for (const team of personalTeams) {
-    if (!team.deleted_at_ms?.length) activeTeamIds.add(team.id);
-  }
-  const mergedTeamIds = [...new Set([...raw.teamIds, ...personalTeams.map((t) => t.id)])];
-
-  const memberships: LiveHomeMemberships = {
-    teamIds: mergedTeamIds.filter((id) => activeTeamIds.has(id)),
-    clubIds: raw.clubIds.filter((id) => activeClubIds.has(id)),
-    clubAdminClubIds: raw.clubAdminClubIds.filter((id) => activeClubIds.has(id)),
-    leagueAdminClubIds: raw.leagueAdminClubIds.filter((id) => activeClubIds.has(id)),
-    miniLeagueIds: raw.miniLeagueIds,
-    roles: raw.roles.filter(
-      (r) =>
-        (!r.club_id || activeClubIds.has(r.club_id)) &&
-        (!r.team_id || activeTeamIds.has(r.team_id)),
-    ),
-  };
-
-  const eventResults = await Promise.allSettled([
-    ...memberships.clubIds.map((clubId) => eventPromises.get(`c:${clubId}`) ?? readContentInScope(ctx, "events", { clubId }, scoped => listLiveEvents(scoped, clubId, null))),
-    ...memberships.teamIds.map((teamId) => eventPromises.get(`t:${teamId}`) ?? readContentInScope(ctx, "events", { teamId }, scoped => listLiveEvents(scoped, null, teamId))),
-  ]);
-
-  const mergedById = new Map<string, LiveEvent>();
-  for (const result of eventResults) {
-    if (result.status !== "fulfilled") continue;
-    for (const event of result.value) mergedById.set(event.id, event);
-  }
-  const merged = [...mergedById.values()]
-    .sort((a, b) => Number(a.starts_at_ms) - Number(b.starts_at_ms))
-    .slice(0, MERGED_EVENTS_CAP);
-
-  // Club names for the carousel cards. Best effort per club: a missing
-  // profile falls back to an empty name rather than failing the whole feed.
-  const clubNameById = new Map<string, string>();
-  const teamNameById = new Map<string, string>();
-  const clubNamesDone = Promise.all(
-    [...new Set(merged.map((event) => event.club_id))].map(async (clubId) => {
-      try {
-        const profile = await clubProfile(clubId);
-        const name = profile[0]?.name;
-        if (name) clubNameById.set(clubId, name);
-      } catch {
-        // Best effort — see comment above.
-      }
-    }),
-  );
-
-  // Team names for the carousel cards — the Next Up card uses the team name
-  // as its primary title, so without this every ICP game renders nameless.
-  // Best effort per team, same contract as the club-name lookup above.
-  await Promise.all([clubNamesDone, Promise.all(
-    [...new Set(merged.map((event) => event.team_id[0]).filter((id): id is string => !!id))].map(
-      async (teamId) => {
-        try {
-          const teamOpt = (await teamRecord(teamId)) as unknown as Array<{
-            name: string;
-          }>;
-          const name = teamOpt[0]?.name;
-          if (name) teamNameById.set(teamId, name);
-        } catch {
-          // Best effort — see club-name comment above.
-        }
-      },
-    ),
-  )]);
-
-  // Only events this user is actually part of: club-level roles (club admin,
-  // competition admin) must not surface other teams' games. listLiveEvents by
-  // club returns every team's events, so filter like the Supabase branch.
-  const { isHomeEventForMember } = await import("@/components/home/homeEventSelection");
-  let events = merged
-    .map((event) => mapLiveHomeEvent(event, clubNameById, teamNameById))
-    .filter((event) =>
-      isHomeEventForMember(event, {
-        teamIds: memberships.teamIds,
-        clubIds: memberships.clubIds,
-        miniLeagueIds: null,
-      }),
-    );
-
-  // Same client-side freshness/recurring handling as the Supabase branch.
-  // Imported lazily so the live layer keeps no static dependency on the
-  // components layer.
-  const { isStillUpcomingForNextUp } = await import("@/components/home/homeEventSelection");
+  options: { signal?: AbortSignal; onProgress?: (feed: LiveHomeFeed) => void } = {},
+): Promise<LiveHomeFeed> {
+  const { signal, onProgress } = options;
+  assertReadNotAborted(signal);
+  const read = <T,>(promise: Promise<T>, label: string) => withReadDeadline(promise, label, 20_000, signal);
+  // Attach failure handling immediately: optional personal-team reads must not
+  // hold club events hostage or produce an unhandled rejection while grants load.
+  const personal = read(readContentInScope(ctx, "membership", { shared: "person" }, listLivePersonalTeams), "Personal teams")
+    .then(value => ({ value, failed: false }), () => ({ value: [], failed: true }));
+  const raw = deriveLiveMemberships(await read(getLiveMyRoleGrants(ctx), "Home memberships"));
+  const { isHomeEventForMember, isStillUpcomingForNextUp } = await import("@/components/home/homeEventSelection");
   const { filterRecurringEvents } = await import("@/lib/filterRecurringEvents");
-  events = events.filter((event) => isStillUpcomingForNextUp(event, Date.now()));
-  events = filterRecurringEvents(events);
-
-  return { memberships, events };
+  const activeClubs = new Set<string>();
+  const activeTeams = new Set<string>();
+  const clubNames = new Map<string, string>();
+  const teamNames = new Map<string, string>();
+  const rows = new Map<string, LiveEvent>();
+  let failures = 0;
+  let successes = 0;
+  const snapshot = (incomplete: boolean): LiveHomeFeed => {
+    const memberships: LiveHomeMemberships = {
+      teamIds: [...activeTeams], clubIds: raw.clubIds.filter(id => activeClubs.has(id)),
+      clubAdminClubIds: raw.clubAdminClubIds.filter(id => activeClubs.has(id)),
+      leagueAdminClubIds: raw.leagueAdminClubIds.filter(id => activeClubs.has(id)),
+      miniLeagueIds: raw.miniLeagueIds,
+      roles: raw.roles.filter(r => (!r.club_id || activeClubs.has(r.club_id)) && (!r.team_id || activeTeams.has(r.team_id))),
+    };
+    const events = [...rows.values()].map(e => mapLiveHomeEvent(e, clubNames, teamNames))
+      .filter(e => isHomeEventForMember(e, { teamIds: memberships.teamIds, clubIds: memberships.clubIds, miniLeagueIds: null }))
+      .filter(e => isStillUpcomingForNextUp(e, Date.now()))
+      .sort((a,b) => Date.parse(a.event_date) - Date.parse(b.event_date)).slice(0, MERGED_EVENTS_CAP);
+    return { memberships, events: filterRecurringEvents(events), incomplete };
+  };
+  const publish = () => { assertReadNotAborted(signal); onProgress?.(snapshot(true)); };
+  const clubIds = [...new Set([...raw.clubIds, ...raw.clubAdminClubIds, ...raw.leagueAdminClubIds,
+    ...raw.roles.map(r => r.club_id).filter((id): id is string => !!id)])];
+  const tasks = clubIds.map(async clubId => {
+    const teamIds = raw.roles.filter(r => r.club_id === clubId && r.team_id).map(r => r.team_id as string);
+    const eventRead = read(readContentInScope(ctx, "events", { clubId }, scoped => listLiveEvents(scoped, clubId, null)), "Home club events")
+      .then(value => ({ value, error: null }), error => ({ value: [] as LiveEvent[], error }));
+    const teamRead = Promise.all(teamIds.map(async teamId => {
+      const [team] = await read(readContentInScope(ctx, "membership", { clubId }, scoped => getLiveTeam(scoped, teamId)), "Home team");
+      if (team && team.club_id === clubId && !team.deleted_at_ms.length) { activeTeams.add(teamId); teamNames.set(teamId, team.name); }
+    })).catch(() => { failures++; });
+    try {
+      const [club] = await read(readContentInScope(ctx, "membership", { clubId }, scoped => getLiveClubProfile(scoped, clubId)), "Home club");
+      if (!club || club.deleted_at_ms.length) return;
+      activeClubs.add(clubId); clubNames.set(clubId, club.name);
+      await teamRead;
+      const result = await eventRead;
+      if (result.error) throw result.error;
+      for (const event of result.value) rows.set(event.id, event);
+      successes++; publish();
+    } catch (error) { assertReadNotAborted(signal); failures++; }
+  });
+  // Team-only grants still need their owning club verified, but do not wait
+  // for unrelated clubs or the personal-team inventory.
+  const covered = new Set(raw.roles.filter(r => r.club_id).map(r => r.team_id));
+  tasks.push(...raw.teamIds.filter(id => !covered.has(id)).map(async teamId => {
+    try {
+      const [team] = await read(readContentInScope(ctx, "membership", { teamId }, scoped => getLiveTeam(scoped, teamId)), "Home team");
+      if (!team || team.deleted_at_ms.length) return;
+      const [club] = await read(readContentInScope(ctx, "membership", { clubId: team.club_id }, scoped => getLiveClubProfile(scoped, team.club_id)), "Home club");
+      if (!club || club.deleted_at_ms.length) return;
+      activeTeams.add(teamId); activeClubs.add(team.club_id); teamNames.set(teamId, team.name); clubNames.set(team.club_id, club.name);
+      for (const event of await read(readContentInScope(ctx, "events", { teamId }, scoped => listLiveEvents(scoped, null, teamId)), "Home team events")) rows.set(event.id, event);
+      successes++; publish();
+    } catch { assertReadNotAborted(signal); failures++; }
+  }));
+  tasks.push((async () => {
+    const result = await personal;
+    assertReadNotAborted(signal);
+    if (result.failed) { failures++; return; }
+    await Promise.all(result.value.filter(team => !team.deleted_at_ms?.length).map(async team => {
+      try {
+        activeTeams.add(team.id); teamNames.set(team.id, team.name);
+        for (const event of await read(readContentInScope(ctx, "events", { teamId: team.id }, scoped => listLiveEvents(scoped, null, team.id)), "Personal team events")) rows.set(event.id, event);
+        successes++; publish();
+      } catch { assertReadNotAborted(signal); failures++; }
+    }));
+  })());
+  await Promise.all(tasks);
+  assertReadNotAborted(signal);
+  if (failures && successes === 0) throw new Error("Home events could not be read; please try again.");
+  return snapshot(failures > 0);
 }
 
 /**
