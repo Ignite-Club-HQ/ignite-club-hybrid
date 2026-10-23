@@ -872,7 +872,7 @@ export default function ClubUpgradePage() {
                 key={p}
                 onClick={() => !isDisabled && setPlan(p)}
                 disabled={isDisabled}
-                className={`w-full p-3 rounded-lg border text-left transition-colors ${
+                className={`w-full h-auto whitespace-normal p-3 rounded-lg border text-left transition-colors ${
                   plan === p
                     ? "border-primary bg-primary/10"
                     : isDisabled
@@ -880,8 +880,8 @@ export default function ClubUpgradePage() {
                     : "border-border hover:border-primary/50"
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
                     <span className="font-medium">{CLUB_PLAN_NAMES[p]}</span>
                     {isRecommended && !isDisabled && (
                       <Badge variant="secondary" className="text-xs">Recommended</Badge>
@@ -892,7 +892,7 @@ export default function ClubUpgradePage() {
                       </Badge>
                     )}
                   </div>
-                  <span className="font-bold">US${planPricing.monthly}/mo</span>
+                  <span className="font-bold shrink-0">US${planPricing.monthly}/mo</span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   {`Up to ${planPricing.teamLimit} teams${p === "standard" ? " • additional teams paid separately" : ""}`}
