@@ -555,7 +555,7 @@ export function ChatParticipantsList({
       }
       return Array.from(memberMap.values());
     },
-    enabled: enabled && resolveAuthBackend() !== "icp",
+    enabled: enabled && (resolveAuthBackend() !== "icp" || !!user),
     staleTime: 1000 * 60 * 5,
   });
 
