@@ -160,6 +160,8 @@ test('identity upgrade uses its record init while club upgrades retain principal
   for(const t of targets){const args=lookupUpgradeArgs(t,'/tmp/module',governor);
     assert.equal(args[args.indexOf('--args')+1],t.name==='identity_access'?`(record { governor = principal "${governor}" })`:`(principal "${governor}")`);
     assert.equal(args[args.indexOf('--mode')+1],'upgrade');
+    assert.equal(args.includes('--wasm-memory-persistence'),t.name==='club_domain');
+    if(t.name==='club_domain')assert.equal(args[args.indexOf('--wasm-memory-persistence')+1],'keep');
   }
 });
 test('activation restart requires the exact release and settled snapshot checkpoint',()=>{
