@@ -13,6 +13,7 @@ import { clearOwnerTestRouting, readOwnerTestRouteCached } from './ownerTestRout
 import { markScopedContext } from './scopedContext';
 import { clearRoleGrantsMemo } from './roleGrantsMemo';
 import { withReadDeadline } from './readDeadline';
+import { StaleGroupSessionError } from './groupSessionError';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
   writeClub<T>(c: string, d: GroupDomain, k: string, w: (ctx: FeatureBackendContext, k: string) => Promise<T>, attempts?: number): Promise<T>;
@@ -51,7 +52,7 @@ const owners = new Map<string, string | null>(); // kind:id -> club (null = shar
 const inflight = new Map<string, Promise<string | null>>();
 let loadedFor: string | null = null;
 let dispatchGeneration = 0;
-let cached: { principal: string; targetKey: string; session: Promise<Session>; ready: boolean } | null = null;
+let cached: { principal: string; targetKey: string; identity: FeatureBackendContext['identity']; session: Promise<Session>; ready: boolean } | null = null;
 export function clearGroupDispatchCache() { dispatchGeneration++; cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; unplaced.clear(); hostedChecked.clear(); reopening = null; }
 // Clubs confirmed (after one reopen) to have no group assignment: legacy/shared.
 const unplaced = new Set<string>();
@@ -90,17 +91,37 @@ async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendCont
   const ctx = await deps.context(); const principal = ctx.identity.getPrincipal().toText();
   const targetKey = JSON.stringify([ctx.target.alias, ctx.target.host, ctx.target.networkKind,
     Object.entries(ctx.target.canisterIds ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
-  if (!cached || cached.principal !== principal || cached.targetKey !== targetKey) {
+  if (!cached || cached.principal !== principal || cached.targetKey !== targetKey || cached.identity !== ctx.identity) {
     clearGroupDispatchCache();
     const opening = deps.open(ctx);
-    const entry = { principal, targetKey, session: withReadDeadline(opening, 'Club routing'), ready: false };
+    const entry = { principal, targetKey, identity: ctx.identity, session: withReadDeadline(opening, 'Club routing'), ready: false };
     cached = entry;
     entry.session.then(() => { entry.ready = true; }, () => { if (cached === entry) cached = null; });
     opening.then(session => { if (cached !== entry) session.dispose(); }, () => {});
   }
   hydrate(deps, principal);
   const entry = cached;
-  try { return { ctx, s: await entry.session, principal }; } catch (e) { if (cached === entry) cached = null; throw e; }
+  try {
+    const session = await entry.session;
+    const s = new Proxy(session, {
+      get(target, property) {
+        const value = Reflect.get(target, property);
+        if (typeof value !== 'function') return value;
+        return (...args: unknown[]) => {
+          const result = value.apply(target, args);
+          if (!(result instanceof Promise)) return result;
+          return result.catch(async (error: unknown) => {
+            if (!(error instanceof StaleGroupSessionError)) throw error;
+            // Retire only the session that observed drift. Never replay writes,
+            // including a mutation invoked through a nominal read callback.
+            if (cached === entry) clearGroupDispatchCache();
+            throw error;
+          });
+        };
+      },
+    });
+    return { ctx, s, principal };
+  } catch (e) { if (cached === entry) cached = null; throw e; }
 }
 
 /** Resolve a scope to its club. A remembered owner (device cache) whose club
@@ -191,7 +212,7 @@ export function createClubDispatcher(deps: DispatchDeps) {
           try { next = await withReadDeadline(opening, 'Membership discovery'); }
           catch (error) { expired = true; throw error; }
           if (cached !== previous) { next.dispose(); return; }
-          cached = { ...previous, session: Promise.resolve(next) };
+          cached = { ...previous, identity: ctx.identity, session: Promise.resolve(next), ready: true };
           unplaced.clear(); hostedChecked.clear();
         })();
       }
@@ -257,7 +278,8 @@ export function createClubDispatcher(deps: DispatchDeps) {
       }
       return club && s.isAssigned(club) ? s.readClub(club, domain, fn) : deps.legacy(feature, club ?? '', fn);
     },
-    writeFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
+    writeFor: async <T>(feature: FeatureArea, scope: EntityScope, domain: GroupDomain, key: string, fn0: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
+      const fn = (ctx: FeatureBackendContext, key0: string) => fn0(markScopedContext(ctx), key0);
       if (!await active()) return deps.legacy(feature, 'clubId' in scope ? scope.clubId : '', ctx => fn(ctx, key));
       const { s, club } = await resolveScoped(deps, scope);
       if (club && !s.isAssigned(club) && !s.isLegacyMember?.(club) && !('clubId' in scope)) {
@@ -305,7 +327,8 @@ export function createClubDispatcher(deps: DispatchDeps) {
       const { s } = await sessionKnowing(deps, clubId);
       return s.isAssigned(clubId) ? s.readClub(clubId, domain, fn) : deps.legacy(feature, clubId, fn);
     },
-    write: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, key: string, fn: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
+    write: async <T>(feature: FeatureArea, clubId: string, domain: GroupDomain, key: string, fn0: (ctx: FeatureBackendContext, key: string) => Promise<T>, attempts?: number): Promise<T> => {
+      const fn = (ctx: FeatureBackendContext, key0: string) => fn0(markScopedContext(ctx), key0);
       if (!await active()) return deps.legacy(feature, clubId, ctx => fn(ctx, key));
       const { s } = await sessionKnowing(deps, clubId);
       return s.isAssigned(clubId) ? s.writeClub(clubId, domain, key, fn, attempts) : deps.legacy(feature, clubId, ctx => fn(ctx, key));

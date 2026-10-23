@@ -7,6 +7,7 @@ import { GROUP_DOMAINS } from './groupRouting';
 import { resolveDeploymentClubDomain, groupRouteScope, type GroupDeployment, type GroupDeploymentBinding, type DeploymentBoundTable } from './groupDeployment';
 import { readCompleteMembershipDirectory, type DirectoryPage, type DirectoryContinuation } from './membershipDirectoryDiscovery';
 import { withReadDeadline } from './readDeadline';
+import { StaleGroupSessionError } from './groupSessionError';
 
 export type GroupRegistry = { revision: bigint; groups: GroupDescriptor[]; deployment: GroupDeployment; bindings: GroupDeploymentBinding[] };
 export type GroupSessionTransport = {
@@ -185,7 +186,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     const run = (async () => {
       const current = await withReadDeadline(transport.readRegistry(), 'Routing verification');
       live();
-      if (registryFingerprint(current) !== initialRegistry) throw new Error('Group registry changed; reopen session');
+      if (registryFingerprint(current) !== initialRegistry) throw new StaleGroupSessionError();
       registryCheckedAt = Date.now();
     })();
     if (!fresh) registryCheck = run;
@@ -207,7 +208,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       entry.tick = ++checkTick;
       const current = await withReadDeadline(transport.readRegistry(), 'Routing verification');
       live();
-      if (registryFingerprint(current) !== initialRegistry) throw new Error('Group registry changed; reopen session');
+      if (registryFingerprint(current) !== initialRegistry) throw new StaleGroupSessionError();
       registryCheckedAt = Date.now();
     })().finally(() => { if (pendingFresh === entry) pendingFresh = null; });
     pendingFresh = entry;
