@@ -511,6 +511,22 @@ export default function GroupChatPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Competition owners/admins can rename that competition's chats (name only).
+  const competitionGroupId = (group as any)?.competition_id as string | null | undefined;
+  const { data: canRenameCompetitionChat } = useQuery({
+    queryKey: ["can-rename-competition-chat", groupId, user?.id],
+    queryFn: async () => {
+      const { data } = await (supabase.rpc as any)("can_rename_competition_chat", {
+        _user_id: user!.id,
+        _group_id: groupId,
+      });
+      return !!data;
+    },
+    enabled: !!groupId && !!user?.id && !!competitionGroupId && !useIcpLab,
+    staleTime: 5 * 60 * 1000,
+  });
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
+
   const { isOnline } = useOnlineStatus();
 
   // Force a fresh fetch whenever we land on this group. Push notifications and
@@ -1650,7 +1666,13 @@ export default function GroupChatPage() {
               scheduleMessageLocked={!groupClubProLoading && !groupClubHasPro}
               onSummarizeMessages={(!aiCatchUpDisabled && groupClubHasPro) ? () => summarizeTriggerRef.current?.() : undefined}
               summarizeLocked={!groupClubProLoading && !groupClubHasPro}
-              onEditGroup={isAdmin ? () => setShowEditGroupDialog(true) : undefined}
+              onEditGroup={
+                canRenameCompetitionChat
+                  ? () => setShowRenameDialog(true)
+                  : isAdmin
+                    ? () => setShowEditGroupDialog(true)
+                    : undefined
+              }
               onDeleteGroup={(isAdmin || group.created_by === user?.id) ? () => setShowDeleteGroupDialog(true) : undefined}
               onManagePinnedVault={
                 (isAdmin || group.created_by === user?.id)
