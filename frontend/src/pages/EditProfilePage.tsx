@@ -306,6 +306,16 @@ export default function EditProfilePage() {
           "display_name",
           displayName.trim(),
         );
+        // Optional contact email (own PII record, upsert semantics). Powers
+        // competition welcome emails for existing members in ICP mode.
+        const trimmedEmail = contactEmail.trim();
+        if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+          throw new Error("Enter a valid email address, or leave it empty.");
+        }
+        if (trimmedEmail) {
+          const { saveLiveContactEmail } = await import("@/live/features/memberWelcomeEmail");
+          await saveLiveContactEmail({ identity, target: getActiveIcpTarget() } as any, trimmedEmail);
+        }
         // Re-sync avatar club grants — covers clubs joined after the photo
         // was uploaded. Best-effort (never throws).
         const { syncLiveAvatarClubGrants } = await import("@/live/avatarUpload");
@@ -459,6 +469,24 @@ export default function EditProfilePage() {
               <Input value={user?.email || ""} disabled className="bg-muted" />
               <p className="text-xs text-muted-foreground">
                 Email cannot be changed
+              </p>
+            </div>
+          )}
+
+          {/* ICP mode: optional contact email, stored encrypted in the
+              member's own PII record. Used for competition welcome emails. */}
+          {isIcpLive && (
+            <div className="space-y-2">
+              <Label htmlFor="contact-email">Contact email (optional)</Label>
+              <Input
+                id="contact-email"
+                type="email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                Used for club and competition welcome emails. Stored encrypted; only you can read it.
               </p>
             </div>
           )}
