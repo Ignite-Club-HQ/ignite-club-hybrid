@@ -6,10 +6,33 @@ vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'parent' } }) 
 vi.mock('@/live/loadBackendRouting', () => ({ isFeatureRoutedToIcp: () => true }));
 vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: mocks.dispatch }));
 vi.mock('@/live/features/messaging', () => ({ getLivePollResults: mocks.results, voteLivePoll: mocks.vote, closeLivePoll: vi.fn(), deleteLivePoll: vi.fn() }));
+vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: async () => new Map([
+  ['parent', { display_name: 'Paul', avatar_url: null }],
+  ['member-2', { display_name: 'Alex', avatar_url: null }],
+]) }));
 import { PollCard } from './PollCard';
 import { prefetchMessagePolls } from '@/lib/pollReadRepository';
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 describe('poll scope and recovery', () => {
+  it('opens the bottom drawer with voters under their selected option', async () => {
+    window.history.replaceState({}, '', '/groups/peanut');
+    mocks.results.mockResolvedValue({ poll: { id: 'poll-voters', question: 'Training day?', options: ['Saturday', 'Sunday'], creator: { toText: () => 'coach' }, created_at_ms: 1000n, closed: false }, counts: [1, 1], votes: [[
+      { poll_id: 'poll-voters', user: { toText: () => 'parent' }, option_index: 0 },
+      { poll_id: 'poll-voters', user: { toText: () => 'member-2' }, option_index: 1 },
+    ]] });
+    mocks.dispatch.mockImplementation(async (_feature, providers) => providers.icp({ target: 'group-1' }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><PollCard pollId="poll-voters" /></QueryClientProvider>);
+    await screen.findByText('Training day?');
+    fireEvent.click(screen.getByRole('button', { name: 'View votes' }));
+    await screen.findByText('Paul');
+    const alex = await screen.findByText('Alex');
+    expect(alex.closest('section')?.textContent).toContain('Sunday');
+    expect(screen.getByText('Paul').closest('section')?.textContent).toContain('Saturday');
+    fireEvent.click(screen.getByRole('button', { name: 'Close votes' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    client.clear();
+  });
   it('joins the poll read started before rendering and reopens from the same cached result', async () => {
     window.history.replaceState({}, '', '/groups/peanut');
     let finish: ((value: unknown) => void) | undefined;
