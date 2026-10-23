@@ -295,6 +295,56 @@ export function ImportFixturesSheet({ competitionId, entries, divisions, open, s
       return;
     }
     const skipped = parsed.rows.length - toInsert.length;
+    if (resolveAuthBackend() === "icp") {
+      // ICP: create each match on-chain (record_match), then set its schedule
+      // details (update_match_details also materializes the fixture events).
+      try {
+        await withFeatureBackend("competitions", {
+          supabase: async () => 0,
+          icp: async (ctx) => {
+            const { recordLiveMatch, updateLiveMatchDetails } = await import("@/live/features/competitions");
+            let created = 0;
+            for (const r of toInsert) {
+              if (!r.scheduledAt || !r.homeId || !r.awayId) continue;
+              const match = (await recordLiveMatch(ctx, competitionId, r.homeId, r.awayId)) as any;
+              await updateLiveMatchDetails(ctx, match.id, {
+                homeTeamId: r.homeId,
+                awayTeamId: r.awayId,
+                divisionId: r.divisionId,
+                scheduledAtMs: r.scheduledAt.getTime(),
+                venue: r.venue || null,
+                pitchNumber: r.pitch || null,
+                roundNumber: r.round ?? null,
+                durationMinutes: null,
+                arrivalMinutesBefore: null,
+                notes: [r.finalsLabel, r.fileNotes].filter(Boolean).join(" · ") || null,
+                expectedRevision: Number(match.revision ?? 0),
+              });
+              created += 1;
+            }
+            return created;
+          },
+        }, { competitionId, writeKey: `fixture-import-${competitionId}` });
+      } catch (e) {
+        setSaving(false);
+        toast({
+          title: "Couldn't import fixtures",
+          description: e instanceof Error ? e.message : "Nothing was saved. Please check the file and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSaving(false);
+      qc.invalidateQueries({ queryKey: ["competition-match-keys", competitionId] });
+      qc.invalidateQueries({ queryKey: ["competition-matches"] });
+      toast({
+        title: "Fixtures imported",
+        description: skipped > 0 ? `${toInsert.length} added, ${skipped} already existed.` : `${toInsert.length} fixtures added.`,
+      });
+      setOpen(false);
+      setText("");
+      return;
+    }
     const rows = toInsert.flatMap((r) => r.scheduledAt ? [{
       competition_id: competitionId,
       division_id: r.divisionId,
