@@ -1680,6 +1680,68 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   };
 
+  // ---------------- Member self-registered welcome emails ----------------
+  // Existing members (e.g. a manager whose team just accepted a competition
+  // entry) have no inviter-supplied welcome job, and ICP accounts carry no
+  // email. The member registers their own pending welcome: the canister
+  // verifies they belong to the competition and stores the browser-generated
+  // unguessable token as the capability the delivery edge function reads
+  // back — same trust shape as register_competition_welcome_job. One job
+  // per member per competition keeps the fixed-template email unspamable.
+  public shared ({ caller }) func register_member_welcome_job(competition_id : Text, token : Text, to : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+
+    do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
+    auth(caller);
+    switch (competitions.find(func(item) = item.id == competition_id)) {
+      case null { #Err("Competition not found") };
+      case (?_competition) {
+        let hasCompetitionRole = roles.any(func(r) = r.user.equal(caller) and r.competition_id == competition_id);
+        let enteredClubRole = entries.any(func(e) =
+          e.competition_id == competition_id and (e.status == "accepted" or e.status == "registered") and
+          roles.any(func(r) = r.user.equal(caller) and r.competition_id == e.club_id)
+        );
+        if (not (isGovernor(caller) or hasCompetitionRole or enteredClubRole)) return #Err("Competition membership required");
+        let enabled = switch (competitionWelcomeSettings.find(func(row) = row.competition_id == competition_id)) {
+          case (?row) row.enabled;
+          case null false;
+        };
+        if (not enabled) return #Err("Welcome email is not enabled for this competition");
+        if (to.size() < 5 or to.size() > 254 or not Text.contains(to, #char '@')) return #Err("Invalid recipient address");
+        if (token.size() < 16 or token.size() > 128) return #Err("Invalid token");
+        if (competitionMemberWelcomeJobs.any(func(job) = job.token == token) or competitionWelcomeJobs.any(func(job) = job.token == token)) return #Err("Token already used");
+        if (competitionMemberWelcomeJobs.any(func(job) = job.competition_id == competition_id and job.member.equal(caller))) return #Err("Welcome email already registered");
+        competitionMemberWelcomeJobs := competitionMemberWelcomeJobs.concat([{ token; competition_id; member = caller; to; created_at_ms = nowMs() }]);
+        #Ok
+      };
+    }
+
+    } finally { removalReceiver.leave(caller) };
+  };
+
+  // Public capability query (like get_competition_welcome_email_job): the
+  // token is the secret. Returns nothing when the settings were disabled
+  // after registration, so a manager switching welcome emails off also
+  // stops pending deliveries.
+  public query func get_member_welcome_email_job(token : Text) : async { #Ok : { competition_id : Text; to : Text; subject : Text; message : Text; competition_name : Text }; #Err : Text } {
+    switch (competitionMemberWelcomeJobs.find(func(job) = job.token == token)) {
+      case null { #Err("No welcome email pending for this token") };
+      case (?job) {
+        let settings = switch (competitionWelcomeSettings.find(func(row) = row.competition_id == job.competition_id)) {
+          case null { return #Err("Welcome email is not enabled for this competition") };
+          case (?row) row;
+        };
+        if (not settings.enabled) return #Err("Welcome email is not enabled for this competition");
+        let competition = switch (competitions.find(func(item) = item.id == job.competition_id)) {
+          case null { return #Err("Competition not found") };
+          case (?value) value;
+        };
+        #Ok({ competition_id = job.competition_id; to = job.to; subject = settings.subject; message = settings.message; competition_name = competition.name })
+      };
+    }
+  };
+
   public shared ({ caller }) func rotate_competition_join_link(competition_id : Text) : async { #Ok : Types.CompetitionJoinLink; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
