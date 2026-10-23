@@ -511,11 +511,15 @@ fn directory_config()->Outcome<membership_runtime::Config>{
 }
 fn save_directory_config(config:&membership_runtime::Config){DIRECTORY_CONFIG.with(|m|m.borrow_mut().set(encode(config)));}
 async fn directory_lifecycle(binding:&group_inventory::Binding,sources:&[(String,Principal)])->Outcome<Vec<membership_acceptance::Lifecycle>>{
+    directory_lifecycle_checked(binding,sources,||Ok(())).await
+}
+async fn directory_lifecycle_checked(binding:&group_inventory::Binding,sources:&[(String,Principal)],recheck:impl Fn()->Outcome<()>)->Outcome<Vec<membership_acceptance::Lifecycle>>{
     if sources.len()>100{return Err("Directory lifecycle budget exceeded".into());}
     let mut targets=vec![ic_cdk::api::canister_self(),binding.registry];targets.extend(sources.iter().map(|(_,p)|*p));
     let mut result=vec![];
     for target in targets{
         let info=ic_cdk::management_canister::canister_info(&ic_cdk::management_canister::CanisterInfoArgs{canister_id:target,num_requested_changes:Some(0)}).await.map_err(|_|"Replica directory lifecycle unavailable")?;
+        recheck()?;
         result.push(membership_acceptance::Lifecycle{canister:target,changes:info.total_num_changes,module_hash:info.module_hash.ok_or("Directory module missing")?});
     }
     Ok(result)
@@ -724,7 +728,7 @@ async fn check_membership_directory_acceptance()->Outcome<DirectoryAcceptanceChe
 /// caller-specific recheck runs after each await, not only at final delivery.
 async fn verify_directory_snapshot(config:&membership_runtime::Config,recheck:impl Fn()->Outcome<()>)->Outcome<(group_inventory::Snapshot,Vec<(String,u64)>)>{
     recheck()?;
-    let before=directory_lifecycle(&config.binding,&config.sources).await?;
+    let before=directory_lifecycle_checked(&config.binding,&config.sources,&recheck).await?;
     membership_acceptance::check_lifecycle(&config.lifecycle,&before)?;
     recheck()?;
     let registry_before=read_registry_pages(&config.binding,&recheck).await?;
@@ -743,7 +747,7 @@ async fn verify_directory_snapshot(config:&membership_runtime::Config,recheck:im
     membership_acceptance::check_collect(&expected,&scans[0],&scans[1])?;
     let registry_after=read_registry_pages(&config.binding,&recheck).await?;
     if registry_before!=registry_after{return Err("Directory registry changed during acceptance".into());}
-    let after=directory_lifecycle(&config.binding,&config.sources).await?;
+    let after=directory_lifecycle_checked(&config.binding,&config.sources,&recheck).await?;
     membership_acceptance::check_lifecycle(&config.lifecycle,&after)?;
     recheck()?;
     let final_sources=DIRECTORY_COORDINATOR.with(|c|{let c=c.borrow();c.accepted_ownership()?;c.sources()})?;
