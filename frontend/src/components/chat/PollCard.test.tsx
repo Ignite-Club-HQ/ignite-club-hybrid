@@ -7,8 +7,29 @@ vi.mock('@/live/loadBackendRouting', () => ({ isFeatureRoutedToIcp: () => true }
 vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: mocks.dispatch }));
 vi.mock('@/live/features/messaging', () => ({ getLivePollResults: mocks.results, voteLivePoll: mocks.vote, closeLivePoll: vi.fn(), deleteLivePoll: vi.fn() }));
 import { PollCard } from './PollCard';
+import { prefetchMessagePolls } from '@/lib/pollReadRepository';
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 describe('poll scope and recovery', () => {
+  it('joins the poll read started before rendering and reopens from the same cached result', async () => {
+    window.history.replaceState({}, '', '/groups/peanut');
+    let finish: ((value: unknown) => void) | undefined;
+    mocks.results.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    mocks.dispatch.mockImplementation(async (_feature, providers) => providers.icp({ target: 'group-1' }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    prefetchMessagePolls(client, [{ body: '[poll:poll-a] [poll:poll-a]' }], 'parent', { conversationId: 'peanut' }, true);
+    const view = render(<QueryClientProvider client={client}><PollCard pollId="poll-a" /></QueryClientProvider>);
+    await waitFor(() => expect(mocks.results).toHaveBeenCalledTimes(1));
+    finish?.({ poll: { id: 'poll-a', question: 'Training day?', options: ['Saturday'], creator: { toText: () => 'coach' }, created_at_ms: 1000n, closed: false }, counts: [1] });
+    await screen.findByText('Training day?');
+    view.unmount();
+    mocks.results.mockImplementation(() => new Promise(() => {}));
+    render(<QueryClientProvider client={client}><PollCard pollId="poll-a" /></QueryClientProvider>);
+    expect(screen.getByText('Training day?')).toBeInTheDocument();
+    expect(mocks.results).toHaveBeenCalledTimes(1);
+    expect(client.getQueryData(['poll', 'poll-a', 'other-account', JSON.stringify({ conversationId: 'peanut' })])).toBeUndefined();
+    expect(client.getQueryData(['poll', 'poll-a', 'parent', JSON.stringify({ conversationId: 'other-chat' })])).toBeUndefined();
+    client.clear();
+  });
   it('loads and votes in Peanut using the captured conversation scope', async () => {
     window.history.replaceState({}, '', '/groups/peanut');
     mocks.results.mockResolvedValue({ poll: { id: 'poll-a', question: 'Training day?', options: ['Saturday', 'Sunday'], creator: { toText: () => 'coach' }, created_at_ms: 1000n, closed: false }, counts: [1, 0] });
