@@ -1,5 +1,5 @@
-/** Lazy caller-private actor connection. Diagnostic responses never become
- * discovery answers; this transport remains hard-off pending release proof. */
+/** Lazy caller-private actor connection. Only identity-released, independently
+ * snapshot-checked pages replace discovery; diagnostic replies never do. */
 import type { FeatureBackendContext } from './featureRouter';
 import type { DirectoryContinuation, DirectoryPage } from './membershipDirectoryDiscovery';
 import type { Reply, ReleasedReply } from '../lab/bindings/identity_access/declarations/identity_access.did';
@@ -16,8 +16,8 @@ export function requireVerifiedDirectoryReply(reply: Reply, caller: string): Rep
   return reply;
 }
 
-/** Real diagnostic endpoint for explicitly requested private acceptance; not
- * invoked by ordinary navigation while the release switch is off. */
+/** Real diagnostic endpoint for explicitly requested private acceptance;
+ * never invoked by ordinary navigation. */
 export async function readLiveMembershipDirectoryDiagnostic(
   ctx: FeatureBackendContext, consumer: bigint, continuation: DirectoryContinuation | null,
 ): Promise<Reply> {
@@ -86,12 +86,17 @@ export function releasedMembershipDirectoryReader() {
     if (captured !== undefined && captured !== binding) throw new Error('Lookup caller or target changed');
     captured = binding;
     if (caller === '2vxsx-fae') throw new Error('Authenticated lookup caller required');
+    const unchanged = () => {
+      if (JSON.stringify([ctx.identity.getPrincipal().toText(),ctx.target.host,ctx.target.canisterIds.identity_access,fingerprint]) !== binding) throw new Error('Lookup caller or target changed');
+    };
     const [{ createLiveActor }, { idlFactory }] = await Promise.all([
       import('./icpAgent'), import('../lab/bindings/identity_access/declarations/identity_access.did.js'),
     ]);
+    unchanged();
     const { actor } = await createLiveActor<import('../lab/bindings/identity_access/declarations/identity_access.did')._SERVICE>(ctx.target, ctx.identity, 'identity_access', 'Identity access', idlFactory);
+    unchanged();
     const response = await actor.read_my_membership_directory(consumer, continuation ? [continuation] : []);
-    if (ctx.identity.getPrincipal().toText() !== caller) throw new Error('Lookup caller changed');
+    unchanged();
     if ('Err' in response) throw new Error(response.Err);
     return convertReleasedDirectoryReply(response.Ok, caller, fingerprint);
   };
