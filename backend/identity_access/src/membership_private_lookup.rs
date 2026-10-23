@@ -65,6 +65,11 @@ const COUNTER:&str="!instance";
 pub struct Sessions<M:Memory>{rows:StableBTreeMap<String,Vec<u8>,M>}
 impl<M:Memory> Sessions<M>{
     pub fn open(memory:M)->Self{Self{rows:StableBTreeMap::init(memory)}}
+    pub fn instance(&self,caller:Principal,consumer:u64)->Result<u64,String>{
+        self.rows.get(&format!("{}:{consumer:020}",caller.to_text()))
+            .map(|b|ciborium::from_reader::<Session,_>(b.as_slice()).expect("lookup session").instance)
+            .filter(|v|*v>0).ok_or("Lookup session missing".into())
+    }
     /// Fresh identity eligibility and source completeness must precede EVERY
     /// call, including persisted reply replay. No await occurs in this method.
     pub fn page_at<F>(&mut self,caller:Principal,viewer:Viewer,sources:Vec<Source>,consumer:u64,continuation:Option<Continuation>,now:u64,reader:F)->Result<(Page,Option<Continuation>),String>
