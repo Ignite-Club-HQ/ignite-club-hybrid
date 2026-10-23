@@ -159,8 +159,8 @@ jobs:
             done
           fi
           cd "$work"
-          # Stage ONLY the copied top-level paths — never `git add -A`, so
-          # files that exist only on the target can never be deleted.
+          # Stage ONLY the copied top-level paths — never stage everything,
+          # so files that exist only on the target can never be deleted.
           paths_to_stage=".github/workflows"
           if [ -n "$EXTRA_PATHS" ]; then
             for p in $(printf '%s' "$EXTRA_PATHS" | tr ',' ' '); do
