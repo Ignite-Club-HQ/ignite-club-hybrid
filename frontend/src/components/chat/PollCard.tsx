@@ -6,7 +6,8 @@ import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLivePollResults, voteLivePoll, closeLivePoll, deleteLivePoll } from "@/live/features/messaging";
+import { voteLivePoll, closeLivePoll, deleteLivePoll } from "@/live/features/messaging";
+import { pollQueryOptions } from "@/lib/pollReadRepository";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,28 +22,6 @@ interface PollCardProps {
   pollId: string;
 }
 
-interface PollRow {
-  id: string;
-  question: string;
-  allow_multiple: boolean;
-  closes_at: string | null;
-  closed_at: string | null;
-  created_by: string;
-  created_at: string;
-}
-
-interface PollOptionRow {
-  id: string;
-  label: string;
-  position: number;
-}
-
-interface PollVoteRow {
-  id: string;
-  option_id: string;
-  user_id: string;
-}
-
 export function PollCard({ pollId }: PollCardProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -53,57 +32,7 @@ export function PollCard({ pollId }: PollCardProps) {
   const pollKey = ["poll", pollId, user?.id, JSON.stringify(scope ?? null)];
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: pollKey,
-    queryFn: async () => {
-      if (icpMode) {
-        const results = await withFeatureBackend("messaging", {
-          supabase: async () => {
-            throw new Error("unreachable");
-          },
-          icp: (ctx) => getLivePollResults(ctx, pollId),
-        }, scope);
-        const poll: PollRow = {
-          id: results.poll.id,
-          question: results.poll.question,
-          allow_multiple: false,
-          closes_at: null,
-          closed_at: results.poll.closed ? new Date(Number(results.poll.created_at_ms)).toISOString() : null,
-          created_by: results.poll.creator.toText(),
-          created_at: new Date(Number(results.poll.created_at_ms)).toISOString(),
-        };
-        const options: PollOptionRow[] = results.poll.options.map((label, position) => ({
-          id: String(position),
-          label,
-          position,
-        }));
-        // The canister reports per-option vote counts, not per-voter rows —
-        // only "did I vote this option" is derivable (via a separate flag
-        // we fake by re-deriving below), so `votes` here is a synthetic
-        // multiset of anonymous rows sized to match each option's count for
-        // the tally math the rest of this component already does.
-        const votes: PollVoteRow[] = [];
-        results.counts.forEach((count, idx) => {
-          for (let i = 0; i < count; i += 1) {
-            votes.push({ id: `${idx}-${i}`, option_id: String(idx), user_id: "" });
-          }
-        });
-        return { poll, options, votes, closed: results.poll.closed };
-      }
-      const [pollRes, optsRes, votesRes] = await Promise.all([
-        supabase.from("polls").select("*").eq("id", pollId).maybeSingle(),
-        supabase.from("poll_options").select("*").eq("poll_id", pollId).order("position", { ascending: true }),
-        supabase.from("poll_votes").select("id, option_id, user_id").eq("poll_id", pollId),
-      ]);
-      if (pollRes.error) throw pollRes.error;
-      if (!pollRes.data) return null;
-      return {
-        poll: pollRes.data as PollRow,
-        options: (optsRes.data || []) as PollOptionRow[],
-        votes: (votesRes.data || []) as PollVoteRow[],
-        closed: !!pollRes.data.closed_at,
-      };
-    },
-    staleTime: 15_000,
+    ...pollQueryOptions(pollId, user?.id, scope, icpMode),
     enabled: !icpMode || (!!user && !!scope),
     retry: 1,
     // Each refresh is a canister call per poll on screen; 10s per card piled
@@ -264,14 +193,16 @@ export function PollCard({ pollId }: PollCardProps) {
     // so the row doesn't grow when the poll resolves.
     return (
       <div className="rounded-2xl border border-border bg-card/50 w-full max-w-[320px] h-[180px] flex items-center justify-center">
-        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading poll…
+        <div className="w-full px-3.5 space-y-3" aria-busy="true" aria-label="Poll">
+          <div className="h-5 w-3/4 rounded bg-muted animate-pulse" />
+          <div className="h-10 rounded bg-muted animate-pulse" />
+          <div className="h-10 rounded bg-muted animate-pulse" />
         </div>
       </div>
     );
   }
 
-  if (isError) {
+  if (isError && !data) {
     return (
       <div className="rounded-xl border border-border bg-muted/30 p-3 max-w-sm text-sm text-muted-foreground">
         <p>We couldn’t load this poll.</p>
