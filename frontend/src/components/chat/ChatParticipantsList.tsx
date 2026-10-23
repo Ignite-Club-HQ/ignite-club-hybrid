@@ -294,12 +294,107 @@ export function ChatParticipantsList({
     queryKey: ["chat-members", chatType, chatId, teamId, clubId, miniLeagueId, clubAdminMemberUserId, effectiveGroupMembershipMode],
     queryFn: async () => {
       if (useIcpLab && user?.id) {
-        return [{
-          id: user.id,
-          display_name: "Local ICP Member",
-          avatar_url: null,
-          role: "club_admin",
-        }] as Member[];
+        // Live ICP: chat membership lives on the messaging canister (the
+        // team/club id doubles as the conversation id) and the team roster's
+        // roles live in club_domain role grants — Supabase user_roles has no
+        // Internet Identity rows.
+        return withFeatureBackend(
+          "messaging",
+          {
+            supabase: async () => {
+              throw new Error("unreachable");
+            },
+            icp: async (ctx) => {
+              const selfIds = new Set<string>(
+                [user?.id, user?.id ? `principal:${user.id}` : null].filter(Boolean) as string[],
+              );
+              const nameFor = (id: string, p?: { display_name?: string | null } | null) =>
+                p?.display_name ||
+                (selfIds.has(id) && myProfile?.display_name ? myProfile.display_name : null) ||
+                null;
+              const avatarFor = (id: string, p?: { avatar_ref?: string[] } | null) =>
+                p?.avatar_ref?.[0] ??
+                (selfIds.has(id) ? (((myProfile as any)?.avatar_url as string | null) ?? null) : null);
+              const profilesFor = async (ids: string[]) => {
+                if (ids.length === 0) return new Map<string, any>();
+                const profiles = await listLiveProfilesByIds(ctx, ids).catch(() => []);
+                return new Map(profiles.map((p: any) => [p.account_id, p]));
+              };
+              const toMembers = (
+                ids: string[],
+                roles?: Map<string, string>,
+                profileMap?: Map<string, any>,
+              ): Member[] =>
+                ids.map((id) => ({
+                  id,
+                  display_name: nameFor(id, profileMap?.get(id)),
+                  avatar_url: avatarFor(id, profileMap?.get(id)),
+                  role: roles?.get(id),
+                }));
+
+              if (chatType === "club_admin") {
+                // Thread id "club-admin-<clubId>-<member>" with fixed 36-char
+                // UUID club ids; participants are the club's admins plus the
+                // member, mirroring ClubAdminChatPage's ICP parsing.
+                const rest = chatId.startsWith("club-admin-") ? chatId.slice("club-admin-".length) : "";
+                const clubId36 = rest.slice(0, 36);
+                const memberPrincipal = rest.slice(37) || null;
+                const ids: string[] = [];
+                if (clubId36) {
+                  const threads = await listLiveClubAdminThreads(ctx, clubId36).catch(() => []);
+                  ids.push(...threads.map((t) => t.member));
+                }
+                if (memberPrincipal) ids.push(memberPrincipal);
+                const unique = [...new Set(ids)];
+                const profileMap = await profilesFor(unique);
+                return unique.map((id) => ({
+                  id,
+                  display_name: nameFor(id, profileMap.get(id)),
+                  avatar_url: avatarFor(id, profileMap.get(id)),
+                  role: id === memberPrincipal ? "member" : "club_admin",
+                }));
+              }
+
+              // Team chats: roster roles come from club_domain team role
+              // grants (any club member may read their team's roster). Chat
+              // membership itself falls back to the messaging canister.
+              if (chatType === "team") {
+                let grants: Array<{ account_id: string; role: string }> | null = null;
+                try {
+                  grants = await listLiveTeamRoleGrants(ctx, chatId);
+                } catch {
+                  // Pre-deploy canisters lack list_team_role_grants.
+                }
+                if (grants) {
+                  const roles = new Map(grants.map((g) => [g.account_id, g.role]));
+                  const profileMap = await profilesFor([...roles.keys()]);
+                  return toMembers([...roles.keys()], roles, profileMap);
+                }
+              }
+
+              // Group/club chats (and the team fallback): the chat's own
+              // member list on the messaging canister is the source of truth.
+              const meta = await getLiveGroupMetadata(ctx, chatId).catch(() => null);
+              if (meta) {
+                const ids = meta.members.map((p) => p.toText());
+                const profileMap = await profilesFor(ids);
+                return toMembers(ids, undefined, profileMap);
+              }
+              if (chatType === "club") {
+                // Club-admin-gated roster; regular members keep an empty
+                // list until the club conversation exists on the canister.
+                const grants = await listLiveRoleGrants(ctx, chatId).catch(
+                  () => [] as Array<{ account_id: string; role: string }>,
+                );
+                const roles = new Map(grants.map((g) => [g.account_id, g.role]));
+                const profileMap = await profilesFor([...roles.keys()]);
+                return toMembers([...roles.keys()], roles, profileMap);
+              }
+              return [] as Member[];
+            },
+          },
+          { conversationId: chatId },
+        );
       }
 
       // Club-admin conversation: all club admins + the member
