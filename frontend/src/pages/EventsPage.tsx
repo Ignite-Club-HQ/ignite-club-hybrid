@@ -720,16 +720,16 @@ export default function EventsPage() {
     .sort()
     .join(",");
   const eventsScopeKey = useMemo(
-    () => `${user?.id || "anon"}_${filter}_${teamFilter || "all"}_${clubFilter || "all"}_${viewerRoleScope}`,
-    [user?.id, filter, teamFilter, clubFilter, viewerRoleScope]
+    () => `${user?.id || "anon"}_all_${teamFilter || "all"}_${clubFilter || "all"}_${viewerRoleScope}`,
+    [user?.id, teamFilter, clubFilter, viewerRoleScope]
   );
 
   // Wider foreign-host fixture discovery is separate from the member schedule.
   // A slow host must not hold the club events query (or vice versa).
-  const fixturesKey = ['icp-schedule-fixtures', user?.id, viewerRoleScope, filter, teamFilter, clubFilter, viewMode, pastDaysBack];
+  const fixturesKey = ['icp-schedule-fixtures', user?.id, viewerRoleScope, teamFilter, clubFilter, viewMode, pastDaysBack];
   const fixtureQuery = useQuery({
     queryKey: fixturesKey,
-    enabled: isIcpAuthBackend && !!userMemberships && (filter === 'all' || filter === 'game'),
+    enabled: isIcpAuthBackend && !!userMemberships,
     queryFn: ({ signal }) => withFeatureBackend('events', {
       supabase: async () => { throw new Error('unreachable'); },
       icp: ctx => {
@@ -747,7 +747,7 @@ export default function EventsPage() {
     refetchOnReconnect: 'always',
   });
 
-  const memberScheduleKey = ['events', 'icp-member-schedule', user?.id, localIcpPersona, filter, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, viewerRoleScope];
+  const memberScheduleKey = ['events', 'icp-member-schedule', user?.id, localIcpPersona, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, viewerRoleScope];
   const memberScheduleQuery = useQuery({
     queryKey: memberScheduleKey,
     enabled: isIcpAuthBackend && !!userMemberships,
@@ -759,7 +759,7 @@ export default function EventsPage() {
         const present = (next: MemberScheduleSnapshot) => ({ ...next, events: viewMode === 'calendar' ? next.events : filterRecurringEvents(next.events) });
         return loadMemberSchedule(ctx, {
           clubIds: clubFilter ? [clubFilter] : userMemberships?.clubIds ?? [], teamIds: userMemberships?.teamIds ?? [],
-          adminClubIds: userMemberships?.clubAdminClubIds ?? [], filter,
+          adminClubIds: userMemberships?.clubAdminClubIds ?? [], filter: 'all',
           selectedTeamId: teamFilter && !teamFilter.startsWith('ml:') ? teamFilter : null,
           fromMs: from.getTime(), toMs: to.getTime(),
         }, next => { if (!signal.aborted) queryClient.setQueryData(memberScheduleKey, present(next)); }).then(next => {
@@ -774,7 +774,7 @@ export default function EventsPage() {
   });
 
   const legacyEventsQuery = useQuery({
-    queryKey: ["events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, filter, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, userMemberships?.miniLeagueIds, viewerRoleScope],
+    queryKey: ["events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, userMemberships?.miniLeagueIds, viewerRoleScope],
     queryFn: async () => {
       const overall = performance.now();
       diagLog("events:start", { hasMemberships: !!userMemberships });
@@ -785,12 +785,11 @@ export default function EventsPage() {
         try {
           const selectedTeamId = teamFilter && !teamFilter.startsWith("ml:") ? teamFilter : undefined;
           const events = await listLocalEvents(localIcpPersona, clubFilter, selectedTeamId);
-          const typedEvents = filter === "all" ? events : events.filter((event) => event.type === filter);
-          return typedEvents as Event[];
+          return events as Event[];
         } catch (error) {
           if (isLocalEventsCanisterUnavailable(error)) {
             const events = fixtureData.getLocalLabEventList();
-            return (filter === "all" ? events : events.filter((event) => event.type === filter)) as Event[];
+            return events as Event[];
           }
           throw error;
         }
@@ -840,7 +839,6 @@ export default function EventsPage() {
             .gte("event_date", thirtyDaysAgo.toISOString().split('T')[0])
             .lte("event_date", upperBound.toISOString().split('T')[0])
             .order("event_date", { ascending: true });
-          if (filter !== "all") query = query.eq("type", filter);
           if (clubFilter) query = query.eq("club_id", clubFilter);
           if (selectedTeamIdFilter) query = query.eq("team_id", selectedTeamIdFilter);
           if (selectedMiniLeagueId) query = query.eq("mini_league_id", selectedMiniLeagueId);
@@ -951,10 +949,12 @@ export default function EventsPage() {
   const events = useMemo(
     () => {
       const memberEvents = eventsData ?? offlineCachedEvents;
-      const fixtures = isIcpAuthBackend && (filter === 'all' || filter === 'game') ? fixtureQuery.data?.events : undefined;
+      const fixtures = isIcpAuthBackend ? fixtureQuery.data?.events : undefined;
       if (!memberEvents && !fixtures) return undefined;
       return [...new Map([...(memberEvents ?? []), ...(fixtures ?? [])].map(event => [event.id, event])).values()]
-        .filter(hasValidScheduleDate).sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id));
+        .filter(hasValidScheduleDate)
+        .filter(event => filter === 'all' || event.type === filter)
+        .sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id));
     },
     [eventsData, offlineCachedEvents, fixtureQuery.data?.events, isIcpAuthBackend, filter],
   );
