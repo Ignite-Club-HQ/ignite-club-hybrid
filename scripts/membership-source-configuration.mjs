@@ -15,6 +15,7 @@ export async function configureDirectorySources(binding, sources, generation, tr
   if (typeof generation !== 'bigint' || generation < 1n || !sources.length || sources.length > 4096 ||
       new Set(sources.map(s => s.groupId)).size !== sources.length || new Set(sources.map(s => s.authority.toText())).size !== sources.length)
     throw new Error('Exact complete directory sources required');
+  if (!transport.identity?.toText?.()) throw new Error('Pinned directory identity required');
   await transport.gate();
   // Identity verifies two complete consensus registries; missing unregistered
   // legacy sources refuse here, never configure the remaining partial set.
@@ -27,14 +28,16 @@ export async function configureDirectorySources(binding, sources, generation, tr
   for (const source of sources) {
     const grant = grants.find(g => g.group === source.groupId);
     if (!grant || grant.generation !== generation || grant.router.toText() !== binding.registry.toText() ||
-        grant.identity.toText() !== grants[0].identity.toText() ||
+        grant.identity.toText() !== transport.identity.toText() ||
         grant.deployment !== binding.target_alias || fingerprint(grant.inventory_digest) !== fingerprint(digest)) throw new Error('Foreign directory source grant');
   }
-  const config = unwrap(await transport.configuration());
-  const observed = config.sources.map(([group, authority]) => [group, authority.toText()]).sort();
   const expected = sources.map(s => [s.groupId, s.authority.toText()]).sort();
-  if (!config.enabled || config.app_enabled || config.generation !== generation || fingerprint(config.binding) !== fingerprint(binding) ||
-      fingerprint(observed) !== fingerprint(expected) || fingerprint(config.inventory_digest) !== fingerprint(digest)) throw new Error('Identity directory configuration readback changed');
+  const checkIdentity = config => {
+    const observed = config.sources?.map(([group, authority]) => [group, authority.toText()]).sort();
+    if (config.enabled !== true || config.app_enabled !== false || config.generation !== generation || fingerprint(config.binding) !== fingerprint(binding) ||
+        fingerprint(observed) !== fingerprint(expected) || fingerprint(config.inventory_digest) !== fingerprint(digest)) throw new Error('Identity directory configuration readback changed');
+  };
+  checkIdentity(unwrap(await transport.configuration()));
   await transport.persist({ phase: 'complete', source: 'identity', binding, generation, sources, grants });
   for (const source of sources) {
     const grant = grants.find(g => g.group === source.groupId);
@@ -60,6 +63,7 @@ export async function configureDirectorySources(binding, sources, generation, tr
     const final = unwrap(await transport.sourceConfiguration(source));
     if (!final.enabled || fingerprint(final.binding?.[0]) !== fingerprint(grant)) throw new Error('Final directory source binding changed');
   }
+  checkIdentity(unwrap(await transport.configuration()));
   await transport.gate();
   return { grants, appEnabled: false, ready: false };
 }

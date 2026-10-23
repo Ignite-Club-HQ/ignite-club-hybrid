@@ -7,6 +7,7 @@ import { configureDirectorySources } from '../../scripts/membership-source-confi
 import { Principal } from '@icp-sdk/core/principal';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import { runOwnershipAcceptance } from '../../scripts/membership-ownership-acceptance.mjs';
+import { checkHistoricalAcceptance } from '../../scripts/membership-acceptance-checks.mjs';
 
 const service = idlFactory({ IDL });
 const method = service._fields.find(([name]) => name === 'advance_membership_directory_source')?.[1];
@@ -18,7 +19,7 @@ test('generated ownership operation has no observer proof input and records exac
   const inventoryDigest = new Uint8Array(32).fill(3);
   const p = { scanned: 100n, clubs: 206n, complete: true, inventory_digest: inventoryDigest, source_revisions: [['g1', 7n], ['g2', 9n]], verified_current: false };
   const reply = IDL.decode(ownership.retTypes, IDL.encode(ownership.retTypes, [{ Ok: p }]))[0];
-  const result = await runOwnershipAcceptance(async () => reply, { inventoryDigest, sources: [{ groupId: 'g1' }, { groupId: 'g2' }] });
+  const result = await runOwnershipAcceptance(async () => reply, { inventoryDigest, sources: [{ groupId: 'g1' }, { groupId: 'g2' }], completed: { g1: 7n, g2: 9n } });
   assert.equal(result.clubs, 206n);assert.equal(result.ready, false);assert.equal(result.appEnabled, false);
 });
 
@@ -53,6 +54,7 @@ test('source configuration orchestration uses both generated identity and club c
   const encodeReply = (idl, name, response) => { const fn = idl._fields.find(([key]) => key === name)?.[1]; assert.ok(fn); return IDL.decode(fn.retTypes, IDL.encode(fn.retTypes, [response]))[0]; };
   const stored = new Map();const clubService = clubIdl({ IDL });
   const result = await configureDirectorySources(binding, sources, 1n, {
+    identity:p(9),
     gate:async()=>{},persist:async()=>{},
     configure:async()=>encodeReply(service,'configure_membership_directory',{Ok:grants}),
     configuration:async()=>encodeReply(service,'read_membership_directory_configuration',{Ok:{binding,generation:1n,inventory_digest:grants[0].inventory_digest,sources:sources.map(s=>[s.groupId,s.authority]),enabled:true,app_enabled:false}}),
@@ -60,4 +62,20 @@ test('source configuration orchestration uses both generated identity and club c
     configureSource:async(s,g)=>{stored.set(s.groupId,{enabled:true,binding:[g]});return encodeReply(clubService,'configure_membership_directory_source',{Ok:null});},
   });
   assert.equal(result.ready,false);assert.equal(stored.size,2);
+});
+test('final acceptance uses generated governor status and identity configuration without fabricating currentness', async () => {
+  const p = n => Principal.fromUint8Array(Uint8Array.of(n, 1));
+  const sources = ['g1', 'g2'].map((groupId, n) => ({ groupId, authority:p(n+2) }));
+  const completed = { g1:7n, g2:9n }, inventoryDigest = new Uint8Array(32).fill(3), generation = 1n;
+  const binding = { registry:p(1),registry_revision:9n,target_alias:'mainnet',deployment_id:'mainnet',deployment_revision:1n,host:'https://icp-api.io',network_kind:'public_mainnet' };
+  const club = clubIdl({ IDL }), targets = [{ newHash:'a'.repeat(64),settingsHash:'b'.repeat(64) }];
+  const roundtrip = (idl, name, reply) => { const fn = idl._fields.find(([key]) => key === name)?.[1];assert.ok(fn);assert.equal(fn.argTypes.length,0);return IDL.decode(fn.retTypes,IDL.encode(fn.retTypes,[reply]))[0]; };
+  const result = await checkHistoricalAcceptance({ sources,completed,inventoryDigest,generation,binding,targets,
+    ownership:{ complete:true,verified_current:false,inventory_digest:inventoryDigest,source_revisions:[['g1',7n],['g2',9n]] } }, {
+    gate:async()=>{},
+    configuration:async()=>roundtrip(service,'read_membership_directory_configuration',{Ok:{binding,generation,inventory_digest:inventoryDigest,sources:sources.map(s=>[s.groupId,s.authority]),enabled:true,app_enabled:false}}),
+    status:async s=>roundtrip(club,'read_membership_discovery_status',{Ok:{revision:completed[s.groupId],acknowledged:completed[s.groupId],pending:false}}),
+    observe:async t=>({moduleHash:t.newHash,settingsHash:t.settingsHash}),
+  });
+  assert.equal(result.sampledCurrent,true);assert.equal(result.verified_current,false);assert.equal(result.ready,false);
 });
