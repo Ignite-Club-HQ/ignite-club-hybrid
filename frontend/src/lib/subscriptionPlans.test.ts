@@ -2,20 +2,20 @@ import { describe, expect, it } from "vitest";
 import { CLUB_PRICING, TEAM_PRICING, FREE_MEDIA_BYTES, CLUB_MEDIA_BYTES, TEAM_MEDIA_BYTES, clubQuote, clubProductId, effectiveTeamLimit, assertPurchaseCatalogReady, mediaAllowance } from "./subscriptionPlans";
 describe("Approved USD subscriptions", () => {
   it.each([
-    ["small",3,44.99,489,59.99,649], ["growing",5,64.99,699,84.99,929],
-    ["starter",10,109.99,1199,139.99,1539], ["standard",20,209.99,2299,259.99,2849],
+    ["small",3,45,499,60,649], ["growing",5,65,699,85,899],
+    ["starter",10,110,1199,140,1499], ["standard",20,210,2299,260,2799],
   ] as const)("prices %s with its exact team limit", (plan,limit,pm,pa,fm,fa) => {
     expect(CLUB_PRICING.pro[plan]).toEqual({ monthly: pm, annual: pa, teamLimit: limit });
     expect(CLUB_PRICING.proFootball[plan]).toEqual({ monthly: fm, annual: fa, teamLimit: limit });
   });
   it("prices Single Team separately", () => {
-    expect(TEAM_PRICING).toEqual({ pro: { monthly:14.99, annual:159 }, proFootball:{ monthly:19.99, annual:215 } });
+    expect(TEAM_PRICING).toEqual({ pro: { monthly:15, annual:159 }, proFootball:{ monthly:20, annual:219 } });
   });
   it("charges for team 21 without increasing storage", () => {
-    expect(clubQuote("pro", "standard", 1, false)).toEqual({ currency:"USD", amount:220.99, teamLimit:21, storageBytes:3221225472 });
-    expect(clubQuote("pro", "standard", 1, true).amount).toBe(2420);
-    expect(clubQuote("pro_football", "standard", 1, false).amount).toBe(273.99);
-    expect(clubQuote("pro_football", "standard", 1, true).amount).toBe(3003);
+    expect(clubQuote("pro", "standard", 1, false)).toEqual({ currency:"USD", amount:220, teamLimit:21, storageBytes:3221225472 });
+    expect(clubQuote("pro", "standard", 1, true).amount).toBe(2419);
+    expect(clubQuote("pro_football", "standard", 1, false).amount).toBe(275);
+    expect(clubQuote("pro_football", "standard", 1, true).amount).toBe(2979);
   });
   it("sets the three nonstacking media allowances", () => {
     expect([FREE_MEDIA_BYTES,TEAM_MEDIA_BYTES,CLUB_MEDIA_BYTES]).toEqual([262144000,1073741824,3221225472]);

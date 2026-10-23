@@ -1,0 +1,10 @@
+UPDATE public.subscription_price_catalog SET monthly_usd = 15, annual_usd = 159, updated_at = now() WHERE product_id = 'team_pro';
+UPDATE public.subscription_price_catalog SET monthly_usd = 20, annual_usd = 219, updated_at = now() WHERE product_id = 'team_pf';
+UPDATE public.subscription_price_catalog SET monthly_usd = 45, annual_usd = 499, updated_at = now() WHERE product_id = 'pro_small';
+UPDATE public.subscription_price_catalog SET monthly_usd = 65, annual_usd = 699, updated_at = now() WHERE product_id = 'pro_growing';
+UPDATE public.subscription_price_catalog SET monthly_usd = 110, annual_usd = 1199, updated_at = now() WHERE product_id = 'pro_starter';
+UPDATE public.subscription_price_catalog SET monthly_usd = 210, annual_usd = 2299, updated_at = now() WHERE product_id = 'pro_standard';
+UPDATE public.subscription_price_catalog SET monthly_usd = 60, annual_usd = 649, updated_at = now() WHERE product_id = 'pf_small';
+UPDATE public.subscription_price_catalog SET monthly_usd = 85, annual_usd = 899, updated_at = now() WHERE product_id = 'pf_growing';
+UPDATE public.subscription_price_catalog SET monthly_usd = 140, annual_usd = 1499, updated_at = now() WHERE product_id = 'pf_starter';
+UPDATE public.subscription_price_catalog SET monthly_usd = 260, annual_usd = 2799, updated_at = now() WHERE product_id = 'pf_standard';

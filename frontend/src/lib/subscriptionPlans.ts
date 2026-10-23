@@ -7,21 +7,21 @@ export const CLUB_PLAN_NAMES: Record<ClubPlan, string> = {
 };
 export const CLUB_PRICING = {
   pro: {
-    small: { monthly: 44.99, annual: 489, teamLimit: 3 },
-    growing: { monthly: 64.99, annual: 699, teamLimit: 5 },
-    starter: { monthly: 109.99, annual: 1199, teamLimit: 10 },
-    standard: { monthly: 209.99, annual: 2299, teamLimit: 20 },
+    small: { monthly: 45, annual: 499, teamLimit: 3 },
+    growing: { monthly: 65, annual: 699, teamLimit: 5 },
+    starter: { monthly: 110, annual: 1199, teamLimit: 10 },
+    standard: { monthly: 210, annual: 2299, teamLimit: 20 },
   },
   proFootball: {
-    small: { monthly: 59.99, annual: 649, teamLimit: 3 },
-    growing: { monthly: 84.99, annual: 929, teamLimit: 5 },
-    starter: { monthly: 139.99, annual: 1539, teamLimit: 10 },
-    standard: { monthly: 259.99, annual: 2849, teamLimit: 20 },
+    small: { monthly: 60, annual: 649, teamLimit: 3 },
+    growing: { monthly: 85, annual: 899, teamLimit: 5 },
+    starter: { monthly: 140, annual: 1499, teamLimit: 10 },
+    standard: { monthly: 260, annual: 2799, teamLimit: 20 },
   },
 } as const;
 export const TEAM_PRICING = {
-  pro: { monthly: 14.99, annual: 159 },
-  proFootball: { monthly: 19.99, annual: 215 },
+  pro: { monthly: 15, annual: 159 },
+  proFootball: { monthly: 20, annual: 219 },
 } as const;
 export const FREE_MEDIA_BYTES = 250 * 1024 ** 2;
 export const CLUB_MEDIA_BYTES = 3 * 1024 ** 3;
@@ -34,7 +34,7 @@ export function clubQuote(tier: PaidTier, plan: ClubPlan, extraTeams: number, an
     throw new Error("Additional teams require the Large Club plan.");
   }
   const pricing = tier === "pro" ? CLUB_PRICING.pro : CLUB_PRICING.proFootball;
-  const extraPrice = tier === "pro" ? (annual ? 121 : 11) : (annual ? 154 : 14);
+  const extraPrice = tier === "pro" ? (annual ? 120 : 10) : (annual ? 180 : 15);
   return { currency: "USD" as const, amount: pricing[plan][annual ? "annual" : "monthly"] + extraTeams * extraPrice,
     teamLimit: pricing[plan].teamLimit + extraTeams, storageBytes: CLUB_MEDIA_BYTES };
 }
