@@ -114,6 +114,7 @@ let supabaseRoleRows: unknown[] = [];
 function makeQueryBuilder(table: string) {
   const builder: any = {
     select: () => builder,
+    update: () => builder,
     eq: () => builder,
     in: () => builder,
     order: () => builder,
@@ -208,6 +209,12 @@ describe("EventsPage roster-derived team scope routing", () => {
       for (const other of types.filter(value => value !== type)) expect(screen.queryByText(`${other} event`)).toBeNull();
     }
     fireEvent.click(screen.getByRole('button', { name: 'Filter by all events' }));
+    for (const type of types) expect(screen.getByText(`${type} event`)).toBeInTheDocument();
+    const inventory = client.getQueryCache().getAll().filter(query => query.queryKey[0] === 'events' || query.queryKey[0] === 'icp-schedule-fixtures');
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar view' }));
+    expect(screen.getByRole('button', { name: 'Calendar view' })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(client.getQueryCache().getAll().filter(query => query.queryKey[0] === 'events' || query.queryKey[0] === 'icp-schedule-fixtures')).toEqual(inventory));
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }));
     for (const type of types) expect(screen.getByText(`${type} event`)).toBeInTheDocument();
     expect(eventsRoutedToIcp ? scheduleMocks.events.mock.calls.length : queriedTables.filter(table => table === 'events').length).toBe(reads);
     expect(competitionMocks.listLivePublicCompetitions.mock.calls.length).toBe(fixtureReads);

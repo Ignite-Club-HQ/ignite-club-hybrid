@@ -35,7 +35,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { ensureFreshSession, isAuthLikeError } from "@/lib/ensureFreshSession";
 import { abortAllInFlightRestGets } from "@/lib/supabaseAuthRetry";
 import { getCachedEventsList, cacheEventsList } from "@/lib/scheduleCache";
-import { filterRecurringEvents } from "@/lib/filterRecurringEvents";
 import { sendScheduleBroadcast } from "@/lib/scheduleBroadcast";
 import { useScheduleBroadcastListener } from "@/hooks/useScheduleBroadcastListener";
 import { useAuth } from "@/hooks/useAuth";
@@ -726,7 +725,7 @@ export default function EventsPage() {
 
   // Wider foreign-host fixture discovery is separate from the member schedule.
   // A slow host must not hold the club events query (or vice versa).
-  const fixturesKey = ['icp-schedule-fixtures', user?.id, viewerRoleScope, teamFilter, clubFilter, viewMode, pastDaysBack];
+  const fixturesKey = ['icp-schedule-fixtures', user?.id, viewerRoleScope, teamFilter, clubFilter, pastDaysBack];
   const fixtureQuery = useQuery({
     queryKey: fixturesKey,
     enabled: isIcpAuthBackend && !!userMemberships,
@@ -734,7 +733,7 @@ export default function EventsPage() {
       supabase: async () => { throw new Error('unreachable'); },
       icp: ctx => {
         const from = new Date(); from.setDate(from.getDate() - Math.max(30, pastDaysBack));
-        const to = new Date(); to.setDate(to.getDate() + (viewMode === 'calendar' ? 240 : 45));
+        const to = new Date(); to.setDate(to.getDate() + 240);
         return loadScheduleFixtures(ctx, {
           leagueClubIds: userMemberships?.leagueAdminClubIds ?? [], clubId: clubFilter ?? null,
           teamId: teamFilter && !teamFilter.startsWith('ml:') ? teamFilter : null,
@@ -747,7 +746,7 @@ export default function EventsPage() {
     refetchOnReconnect: 'always',
   });
 
-  const memberScheduleKey = ['events', 'icp-member-schedule', user?.id, localIcpPersona, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, viewerRoleScope];
+  const memberScheduleKey = ['events', 'icp-member-schedule', user?.id, localIcpPersona, teamFilter, clubFilter, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, viewerRoleScope];
   const memberScheduleQuery = useQuery({
     queryKey: memberScheduleKey,
     enabled: isIcpAuthBackend && !!userMemberships,
@@ -755,16 +754,15 @@ export default function EventsPage() {
       supabase: async () => { throw new Error('unreachable'); },
       icp: ctx => {
         const from = new Date(); from.setDate(from.getDate() - Math.max(30, pastDaysBack));
-        const to = new Date(); to.setDate(to.getDate() + (viewMode === 'calendar' ? 240 : 45));
-        const present = (next: MemberScheduleSnapshot) => ({ ...next, events: viewMode === 'calendar' ? next.events : filterRecurringEvents(next.events) });
+        const to = new Date(); to.setDate(to.getDate() + 240);
         return loadMemberSchedule(ctx, {
           clubIds: clubFilter ? [clubFilter] : userMemberships?.clubIds ?? [], teamIds: userMemberships?.teamIds ?? [],
           adminClubIds: userMemberships?.clubAdminClubIds ?? [], filter: 'all',
           selectedTeamId: teamFilter && !teamFilter.startsWith('ml:') ? teamFilter : null,
           fromMs: from.getTime(), toMs: to.getTime(),
-        }, next => { if (!signal.aborted) queryClient.setQueryData(memberScheduleKey, present(next)); }).then(next => {
+        }, next => { if (!signal.aborted) queryClient.setQueryData(memberScheduleKey, next); }).then(next => {
           if (signal.aborted) throw new Error('Schedule request cancelled');
-          const value = present(next);
+          const value = next;
           if (!value.incomplete) cacheEventsList(eventsScopeKey, value.events, user?.id);
           return value;
         });
@@ -774,7 +772,7 @@ export default function EventsPage() {
   });
 
   const legacyEventsQuery = useQuery({
-    queryKey: ["events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, teamFilter, clubFilter, viewMode, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, userMemberships?.miniLeagueIds, viewerRoleScope],
+    queryKey: ["events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, teamFilter, clubFilter, pastDaysBack, userMemberships?.teamIds, userMemberships?.clubIds, userMemberships?.miniLeagueIds, viewerRoleScope],
     queryFn: async () => {
       const overall = performance.now();
       diagLog("events:start", { hasMemberships: !!userMemberships });
@@ -811,14 +809,9 @@ export default function EventsPage() {
         if (cached) return cached as Event[];
       }
 
-      // Window: last 30 days for context, configurable upper bound ahead.
-      // List view stays narrow (~45 days) to shrink payload; calendar view
-      // needs a much wider window so users can browse months ahead and still
-      // see future fixtures (e.g. a full season).
-      const USE_NARROW_SCHEDULE_WINDOW = true;
-      const upperDays = viewMode === "calendar"
-        ? 240
-        : (USE_NARROW_SCHEDULE_WINDOW ? 45 : 120);
+      // Both presentations share the calendar-ready season window. Switching
+      // views only changes layout, never the inventory or network query.
+      const upperDays = 240;
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - Math.max(30, pastDaysBack));
       const upperBound = new Date();
@@ -898,13 +891,7 @@ export default function EventsPage() {
         }
       });
 
-      // In calendar view we render a specific day, so showing every recurring
-      // occurrence is desirable. In list view we cap recurring SERIES to
-      // avoid flooding with months of future occurrences.
-      const finalEvents: Event[] =
-        viewMode === "calendar"
-          ? (filteredData as Event[])
-          : (filterRecurringEvents(filteredData) as Event[]);
+      const finalEvents = filteredData as Event[];
 
       // Cache for offline use
       cacheEventsList(eventsScopeKey, finalEvents, user?.id);
