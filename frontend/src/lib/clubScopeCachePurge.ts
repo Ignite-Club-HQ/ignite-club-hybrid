@@ -52,10 +52,11 @@ function isGlobalKey(key: readonly unknown[]): boolean {
 // consumers mount only for events selected from Home's filtered inventory.
 const NEXT_UP_EVENT_KEYS = new Set([
   "child-rsvps-card",
-  "children-for-event",
-  "event-rsvp-summary",
-  "event-rsvps-going",
-  "event-rsvps",
+  "event-children-card",
+  "rsvp-summary",
+  "hero-rsvp",
+  "hero-my-duties",
+  "event-membership",
 ]);
 
 export function purgeClubScopedQueryCache(queryClient: QueryClient) {

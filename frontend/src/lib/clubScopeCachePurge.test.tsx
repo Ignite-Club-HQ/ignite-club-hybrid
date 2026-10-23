@@ -48,13 +48,13 @@ describe("Next Up club-switch cache isolation", () => {
   it("removes ambiguous club content but retains explicitly event-keyed card reads and identity", () => {
     const client = new QueryClient();
     client.setQueryData(["club-news"], ["old-club-post"]);
-    client.setQueryData(["event-rsvps", "dogs-game", "paul"], ["going"]);
-    client.setQueryData(["event-rsvps"], ["ambiguous"]);
+    client.setQueryData(["hero-rsvp", "dogs-game", "paul"], ["going"]);
+    client.setQueryData(["hero-rsvp"], ["ambiguous"]);
     client.setQueryData(["user-roles", "paul"], ["member"]);
     purgeClubScopedQueryCache(client);
     expect(client.getQueryData(["club-news"])).toBeUndefined();
-    expect(client.getQueryData(["event-rsvps"])).toBeUndefined();
-    expect(client.getQueryData(["event-rsvps", "dogs-game", "paul"])).toEqual(["going"]);
+    expect(client.getQueryData(["hero-rsvp"])).toBeUndefined();
+    expect(client.getQueryData(["hero-rsvp", "dogs-game", "paul"])).toEqual(["going"]);
     expect(client.getQueryState(["user-roles", "paul"])?.isInvalidated).toBe(false);
     client.clear();
   });
