@@ -7,7 +7,7 @@ const sources = ['g1', 'g2'].map(groupId => ({ groupId, authority: p(`${groupId}
 const grants = sources.map(s => ({ group: s.groupId, router: binding.registry, identity: p('identity'), deployment: 'mainnet', generation, inventory_digest: Array(32).fill(1) }));
 function transport() {
   const stored = new Map(), calls = [];
-  return { calls, stored, gate: async () => {}, configure: async () => ({ Ok: grants }),
+  return { calls, stored, identity: p('identity'), gate: async () => {}, configure: async () => ({ Ok: grants }),
     configuration: async () => ({ Ok: { binding, generation, sources: sources.map(s => [s.groupId, s.authority]), inventory_digest: grants[0].inventory_digest, enabled: true, app_enabled: false } }),
     sourceConfiguration: async s => ({ Ok: stored.get(s.groupId) ?? { enabled: false, binding: [] } }),
     configureSource: async (s, grant) => { calls.push(s.groupId); stored.set(s.groupId, { enabled: true, binding: [grant] }); return { Ok: null }; },
@@ -38,4 +38,15 @@ test('late disablement is rejected after all source configurations finish', asyn
   const t = transport();const read = t.sourceConfiguration;let n = 0;
   t.sourceConfiguration = async s => { n++; if (n === 5) return { Ok: { enabled: false, binding: [grants[0]] } }; return read(s); };
   await assert.rejects(() => configureDirectorySources(binding, sources, generation, t), /Final/);
+});
+test('consistently foreign identity grants refuse before any source writes', async () => {
+  const t = transport();t.configure = async () => ({ Ok: grants.map(g => ({ ...g, identity: p('foreign') })) });
+  await assert.rejects(() => configureDirectorySources(binding, sources, generation, t), /Foreign/);assert.deepEqual(t.calls, []);
+});
+test('late identity configuration changes refuse after source readbacks', async () => {
+  for (const field of ['enabled', 'app_enabled', 'generation', 'inventory_digest']) {
+    const t = transport(), read = t.configuration;let n = 0;
+    t.configuration = async () => {const r = await read();if (++n === 2) r.Ok[field] = field === 'enabled' ? false : field === 'app_enabled' ? true : field === 'generation' ? 3n : Array(32).fill(2);return r;};
+    await assert.rejects(() => configureDirectorySources(binding, sources, generation, t), /Identity.*changed/);
+  }
 });

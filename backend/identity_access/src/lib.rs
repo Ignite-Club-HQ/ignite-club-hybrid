@@ -601,7 +601,11 @@ async fn directory_source_status(config:&membership_runtime::Config,source:&str,
     directory_config()?.check_watermark(source,result.0)?;
     let digest:[u8;32]=config.inventory_digest.as_slice().try_into().map_err(|_|"Invalid directory inventory digest")?;
     let observed=membership_materializer::Binding{authority,generation:config.generation,revision:result.0,inventory_digest:digest};
-    DIRECTORY_COORDINATOR.with(|m|m.borrow_mut().observe_invalidation(source,&observed))?;
+    DIRECTORY_COORDINATOR.with(|m|{
+        let mut coordinator=m.borrow_mut();
+        coordinator.check_observed_watermark(source,&observed)?;
+        coordinator.observe_invalidation(source,&observed)
+    })?;
     Ok(result)
 }
 /// One exact source and one bounded unit per invocation; retries preserve

@@ -260,7 +260,7 @@ impl<M:Memory+Clone> Coordinator<M>{
         if prior.is_none_or(|b|binding.revision>b.revision){self.rows.insert(key,encode(binding));}
         Ok(())
     }
-    fn check_observed_watermark(&self,source:&str,binding:&Binding)->Outcome<()>{
+    pub fn check_observed_watermark(&self,source:&str,binding:&Binding)->Outcome<()>{
         if let Some(bytes)=self.rows.get(&format!("watermark:{source}")){
             let observed:Binding=decode(&bytes);
             if observed.generation==binding.generation&&observed.inventory_digest==binding.inventory_digest&&observed.authority==binding.authority&&observed.revision>binding.revision{return Err("Source superseded by observed invalidation".into());}
@@ -324,6 +324,14 @@ impl<M:Memory+Clone> Coordinator<M>{
     type Mem=VirtualMemory<VectorMemory>;
     fn open(m:&MemoryManager<VectorMemory>)->Coordinator<Mem>{Coordinator::open(m.get(MemoryId::new(0)),Pool::open(m.get(MemoryId::new(1)),m.get(MemoryId::new(2)),10000,32).unwrap(),m.get(MemoryId::new(3)))}
     fn viewer(p:Principal)->Viewer{Viewer{account:"member".into(),version:1,aliases:vec![p]}}
+    #[test]fn consensus_status_cannot_regress_below_retained_observation_after_reopen(){
+        let manager=MemoryManager::init(VectorMemory::default());let (s,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&s,&pin,&a,1).unwrap()).unwrap();let mut observed=c.begin("g0",a[0],1).unwrap();
+        observed.revision=12;c.observe_invalidation("g0",&observed).unwrap();drop(c);
+        let c=open(&manager);let mut lower=observed.clone();lower.revision=11;
+        assert!(c.check_observed_watermark("g0",&lower).is_err());
+        c.check_observed_watermark("g0",&observed).unwrap();observed.revision=13;c.check_observed_watermark("g0",&observed).unwrap();
+    }
     #[test]fn bounded_exclusive_legacy_acceptance_survives_upgrade_and_rejects_new_notifications(){
         let manager=MemoryManager::init(VectorMemory::default());let (s,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);
         c.bind_inventory(verify_inventory(&s,&pin,&a,1).unwrap()).unwrap();
