@@ -24,10 +24,48 @@ export async function readCompleteSourceClubs(groupId, read, { maxPages = 10000 
     }
     const next = page.next?.[0] ?? null;
     if (next === null) return { groupId, revision, scanned, clubs };
-    if (next.revision !== revision || page.scanned === 0n) throw new Error(`${groupId} source cursor did not advance`);
+    if (!Array.isArray(page.next) || page.next.length !== 1 || next.revision !== revision || page.scanned === 0n ||
+        ['phase', 'offset', 'nested'].some(k => typeof next[k] !== 'bigint' || next[k] < 0n) || next.phase > 7n ||
+        (cursor && !(next.phase > cursor.phase || next.phase === cursor.phase &&
+          (next.offset > cursor.offset || next.offset === cursor.offset && next.nested > cursor.nested)))) throw new Error(`${groupId} source cursor did not advance`);
     cursor = next;
   }
   throw new Error(`${groupId} source export exceeded page budget`);
+}
+
+/** Operator-only orchestration; no source grants or authority writes. Read
+ * the complete registry/source set twice and recheck each source's revision
+ * after the last await. Never persist raw relationship edges. */
+export async function checkLegacyOwnership(transport, expected = OWNER_GROUP1_CLUBS) {
+  const initial = await transport.registry();
+  const valid = inventory => inventory?.fingerprint && Array.isArray(inventory.sources) && inventory.sources.length > 0 &&
+    inventory.sources.some(s => s.groupId === 'g1') && new Set(inventory.sources.map(s => s.groupId)).size === inventory.sources.length &&
+    new Set(inventory.sources.map(s => s.canisterId)).size === inventory.sources.length;
+  if (!valid(initial)) throw new Error('Exact complete source inventory required');
+  const signature = inv => JSON.stringify([inv.fingerprint, inv.sources]);
+  const gate = async () => {
+    const current = await transport.registry();
+    if (!valid(current) || signature(current) !== signature(initial)) throw new Error('Registry source inventory changed');
+  };
+  const scan = async () => {
+    const result = [];
+    for (const source of initial.sources) {
+      await gate();
+      const rows = await readCompleteSourceClubs(source.groupId, cursor => transport.read(source, cursor));
+      await gate(); result.push(rows);
+    }
+    return result;
+  };
+  const first = await scan(), second = await scan();
+  const clubs = verifyOwnerNamedGroup1Clubs(first, second, expected);
+  for (const source of initial.sources) {
+    const current = await transport.status(source);
+    if (!current || current.revision !== second.find(s => s.groupId === source.groupId)?.revision) throw new Error(`${source.groupId} changed after source traversal`);
+  }
+  await gate();
+  return { kind: 'operator-consensus-source-observation', registryFingerprint: initial.fingerprint,
+    sources: second.map(s => ({ groupId: s.groupId, revision: String(s.revision), scanned: s.scanned, clubCount: s.clubs.size })),
+    clubs, ready: false, appEnabled: false };
 }
 
 /** Requires every registered source, rechecked unchanged, and each owner-named
