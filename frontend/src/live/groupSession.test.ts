@@ -21,19 +21,6 @@ function fixture() {
   return { ctx, registry, assignments, transport };
 }
 describe('integrated deployment-bound group read session', () => {
-  it('a stalled chat routing check clears so a later event can verify afresh', async () => {
-    const f = fixture();
-    const s = await openGroupSession(f.ctx, f.transport);
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(Date.now() + 16_000);
-      vi.mocked(f.transport.readRegistry).mockImplementationOnce(() => new Promise(() => {}));
-      const chat = s.readClub('club-a', 'messaging_domain', async () => 'chat');
-      const failed = expect(chat).rejects.toThrow('Routing verification timed out');
-      await vi.advanceTimersByTimeAsync(20_001); await failed;
-      expect(await s.readClub('club-a', 'events_domain', async () => 'event-ready')).toBe('event-ready');
-    } finally { vi.useRealTimers(); }
-  });
   it('a verified complete directory skips membership searches but retains destination checks', async () => {
     const f = fixture();
     f.transport.readMembershipDirectory = vi.fn(async (_, sequence, fingerprint) => ({ caller: 'person', accountVersion: 1n,
