@@ -1,10 +1,15 @@
 # Releasing the permanent club lookup
 
-The app connection and all-group protected release are implemented and tested
-locally. **Nothing has been deployed or published.** Existing discovery remains
-the fallback until the live identity service releases verified private pages.
+**Status 23 October 2026 02:33 UTC:** the protected all-group release ran
+successfully on mainnet (after the one recorded CLI-rejection recovery). The
+governor-verified routing snapshot was regenerated and committed with
+`approved: true` and the released `club_domain` fingerprint. The lookup is
+live; existing discovery remains the automatic fallback and the app is not yet
+re-published with the connected lookup for end users.
+
 Check mode is read-only; upgrade performs the bounded release described below.
 A missing source-export method fails check mode; there is no public-query fallback.
+
 
 ## Before you run
 
