@@ -224,7 +224,7 @@ export function CreatePollDialog({ open, onOpenChange, chatType, chatId, onCreat
       onOpenChange(false);
     },
     onError: (error: any) => {
-      const message = error?.message || "Failed to create poll";
+      const message = pollErrorMessage(error, "Failed to create poll");
       if (CLIENT_VALIDATION_MESSAGES.has(message)) return;
       toast.error(message);
     },

@@ -149,7 +149,7 @@ export function PollCard({ pollId }: PollCardProps) {
       refetch();
     },
     onError: (e: any) => {
-      toast.error(e?.message || "Failed to record vote");
+      toast.error(pollErrorMessage(e, "Failed to record vote"));
     },
     onSettled: () => setBusyOptionId(null),
   });
@@ -175,7 +175,7 @@ export function PollCard({ pollId }: PollCardProps) {
       toast.success("Poll closed");
       refetch();
     },
-    onError: (e: any) => toast.error(e?.message || "Failed to close poll"),
+    onError: (e: any) => toast.error(pollErrorMessage(e, "Failed to close poll")),
   });
 
   const deleteMutation = useMutation({
@@ -196,7 +196,7 @@ export function PollCard({ pollId }: PollCardProps) {
       toast.success("Poll deleted");
       qc.invalidateQueries({ queryKey: pollKey });
     },
-    onError: (e: any) => toast.error(e?.message || "Failed to delete poll"),
+    onError: (e: any) => toast.error(pollErrorMessage(e, "Failed to delete poll")),
   });
 
   if (isLoading) {
