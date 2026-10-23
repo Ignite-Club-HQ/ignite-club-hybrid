@@ -3,11 +3,13 @@ import { ExternalLink, MapPin } from "lucide-react";
 interface GoogleMapEmbedProps {
   address: string;
   className?: string;
+  loading?: "eager" | "lazy";
 }
 
 export function GoogleMapEmbed({
   address,
   className = "w-full h-48 rounded-lg",
+  loading = "lazy",
 }: GoogleMapEmbedProps) {
   const browserKey = import.meta.env.IGNITE_LIVE_GOOGLE_MAPS_BROWSER_KEY;
   const place = address.trim();
@@ -29,7 +31,7 @@ export function GoogleMapEmbed({
           className={className}
           src={`https://www.google.com/maps?q=${encodeURIComponent(place)}&output=embed`}
           allowFullScreen
-          loading="lazy"
+          loading={loading}
           referrerPolicy="strict-origin-when-cross-origin"
           title="Event location map"
         />
@@ -52,7 +54,7 @@ export function GoogleMapEmbed({
       className={className}
       src={`https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(browserKey)}&q=${encodeURIComponent(place)}`}
       allowFullScreen
-      loading="lazy"
+      loading={loading}
       referrerPolicy="strict-origin-when-cross-origin"
       title="Event location map"
     />
