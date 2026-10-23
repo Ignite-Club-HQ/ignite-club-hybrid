@@ -35,3 +35,25 @@ test('workflow refuses to target itself and rejects unsafe paths', () => {
 test('workflow runs the compare report at the end', () => {
   assert.match(wf, /migrate-github-repo\.mjs compare/);
 });
+
+test('target protection: skip-if-exists is the default for secrets, variables and files', () => {
+  // Default choice must be skip; overwrite must be an explicit opt-in.
+  assert.match(wf, /default: skip/);
+  assert.match(wf, /options: \[skip, overwrite\]/);
+  // Every mutation path checks EXISTING_MODE before replacing.
+  const overwriteChecks = wf.match(/EXISTING_MODE" != "overwrite"/g) ?? [];
+  assert.ok(overwriteChecks.length >= 3, `expected >=3 skip guards, found ${overwriteChecks.length}`);
+  assert.match(wf, /skip secret \$name: already exists on target/);
+  assert.match(wf, /skip variable \$name: already exists on target/);
+  assert.match(wf, /skip file \$rel: exists on target with different content/);
+});
+
+test('target protection: file staging is path-scoped, never git add -A', () => {
+  assert.doesNotMatch(wf, /git add -A/);
+  assert.match(wf, /git add -- \$paths_to_stage/);
+  // No force-push or delete operations anywhere.
+  assert.doesNotMatch(wf, /push --force/);
+  assert.doesNotMatch(wf, /git push -f/);
+  assert.doesNotMatch(wf, /gh secret delete/);
+  assert.doesNotMatch(wf, /actions\/variables\/\$name" -X DELETE/);
+});

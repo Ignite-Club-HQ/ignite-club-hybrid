@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diffNames, planFileCopy } from './migrate-github-repo.mjs';
+import { diffNames, planFileCopy, parseFlags } from './migrate-github-repo.mjs';
 
 test('diffNames splits missing, extra and shared names', () => {
   const diff = diffNames(['A', 'B', 'C'], ['B', 'D']);
