@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trophy, CalendarPlus, Save, ChevronDown, ChevronRight, Trash2, Pencil, Settings2, MapPin, Check } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -203,7 +203,7 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
         supabase: async () => {
           const { data, error } = await supabase
             .from("competition_matches")
-            .select("*, home:home_team_id(id, name, logo_url), away:away_team_id(id, name, logo_url), competition_divisions:division_id(name), competition_match_results(home_score, away_score)")
+            .select("*, home:home_team_id(id, name, logo_url), away:away_team_id(id, name, logo_url), competition_divisions:division_id(name), competition_match_results(home_score, away_score), fixture_events:events!events_competition_match_id_fkey(id)")
             .eq("competition_id", competitionId)
             .order("round_number", { ascending: true, nullsFirst: false })
             .order("scheduled_at", { ascending: true, nullsFirst: false });
