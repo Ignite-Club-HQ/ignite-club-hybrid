@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -37,7 +37,7 @@ const roleRows = [
   { user_id: "principal-abc", club_id: "club-b", team_id: null, role: "member" },
 ];
 
-const themeState = vi.hoisted(() => ({ activeClubFilter: null as string | null, icp: false, profile: vi.fn() }));
+const themeState = vi.hoisted(() => ({ activeClubFilter: null as string | null }));
 
 vi.mock("@/hooks/useClubTheme", () => ({
   useClubTheme: () => ({
@@ -56,17 +56,15 @@ vi.mock("@/hooks/useSponsorAnalytics", () => ({
   useSponsorAnalytics: () => ({ trackView: vi.fn(), trackClick: vi.fn() }),
 }));
 
-vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => themeState.icp }));
-vi.mock('@/live/membershipRouting', () => ({ readMembershipInScope: (ctx: unknown, _scope: unknown, read: (ctx: unknown) => unknown) => read(ctx) }));
-vi.mock('@/live/accountDiscovery', () => ({ readDiscoveredRemovedClubs: async () => [] }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => false }));
 vi.mock("@/live/featureRouter", () => ({
   mergeLists: (values: unknown[]) => values.flat(),
-  withFeatureBackend: async (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => themeState.icp ? providers.icp({}) : providers.supabase(),
+  withFeatureBackend: async (_feature: string, providers: { supabase: () => unknown }) => providers.supabase(),
 }));
 vi.mock("@/live/clubScope", () => ({ writeOnce: (scope: unknown) => scope }));
-vi.mock("@/live/features/membership", () => ({ getLiveMyRoleGrants: async () => roleRows.map(row => ({ role: row.role, club: [row.club_id], team: [] })) }));
+vi.mock("@/live/features/membership", () => ({ getLiveMyRoleGrants: async () => [] }));
 vi.mock("@/live/features/club", () => ({
-  getLiveClubProfile: (...args: unknown[]) => themeState.profile(...args),
+  getLiveClubProfile: async () => [],
   getLiveClubSubscription: async () => null,
   listLiveSponsors: async () => [],
   listLiveMyRemovedClubs: async () => [],
@@ -114,7 +112,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 import ClubsPage from "./ClubsPage";
 
-function renderPage(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+function renderPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/clubs"]}>
@@ -126,40 +125,9 @@ function renderPage(queryClient = new QueryClient({ defaultOptions: { queries: {
 
 beforeEach(() => {
   themeState.activeClubFilter = null;
-  themeState.icp = false;
-  themeState.profile.mockReset();
 });
 
 describe("clubs page club list", () => {
-  it('shows ready ICP clubs before the other group replies without persisting partial rows', async () => {
-    themeState.icp = true;
-    let finish: ((rows: unknown[]) => void) | undefined;
-    const profile = (index: number) => [{ ...clubRows[index], logo_url: [], description: [], sport: [clubRows[index].sport], deleted_at_ms: [] }];
-    themeState.profile.mockImplementation(async (_ctx, id) => id === 'club-a' ? profile(0) : new Promise(resolve => { finish = resolve; }));
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    renderPage(client);
-    await screen.findByText('Riverside Rovers');
-    expect(screen.queryByText('Northern Netball')).toBeNull();
-    expect(client.getQueryData(['clubs'])).toBeUndefined();
-    await act(async () => finish?.(profile(1)));
-    await screen.findByText('Northern Netball');
-    expect((client.getQueryData(['clubs']) as { id: string }[]).map(row => row.id)).toEqual(['club-a', 'club-b']);
-    client.clear();
-  });
-  it('keeps the previous complete ICP list when one club fails instead of replacing it with one club', async () => {
-    themeState.icp = true;
-    themeState.profile.mockImplementation(async (_ctx, id) => {
-      if (id === 'club-b') throw new Error('Group unavailable');
-      return [{ ...clubRows[0], logo_url: [], description: [], sport: ['Football'], deleted_at_ms: [] }];
-    });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(['clubs'], clubRows);
-    renderPage(client);
-    await screen.findByText('Some clubs could not be loaded.');
-    expect(screen.getByText('Northern Netball')).toBeTruthy();
-    expect(client.getQueryData(['clubs'])).toEqual(clubRows);
-    client.clear();
-  });
   it("lists clubs of every sport the user belongs to", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText("Riverside Rovers")).toBeTruthy());

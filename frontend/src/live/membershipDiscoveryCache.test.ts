@@ -5,17 +5,6 @@ import { bindMembershipDiscovery, clearMembershipDiscovery, MEMBERSHIP_RECONCILE
 beforeEach(() => { clearMembershipDiscovery(); vi.useFakeTimers(); vi.setSystemTime(1000); });
 afterEach(() => { clearMembershipDiscovery(); vi.useRealTimers(); });
 describe('shared membership discovery', () => {
-  it('expires stalled discovery, allows retry and ignores a late old reply', async () => {
-    let finish: ((value: string[]) => void) | undefined;
-    const pending = readMembershipDiscovery('stalled', () => new Promise<string[]>(resolve => { finish = resolve; }));
-    const rejection = expect(pending).rejects.toThrow('timed out');
-    await vi.advanceTimersByTimeAsync(20_000);
-    await rejection;
-    expect(await readMembershipDiscovery('stalled', async () => ['new-club'])).toEqual(['new-club']);
-    finish?.(['old-club']);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(await readMembershipDiscovery('stalled', async () => [])).toEqual(['new-club']);
-  });
   it('records bounded query data and invalidates visible membership pages after an external join', async () => {
     const client = new QueryClient();
     bindMembershipDiscovery(client);

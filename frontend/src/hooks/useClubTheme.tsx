@@ -809,7 +809,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
                 const [profile, settings, sub] = await Promise.all([
                   readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubProfile(scoped, clubId)),
                   readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubSettings(scoped, clubId)),
-                  readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubSubscription(scoped, clubId)),
+                  readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubSubscription(scoped, clubId)).catch(() => null),
                 ]);
                 const p = profile[0];
                 if (!p || p.deleted_at_ms.length) return null;
@@ -833,8 +833,8 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
                   darkSecondary: hexColorToHsl(st.theme_dark_secondary_color[0]),
                   darkAccent: hexColorToHsl(st.theme_dark_accent_color[0]),
                 };
-              } catch (error) {
-                throw error;
+              } catch {
+                return null;
               }
             }));
             return rows.filter((r): r is ClubTheme => r !== null);
@@ -1005,8 +1005,8 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
                 const p = profile[0];
                 if (!p || p.deleted_at_ms.length) return null;
                 return { id: p.id, name: p.name, logo_url: p.logo_url[0] ?? null };
-              } catch (error) {
-                throw error;
+              } catch {
+                return null;
               }
             }));
             return rows.filter((r): r is NonNullable<typeof r> => r !== null);

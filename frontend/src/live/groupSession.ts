@@ -6,8 +6,6 @@ import type { GroupDescriptor, ClubAssignment, GroupDomain } from './groupRoutin
 import { GROUP_DOMAINS } from './groupRouting';
 import { resolveDeploymentClubDomain, groupRouteScope, type GroupDeployment, type GroupDeploymentBinding, type DeploymentBoundTable } from './groupDeployment';
 import { readCompleteMembershipDirectory, type DirectoryPage, type DirectoryContinuation } from './membershipDirectoryDiscovery';
-import { withReadDeadline } from './readDeadline';
-import { StaleGroupSessionError } from './groupSessionError';
 
 export type GroupRegistry = { revision: bigint; groups: GroupDescriptor[]; deployment: GroupDeployment; bindings: GroupDeploymentBinding[] };
 export type GroupSessionTransport = {
@@ -48,7 +46,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   const principal = context.identity.getPrincipal().toText();
   if (!principal || principal === '2vxsx-fae') throw new Error('Authenticated group session required');
   const sameIdentity = () => { if (context.identity.getPrincipal().toText() !== principal) throw new Error('Group session identity changed'); };
-  const registry = await withReadDeadline(transport.readRegistry(), 'Club registry');
+  const registry = await transport.readRegistry();
   const registryFingerprint = (value: GroupRegistry) => JSON.stringify(value, (_key, v) => typeof v === 'bigint' ? v.toString() : v);
   const initialRegistry = registryFingerprint(registry);
   sameIdentity();
@@ -85,7 +83,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     let offset = 0n; let pages = 0; let acl: bigint | undefined;
     while (true) {
       if (++pages > MAX_PAGES) throw new Error('Membership discovery exceeds scan budget');
-      const page = await withReadDeadline(transport.readMemberships(targetFor(group.id), offset, 100), 'Club memberships');
+      const page = await transport.readMemberships(targetFor(group.id), offset, 100);
       sameIdentity();
       if (page.clubs.length > 100 || page.clubs.some(c => !c || c.length > 64) ||
           (acl !== undefined && acl !== page.aclRevision) ||
@@ -103,7 +101,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     while (true) {
       if (++pages > MAX_PAGES) throw new Error('Membership discovery exceeds scan budget');
       let page: Awaited<ReturnType<typeof read>>;
-      try { page = await withReadDeadline(read(targetFor(group.id), after, 100), 'Indexed club memberships'); }
+      try { page = await read(targetFor(group.id), after, 100); }
       catch (e) { if (pages === 1 && APP_WIDE_INDEX_ERROR.test((e as Error).message)) { sameIdentity(); return scanGroup(group); } throw e; }
       sameIdentity();
       const ascending = page.clubs.every((c, i) => (i === 0 ? after === null || c > after : c > page.clubs[i - 1]));
@@ -120,8 +118,8 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   const discoveryStartedAt = Date.now();
   if (transport.readMembershipDirectory) {
     try {
-      const directory = await withReadDeadline(readCompleteMembershipDirectory(principal, initialRegistry,
-        continuation => transport.readMembershipDirectory?.(context, continuation, initialRegistry) ?? Promise.reject(new Error('Directory unavailable')), sameIdentity), 'Membership directory');
+      const directory = await readCompleteMembershipDirectory(principal, initialRegistry,
+        continuation => transport.readMembershipDirectory?.(context, continuation, initialRegistry) ?? Promise.reject(new Error('Directory unavailable')), sameIdentity);
       // Validate the entire result before modifying any routing inventory.
       if (directory.assignments.some(row => !routing.groups.has(row.groupId) || row.revision > registry.revision)) throw new Error('Foreign directory assignment');
       for (const row of directory.assignments) claim(row.clubId, row.groupId);
@@ -143,7 +141,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     let offset = 0n;
     for (let pageCount = 0; ; pageCount++) {
       if (pageCount >= MAX_PAGES) throw new Error('Legacy membership scan exceeds budget');
-      const page = await withReadDeadline(transport.readLegacyMemberships(context, offset, 100), 'Original club memberships');
+      const page = await transport.readLegacyMemberships(context, offset, 100);
       sameIdentity();
       if (page.clubs.length > 100 || page.clubs.some(id => !id || id.length > 64 || clubs.has(id) || legacyClubs.has(id)) ||
         (page.next !== null && page.next <= offset)) throw new Error('Invalid legacy membership page');
@@ -158,7 +156,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     for (let offset = 0; offset < requested.length; offset += 20) chunks.push(requested.slice(offset, offset + 20));
     // Chunks are independent consensus reads; ask them together.
     await Promise.all(chunks.map(async chunk => {
-      const rows = await withReadDeadline(transport.readAssignments([...chunk], registry.revision), 'Club assignments');
+      const rows = await transport.readAssignments([...chunk], registry.revision);
       sameIdentity();
       if (rows.length !== chunk.length || new Set(rows.map(r => r.clubId)).size !== rows.length) throw new Error('Incomplete group assignments');
       for (const row of rows) {
@@ -184,9 +182,9 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     if (!fresh && !(strict && registryCheckedAt === openedAt) && Date.now() - registryCheckedAt < RECHECK_WINDOW_MS) return;
     if (!fresh && registryCheck) return registryCheck;
     const run = (async () => {
-      const current = await withReadDeadline(transport.readRegistry(), 'Routing verification');
+      const current = await transport.readRegistry();
       live();
-      if (registryFingerprint(current) !== initialRegistry) throw new StaleGroupSessionError();
+      if (registryFingerprint(current) !== initialRegistry) throw new Error('Group registry changed; reopen session');
       registryCheckedAt = Date.now();
     })();
     if (!fresh) registryCheck = run;
@@ -206,9 +204,9 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       // Let siblings whose replies land in the same turn join this check.
       await Promise.resolve(); await Promise.resolve();
       entry.tick = ++checkTick;
-      const current = await withReadDeadline(transport.readRegistry(), 'Routing verification');
+      const current = await transport.readRegistry();
       live();
-      if (registryFingerprint(current) !== initialRegistry) throw new StaleGroupSessionError();
+      if (registryFingerprint(current) !== initialRegistry) throw new Error('Group registry changed; reopen session');
       registryCheckedAt = Date.now();
     })().finally(() => { if (pendingFresh === entry) pendingFresh = null; });
     pendingFresh = entry;
@@ -226,7 +224,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     const waiting = fresh ? [] : unique.map(id => assignmentInflight.get(id)).filter((p): p is Promise<void> => !!p);
     const stale = unique.filter(id => (fresh || now - checkedAt(id) >= RECHECK_WINDOW_MS) && (fresh || !assignmentInflight.has(id)));
     if (stale.length) {
-      const run = withReadDeadline(validateAssignments(stale), 'Club verification').then(() => { for (const id of stale) assignmentCheckedAt.set(id, Date.now()); });
+      const run = validateAssignments(stale).then(() => { for (const id of stale) assignmentCheckedAt.set(id, Date.now()); });
       for (const id of stale) assignmentInflight.set(id, run);
       try { await run; } finally { for (const id of stale) if (assignmentInflight.get(id) === run) assignmentInflight.delete(id); }
     }
@@ -250,7 +248,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       const memberGroups = new Set([...clubs].map(id => routing.assignments.get(id)?.groupId));
       const reads = registry.groups.filter(g => memberGroups.has(g.id)).map(g => read(targetFor(g.id)));
       if (legacyClubs.size) reads.push(read(context));
-      const parts = await Promise.all(reads.map(read => withReadDeadline(read, 'Member content')));
+      const parts = await Promise.all(reads);
       live();
       const rows = parts.flat();
       if (rows.length > maxRows) throw new Error('Member-group read exceeds row budget');
@@ -343,7 +341,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
       live();
       await assertRegistryUnchanged();
-      const parts = await Promise.all(registry.groups.map(g => withReadDeadline(read(targetFor(g.id)), 'Group content')));
+      const parts = await Promise.all(registry.groups.map(g => read(targetFor(g.id))));
       // Fresh: a registry change while replies were in flight must discard them.
       // Sibling reads that finished before one fresh check started share it.
       await confirmUnchangedAfter(++checkTick);
