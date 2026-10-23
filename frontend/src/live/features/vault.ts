@@ -264,6 +264,9 @@ export async function resolveLivePiiTextBatch(
  * - child name      -> pii_id = child id,        field_id = "name"
  * - invite email    -> pii_id = invite id,       field_id = "email"
  * - user display name -> pii_id = principal text, field_id = "display_name"
+ * - own contact email -> pii_id = principal text, field_id = "contact_email"
+ *   (optional, member-owned; powers member self-registered competition
+ *   welcome emails — see memberWelcomeEmail.ts)
  *
  * Ownership: the caller who creates the record is its domain owner (the club
  * admin acts as data controller for children they create; a user owns their

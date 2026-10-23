@@ -446,6 +446,19 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_member_welcome_email_job(token: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            to: string;
+            subject: string;
+            competition_name: string;
+            message: string;
+            competition_id: string;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_my_pending_eois(): Promise<{
         __kind__: "Ok";
         Ok: Array<EoiSubmission>;
@@ -877,6 +890,13 @@ export interface MainInterface {
         Err: string;
     }>;
     register_competition_welcome_job(token: string, to: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    register_member_welcome_job(competition_id: string, token: string, to: string): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -1707,6 +1727,22 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.get_join_link_preview(arg0);
         return from_candid_variant_n55(result);
     }
+    async get_member_welcome_email_job(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            to: string;
+            subject: string;
+            competition_name: string;
+            message: string;
+            competition_id: string;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_member_welcome_email_job(arg0);
+        return from_candid_variant_n53(result);
+    }
     async get_my_pending_eois(): Promise<{
         __kind__: "Ok";
         Ok: Array<EoiSubmission>;
@@ -2334,6 +2370,16 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.register_competition_welcome_job(arg0, arg1);
+        return from_candid_variant_n9(result);
+    }
+    async register_member_welcome_job(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.register_member_welcome_job(arg0, arg1, arg2);
         return from_candid_variant_n9(result);
     }
     async register_team(arg0: string, arg1: string, arg2: string): Promise<{

@@ -1524,13 +1524,32 @@ function MatchRow({ match, isAdmin, competitionId, entries, divisions, hideRound
 
   const isScheduled = !isCompleted && !isCancelled && !isPostponed && !isInProgress;
   const linkedEventId: string | null = match.home_event_id ?? match.away_event_id ?? match.fixture_events?.[0]?.id ?? null;
+  // ICP Match records carry no event ids; they are resolved on tap from
+  // events_domain's match->event links instead.
+  const canOpenEvent = Boolean(linkedEventId || (resolveAuthBackend() === "icp" && match.id));
   return (
     <Card
-      className={`overflow-hidden w-full box-border shadow-sm hover:shadow-md transition-shadow ${linkedEventId && !editing ? "cursor-pointer" : ""} ${isCancelled ? "opacity-60" : ""}`}
-      onClick={(e) => {
-        if (!linkedEventId || editing) return;
+      className={`overflow-hidden w-full box-border shadow-sm hover:shadow-md transition-shadow ${canOpenEvent && !editing ? "cursor-pointer" : ""} ${isCancelled ? "opacity-60" : ""}`}
+      onClick={async (e) => {
+        if (!canOpenEvent || editing) return;
         if (shouldIgnoreFixtureCardClick(e.currentTarget, e.target as Element)) return;
-        navigate(`/events/${linkedEventId}`);
+        if (linkedEventId) {
+          navigate(`/events/${linkedEventId}`);
+          return;
+        }
+        try {
+          const [{ getCurrentInternetIdentity }, { getActiveIcpTarget }, { getLiveMatchEventIds }] = await Promise.all([
+            import("@/live/internetIdentityAuth"),
+            import("@/live/targetRegistry"),
+            import("@/live/features/events"),
+          ]);
+          const identity = await getCurrentInternetIdentity();
+          if (!identity) return;
+          const links = await getLiveMatchEventIds({ identity, target: getActiveIcpTarget() } as any, match.id);
+          if (links[0]?.event_id) navigate(`/events/${links[0].event_id}`);
+        } catch {
+          // No materialized events or no access — the tap simply does nothing.
+        }
       }}
     >
       <CardContent className="px-4 pt-4 pb-3.5 space-y-4">

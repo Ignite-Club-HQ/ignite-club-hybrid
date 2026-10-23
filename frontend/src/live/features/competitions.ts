@@ -390,6 +390,24 @@ export async function registerLiveCompetitionWelcomeJob(
   return unwrapCandid(actor.register_competition_welcome_job(token, to), "Register competition welcome email");
 }
 
+/**
+ * Registers a pending welcome email for an existing member (e.g. after
+ * their team accepts a competition entry). ICP accounts carry no email, so
+ * the member supplies their own address; the canister verifies their
+ * competition membership and keeps one job per member per competition.
+ * The token must be a fresh browser-generated unguessable id — it is the
+ * capability the delivery edge function reads the job back with.
+ */
+export async function registerLiveMemberWelcomeJob(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  token: string,
+  to: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.register_member_welcome_job(competitionId, token, to), "Register member welcome email");
+}
+
 export async function setLiveCompetitionChatSettings(
   ctx: FeatureBackendContext,
   competitionId: string,
