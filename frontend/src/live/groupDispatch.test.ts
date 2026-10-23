@@ -31,6 +31,13 @@ describe('club-scoped dispatcher', () => {
     expect(d.open).toHaveBeenCalledTimes(1);
     expect(session.dispose).not.toHaveBeenCalled();
   });
+  it('a settled session still refreshes after membership reconciliation', async () => {
+    const { d } = deps(ON);
+    const dispatcher = createClubDispatcher(d);
+    await dispatcher.memberClubIds();
+    await dispatcher.refreshMembershipSession();
+    expect(d.open).toHaveBeenCalledTimes(2);
+  });
   it('verified legacy members do not reopen the session on every club read', async () => {
     const { d, session } = deps(ON);
     const dispatcher = createClubDispatcher({ ...d, open: vi.fn(async () => ({ ...session, isLegacyMember: (id: string) => id === 'legacy-club' })) });

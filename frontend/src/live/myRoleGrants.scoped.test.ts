@@ -15,9 +15,16 @@ describe('role grants inside a fan-out leg', () => {
     expect(state.readAcross).not.toHaveBeenCalled();
   });
   it('ordinary calls fetch roles only from verified member groups', async () => {
-    state.readMemberGroups.mockResolvedValue([]);
-    await fetchMyRoleGrantsEverywhere({ target: {}, identity: {} } as never);
+    const grants = [{ role: 'club_admin', club: ['g1-club'], team: [] }, { role: 'coach', club: ['g2-club'], team: ['u9'] }];
+    state.readMemberGroups.mockResolvedValue(grants);
+    expect(await fetchMyRoleGrantsEverywhere({ target: {}, identity: {} } as never)).toEqual(grants);
     expect(state.readMemberGroups).toHaveBeenCalledWith('membership', 'club_domain', expect.any(Function), expect.any(Function));
+    expect(state.readAcross).not.toHaveBeenCalled();
+  });
+  it('a failed member-source read never becomes an empty complete inventory', async () => {
+    state.readMemberGroups.mockRejectedValueOnce(new Error('Member source unavailable'));
+    const ctx = { target: {}, identity: { getPrincipal: () => ({ toText: () => 'other-person' }) } } as never;
+    await expect(fetchMyRoleGrantsEverywhere(ctx)).rejects.toThrow('Member source unavailable');
     expect(state.readAcross).not.toHaveBeenCalled();
   });
 });
