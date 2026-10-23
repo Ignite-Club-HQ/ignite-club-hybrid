@@ -48,6 +48,18 @@ export function requireHistoricalCheckpoint(journal, sources) {
     requireOwnershipRevisions(sources, completed, wire, journal.directoryInventoryDigest);
   }
 }
+/** Actual identity-owned consensus operation, never an operator-supplied
+ * freshness assertion. Successful checks remain separate from app release. */
+export async function checkReplicaAcceptance(sources, completed, transport) {
+  const expected = requireCompleteFill(sources, completed);
+  await transport.gate();
+  const checked = unwrap(await transport.check());
+  await transport.gate();
+  if (checked.snapshot_verified !== true || checked.restoration_guard_verified !== true ||
+      checked.verified_current !== false || checked.app_enabled !== false ||
+      !Array.isArray(checked.source_revisions) || fingerprint(checked.source_revisions) !== fingerprint(expected)) throw new Error('Replica acceptance differs from filled source inventory');
+  return { snapshotVerified: true, restorationGuardVerified: true, sourceRevisions: expected.map(([id, value]) => [id, String(value)]), ready: false, appEnabled: false };
+}
 /** Two full status/configuration/module sweeps: catches observed changes,
  * missing sources, rollback below acknowledged revisions and late drift.
  * Status is read using existing governor-only consensus methods. */

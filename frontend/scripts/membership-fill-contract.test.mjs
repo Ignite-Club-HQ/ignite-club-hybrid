@@ -7,7 +7,7 @@ import { configureDirectorySources } from '../../scripts/membership-source-confi
 import { Principal } from '@icp-sdk/core/principal';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import { runOwnershipAcceptance } from '../../scripts/membership-ownership-acceptance.mjs';
-import { checkHistoricalAcceptance } from '../../scripts/membership-acceptance-checks.mjs';
+import { checkHistoricalAcceptance, checkReplicaAcceptance } from '../../scripts/membership-acceptance-checks.mjs';
 
 const service = idlFactory({ IDL });
 const method = service._fields.find(([name]) => name === 'advance_membership_directory_source')?.[1];
@@ -78,4 +78,14 @@ test('final acceptance uses generated governor status and identity configuration
     observe:async t=>({moduleHash:t.newHash,settingsHash:t.settingsHash}),
   });
   assert.equal(result.sampledCurrent,true);assert.equal(result.verified_current,false);assert.equal(result.ready,false);
+});
+test('generated replica-owned acceptance cannot be replaced by readiness booleans or partial revisions', async () => {
+  const fn = service._fields.find(([name]) => name === 'check_membership_directory_acceptance')?.[1];assert.ok(fn);assert.equal(fn.argTypes.length,0);
+  const sources = [{groupId:'g1'},{groupId:'g2'}],completed={g1:7n,g2:9n};
+  const wire = response => IDL.decode(fn.retTypes,IDL.encode(fn.retTypes,[response]))[0];
+  const valid = {snapshot_verified:true,restoration_guard_verified:true,source_revisions:[['g1',7n],['g2',9n]],verified_current:false,app_enabled:false};
+  const result=await checkReplicaAcceptance(sources,completed,{gate:async()=>{},check:async()=>wire({Ok:valid})});
+  assert.equal(result.snapshotVerified,true);assert.equal(result.restorationGuardVerified,true);assert.equal(result.appEnabled,false);
+  for(const bad of [{...valid,restoration_guard_verified:false},{...valid,source_revisions:[['g1',7n]]},{...valid,verified_current:true},{...valid,app_enabled:true}]) await assert.rejects(()=>checkReplicaAcceptance(sources,completed,{gate:async()=>{},check:async()=>wire({Ok:bad})}));
+  await assert.rejects(()=>checkReplicaAcceptance(sources,completed,{gate:async()=>{},check:async()=>wire({Err:'Directory lifecycle changed'})}),/lifecycle/);
 });

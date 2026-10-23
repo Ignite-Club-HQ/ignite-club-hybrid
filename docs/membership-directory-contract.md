@@ -1,6 +1,6 @@
 # Stage B: authority-backed membership display directory
 
-Status: source propagation, bounded reconstruction, private diagnostic connection and explicitly pinned original G1 transport are implemented locally. Exclusive retained-source ownership acceptance is now implemented as a governor-only bounded operation using the existing Club-row trees and two constant-size stable progress/acceptance rows, with generated contracts and a release driver. Verified-current/recovery acceptance and runnable activation remain unfinished. Nothing deployed or accepted live.
+Status: source propagation, bounded reconstruction, private diagnostic connection, original G1 ownership and governor consensus snapshot/restoration checks are implemented locally. Real local canisters reject same-Wasm source restoration and jointly restored identity/source snapshots. Per-page released reader, app activation and signed production acceptance remain unfinished. Nothing deployed or accepted live.
 Stage A complete discovery remains mandatory until the requirements below pass.
 
 ### 23 October acceptance-check implementation
@@ -13,11 +13,28 @@ configuration and module/settings sweeps; pending changes, observed rollback,
 source outages or late drift refuse. Consensus status also refuses a revision
 below the coordinator's persisted observed watermark after reopening.
 
-These checks emit non-authorizing historical reports only. They cannot distinguish
-a lost/delayed notification from no change, or jointly restored local counters
-from unchanged state. The atomic read-freshness protocol and independently retained
-restoration fence are not implemented. Upgrade remains blocked before live
-mutation, the released-reader stub refuses, and Stage A remains active.
+Those historical reports alone remain non-authorizing. The new governor-only
+`check_membership_directory_acceptance()` adds actual consensus snapshot and
+restoration verification. Configuration pins replica `canister_info` history
+counts and module hashes for identity, router and every source **before** any
+reconstruction. Complete ordered revision scans must agree with accepted ownership
+and the unchanged complete builds; management-history reads bracket the scans.
+The two scans have a common stable interval, establishing snapshot-time evidence
+without membership-write locks or relying on notification delivery.
+
+The independent replica history advances on snapshot load, including same-code
+and jointly restored identity/source loads; restored local acceptance cannot
+repin it through ordinary configuration. A real three-service PocketIC rehearsal
+passes complete empty-source fill/ownership, caller/incomplete/mutation refusal,
+source snapshot load and jointly restored identity/source refusal. Taking a
+snapshot and ordinary stop/start preserve acceptance. This is not general
+disaster recovery or populated caller-private page acceptance.
+
+Upgrade remains blocked before live mutation and Stage A remains active. The
+released reader still needs per-page snapshot verification and stable caller
+binding through awaits; this operator check deliberately reports app disabled
+and `verified_current=false`. A passing operator snapshot is not a permanently
+current directory or a performance claim.
 
 ### 23 October original-source continuation
 
