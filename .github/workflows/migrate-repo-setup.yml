@@ -6,6 +6,12 @@ on:
         description: Target repo as owner/name
         required: true
         default: ''
+      existing:
+        description: What to do when a secret/variable/file already exists on the target
+        type: choice
+        required: true
+        default: skip
+        options: [skip, overwrite]
       extra_paths:
         description: Extra tracked paths to copy (comma-separated; .github/workflows always copied)
         required: false
@@ -51,34 +57,41 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$TARGET_REPO_PAT" || { echo "::error::Add repo secret TARGET_REPO_PAT (PAT with repo+workflow scope on the target repo) first"; exit 1; }
-      - name: Copy Actions variables
+      - name: Copy Actions variables (never deletes; existing skipped unless overwrite)
         env:
           GH_TOKEN: ${{ secrets.TARGET_REPO_PAT }}
           SOURCE_REPO: ${{ github.repository }}
           TARGET_REPO: ${{ inputs.target_repo }}
+          EXISTING_MODE: ${{ inputs.existing }}
         run: |
           set -euo pipefail
           gh api "repos/$SOURCE_REPO/actions/variables" --jq '.variables[] | @base64' | while read -r row; do
             name="$(printf '%s' "$row" | base64 -d | jq -r .name)"
             value="$(printf '%s' "$row" | base64 -d | jq -r .value)"
             if gh api "repos/$TARGET_REPO/actions/variables/$name" >/dev/null 2>&1; then
+              if [ "$EXISTING_MODE" != "overwrite" ]; then
+                echo "skip variable $name: already exists on target (set existing=overwrite to replace)"
+                continue
+              fi
               gh api -X PATCH "repos/$TARGET_REPO/actions/variables/$name" -f name="$name" -f value="$value" >/dev/null
-              echo "updated variable $name"
+              echo "overwrote variable $name"
             else
               gh api -X POST "repos/$TARGET_REPO/actions/variables" -f name="$name" -f value="$value" >/dev/null
               echo "created variable $name"
             fi
           done
-      - name: Copy Actions secrets
+      - name: Copy Actions secrets (never deletes; existing skipped unless overwrite)
         env:
           GH_TOKEN: ${{ secrets.TARGET_REPO_PAT }}
           TARGET_REPO: ${{ inputs.target_repo }}
+          EXISTING_MODE: ${{ inputs.existing }}
           EXTRA_SECRET_NAMES: ${{ inputs.extra_secret_names }}
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
           ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
           FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
+          existing_names="$(gh secret list --repo "$TARGET_REPO" --json name --jq '.[].name')"
           names="DEPLOYER_PEM ICP_PUSH_WORKER_SEED FCM_SERVICE_ACCOUNT_JSON"
           if [ -n "$EXTRA_SECRET_NAMES" ]; then
             names="$names $(printf '%s' "$EXTRA_SECRET_NAMES" | tr ',' ' ')"
@@ -89,26 +102,52 @@ jobs:
               echo "skip $name: not set on source repo"
               continue
             fi
+            if printf '%s\n' "$existing_names" | grep -qx "$name"; then
+              if [ "$EXISTING_MODE" != "overwrite" ]; then
+                echo "skip secret $name: already exists on target (set existing=overwrite to replace)"
+                continue
+              fi
+              echo "overwriting existing secret $name on target"
+            fi
             printf '%s' "$value" | gh secret set "$name" --repo "$TARGET_REPO" --body -
             echo "set secret $name on target"
           done
-      - name: Copy workflow files and extra paths
+      - name: Copy workflow files and extra paths (never deletes; existing differing files skipped unless overwrite)
         env:
           TARGET_REPO_PAT: ${{ secrets.TARGET_REPO_PAT }}
           TARGET_REPO: ${{ inputs.target_repo }}
+          EXISTING_MODE: ${{ inputs.existing }}
           EXTRA_PATHS: ${{ inputs.extra_paths }}
         run: |
           set -euo pipefail
           work="$RUNNER_TEMP/target-checkout"
           git clone --depth 1 "https://x-access-token:${TARGET_REPO_PAT}@github.com/${TARGET_REPO}.git" "$work"
+          conflicts=0
+          copy_file() {
+            local rel="$1"
+            if [ -f "$work/$rel" ]; then
+              if cmp -s "$rel" "$work/$rel"; then
+                return 0
+              fi
+              if [ "$EXISTING_MODE" != "overwrite" ]; then
+                echo "skip file $rel: exists on target with different content (set existing=overwrite to replace)"
+                conflicts=$((conflicts + 1))
+                return 0
+              fi
+              echo "overwriting file $rel"
+            fi
+            mkdir -p "$work/$(dirname "$rel")"
+            cp -a "$rel" "$work/$rel"
+            echo "copied $rel"
+          }
           copy_path() {
             local p="$1"
             p="${p%/}"
             case "$p" in /*|*..*|'') echo "::error::Refusing unsafe path: $1"; exit 1 ;; esac
-            if [ -e "$p" ]; then
-              mkdir -p "$work/$(dirname "$p")"
-              cp -a "$p" "$work/$p"
-              echo "copied $p"
+            if [ -d "$p" ]; then
+              find "$p" -type f | while read -r f; do copy_file "$f"; done
+            elif [ -f "$p" ]; then
+              copy_file "$p"
             else
               echo "skip $p: not present in source checkout"
             fi
@@ -120,15 +159,26 @@ jobs:
             done
           fi
           cd "$work"
-          git add -A
+          # Stage ONLY the copied top-level paths — never stage everything,
+          # so files that exist only on the target can never be deleted.
+          paths_to_stage=".github/workflows"
+          if [ -n "$EXTRA_PATHS" ]; then
+            for p in $(printf '%s' "$EXTRA_PATHS" | tr ',' ' '); do
+              paths_to_stage="$paths_to_stage ${p%/}"
+            done
+          fi
+          git add -- $paths_to_stage
           if git diff --cached --quiet; then
             echo "no file differences — nothing to commit"
-            exit 0
+          else
+            git -c user.name=repo-migrate -c user.email=repo-migrate@local \
+              commit -m "Migrate repo setup from ${{ github.repository }}"
+            git push
+            echo "pushed file changes to $TARGET_REPO"
           fi
-          git -c user.name=repo-migrate -c user.email=repo-migrate@local \
-            commit -m "Migrate repo setup from ${{ github.repository }}"
-          git push
-          echo "pushed file changes to $TARGET_REPO"
+          if [ "$conflicts" -gt 0 ]; then
+            echo "::warning::$conflicts existing file(s) skipped (existing=skip)"
+          fi
       - name: Final compare report
         if: always()
         env:
