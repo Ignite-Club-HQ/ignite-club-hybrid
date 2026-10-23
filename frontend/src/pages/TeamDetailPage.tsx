@@ -124,6 +124,7 @@ import { TeamLeaveDialog } from "@/components/team/TeamLeaveDialog";
 import { TeamQuickActionsSection } from "@/components/team/TeamQuickActionsSection";
 import { TeamDetailAccordionSections } from "@/components/team/TeamDetailAccordionSections";
 import { getCachedTeam, getCachedClub, cacheTeam, cacheClub } from "@/lib/clubTeamCache";
+import { loadTeamClubDetails } from "@/lib/teamClubDetails";
 
 
 type TeamRole = TeamJoinRole;
@@ -185,11 +186,11 @@ export default function TeamDetailPage() {
             const row = await getLiveTeam(ctx, id);
             const t = row.length ? row[0] : null;
             if (!t) return null;
-            const [profileRow, sub, generalSettings] = await Promise.all([
-              getLiveClubProfile(ctx, t.club_id),
-              getLiveClubSubscription(ctx, t.club_id),
-              import("@/live/features/club").then(module => module.getLiveClubGeneralSettings(ctx, t.club_id)),
-            ]);
+            const [profileRow, sub, generalSettings] = await loadTeamClubDetails({
+              profile: () => getLiveClubProfile(ctx, t.club_id),
+              subscription: () => getLiveClubSubscription(ctx, t.club_id),
+              settings: () => import("@/live/features/club").then(module => module.getLiveClubGeneralSettings(ctx, t.club_id)),
+            });
             const club = profileRow.length ? profileRow[0] : null;
             // Map the canister team + club onto the Supabase row shape this
             // page renders (including the clubs join).
