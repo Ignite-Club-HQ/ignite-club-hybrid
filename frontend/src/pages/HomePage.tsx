@@ -2109,7 +2109,7 @@ export default function HomePage() {
   // old empty event list made <NextUpCarousel /> return null, so My Teams painted
   // high on the page and was pushed down when Next Up arrived. Keep the unified
   // Home skeleton in place while an empty Next Up result is actively refetching.
-  const waitingForNextUpResolution = events.length === 0 && isFetching;
+  const waitingForNextUpResolution = !membershipAndEvents && isFetching;
 
   // Coordinate first paint of Next Up + My Teams so both fade in together.
   // Both widgets are mounted behind the unified skeleton and only revealed once
@@ -2135,7 +2135,7 @@ export default function HomePage() {
     ? (isFetched || !!membershipAndEvents) && !isLoading && !waitingForNextUpResolution
     : readyNextUpSignature === nextUpEventSignature;
   const myTeamsReady = readyMyTeamsTarget === myTeamsReadyTarget;
-  const computedShowContent = initialized && (isFetched || !!membershipAndEvents) && !isLoading && !waitingForNextUpResolution && nextUpSectionReady && myTeamsReady;
+  const computedShowContent = initialized && (isFetched || !!membershipAndEvents) && !isLoading && !waitingForNextUpResolution;
   // Latch so we never re-hide the page back to the unified skeleton after the
   // first synchronized reveal — otherwise a later refetch on one section
   // (events array reference changes → NextUp re-checks first hero) would yank

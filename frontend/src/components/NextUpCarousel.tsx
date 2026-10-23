@@ -388,9 +388,7 @@ function useRsvpSummary(eventId: string, eventType?: string) {
         countQuery = countQuery.not("child_id", "is", null);
       }
       
-      const { count } = await countQuery;
-
-      // Then get a few for avatars
+      // Count and avatar rows are independent; fetch both together.
       let avatarQuery = supabase
         .from("rsvps")
         .select("id, status, user_id, child_id, mini_league_player_id, children:child_id(name), mini_league_players:mini_league_player_id(name)")
@@ -401,7 +399,10 @@ function useRsvpSummary(eventId: string, eventType?: string) {
         avatarQuery = avatarQuery.not("child_id", "is", null);
       }
       
-      const { data: rsvps, error } = await avatarQuery.limit(5);
+      const [{ count }, { data: rsvps, error }] = await Promise.all([
+        countQuery,
+        avatarQuery.limit(5),
+      ]);
       if (error) throw error;
       if (!rsvps || rsvps.length === 0) return { avatars: [], totalCount: 0 };
 
@@ -599,32 +600,15 @@ function HeroCard({ event, fullWidth, onNeedsRsvpChange, onReadyChange }: { even
   const { data: rsvpSummary, isFetched: rsvpSummaryFetched } = useRsvpSummary(event.id, event.type);
   const { data: isEventMember = true, isFetched: membershipFetched } = useEventMembership({ id: event.id, team_id: event.team_id, club_id: event.club_id, target_team_ids: (event as any).target_team_ids });
 
-  // Hold the card's interactive sections until per-event queries settle so the
-  // card doesn't grow (Children's RSVP accordion appears, helper text disappears)
-  // a moment after first paint and visibly push the rest of the home page down.
-  // Also gates the "RSVP Required" pill so it never flashes before child
-  // RSVPs hydrate (which would briefly show the pill on already-responded events).
+  // Event details are already loaded. Only attendance depends on the
+  // membership/household/RSVP reads; summaries and duties update independently.
   const dutiesReady = !user?.id || event.is_cancelled || myDutiesFetched;
-  // Fallback timer: offline / very slow secondary queries can leave the six
-  // hero queries in "pending" for tens of seconds (browser fetch has no short
-  // timeout when the network is down), which strands the card as a skeleton
-  // even though the parent events query hydrated instantly from localStorage
-  // and the rest of the home page (My Teams, etc.) is fully painted. After
-  // 1500ms, reveal with whatever data we have — RSVP buttons still work with
-  // no cached `myRsvp`, and missing summary/children data just renders empty
-  // instead of a skeleton. Matches the parent carousel's own 1500ms fallback.
-  const [heroReadyTimedOut, setHeroReadyTimedOut] = React.useState(false);
-  React.useEffect(() => {
-    setHeroReadyTimedOut(false);
-    const t = setTimeout(() => setHeroReadyTimedOut(true), 1500);
-    return () => clearTimeout(t);
-  }, [event.id]);
-  const heroDataReady = !user || (myRsvpFetched && childrenFetched && childRsvpsFetched && rsvpSummaryFetched && membershipFetched && dutiesReady) || heroReadyTimedOut;
+  const heroDataReady = !user || (myRsvpFetched && childrenFetched && childRsvpsFetched && membershipFetched);
 
   React.useEffect(() => {
-    onReadyChange?.(event.id, heroDataReady);
+    onReadyChange?.(event.id, true);
     return () => onReadyChange?.(event.id, false);
-  }, [event.id, heroDataReady, onReadyChange]);
+  }, [event.id, onReadyChange]);
 
   const rsvpMutation = useMutation({
     mutationFn: async (status: RsvpStatus) => {
@@ -871,10 +855,6 @@ function HeroCard({ event, fullWidth, onNeedsRsvpChange, onReadyChange }: { even
         : `${guardianUnrespondedCount} ${rsvpGroupNoun} need RSVP`)
     : "RSVP Required";
 
-  if (!heroDataReady) {
-    return <NextUpHeroCardSkeleton />;
-  }
-
   return (
     <Card
       className={`relative overflow-hidden shadow-md hover:shadow-lg transition-all cursor-pointer w-full shrink-0 min-h-[340px] h-full flex flex-col ${event.is_cancelled ? "opacity-60 border-border/50" : showNeedsRsvp ? "border-primary/40 bg-primary/[0.04]" : "border-border/50"}`}
@@ -1083,12 +1063,9 @@ function HeroCard({ event, fullWidth, onNeedsRsvpChange, onReadyChange }: { even
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
-            {/* Render RSVP buttons immediately — don't wait for per-event queries.
-                Until heroDataReady, hasGuardianChildren is false so we fall into
-                the simple parent-buttons branch with no active selection. When
-                queries land we either swap to the guardian variant or light up
-                the active state, all within the reserved 168px so nothing jolts. */}
-            <NextUpHeroRsvpSection
+            {/* Keep only attendance pending; never hide known event details
+                or guess the adult/child response scope before it resolves. */}
+            {heroDataReady ? <NextUpHeroRsvpSection
               childrenOnEvent={childrenOnEvent ?? []}
               childRsvpPending={childRsvpMutation.isPending}
               childRsvpPendingChildId={childRsvpMutation.variables?.childId}
@@ -1108,7 +1085,7 @@ function HeroCard({ event, fullWidth, onNeedsRsvpChange, onReadyChange }: { even
               rsvpPending={rsvpMutation.isPending}
               rsvpPendingStatus={rsvpMutation.variables}
               rsvpSummaryTotalCount={rsvpSummary?.totalCount || 0}
-            />
+            /> : <div className="min-h-[168px]" aria-busy="true" aria-label="Event attendance" />}
           </div>
         )}
       </CardContent>
@@ -1430,7 +1407,7 @@ export function NextUpCarousel({ events, isLoading, onReadyChange }: NextUpCarou
     const t = setTimeout(() => setFirstHeroTimedOut(true), 1500);
     return () => clearTimeout(t);
   }, [firstEventId]);
-  const sectionReady = !isLoading && (firstHeroReady || firstHeroTimedOut);
+  const sectionReady = allEvents.length > 0 || (!isLoading && (firstHeroReady || firstHeroTimedOut));
 
   React.useEffect(() => {
     onReadyChange?.(sectionReady);
@@ -1441,7 +1418,7 @@ export function NextUpCarousel({ events, isLoading, onReadyChange }: NextUpCarou
   // Show skeleton while loading to reserve space and prevent layout shift.
   // Height matches live card (340) + dot row reservation (pt-3 + h-6 = 36)
   // so My Teams below does not move when the live card mounts.
-  if (isLoading) {
+  if (isLoading && allEvents.length === 0) {
     return (
       <section className="space-y-3">
         <div className="flex items-center justify-between">
