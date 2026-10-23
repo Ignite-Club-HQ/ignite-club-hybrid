@@ -5,9 +5,10 @@
  *
  * State mapping stays exactly the same as before, so backend validation and
  * `events.target_team_ids` semantics are untouched:
- *   - Whole club     → teamId = "",   targetTeamIds = null
+ *   - Whole club     → teamId = "",   targetTeamIds = null, competitionId = ""
  *   - One team       → teamId = <id>, targetTeamIds = null
  *   - Selected teams → teamId = "",   targetTeamIds = string[] (≥ 2 to submit)
+ *   - Competition    → teamId = "",   targetTeamIds = null, competitionId = <id>
  */
 import { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
@@ -34,9 +35,14 @@ interface Props {
   disabled?: boolean;
   /** Which mode is selected when there is no explicit team/target-team state. */
   defaultMode?: Mode;
+  /** Pass to enable the Competition option (only when the user may organise one). */
+  competitions?: TeamOption[];
+  competitionId?: string;
+  onCompetitionIdChange?: (next: string) => void;
+  competitionTeamCount?: number;
 }
 
-type Mode = "club" | "team" | "selected";
+type Mode = "club" | "team" | "selected" | "competition";
 
 export function EventAudienceSelector({
   teams,
@@ -48,14 +54,21 @@ export function EventAudienceSelector({
   supportsClubWideScope,
   disabled,
   defaultMode = "team",
+  competitions,
+  competitionId = "",
+  onCompetitionIdChange,
+  competitionTeamCount,
 }: Props) {
+  const showCompetition = !!onCompetitionIdChange && (competitions?.length ?? 0) > 0;
   // Derived mode is only a *hint*: picking "One team" before a team is chosen
   // leaves teamId empty, so the mode has to be remembered locally too.
-  const derivedMode: Mode = teamId
-    ? "team"
-    : Array.isArray(targetTeamIds)
-      ? "selected"
-      : "club";
+  const derivedMode: Mode = competitionId
+    ? "competition"
+    : teamId
+      ? "team"
+      : Array.isArray(targetTeamIds)
+        ? "selected"
+        : "club";
   const [mode, setMode] = useState<Mode>(defaultMode !== "club" ? defaultMode : derivedMode);
 
   // Follow external changes (e.g. loading an existing event) without fighting
@@ -69,7 +82,8 @@ export function EventAudienceSelector({
 
   const pickMode = (next: Mode) => {
     setMode(next);
-    if (next === "club") {
+    if (next !== "competition") onCompetitionIdChange?.("");
+    if (next === "club" || next === "competition") {
       onTeamIdChange("");
       onTargetTeamIdsChange(null);
     } else if (next === "team") {
@@ -105,12 +119,15 @@ export function EventAudienceSelector({
     { key: "club", title: "Whole club", hint: "Everyone in the club can RSVP" },
     { key: "team", title: "One team", hint: "Pick a single team" },
     { key: "selected", title: "Several teams", hint: "Pick 2 or more teams" },
+    ...(showCompetition
+      ? [{ key: "competition" as Mode, title: "Competition", hint: "Teams in a competition" }]
+      : []),
   ];
 
   return (
     <div className="space-y-2">
       <Label className="text-sm font-medium">Who's this for?</Label>
-      <div className="grid grid-cols-3 gap-2">
+      <div className={cn("grid gap-2", showCompetition ? "grid-cols-2" : "grid-cols-3")}>
         {options.map((o) => (
           <button
             key={o.key}
@@ -160,6 +177,25 @@ export function EventAudienceSelector({
           {selected.length < 2 && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
               Select at least 2 teams — for a single team, choose "One team" above.
+            </p>
+          )}
+        </div>
+      )}
+
+      {mode === "competition" && showCompetition && (
+        <div className="space-y-1.5">
+          <MobileCardSelect
+            value={competitionId}
+            onValueChange={(v) => onCompetitionIdChange!(v)}
+            options={competitions!.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Select competition"
+            label="Competition"
+            disabled={disabled}
+          />
+          {competitionId && (
+            <p className="text-xs text-muted-foreground">
+              One event for the whole competition. Everyone on the {competitionTeamCount ?? 0} entered{" "}
+              {competitionTeamCount === 1 ? "team" : "teams"} (and parents/guardians) is invited.
             </p>
           )}
         </div>
