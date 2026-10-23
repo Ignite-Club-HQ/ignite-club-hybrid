@@ -1,6 +1,7 @@
 import { ChevronRight, FolderOpen, Loader2, Lock, Search, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { getFolderColorClass } from "@/components/TeamFoldersManager";
 import type { FolderView } from "@/features/vault/useVaultExport";
 import {
@@ -27,6 +28,9 @@ export interface VaultRootClubSummary {
 export interface VaultRootPickerModel {
   isLoadingClubs: boolean;
   clubs: VaultRootClubSummary[] | undefined;
+  /** Set when the club list couldn't be read — offer a retry, never "No clubs". */
+  loadFailed?: boolean;
+  onRetry?: () => void;
   activeClubFilter: string | null;
   onSelectClub: (club: VaultRootClubSummary) => void;
 }
@@ -159,7 +163,7 @@ function VaultSearchBar({ search }: { search: VaultSearchModel }) {
 }
 
 function VaultRootClubPicker({ rootPicker }: { rootPicker: VaultRootPickerModel }) {
-  const { isLoadingClubs, clubs, activeClubFilter, onSelectClub } = rootPicker;
+  const { isLoadingClubs, clubs, activeClubFilter, onSelectClub, loadFailed, onRetry } = rootPicker;
 
   return (
     <div className="space-y-3">
@@ -168,6 +172,16 @@ function VaultRootClubPicker({ rootPicker }: { rootPicker: VaultRootPickerModel 
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-muted-foreground">Loading clubs...</p>
         </div>
+      ) : loadFailed && (!clubs || clubs.length === 0) ? (
+        <Card className="border-dashed">
+          <CardContent className="p-8 text-center space-y-3">
+            <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground" />
+            <p className="text-muted-foreground">Your clubs couldn't be loaded just now.</p>
+            {onRetry && (
+              <Button variant="outline" onClick={onRetry}>Try again</Button>
+            )}
+          </CardContent>
+        </Card>
       ) : !clubs || clubs.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="p-8 text-center">
