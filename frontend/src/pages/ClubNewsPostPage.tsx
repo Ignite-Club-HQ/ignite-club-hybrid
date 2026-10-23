@@ -23,7 +23,7 @@ export default function ClubNewsPostPage() {
   const { newsId } = useParams<{ newsId: string }>();
   const navigate = useNavigate();
   const isLocalLab = resolveLocalAuthMode(window.location.search, true);
-  const { data: post, isLoading } = useClubNewsPost(newsId);
+  const { data: post, isLoading, isError, refetch } = useClubNewsPost(newsId);
   const { data: teams = [] } = useClubTeamsForNews(post?.club_id ?? null);
   const { data: targetTeams = [] } = useTeamNamesByIds(post?.target_team_ids);
   const teamNameMap = useMemo(() => {
@@ -47,18 +47,20 @@ export default function ClubNewsPostPage() {
   const { data: author } = useQuery({
     queryKey: ["club-news-author", post?.author_id],
     queryFn: async () => {
+      const authorId = post?.author_id;
+      if (!authorId) return null;
       if (isLocalLab) return "Local ICP Member";
       return withFeatureBackend("membership", {
         supabase: async () => {
           const { data } = await supabase
             .from("profiles")
             .select("display_name")
-            .eq("id", post!.author_id!)
+            .eq("id", authorId)
             .maybeSingle();
           return data?.display_name ?? null;
         },
         icp: async (ctx) => {
-          const profiles = await listLiveProfilesByIds(ctx, [post!.author_id!]);
+          const profiles = await listLiveProfilesByIds(ctx, [authorId]);
           return profiles[0]?.display_name ?? null;
         },
       }, { shared: 'person' });
@@ -81,6 +83,11 @@ export default function ClubNewsPostPage() {
           <Skeleton className="h-40 w-full rounded-lg" />
           <Skeleton className="h-24 w-full" />
         </div>
+      ) : isError && !post ? (
+        <Card className="space-y-3 p-8 text-center text-sm text-muted-foreground">
+          <p>Couldn’t load this post. Please try again.</p>
+          <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
+        </Card>
       ) : !post ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">
           This post is no longer available.
