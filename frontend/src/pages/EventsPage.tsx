@@ -65,6 +65,7 @@ import { getLiveAccountRosterScope } from "@/live/features/events";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/club";
 import { loadScheduleFixtures, type FixtureSnapshot } from "@/live/scheduleFixtures";
+import { withReadDeadline } from "@/live/readDeadline";
 import { loadMemberSchedule, type MemberScheduleSnapshot } from "@/live/scheduleMembers";
 
 /** Derive the memberships shape the schedule filters need from the caller's
@@ -77,15 +78,15 @@ async function getLiveEventMemberships(
   accountId: string,
 ) {
   // Independent lookups run together instead of one after another.
-  const scopePromise = readContentInScope(ctx, 'events', { memberGroups: true, merge: (parts: Array<{ teamIds: string[]; clubIds: string[]; childIds: string[] }>) => ({
+  const scopePromise = withReadDeadline(readContentInScope(ctx, 'events', { memberGroups: true, merge: (parts: Array<{ teamIds: string[]; clubIds: string[]; childIds: string[] }>) => ({
     teamIds: [...new Set(parts.flatMap(p => p.teamIds))], clubIds: [...new Set(parts.flatMap(p => p.clubIds))], childIds: [...new Set(parts.flatMap(p => p.childIds))],
-  }) }, scoped => getLiveAccountRosterScope(scoped, accountId)).catch(() => ({
+  }) }, scoped => getLiveAccountRosterScope(scoped, accountId)), 'Schedule roster').catch(() => ({
     teamIds: [] as string[],
     clubIds: [] as string[],
     childIds: [] as string[],
   }));
   // Independent league discovery is owned by a separate query below; club events never wait for it.
-  const grants = await getLiveMyRoleGrants(ctx);
+  const grants = await withReadDeadline(getLiveMyRoleGrants(ctx), 'Schedule memberships');
   const roles = grants.map((g) => ({
     club_id: (g.club[0] ?? null) as string | null,
     team_id: (g.team[0] ?? null) as string | null,
@@ -114,7 +115,7 @@ async function getLiveEventMemberships(
       // Do not repeat owner discovery and a team fetch for those grants.
       if (roles.some(role => role.team_id === teamId && role.club_id)) return;
       try {
-        const teamOpt = await readMembershipInScope(ctx, { teamId }, (scoped) => getLiveTeam(scoped, teamId));
+        const teamOpt = await withReadDeadline(readMembershipInScope(ctx, { teamId }, (scoped) => getLiveTeam(scoped, teamId)), 'Schedule team');
         const clubId = (teamOpt as any)?.[0]?.club_id as string | undefined;
         if (clubId) clubIds.add(clubId);
       } catch { /* best effort */ }
@@ -308,7 +309,7 @@ export default function EventsPage() {
             const clubs = await Promise.all(
               memberships.clubIds.map(async (clubId) => {
                 try {
-                  const profileOpt = await readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubProfile(scoped, clubId));
+                  const profileOpt = await withReadDeadline(readMembershipInScope(ctx, { clubId }, (scoped) => getLiveClubProfile(scoped, clubId)), 'Schedule club label');
                   const profile = (profileOpt as any)?.[0] as { name?: string; sport?: string[] } | undefined;
                   return { id: clubId, name: profile?.name ?? "Club", sport: (profile?.sport?.[0] ?? null) as string | null };
                 } catch {
@@ -762,7 +763,7 @@ export default function EventsPage() {
           adminClubIds: userMemberships?.clubAdminClubIds ?? [], filter: 'all',
           selectedTeamId: teamFilter && !teamFilter.startsWith('ml:') ? teamFilter : null,
           fromMs: from.getTime(), toMs: to.getTime(),
-        }, next => { if (!signal.aborted) queryClient.setQueryData(memberScheduleKey, next); }).then(next => {
+        }, next => { if (!signal.aborted) queryClient.setQueryData(memberScheduleKey, next); }, signal).then(next => {
           if (signal.aborted) throw new Error('Schedule request cancelled');
           const value = next;
           if (!value.incomplete) cacheEventsList(eventsScopeKey, value.events, user?.id);
