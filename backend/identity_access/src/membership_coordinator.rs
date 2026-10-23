@@ -49,6 +49,13 @@ pub fn verify_inventory(snapshot:&group_inventory::Snapshot,pin:&group_inventory
 /// A separately trusted original writer can participate without manufacturing
 /// a router group or placement. This establishes transport inventory ONLY;
 /// missing club assignments still block private pages and release.
+pub fn original_mainnet_writer(pin:&group_inventory::Binding,identity:Principal)->Option<Principal>{
+    if pin.registry.to_text()!="jcdfe-vqaaa-aaaal-qxloq-cai"||identity.to_text()!="mq2sj-fiaaa-aaaal-qxlqa-cai"||
+        pin.target_alias!="mainnet"||pin.deployment_id!="mainnet"||pin.host!="https://icp-api.io"||pin.network_kind!="public_mainnet"{
+        return None;
+    }
+    Principal::from_text("mzzzv-taaaa-aaaal-qxlrq-cai").ok()
+}
 pub fn verify_inventory_with_original(snapshot:&group_inventory::Snapshot,pin:&group_inventory::Binding,
     required_authorities:&[Principal],generation:u64,original:Principal)->Outcome<VerifiedInventory>{
     if original==Principal::anonymous()||original==Principal::management_canister(){return Err("Exact original club authority required".into());}
@@ -248,6 +255,17 @@ impl<M:Memory+Clone> Coordinator<M>{
     type Mem=VirtualMemory<VectorMemory>;
     fn open(m:&MemoryManager<VectorMemory>)->Coordinator<Mem>{Coordinator::open(m.get(MemoryId::new(0)),Pool::open(m.get(MemoryId::new(1)),m.get(MemoryId::new(2)),10000,32).unwrap(),m.get(MemoryId::new(3)))}
     fn viewer(p:Principal)->Viewer{Viewer{account:"member".into(),version:1,aliases:vec![p]}}
+    #[test]fn original_mainnet_pin_matches_exact_existing_canisters_and_deployment(){
+        let (_,mut pin,_)=group_inventory::tests::fixture();pin.registry=Principal::from_text("jcdfe-vqaaa-aaaal-qxloq-cai").unwrap();
+        pin.target_alias="mainnet".into();pin.deployment_id="mainnet".into();pin.host="https://icp-api.io".into();
+        let identity=Principal::from_text("mq2sj-fiaaa-aaaal-qxlqa-cai").unwrap();
+        assert_eq!(original_mainnet_writer(&pin,identity).unwrap().to_text(),"mzzzv-taaaa-aaaal-qxlrq-cai");
+        assert!(original_mainnet_writer(&pin,Principal::from_slice(&[99,1])).is_none());
+        for field in ["router","target","deployment","host","network"]{
+            let mut bad=pin.clone();match field{"router"=>bad.registry=Principal::from_slice(&[99,1]),"target"=>bad.target_alias="other".into(),"deployment"=>bad.deployment_id="other".into(),"host"=>bad.host="https://other.invalid".into(),_=>bad.network_kind="cloud_engine".into()};
+            assert!(original_mainnet_writer(&bad,identity).is_none());
+        }
+    }
     #[test]fn explicitly_pinned_original_writer_needs_no_invented_placement(){
         let (snapshot,pin,a)=group_inventory::tests::fixture();let original=Principal::from_slice(&[98,1]);
         let mut required=a.clone();required.push(original);
