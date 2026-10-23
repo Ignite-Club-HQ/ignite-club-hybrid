@@ -88,15 +88,17 @@ export function planFileCopy(paths) {
   // Default set: everything repo-level that the merge doc says must move.
   const defaults = ['.github/workflows'];
   const seen = new Set();
-  return [...defaults, ...paths].filter((p) => {
+  const out = [];
+  for (const p of [...defaults, ...paths]) {
     const clean = p.replace(/\/+$/, '');
     if (!clean || clean.startsWith('/') || clean.includes('..')) {
       throw new Error(`Refusing unsafe path: ${p}`);
     }
-    if (seen.has(clean)) return false;
+    if (seen.has(clean)) continue;
     seen.add(clean);
-    return true;
-  });
+    out.push(clean);
+  }
+  return out;
 }
 
 async function cmdCompare(token, source, target) {
