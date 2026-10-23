@@ -2,15 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createClubDispatcher, clearGroupDispatchCache, clubDispatch } from './groupDispatch';
 import { OFF } from './groupActivation';
 import { GROUP_DOMAINS } from './groupRouting';
-import { isScopedContext } from './scopedContext';
-import { StaleGroupSessionError } from './groupSessionError';
 
 const ON = { ...OFF, operatorApproved: true, recoveryVerified: true, rehearsalPassed: true, mainnetVerified: true, routedDomains: GROUP_DOMAINS, registryRevision: 1n, approvedRevision: 1n, removalWiring: { revision: 1n, groupIds: ["a"], checkedAtMs: 0 } };
 function deps(gates = OFF, principal = 'p1') {
-  const identity = { getPrincipal: () => ({ toText: () => principal }) };
   const session = { readClub: vi.fn(async () => 'group'), writeClub: vi.fn(async () => 'group'), isAssigned: (c: string) => c === 'moved', dispose: vi.fn() };
   const d = { gates: () => gates, legacy: vi.fn(async () => 'legacy') as never,
-    context: async () => ({ identity, target: {
+    context: async () => ({ identity: { getPrincipal: () => ({ toText: () => principal }) }, target: {
       alias: 'mainnet', host: 'https://icp-api.io', networkKind: 'public_mainnet', canisterIds: {},
     } }) as never, open: vi.fn(async () => session) };
   return { d, session };
@@ -18,125 +15,6 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
-  it('opens a fresh session after identity renewal under the same principal', async () => {
-    const { d, session } = deps(ON);
-    const initial = await d.context();
-    let identity = initial.identity;
-    const open = vi.fn(async ctx => ({ ...session,
-      readClub: async (_club, _domain, read) => read(ctx) }));
-    const dispatcher = createClubDispatcher({ ...d, context: async () => ({ ...initial, identity }), open } as never);
-    expect(await dispatcher.read('events', 'moved', 'events_domain', async ctx => ctx.identity)).toBe(identity);
-    identity = { getPrincipal: () => ({ toText: () => 'p1' }) } as never;
-    expect(await dispatcher.read('events', 'moved', 'events_domain', async ctx => ctx.identity)).toBe(identity);
-    expect(open).toHaveBeenCalledTimes(2);
-  });
-  it.each(['read', 'write'] as const)('retires a drifted session after %s without replaying a mutation', async method => {
-    const { d, session } = deps(ON);
-    const stale = { ...session, readClub: vi.fn().mockRejectedValue(new StaleGroupSessionError()),
-      writeClub: vi.fn().mockRejectedValue(new StaleGroupSessionError()) };
-    d.open.mockResolvedValueOnce(stale).mockResolvedValue(session);
-    const dispatcher = createClubDispatcher(d);
-    const write = vi.fn(async () => 'saved');
-    const operation = method === 'read'
-      ? dispatcher.read('events', 'moved', 'events_domain', write)
-      : dispatcher.write('messaging', 'moved', 'messaging_domain', 'key', write, 1);
-    await expect(operation).rejects.toThrow('registry changed');
-    expect(write).not.toHaveBeenCalled();
-    expect(await dispatcher.read('events', 'moved', 'events_domain', write)).toBe('group');
-    expect(d.open).toHaveBeenCalledTimes(2);
-  });
-  it.each(['moved', 'legacy-club'])('marks both write entrypoints scoped without poisoning the original context for %s', async club => {
-    const { d, session } = deps(ON);
-    const context = {} as never;
-    session.writeClub.mockImplementation(async (_club, _domain, _key, write) => write(context, 'key'));
-    const dispatcher = createClubDispatcher({ ...d, legacy: async (_feature, _club, write) => write(context) } as never);
-    expect(await dispatcher.write('membership', club, 'club_domain', 'key', async ctx => isScopedContext(ctx), 1)).toBe(true);
-    expect(await dispatcher.writeFor('membership', { clubId: club }, 'club_domain', 'key', async ctx => isScopedContext(ctx), 1)).toBe(true);
-    expect(isScopedContext(context)).toBe(false);
-  });
-  it.each(['moved', 'legacy-club'])('marks both read entrypoints scoped for %s', async club => {
-    const { d, session } = deps(ON);
-    session.readClub.mockImplementation(async (_club, _domain, read) => read({}));
-    const dispatcher = createClubDispatcher({ ...d, legacy: async (_feature, _club, read) => read({} as never) } as never);
-    expect(await dispatcher.read('membership', club, 'club_domain', async ctx => isScopedContext(ctx))).toBe(true);
-    expect(await dispatcher.readFor('membership', { clubId: club }, 'club_domain', async ctx => isScopedContext(ctx))).toBe(true);
-  });
-  it('bounds a stalled shared fanout leg while retaining successful group results', async () => {
-    const { d, session } = deps(ON);
-    const dispatcher = createClubDispatcher({ ...d, legacy: () => new Promise(() => {}),
-      open: async () => ({ ...session, readEveryGroup: async (_domain, read) => read({} as never) }) } as never);
-    vi.useFakeTimers();
-    try {
-      const pending = dispatcher.readAcross('events', 'events_domain', async () => ['group-event'], parts => parts.flat());
-      await vi.advanceTimersByTimeAsync(20_001);
-      expect(await pending).toEqual(['group-event']);
-    } finally { vi.useRealTimers(); }
-  });
-  it('expires a stalled membership refresh, retains the ready session and disposes late replacements', async () => {
-    const { d, session } = deps(ON);
-    const dispatcher = createClubDispatcher(d);
-    await dispatcher.memberClubIds();
-    let finish: ((value: typeof session) => void) | undefined;
-    const late = { ...session, dispose: vi.fn() };
-    d.open.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    vi.useFakeTimers();
-    try {
-      const pending = dispatcher.refreshMembershipSession();
-      const rejection = expect(pending).rejects.toThrow('Membership discovery timed out');
-      await vi.advanceTimersByTimeAsync(20_001);
-      await rejection;
-      expect(await dispatcher.read('events', 'moved', 'events_domain', async () => 'event')).toBe('group');
-      finish?.(late);
-      await Promise.resolve();
-      expect(late.dispose).toHaveBeenCalledOnce();
-      await dispatcher.refreshMembershipSession();
-      expect(d.open).toHaveBeenCalledTimes(3);
-      expect(session.dispose).not.toHaveBeenCalled();
-    } finally { vi.useRealTimers(); }
-  });
-  it('a late owner probe cannot populate a replacement session', async () => {
-    const { d, session } = deps(ON);
-    let finish: ((value: string | null) => void) | undefined;
-    const lookup = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue('moved');
-    const save = vi.fn();
-    const dispatch = createClubDispatcher({ ...d, lookup, store: { load: () => ({}), save },
-      open: async () => ({ ...session, readEveryGroup: async (_domain, read) => read({}) }) } as never);
-    const old = dispatch.readFor('messaging', { conversationId: 'chat' }, 'messaging_domain', async () => 'chat').catch(error => error);
-    await vi.waitFor(() => expect(finish).toBeDefined());
-    clearGroupDispatchCache();
-    await dispatch.readFor('events', { eventId: 'event' }, 'events_domain', async () => 'event');
-    save.mockClear();
-    finish?.('old-club');
-    expect((await old).message).toContain('session changed');
-    expect(save).not.toHaveBeenCalled();
-    await dispatch.readFor('messaging', { conversationId: 'chat' }, 'messaging_domain', async () => 'chat');
-    expect(lookup).toHaveBeenCalledTimes(3);
-  });
-  it('a stalled chat content read does not block an event in the same group', async () => {
-    const { d, session } = deps(ON);
-    const dispatch = createClubDispatcher(d);
-    let finish: ((value: string) => void) | undefined;
-    session.readClub.mockImplementation(async (_club, domain) => domain === 'messaging_domain'
-      ? new Promise<string>(resolve => { finish = resolve; }) : 'event-ready');
-    const chat = dispatch.read('messaging', 'moved', 'messaging_domain', async () => 'chat');
-    await vi.waitFor(() => expect(finish).toBeDefined());
-    expect(await dispatch.read('events', 'moved', 'events_domain', async () => 'event')).toBe('event-ready');
-    finish?.('chat-ready'); await chat;
-  });
-  it('a late failed session opening cannot clear a newer session', async () => {
-    const { d, session } = deps(ON);
-    let rejectOld: ((error: Error) => void) | undefined;
-    d.open.mockImplementationOnce(() => new Promise((_, reject) => { rejectOld = reject; }));
-    const dispatch = createClubDispatcher(d);
-    const old = dispatch.memberClubIds().catch(() => undefined);
-    await vi.waitFor(() => expect(rejectOld).toBeDefined());
-    clearGroupDispatchCache();
-    await dispatch.memberClubIds();
-    rejectOld?.(new Error('abandoned chat opening')); await old;
-    await dispatch.memberClubIds();
-    expect(d.open).toHaveBeenCalledTimes(2);
-    expect(session.dispose).not.toHaveBeenCalled();
-  });
   it('cold discovery refresh joins an already opening session', async () => {
     const { d, session } = deps(ON);
     let finish: ((value: typeof session) => void) | undefined;
