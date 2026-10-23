@@ -1,6 +1,6 @@
 import { acrossLists } from "@/live/featureScopes";
 import { mergeLists } from "@/live/featureRouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { readHomeSectionSnapshot, writeHomeSectionSnapshot } from "@/lib/homeSectionSnapshot";
@@ -192,11 +192,17 @@ export function useLatestClubNews(clubId?: string | null) {
 
 export function useClubNewsPost(newsId?: string | null) {
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
+  const queryClient = useQueryClient();
   return useQuery<ClubNewsRow | null>({
     queryKey: ["club-news-post", newsId],
     queryFn: async () => {
       if (!newsId) return null;
       if (useIcpLab) return getLocalLabNewsPost(newsId) as ClubNewsRow | null;
+      // Home/archive already know the actual post's club. Use it as a routing
+      // hint, not as authorization: the owning canister still checks the audience.
+      const knownPost = queryClient.getQueriesData<ClubNewsRow[]>({ queryKey: ["club-news"] })
+        .flatMap(([, rows]) => rows ?? [])
+        .find((row) => row.id === newsId);
       return withFeatureBackend("news", {
         supabase: async () => {
           const { data, error } = await supabase
@@ -208,8 +214,13 @@ export function useClubNewsPost(newsId?: string | null) {
           return (data as ClubNewsRow | null) ?? null;
         },
         icp: async (ctx) => {
-          // The canister has no get-by-id; resolve the post via the caller's
-          // clubs (role grants) and filter. Provisional — verify post-deploy.
+          if (knownPost?.club_id) {
+            const posts = await listLiveNews(ctx, knownPost.club_id);
+            const post = posts.find((row) => row.id === newsId);
+            return post ? liveNewsPostToRow(post) : null;
+          }
+          // Cold deep links retain caller-authorized owner discovery. Competition
+          // audiences may be visible without an ordinary club membership.
           const [{ listLiveMembershipClubs }, { listMyLiveMiniLeagues }] = await Promise.all([
             import("@/live/features/membership"),
             import("@/live/features/miniLeagues"),
@@ -222,13 +233,12 @@ export function useClubNewsPost(newsId?: string | null) {
             ...clubs.filter((c) => !isLiveClubDeleted(c)).map((c) => c.id),
             ...miniLeagues.map((league: any) => league.club_id),
           ]));
-          if (clubIds.length === 0) return null;
           const posts = await listLiveNewsMulti(ctx, clubIds);
           const post = (posts as Array<Parameters<typeof liveNewsPostToRow>[0]>)
             .find((p) => p.id === newsId);
           return post ? liveNewsPostToRow(post) : null;
         },
-      }, { newsId: newsId });
+      }, knownPost?.club_id ? { clubId: knownPost.club_id } : { newsId });
     },
     enabled: !!newsId,
   });
