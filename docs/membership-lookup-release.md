@@ -24,6 +24,33 @@ is ready. Do not run **upgrade** yet; it deliberately stops without changes.
 
 ## Essential work before upgrade
 
+### Owner-named legacy clubs: public cross-check
+
+On 23 October the existing public `list_clubs` query returned these active
+records from the original Group 1 club service; they were absent from the
+Group 2 query observed in the same check:
+
+| Club | Exact candidate ID |
+| --- | --- |
+| Winter Cats | `c1ba8739-5368-4ca9-8143-baa1d3ecfbc6` |
+| Giddy Goat | `c1f2ed52-fda3-45b4-84d3-57fcf253116e` |
+| Riverdogs | `f9f7d89c-a51f-454d-af8e-b976c10d2fc4` |
+
+These are public-query observations, not consensus/exclusive ownership proof.
+They are not an exhaustive inventory of Group 1: other active records exist.
+
+`frontend/scripts/check-membership-ownership.ts` now provides the operator
+check: use the existing governor PEM path and a report path as its arguments.
+It reads the complete registry, includes the explicitly pinned original Group 1
+authority, traverses every source's governor-only consensus export twice,
+rechecks revisions and registry, and rejects missing/deleted/duplicate matches.
+It emits only club IDs/source counts/revisions and `ready: false`; no raw ACL
+relationships, grants, placements or media-key changes. This check is not wired
+into an upgrade or represented as runnable without the existing signing key and
+supported live source-export methods. It has not been run signed on mainnet.
+
+### Remaining release prerequisites
+
 - The intended upgrade scope is only three existing services: the shared account service
   (`identity_access`) and each group's club service (`club_domain`). No other
   service is touched, created or rewired.
