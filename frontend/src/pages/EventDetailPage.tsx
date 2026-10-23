@@ -1016,15 +1016,27 @@ export default function EventDetailPage() {
 
   // Fetch team/club members for duty assignment and not responded list (with roles)
   const { data: membersWithRoles } = useQuery({
-    queryKey: ["event-members-with-roles", event?.club_id, event?.team_id, isIcpAuthBackend],
+    queryKey: ["event-members-with-roles", event?.club_id, event?.team_id, (event as any)?.competition_id, isIcpAuthBackend],
     queryFn: async () => withFeatureBackend("membership", {
       supabase: async () => {
         const query = supabase
           .from("user_roles")
           .select("user_id, role, team_id, profiles:user_id (id, display_name, avatar_url)");
 
+        const isCompetitionWide = !!(event as any)?.competition_id && !event?.team_id;
         if (event?.team_id) {
           query.eq("team_id", event.team_id);
+        } else if (isCompetitionWide) {
+          // Competition-wide events invite only people on the entered teams
+          // (plus their parents/guardians) — never the whole organising club.
+          const { data: audience, error: audErr } = await supabase.rpc(
+            "get_competition_event_recipients" as any,
+            { p_event_id: id! },
+          );
+          if (audErr) throw audErr;
+          const ids = ((audience as any[]) || []).map((r: any) => (typeof r === "string" ? r : r?.get_competition_event_recipients ?? r?.user_id)).filter(Boolean);
+          if (ids.length === 0) return [];
+          query.in("user_id", ids);
         } else {
           query.eq("club_id", event!.club_id);
         }

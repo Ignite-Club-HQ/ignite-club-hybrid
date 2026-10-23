@@ -996,6 +996,23 @@ export default function TeamDetailPage() {
 
   const isCoachOrAdmin = userRole === "team_admin" || userRole === "coach" || isAppAdmin;
   const isAdmin = isCoachOrAdmin;
+  // Competition Owners/Admins (any entered team) and season captains (own team)
+  // may invite players only — no staff roles, no other management.
+  const { data: canInvitePlayersOnly = false } = useQuery({
+    queryKey: ["can-invite-players-to-team", id, user?.id],
+    enabled: !!id && !!user && !isCoachOrAdmin && !isClubAdmin && !useIcpLab,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("can_invite_players_to_team", {
+        _user_id: user!.id,
+        _team_id: id,
+      });
+      if (error) return false;
+      return data === true;
+    },
+  });
+  const showInvite = isAdmin || !!isClubAdmin || canInvitePlayersOnly;
+  const playersOnlyInvite = !isAdmin && !isClubAdmin && canInvitePlayersOnly;
   // Club admins should have the same team-management actions in the team menu
   const canManageTeam = isAdmin || isClubAdmin;
   // Settings / archive / delete stay with real admins only — captains are excluded.
@@ -1506,7 +1523,7 @@ export default function TeamDetailPage() {
             {Object.keys(members).length + teamChildren.length} member{Object.keys(members).length + teamChildren.length !== 1 ? 's' : ''}
           </p>
         </div>
-        {(isAdmin || isClubAdmin) && (
+        {showInvite && (
           <Button size="sm" className="shrink-0 h-9" onClick={() => setHeaderInviteOpen(true)}>
             <UserPlus className="h-4 w-4 mr-1.5" />
             Invite
@@ -1627,15 +1644,16 @@ export default function TeamDetailPage() {
       </div>
 
       {/* Hidden AddTeamMemberSheet controlled by header Invite button */}
-      {(isAdmin || isClubAdmin) && headerInviteOpen && (
+      {showInvite && headerInviteOpen && (
         <Suspense fallback={null}>
         <AddTeamMemberSheet
           teamId={id!}
           teamName={team.name}
           clubId={team.club_id}
           teamType={(team as any).team_type || "mixed"}
-          isClubAdminOnly={isClubAdmin && !isCoachOrAdmin}
+          isClubAdminOnly={(isClubAdmin && !isCoachOrAdmin) || playersOnlyInvite}
           canBulkInvite={isCoachOrAdmin || isClubAdmin}
+          playersOnly={playersOnlyInvite}
           triggerVariant="none"
           externalOpen={headerInviteOpen}
           onExternalOpenChange={setHeaderInviteOpen}
