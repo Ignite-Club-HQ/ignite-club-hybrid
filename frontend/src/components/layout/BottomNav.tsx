@@ -2,12 +2,7 @@ import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { Home, Calendar, MessageCircle, Image } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/hooks/useAuth";
-import { useClubTheme } from "@/hooks/useClubTheme";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useUnreadMessageCounts } from "@/hooks/useUnreadMessageCounts";
-import { useSuppressedChatScopes } from "@/lib/pushTapSuppression";
+import { useNavMessagesBadgeCount } from "@/hooks/useNavMessagesBadgeCount";
 import { Capacitor } from "@capacitor/core";
 import {
   IOS_LAYOUT_RESET_EVENT,
@@ -17,7 +12,6 @@ import {
 import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
 import { useNativeKeyboardHeight } from "@/hooks/useNativeKeyboardHeight";
 import { prefetchRoute, warmMainRoutes } from "@/lib/routePrefetch";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 const navItems = [
   { to: "/", icon: Home, label: "Home" },
