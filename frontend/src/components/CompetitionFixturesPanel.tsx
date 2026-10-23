@@ -1423,6 +1423,7 @@ function RoundSection({
 function MatchRow({ match, isAdmin, competitionId, entries, divisions, hideRoundBadge = false, source }: { match: any; isAdmin: boolean; competitionId: string; entries: any[]; divisions: any[]; hideRoundBadge?: boolean; source?: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [editDetailsOpen, setEditDetailsOpen] = useState(false);
   const [home, setHome] = useState<string>(match.home_score?.toString() ?? "");
@@ -1522,8 +1523,16 @@ function MatchRow({ match, isAdmin, competitionId, entries, divisions, hideRound
 
 
   const isScheduled = !isCompleted && !isCancelled && !isPostponed && !isInProgress;
+  const linkedEventId: string | null = match.home_event_id ?? match.away_event_id ?? match.fixture_events?.[0]?.id ?? null;
   return (
-    <Card className={`overflow-hidden w-full box-border shadow-sm hover:shadow-md transition-shadow ${isCancelled ? "opacity-60" : ""}`}>
+    <Card
+      className={`overflow-hidden w-full box-border shadow-sm hover:shadow-md transition-shadow ${linkedEventId && !editing ? "cursor-pointer" : ""} ${isCancelled ? "opacity-60" : ""}`}
+      onClick={(e) => {
+        if (!linkedEventId || editing) return;
+        if (shouldIgnoreFixtureCardClick(e.currentTarget, e.target as Element)) return;
+        navigate(`/events/${linkedEventId}`);
+      }}
+    >
       <CardContent className="px-4 pt-4 pb-3.5 space-y-4">
         {/* 1. Time — compact metadata row */}
         {!editing && (
