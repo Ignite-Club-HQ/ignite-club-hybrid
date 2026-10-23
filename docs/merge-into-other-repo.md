@@ -126,6 +126,31 @@ project; the Google Maps connector keys stay as-is.
 `send-welcome-email-icp` to the prod project, then smoke-test one push
 delivery and one welcome email before switching traffic.
 
+## 4b. Automated copy tool (run before the merge)
+
+`scripts/migrate-github-repo.mjs` copies the repo-level setup from this repo
+to `ignite-club-hq-prod`. It needs a PAT with `repo` + `workflow` scope on
+both repos (`GITHUB_TOKEN`), plus `SOURCE_REPO` and `TARGET_REPO` as
+`owner/name`.
+
+- `compare` — diffs secret names, variable names and workflow files between
+  the two repos. Read-only; run this first.
+- `copy-variables` — copies Actions variables value-and-all (variables are
+  readable, unlike secrets).
+- `copy-files [--path P]...` — clones both repos shallowly, copies
+  `.github/workflows` plus any extra `--path` entries, commits and pushes to
+  the target. Refuses absolute/parent-traversal paths.
+- `copy-secrets --from-env NAME,NAME` — GitHub never returns secret values,
+  so this reads each named value from your LOCAL environment (or prompts),
+  encrypts it with the target repo's public key (libsodium sealed box) and
+  sets it on the target only. Values are never printed. Needs
+  `npm install --no-save libsodium-wrappers` at repo root.
+
+Secret names to expect (from section 4a): `DEPLOYER_PEM`,
+`ICP_PUSH_WORKER_SEED`, `FCM_SERVICE_ACCOUNT_JSON`. Keep the same
+`ICP_PUSH_WORKER_SEED` value so existing canister grants stay valid.
+Unit tests: `node --test scripts/migrate-github-repo.test.mjs`.
+
 ## 5. The single biggest risk: the canister ID tables
 
 `deploy/mainnet/.icp/data/mappings/ic.ids.json` and
