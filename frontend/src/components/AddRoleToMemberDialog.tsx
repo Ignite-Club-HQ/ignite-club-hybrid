@@ -1,4 +1,5 @@
 import { writeOnce } from "@/live/clubScope";
+import { sendCompetitionWelcomeEmail } from "@/lib/sendCompetitionWelcomeEmail";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, UserPlus } from "lucide-react";

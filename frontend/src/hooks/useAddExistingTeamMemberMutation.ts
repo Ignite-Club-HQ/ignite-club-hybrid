@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import { sendCompetitionWelcomeEmail } from "@/lib/sendCompetitionWelcomeEmail";
 import type { BulkChild } from "@/components/members/ChildAndSecondGuardianFields";
 import {
   ensureSecondParent,
