@@ -59,6 +59,9 @@ jobs:
           icp build club_domain
           mkdir -p "$RUNNER_TEMP/lookup-wasm"
           cp .icp/cache/artifacts/identity_access .icp/cache/artifacts/club_domain "$RUNNER_TEMP/lookup-wasm/"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - name: Verify real consensus acceptance and snapshot restoration locally
         run: |
           set -euo pipefail

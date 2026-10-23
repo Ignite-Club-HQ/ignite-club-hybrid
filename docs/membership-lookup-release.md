@@ -82,13 +82,25 @@ the check. Reports explicitly distinguish `sampledCurrent` from
 `verified_current`, and keep readiness/app activation false. The workflow runs
 these tests before using the signing key; its upgrade block remains in place.
 
-**These checks cannot finish live currentness by themselves.** A membership can
-change after its status reply and before its notification reaches the lookup.
-Likewise, restoring both a source and its local revision counters can look
-consistent. A real read-freshness protocol and independent restoration fence are
-still missing engineering, not a secret or approval the owner can supply.
+The new generated **governor consensus acceptance operation** now checks a
+snapshot rather than pretending sampled replies are permanently current. Two
+complete ordered source revision scans must match exact accepted ownership/build
+revisions. Independent replica lifecycle history for identity/router/all sources
+is pinned before reconstruction and rechecked around acceptance. Snapshot loading
+advances that history even when code and local counters look unchanged.
 
-The verified-current/old-restored-state release contract remains unfinished. Additional registered groups
+Real disposable-canister tests pass same-code source restore and jointly restored
+identity/source refusal. The workflow runs this rehearsal, and the draft runner
+records the operation's result separately from historical reports. No mutation
+locks, new router service or additional source migration is required.
+
+**The checks are implemented locally; live acceptance has not run.** The released
+caller-private reader still needs to apply snapshot verification on every page
+and protect its account binding through awaits. This operator operation never
+enables the app, and ordinary configuration cannot repin a restored instance.
+Populated private-page and signed production acceptance remain separate.
+
+App-ready verified-current release remains unfinished. Additional registered groups
 are inspected, but cannot be silently ignored or added to this three-target upgrade.
 The protected upgrade still refuses before making changes.
 
