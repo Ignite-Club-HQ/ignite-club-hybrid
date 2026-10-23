@@ -1727,7 +1727,8 @@ export default function TeamChatPage() {
     onMutate: async ({ text, image_url, reply_to_id }) => {
       const currentProfile = profileRef.current;
 
-      await queryClient.cancelQueries({ queryKey: ["team-messages", teamId] });
+      // Do not defer composer clearing until a cancelled read settles.
+      void queryClient.cancelQueries({ queryKey: ["team-messages", teamId] });
 
       // Mutation-specific temp id so overlapping sends can be rolled back
       // independently (Date.now() alone collides on rapid double-sends).

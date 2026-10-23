@@ -1528,7 +1528,8 @@ export default function ClubChatPage() {
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {
       const currentProfile = profileRef.current;
-      await queryClient.cancelQueries({ queryKey: ["club-messages", clubId] });
+      // Do not defer composer clearing until a cancelled read settles.
+      void queryClient.cancelQueries({ queryKey: ["club-messages", clubId] });
 
       // Mutation-specific temp id so overlapping sends roll back independently.
       const tempId = createSendTempId();
