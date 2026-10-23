@@ -175,6 +175,9 @@ impl<M:Memory+Clone> Coordinator<M>{
     }
     pub fn private_page(&self,sessions:&mut Sessions<M>,caller:Principal,viewer:Viewer,consumer:u64,continuation:Option<Continuation>,now:u64)->Outcome<(Page,Option<Continuation>)>{
         if caller==Principal::anonymous()||viewer.aliases.is_empty()||viewer.aliases.len()>8||!viewer.aliases.contains(&caller){return Err("Caller-private verified account required".into());}
+        // Unresolved legacy ownership or unchecked builds must never supply an
+        // apparently valid empty answer; callers fall back to existing discovery.
+        self.require_resolved_locations()?;
         let mut sources=self.sources()?;
         // Verified aliases are identity-owned. Read at most 100 indexed source
         // candidates per alias; unusually broad accounts fall back explicitly.
@@ -226,13 +229,13 @@ impl<M:Memory+Clone> Coordinator<M>{
             let source=format!("g{n}");let b=c.begin(&source,*authority,1).unwrap();
             c.ingest(&source,*authority,&b,0,vec![Edge::Club{id:format!("club{n}"),deleted:false},Edge::Role{subject:user,club:Some(format!("club{n}"))}],true).unwrap();
             assert!(c.publish(&source,&b).is_err());while c.advance(&source,&b).unwrap()>0{}
-            c.publish(&source,&b).unwrap();assert!(c.sources().is_err());c.acknowledge(&source,&b,1).unwrap();
+            c.publish(&source,&b).unwrap();assert!(c.sources().is_err());c.acknowledge(&source,&b,1).unwrap();c.finish_location_checks(&source,&b).unwrap();
         }
         let (first,next)=c.private_page(&mut sessions,user,viewer(user),1,None,1).unwrap();assert_eq!(first.rows[0].club,"club0");assert_eq!(next.as_ref().map(|t|t.sequence),Some(1));drop(c);
         let mut c=open(&manager);let (second,next)=c.private_page(&mut sessions,user,viewer(user),1,next,1).unwrap();assert_eq!(second.rows[0].club,"club1");assert!(next.is_none());
         let b=c.begin("g0",authorities[0],2).unwrap();assert!(c.private_page(&mut sessions,user,viewer(user),1,None,2).is_err());
         c.ingest("g0",authorities[0],&b,0,vec![Edge::Club{id:"club0".into(),deleted:false}],true).unwrap();while c.advance("g0",&b).unwrap()>0{}
-        c.publish("g0",&b).unwrap();assert!(c.acknowledge("g0",&b,1).is_err());c.acknowledge("g0",&b,2).unwrap();let (page,next)=c.private_page(&mut sessions,user,viewer(user),1,None,2).unwrap();assert_eq!(page.rows[0].club,"club1");assert!(next.is_none());
+        c.publish("g0",&b).unwrap();assert!(c.acknowledge("g0",&b,1).is_err());c.acknowledge("g0",&b,2).unwrap();c.finish_location_checks("g0",&b).unwrap();let (page,next)=c.private_page(&mut sessions,user,viewer(user),1,None,2).unwrap();assert_eq!(page.rows[0].club,"club1");assert!(next.is_none());
     }
     #[test]fn foreign_authority_stale_callback_and_inventory_replacement_never_publish(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,authorities)=group_inventory::tests::fixture();
@@ -263,6 +266,7 @@ impl<M:Memory+Clone> Coordinator<M>{
         if edges.is_empty(){c.ingest(source,authority,&binding,0,vec![],true).unwrap();}
         while c.advance(source,&binding).unwrap()>0{}
         c.publish(source,&binding).unwrap();c.acknowledge(source,&binding,revision).unwrap();
+        c.finish_location_checks(source,&binding).unwrap();
     }
     #[test]fn single_source_members_skip_empty_groups_after_reopen_and_removal_clears_the_index(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let user=Principal::from_slice(&[99,1]);let mut c=open(&manager);
@@ -316,11 +320,26 @@ impl<M:Memory+Clone> Coordinator<M>{
         let mut foreign=newer.clone();foreign.authority=a[0];foreign.revision=100;assert!(c.observe_invalidation("g1",&foreign).is_err());assert!(c.sources().is_ok());
         foreign=newer;foreign.generation+=1;assert!(c.observe_invalidation("g1",&foreign).is_err());assert!(c.sources().is_ok());
     }
+    #[test]fn private_pages_refuse_until_club_ownership_coverage_is_resolved(){
+        let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let user=Principal::from_slice(&[99,1]);let mut c=open(&manager);
+        c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();
+        finish(&mut c,"g1",a[1],1,vec![]);
+        let binding=c.begin("g0",a[0],1).unwrap();
+        c.ingest("g0",a[0],&binding,0,vec![Edge::Club{id:"member".into(),deleted:false},Edge::Role{subject:user,club:Some("member".into())}],true).unwrap();
+        while c.advance("g0",&binding).unwrap()>0{}c.publish("g0",&binding).unwrap();c.acknowledge("g0",&binding,1).unwrap();
+        let mut sessions=Sessions::open(manager.get(MemoryId::new(4)));
+        // Fully published and acknowledged, but ownership never checked: no answer.
+        assert!(c.private_page(&mut sessions,user,viewer(user),1,None,1).is_err());
+        c.unresolved_location("g0",&binding).unwrap();assert!(c.private_page(&mut sessions,user,viewer(user),1,None,1).is_err());
+        // A marked-unresolved build cannot be certified; a fresh rebuild can.
+        assert!(c.finish_location_checks("g0",&binding).is_ok());assert!(c.private_page(&mut sessions,user,viewer(user),1,None,1).is_err());
+        finish(&mut c,"g0",a[0],2,vec![Edge::Club{id:"member".into(),deleted:false},Edge::Role{subject:user,club:Some("member".into())}]);
+        let (page,next)=c.private_page(&mut sessions,user,viewer(user),1,None,2).unwrap();assert_eq!(page.rows[0].club,"member");assert!(next.is_none());
+    }
     #[test]fn unresolved_legacy_ownership_survives_reopen_and_cannot_certify_readiness(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();
         finish(&mut c,"g0",a[0],1,vec![]);finish(&mut c,"g1",a[1],1,vec![]);
-        assert!(c.require_resolved_locations().is_err());
-        for source in ["g0","g1"]{let binding=c.build(source).unwrap().binding;c.finish_location_checks(source,&binding).unwrap();}assert!(c.require_resolved_locations().is_ok());
+        assert!(c.require_resolved_locations().is_ok());
         let binding=c.build("g0").unwrap().binding;c.unresolved_location("g0",&binding).unwrap();drop(c);
         let c=open(&manager);assert!(c.sources().is_ok());assert!(c.require_resolved_locations().is_err());let mut stale=binding;stale.revision=2;assert!(c.builder("g0",&stale).is_err());
     }

@@ -10,8 +10,8 @@ import { readCompleteMembershipDirectory, type DirectoryPage, type DirectoryCont
 export type GroupRegistry = { revision: bigint; groups: GroupDescriptor[]; deployment: GroupDeployment; bindings: GroupDeploymentBinding[] };
 export type GroupSessionTransport = {
   readRegistry(): Promise<GroupRegistry>;
-  /** Optional only after source propagation is verified; absence/failure keeps
-   * complete Stage A discovery. No live adapter is installed yet. */
+  /** Explicit opt-in only after source propagation is verified.
+   * Absence, failure or uncertainty keeps complete Stage A discovery. */
   readMembershipDirectory?(ctx: FeatureBackendContext, continuation: DirectoryContinuation | null, registryFingerprint: string): Promise<DirectoryPage>;
   readMemberships(ctx: FeatureBackendContext, offset: bigint, limit: number): Promise<{ clubs: string[]; next: bigint | null; aclRevision: bigint }>;
   readAssignments(clubs: string[], revision: bigint): Promise<ClubAssignment[]>;
