@@ -651,6 +651,26 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(input.creator) };
   };
 
+  // Fixture-card tap-to-event: returns the per-team event ids materialized
+  // for a competition match. The Match record on competition_domain carries
+  // no event ids, so the client resolves them here. Callers must belong to
+  // at least one linked club (same member-visibility convention as
+  // canView); both teams' ids are returned, mirroring the Supabase match
+  // row's home_event_id/away_event_id visibility.
+  public query ({caller}) func get_match_event_ids(match_id : Text) : async {#Ok : [{team_id : Text; event_id : Text}]; #Err : Text} {
+    auth(caller);
+    let links = competitionMatchLinks.filter(func(l) = l.match_id == match_id);
+    if (links.size() == 0) return #Err("No fixture events for this match");
+    let memberOfAny = isGovernor(caller) or links.any(func(l) =
+      switch (events.find(func(e) = e.id == l.event_id)) {
+        case null false;
+        case (?event) isClubMember(caller, event.club_id);
+      }
+    );
+    if (not memberOfAny) return #Err("Fixture club membership required");
+    #Ok(links.map(func(l) = { team_id = l.team_id; event_id = l.event_id }))
+  };
+
   func matchHistoryAccess(caller:Principal,event:Types.Event,managerOnly:Bool) : async {#Ok:Bool;#Err:Text} {
     let link=switch(competitionMatchLinks.find(func(l)=l.event_id==event.id)){case null return #Ok(true);case(?l)l};
     if(event.team_id!=?link.team_id) return #Err("History association mismatch");
