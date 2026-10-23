@@ -717,8 +717,9 @@ function SupabaseVaultPage() {
             },
             icp: async (ctx) => {
               try {
-                const t: any = await getLiveTeam(ctx, teamId);
-                return { id: t.id, name: t.name, club_id: t.club_id ?? t.club };
+                const [team] = await getLiveTeam(ctx, teamId);
+                if (!team) return null;
+                return { id: team.id, name: team.name, club_id: team.club_id };
               } catch {
                 return null;
               }

@@ -103,7 +103,8 @@ export function useVaultAccessModel({
   const { data: userRoles, isLoading: isLoadingRoles } = useQuery({
     queryKey: ["user-admin-roles", userId],
     queryFn: async () => {
-      const roles = await fetchVaultUserRoles(userId!);
+      if (!userId) return [];
+      const roles = await fetchVaultUserRoles(userId);
       console.log("[Vault] Fetched userRoles for user", userId, ":", roles);
       return roles;
     },
@@ -203,7 +204,7 @@ export function useVaultAccessModel({
   const hasProClub = proAccessInfo ?? false;
 
   const isLoadingAccess =
-    isLoadingAppAdmin || isLoadingProClub || isLoadingRoles || isLoadingClubHasPro || isLoadingTeamHasPro || isLoadingCompetitionAccess;
+    isLoadingAppAdmin || isLoadingRoles || (!isAppAdmin && (isLoadingProClub || isLoadingClubHasPro || isLoadingTeamHasPro || isLoadingCompetitionAccess));
 
   // Vault access requires: 1) Pro subscription in current context AND 2) Admin/coach role
   const vaultAccessContextHasPro = currentView.type === "root" ? hasProClub : currentContextHasPro;
