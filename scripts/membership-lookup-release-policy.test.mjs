@@ -124,3 +124,9 @@ test('journal binding digest covers the exact target set', () => {
   const other = { ...binding, targets: targets.map(t => ({ ...t, newHash: 'f'.repeat(64) })) };
   assert.notEqual(digest(binding), digest(other));
 });
+test('restart rejects fabricated activation and contradictory saved source revisions', () => {
+  for (const changes of [{ appEnabled: true }, { verified_current: true }, { acknowledgedRevisions: { g1: '0' } }, { acknowledgedRevisions: { g3: '7' } }, { acknowledgedRevisions: { g1: '7' }, fill: { g1: false, g2: true } }]) {
+    assert.throws(() => validateJournal(journal(changes), binding));
+  }
+  validateJournal(journal({ acknowledgedRevisions: { g1: '7', g2: '9' } }), binding);
+});

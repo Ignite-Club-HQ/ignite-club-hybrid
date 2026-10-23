@@ -5,6 +5,7 @@
 // completion cannot certify readiness; upgrades remain blocked until the
 // source configuration and verified-current release contract are implemented.
 import { digest, executeUpgrades } from './subscription-upgrade-policy.mjs';
+import { requireHistoricalCheckpoint } from './membership-acceptance-checks.mjs';
 export { digest, executeUpgrades };
 
 export const CONFIRMATION = 'RELEASE MEMBERSHIP LOOKUP';
@@ -91,6 +92,7 @@ export function validateJournal(journal, binding) {
   if (journal.fill && (typeof journal.fill !== 'object' || ['g1', 'g2'].some(g => typeof journal.fill[g] !== 'boolean'))) throw new Error('Invalid fill record');
   // Even a fully acknowledged historical fill is not global currentness.
   if (journal.ready === true) throw new Error('Historical membership fill cannot certify lookup readiness');
+  requireHistoricalCheckpoint(journal, ['g1', 'g2'].map(groupId => ({ groupId, canisterId: PINNED[groupId] })));
 }
 
 /** Uses the real source-specific Progress contract. Completion records an

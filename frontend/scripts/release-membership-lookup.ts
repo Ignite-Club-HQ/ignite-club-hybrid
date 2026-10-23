@@ -26,11 +26,12 @@ import { membershipOwnershipTransport } from './membership-ownership-transport';
 import { checkLegacyOwnership } from '../../scripts/membership-legacy-ownership.mjs';
 import { fingerprint } from '../../scripts/membership-source-configuration.mjs';
 import { runOwnershipAcceptance } from '../../scripts/membership-ownership-acceptance.mjs';
+import { requireCompleteFill, checkHistoricalAcceptance } from '../../scripts/membership-acceptance-checks.mjs';
 
 const [action, artifacts, pem, directory] = process.argv.slice(2);
 validateRequest(action, process.env.CONFIRMATION);
 // Refuse BEFORE management calls, journal writes or installation. The current
-// runner has no exact source-grant configuration or current-readiness verifier.
+// runner has no atomic read-freshness or independent restored-state verifier.
 if (action === 'upgrade') requireLookupReleaseAcceptance();
 if (!artifacts || !pem || !directory) throw new Error('Artifacts, existing key and report directory required');
 const root = new URL('../../', import.meta.url);
@@ -115,7 +116,7 @@ if (!api(`git/matching-refs/heads/${branch}`).some((r: { ref: string }) => r.ref
 const path = 'contents/membership-lookup-release.json';
 const entries = api(`contents?ref=${branch}`);
 let stored = entries.some((e: { name: string }) => e.name === 'membership-lookup-release.json') ? api(`${path}?ref=${branch}`) : null;
-const binding = { release, governor: GROUP2_GOVERNOR, router: shared.shard_router, configurationRevision: String(initial.configurationRevision), configuration, targets };
+const binding = { release, governor: GROUP2_GOVERNOR, router: shared.shard_router, configurationRevision: String(initial.configurationRevision), configuration, sources: observedSources, targets };
 let journal = stored ? JSON.parse(Buffer.from(stored.content, 'base64').toString()) : null;
 if (journal && digest(journal.binding) !== digest(binding)) throw new Error('Another release journal exists; do not reset it. Review its settled outcomes before a separate release.');
 if (!journal) {
@@ -137,8 +138,10 @@ const fillActor = Actor.createActor<IdentityService>(identityIdl, { agent, canis
 // Same complete source set checked before mutation; original G1 is supported
 // by identity's explicit pinned-source verifier, never by a fake placement.
 const sources = observedSources.map((s: { groupId: string; canisterId: string }) => ({ groupId: s.groupId, authority: Principal.fromText(s.canisterId) }));
-const firstPlacement = initial.placements[0];
+const firstPlacement = initial.placements.find(p => p.group_id === 'g2');
 if (!firstPlacement) throw new Error('Directory deployment placement required');
+if (initial.placements.some(p => p.deployment_id !== firstPlacement.deployment_id || p.deployment_revision !== firstPlacement.deployment_revision ||
+    p.host !== firstPlacement.host || p.network_kind !== firstPlacement.network_kind)) throw new Error('Common exact directory deployment binding required');
 const directoryBinding = { registry: Principal.fromText(shared.shard_router), registry_revision: initial.revision,
   target_alias: 'mainnet', deployment_id: firstPlacement.deployment_id, deployment_revision: firstPlacement.deployment_revision,
   host: firstPlacement.host, network_kind: firstPlacement.network_kind };
@@ -147,14 +150,16 @@ const sourceActor = (source: { groupId: string }) => {
   const actor = sourceActors.get(source.groupId); if (!actor) throw new Error('Unknown exact source'); return actor;
 };
 const configured = await configureDirectorySources(directoryBinding, sources, 1n, {
+  identity: Principal.fromText(PINNED.identity),
   gate,
   configure: (b: typeof directoryBinding, authorities: Principal[], generation: bigint) => fillActor.configure_membership_directory(b, authorities, generation),
   configuration: () => fillActor.read_membership_directory_configuration(),
   sourceConfiguration: (source: { groupId: string }) => sourceActor(source).read_membership_directory_source_binding(),
   configureSource: (source: { groupId: string }, grant: Parameters<ClubService['configure_membership_directory_source']>[0]) => sourceActor(source).configure_membership_directory_source(grant),
-  persist: async (checkpoint: unknown) => { journal.configuration = checkpoint; await persist(); },
+  persist: async (checkpoint: unknown) => { journal.configuration = JSON.parse(fingerprint(checkpoint)); await persist(); },
 });
-await runFill(['g1', 'g2'], async (groupId: string) => {
+journal.directoryInventoryDigest = Array.from(configured.grants[0].inventory_digest);await persist();
+const completed = await runFill(observedSources.map((s: { groupId: string }) => s.groupId), async (groupId: string) => {
   await gate();
   const progress = await fillActor.advance_membership_directory_source(groupId);
   await gate();
@@ -164,11 +169,19 @@ await runFill(['g1', 'g2'], async (groupId: string) => {
   journal.acknowledgedRevisions = { ...journal.acknowledgedRevisions, [groupId]: String(revision) };
   await persist();
 } });
+requireCompleteFill(sources, completed);
 await gate();
-await runOwnershipAcceptance(() => fillActor.advance_membership_directory_ownership(), {
-  sources, inventoryDigest: configured.grants[0]?.inventory_digest,
+const ownership = await runOwnershipAcceptance(() => fillActor.advance_membership_directory_ownership(), {
+  sources, completed, inventoryDigest: configured.grants[0]?.inventory_digest,
 }, { gate, persist: async (ownership: unknown) => {
-  journal.ownership = ownership; journal.ready = false; await persist();
+  journal.ownership = JSON.parse(fingerprint(ownership)); journal.ready = false; await persist();
 } });
+const acceptance = await checkHistoricalAcceptance({ sources, completed, ownership,
+  inventoryDigest: configured.grants[0].inventory_digest, binding: directoryBinding, generation: 1n,
+  targets: journal.steps,
+}, { gate, configuration: () => fillActor.read_membership_directory_configuration(),
+  status: (source: { groupId: string }) => sourceActor(source).read_membership_discovery_status(), observe });
+journal.acceptance = acceptance;await persist();
+writeFileSync(resolve(directory, 'acceptance.json'), JSON.stringify(acceptance, null, 2));
 journal.ready = false; await persist();
-throw new Error('Exclusive source ownership accepted for exact revisions; verified-current release acceptance remains required. No readiness record or app activation.');
+throw new Error('Historical coverage/ownership and repeated catch-up readbacks checked; atomic read freshness and independent restored-state fencing remain required. No readiness record or app activation.');
