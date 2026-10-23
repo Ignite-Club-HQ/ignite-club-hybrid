@@ -1,6 +1,8 @@
 # Safe transfer of GitHub secrets and Actions to prod
 
 ## Scope
+**We are adding to `Ignite-Club-HQ/ignite-club-hq-prod` only. Nothing is being removed or overwritten from that repository: no existing secrets, variables, files, workflows, branches or settings. Any collision is skipped and reported, never replaced. `Ignite-Club-HQ/ignite-club-hybrid` remains unchanged.**
+
 **Copy only, from `Ignite-Club-HQ/ignite-club-hybrid` to `Ignite-Club-HQ/ignite-club-hq-prod`**, before the later app merge. Hybrid remains unchanged: no source commits, secret/variable edits, workflow edits, deletions or disabling jobs. Add only missing approved destination secrets, variables and inactive workflow setup. Never transfer prod’s setup back into hybrid. Do not replace prod’s main branch, merge the app, change Supabase/Lovable/Codemagic settings, deploy canisters, change controllers or fund services.
 
 ## 1. Read-only inventory first
@@ -44,4 +46,4 @@ Keep hybrid’s workers running and unchanged throughout this copy. Destination 
 - Include updated transfer instructions with the destination staging bundle; do not commit documentation changes to hybrid. Treat the older merge document's inventory as historical, not current authority.
 
 ## Result
-Prod gains only approved missing credentials and an inactive, reviewable automation bundle. Hybrid remains unchanged, as do prod's existing secrets, files, main branch and running services. Missing original secret values are explicit blockers. App replacement, source changes and automation activation remain separate approvals.
+**Additions to prod only; nothing removed or overwritten in prod; hybrid unchanged.** Prod gains only approved missing credentials and an inactive, reviewable automation bundle. Prod's existing secrets, variables, files, workflows, branches, settings and running services are preserved. Missing original secret values are explicit blockers. App replacement, source changes and automation activation remain separate approvals.
