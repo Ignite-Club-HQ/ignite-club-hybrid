@@ -14,7 +14,6 @@ import { resolveEventCapabilities } from "@/features/events/eventCapabilities";
 import { fetchEventDetail } from "@/features/events/eventDetailRepository";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
-import { abortAllInFlightRestGets } from "@/lib/supabaseAuthRetry";
 import { Share } from "@capacitor/share";
 import { Capacitor } from "@capacitor/core";
 import { getShareUrl } from "@/lib/shareUtils";

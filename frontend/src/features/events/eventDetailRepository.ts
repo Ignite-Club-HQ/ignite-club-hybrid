@@ -2,17 +2,19 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveEvents } from "@/live/features/events";
 import { getCachedTeam, getCachedClub } from "@/lib/clubTeamCache";
 import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
+import { assertReadNotAborted, withReadDeadline } from "@/live/readDeadline";
 
 /** Core Event Detail read boundary. */
 export const EVENT_DETAIL_SELECT =
   "*, teams (name, default_match_arrival_minutes, default_rsvp_audience), clubs!club_id (name, is_pro, sport)";
 
-async function fetchEventDetailFromSupabase(client: any, eventId: string) {
-  const { data, error } = await client
+async function fetchEventDetailFromSupabase(client: any, eventId: string, signal?: AbortSignal) {
+  let query = client
     .from("events")
     .select(EVENT_DETAIL_SELECT)
-    .eq("id", eventId)
-    .maybeSingle();
+    .eq("id", eventId);
+  if (signal) query = query.abortSignal(signal);
+  const { data, error } = await query.maybeSingle();
 
   if (error) throw error;
   return data ?? null;
@@ -29,15 +31,18 @@ async function fetchEventDetailFromSupabase(client: any, eventId: string) {
  * row (no teams/clubs joins, ms epoch timestamps, Principal creator) — the
  * mapping is provisional until verified against a deployed canister.
  */
-export async function fetchEventDetail(client: any, eventId: string) {
-  return withFeatureBackend("events", {
-    supabase: () => fetchEventDetailFromSupabase(client, eventId),
+export async function fetchEventDetail(client: any, eventId: string, signal?: AbortSignal) {
+  assertReadNotAborted(signal);
+  return withReadDeadline(withFeatureBackend("events", {
+    supabase: () => fetchEventDetailFromSupabase(client, eventId, signal),
     icp: async (ctx) => {
+      assertReadNotAborted(signal);
       const events = await listLiveEvents(ctx);
+      assertReadNotAborted(signal);
       const raw = events.find((event) => event.id === eventId);
       return raw ? toEventDetailShape(raw) : null;
     },
-  }, { eventId });
+  }, { eventId }), 'Event loading');
 }
 
 /**
