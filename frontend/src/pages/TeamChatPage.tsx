@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, Suspense } from "react";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { chatSendFailureReason } from "@/lib/chatSendFailure";
+import { withReadDeadline } from "@/live/readDeadline";
+import { readIcpThreadPage } from "@/features/messaging/thread/icpThreadRead";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { isSameDay } from "date-fns";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
@@ -516,12 +518,14 @@ export default function TeamChatPage() {
   // load and by scroll-back paging so both render identically.
   const mapLiveTeamRows = async (ctx: any, rows: any[]): Promise<Message[]> => {
     const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
-    const profilesMap = await fetchProfilesWithCache(authorIds);
+    const profilesRead = withReadDeadline(fetchProfilesWithCache(authorIds), 'Chat profiles', 1500)
+      .catch(() => getProfilesFromCache(authorIds));
+    const reactionsRead = teamId ? withReadDeadline(listLiveReactions(ctx, teamId), 'Chat reactions', 1500).catch(() => []) : Promise.resolve([]);
+    const [profilesMap, liveReactions] = await Promise.all([profilesRead, reactionsRead]);
     // Reactions persist on the canister; restore them on every refetch.
     // Tolerate older canisters that lack list_reactions.
     const reactionsByMessage = new Map<string, any[]>();
     try {
-      const liveReactions = await listLiveReactions(ctx, teamId!);
       for (const r of liveReactions) {
         const uid = r.user.toText();
         const list = reactionsByMessage.get(r.message_id) ?? [];
@@ -592,12 +596,13 @@ export default function TeamChatPage() {
         return await withFeatureBackend("messaging", {
           supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
           icp: async (ctx) => {
-            if (team?.club_id) {
-              try { await ensureLiveClubConversations(ctx, team.club_id); } catch { /* best-effort self-heal */ }
-            }
             // Newest-first page: the canister returns the newest MESSAGES_PER_PAGE
             // rows plus a backward cursor when older history remains.
-            const page = await listLiveLatestMessagesPage(ctx, teamId, null, MESSAGES_PER_PAGE);
+            const clubId = team?.club_id;
+            const page = await readIcpThreadPage(
+              () => withReadDeadline(listLiveLatestMessagesPage(ctx, teamId, null, MESSAGES_PER_PAGE), 'Chat messages'),
+              clubId ? () => ensureLiveClubConversations(ctx, clubId) : undefined,
+            );
             const messages = await mapLiveTeamRows(ctx, page.messages);
             const olderCursor =
               Array.isArray(page.next_sequence) && page.next_sequence.length > 0
