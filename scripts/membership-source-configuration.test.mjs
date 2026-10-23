@@ -33,3 +33,9 @@ test('unknown persistence stops before source mutation', async () => {
   const t = transport();t.persist = async () => { throw Error('Unknown journal write'); };
   await assert.rejects(() => configureDirectorySources(binding, sources, generation, t), /Unknown/);assert.deepEqual(t.calls, []);
 });
+
+test('late disablement is rejected after all source configurations finish', async () => {
+  const t = transport();const read = t.sourceConfiguration;let n = 0;
+  t.sourceConfiguration = async s => { n++; if (n === 5) return { Ok: { enabled: false, binding: [grants[0]] } }; return read(s); };
+  await assert.rejects(() => configureDirectorySources(binding, sources, generation, t), /Final/);
+});
