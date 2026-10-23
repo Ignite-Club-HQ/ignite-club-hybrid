@@ -99,6 +99,12 @@ export default function TeamCompetitionsSection({ teamId, canManage }: Props) {
           // ICP entry ids are "<competition_id>:<team_id>" (see query above).
           const [competitionId, entryTeamId] = entryId.split(":");
           await respondLiveEntryInvite(ctx, competitionId, entryTeamId, status === "accepted");
+          if (status === "accepted") {
+            // Parity with Supabase's welcome email on entry acceptance:
+            // self-registered, best effort, needs the member's contact email.
+            const { maybeSendLiveMemberWelcomeEmail } = await import("@/live/features/memberWelcomeEmail");
+            await maybeSendLiveMemberWelcomeEmail(ctx, competitionId);
+          }
         },
       }, writeOnce({ competitionId: entryId.split(":")[0] }));
     } catch (err: any) {
