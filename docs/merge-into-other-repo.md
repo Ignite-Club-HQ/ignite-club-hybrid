@@ -128,10 +128,23 @@ delivery and one welcome email before switching traffic.
 
 ## 4b. Automated copy tool (run before the merge)
 
-`scripts/migrate-github-repo.mjs` copies the repo-level setup from this repo
-to `ignite-club-hq-prod`. It needs a PAT with `repo` + `workflow` scope on
-both repos (`GITHUB_TOKEN`), plus `SOURCE_REPO` and `TARGET_REPO` as
-`owner/name`.
+**One-click path (preferred):** the `Migrate repo setup to prod repo`
+workflow (`.github/workflows/migrate-repo-setup.yml`). One-time prerequisite:
+add a repo secret `TARGET_REPO_PAT` here — a PAT with `repo` + `workflow`
+scope on the target repo. Then Actions → Migrate repo setup to prod repo →
+Run workflow: enter the target as `owner/ignite-club-hq-prod`, optionally
+extra paths/secret names, type `MIGRATE REPO SETUP`. It copies Actions
+variables (value-and-all), the three known secrets (`DEPLOYER_PEM`,
+`ICP_PUSH_WORKER_SEED`, `FCM_SERVICE_ACCOUNT_JSON`; values are read from this
+repo's secrets at runtime and piped straight into `gh secret set` — never
+printed), `.github/workflows` plus any extra paths (committed and pushed to
+the target), and finishes with a compare report. Keep the same
+`ICP_PUSH_WORKER_SEED` value so existing canister grants stay valid.
+Workflow guards: `scripts/migrate-repo-setup-workflow.test.mjs`.
+
+**Manual/local path:** `scripts/migrate-github-repo.mjs` does the same from
+your machine. It needs a PAT with `repo` + `workflow` scope on both repos
+(`GITHUB_TOKEN`), plus `SOURCE_REPO` and `TARGET_REPO` as `owner/name`.
 
 - `compare` — diffs secret names, variable names and workflow files between
   the two repos. Read-only; run this first.

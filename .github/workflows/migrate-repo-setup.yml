@@ -1,0 +1,138 @@
+name: Migrate repo setup to prod repo
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: Target repo as owner/name
+        required: true
+        default: ''
+      extra_paths:
+        description: Extra tracked paths to copy (comma-separated; .github/workflows always copied)
+        required: false
+        default: ''
+      extra_secret_names:
+        description: Extra secret names to copy beyond DEPLOYER_PEM, ICP_PUSH_WORKER_SEED, FCM_SERVICE_ACCOUNT_JSON (comma-separated)
+        required: false
+        default: ''
+      confirmation:
+        description: Type MIGRATE REPO SETUP to run
+        required: true
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: ignite-repo-setup-migration
+  cancel-in-progress: false
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Validate confirmation and inputs
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          TARGET_REPO: ${{ inputs.target_repo }}
+        run: |
+          set -euo pipefail
+          trimmed="$(printf '%s' "$CONFIRMATION" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          test "$trimmed" = "MIGRATE REPO SETUP" || { echo "::error::Confirmation must be exactly: MIGRATE REPO SETUP"; exit 1; }
+          case "$TARGET_REPO" in
+            */*) ;;
+            *) echo "::error::target_repo must be owner/name"; exit 1 ;;
+          esac
+          test "$TARGET_REPO" != "${{ github.repository }}" || { echo "::error::target_repo must differ from this repo"; exit 1; }
+      - name: Check target PAT
+        env:
+          TARGET_REPO_PAT: ${{ secrets.TARGET_REPO_PAT }}
+        run: |
+          set -euo pipefail
+          test -n "$TARGET_REPO_PAT" || { echo "::error::Add repo secret TARGET_REPO_PAT (PAT with repo+workflow scope on the target repo) first"; exit 1; }
+      - name: Copy Actions variables
+        env:
+          GH_TOKEN: ${{ secrets.TARGET_REPO_PAT }}
+          SOURCE_REPO: ${{ github.repository }}
+          TARGET_REPO: ${{ inputs.target_repo }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$SOURCE_REPO/actions/variables" --jq '.variables[] | @base64' | while read -r row; do
+            name="$(printf '%s' "$row" | base64 -d | jq -r .name)"
+            value="$(printf '%s' "$row" | base64 -d | jq -r .value)"
+            if gh api "repos/$TARGET_REPO/actions/variables/$name" >/dev/null 2>&1; then
+              gh api -X PATCH "repos/$TARGET_REPO/actions/variables/$name" -f name="$name" -f value="$value" >/dev/null
+              echo "updated variable $name"
+            else
+              gh api -X POST "repos/$TARGET_REPO/actions/variables" -f name="$name" -f value="$value" >/dev/null
+              echo "created variable $name"
+            fi
+          done
+      - name: Copy Actions secrets
+        env:
+          GH_TOKEN: ${{ secrets.TARGET_REPO_PAT }}
+          TARGET_REPO: ${{ inputs.target_repo }}
+          EXTRA_SECRET_NAMES: ${{ inputs.extra_secret_names }}
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
+          FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          names="DEPLOYER_PEM ICP_PUSH_WORKER_SEED FCM_SERVICE_ACCOUNT_JSON"
+          if [ -n "$EXTRA_SECRET_NAMES" ]; then
+            names="$names $(printf '%s' "$EXTRA_SECRET_NAMES" | tr ',' ' ')"
+          fi
+          for name in $names; do
+            value="${!name:-}"
+            if [ -z "$value" ]; then
+              echo "skip $name: not set on source repo"
+              continue
+            fi
+            printf '%s' "$value" | gh secret set "$name" --repo "$TARGET_REPO" --body -
+            echo "set secret $name on target"
+          done
+      - name: Copy workflow files and extra paths
+        env:
+          TARGET_REPO_PAT: ${{ secrets.TARGET_REPO_PAT }}
+          TARGET_REPO: ${{ inputs.target_repo }}
+          EXTRA_PATHS: ${{ inputs.extra_paths }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/target-checkout"
+          git clone --depth 1 "https://x-access-token:${TARGET_REPO_PAT}@github.com/${TARGET_REPO}.git" "$work"
+          copy_path() {
+            local p="$1"
+            p="${p%/}"
+            case "$p" in /*|*..*|'') echo "::error::Refusing unsafe path: $1"; exit 1 ;; esac
+            if [ -e "$p" ]; then
+              mkdir -p "$work/$(dirname "$p")"
+              cp -a "$p" "$work/$p"
+              echo "copied $p"
+            else
+              echo "skip $p: not present in source checkout"
+            fi
+          }
+          copy_path .github/workflows
+          if [ -n "$EXTRA_PATHS" ]; then
+            for p in $(printf '%s' "$EXTRA_PATHS" | tr ',' ' '); do
+              copy_path "$p"
+            done
+          fi
+          cd "$work"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no file differences — nothing to commit"
+            exit 0
+          fi
+          git -c user.name=repo-migrate -c user.email=repo-migrate@local \
+            commit -m "Migrate repo setup from ${{ github.repository }}"
+          git push
+          echo "pushed file changes to $TARGET_REPO"
+      - name: Final compare report
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.TARGET_REPO_PAT }}
+          SOURCE_REPO: ${{ github.repository }}
+          TARGET_REPO: ${{ inputs.target_repo }}
+        run: node scripts/migrate-github-repo.mjs compare || true
