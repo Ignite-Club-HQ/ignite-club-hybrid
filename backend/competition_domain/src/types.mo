@@ -60,6 +60,19 @@ module {
     to : Text;
     created_at_ms : Nat64;
   };
+  // Pending welcome email registered by an existing member themselves (e.g.
+  // after their team accepts a competition entry). ICP accounts carry no
+  // email, so the member supplies their own address; the canister verifies
+  // competition membership and stores the browser-generated unguessable
+  // token as the capability the delivery edge function reads. One job per
+  // member per competition.
+  public type CompetitionMemberWelcomeJob = {
+    token : Text;
+    competition_id : Text;
+    member : Principal;
+    to : Text;
+    created_at_ms : Nat64;
+  };
   // Expression-of-interest submission (parent sign-up for a season).
   // Mirrors the Supabase eoi_submissions columns the EOI hooks read/write;
   // *_at_ms timestamps replace ISO strings, Principal replaces auth.uid().
