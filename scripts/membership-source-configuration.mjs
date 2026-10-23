@@ -1,6 +1,14 @@
 // Exact separate source-grant orchestration for the operator. It is not wired
 // to mainnet upgrades until legacy source inventory/release acceptance exists.
-export const fingerprint = value => JSON.stringify(value, (_, v) => typeof v === 'bigint' ? String(v) : v);
+const canonical = value => {
+  if (typeof value === 'bigint') return String(value);
+  if (value?.toText) return value.toText();
+  if (ArrayBuffer.isView(value)) return Array.from(value);
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])]));
+  return value;
+};
+export const fingerprint = value => JSON.stringify(canonical(value));
 const unwrap = reply => { if (!reply || typeof reply !== 'object' || 'Err' in reply) throw new Error(reply?.Err ?? 'Invalid directory configuration reply'); return reply.Ok; };
 
 export async function configureDirectorySources(binding, sources, generation, transport) {
