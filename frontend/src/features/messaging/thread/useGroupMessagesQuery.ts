@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { prefetchMessagePolls } from "@/lib/pollReadRepository";
 import { markChatFetch } from "@/hooks/useChatPerfMarks";
 import { splitPageWindow } from "@/lib/chatPageWindow";
 import { getCachedMessages, cacheMessages } from "@/lib/messageCache";
@@ -171,6 +172,8 @@ const fetchGroupMessages = async ({
 
     const { items: dataToDisplay, hasMore } = splitPageWindow(rawMessages, pageSize);
 
+    prefetchMessagePolls(queryClient, dataToDisplay, userId, { conversationId: groupId }, false);
+
     const messageIds = dataToDisplay.map((m) => m.id);
     const replyToIds = dataToDisplay
       .filter((m) => m.reply_to_id)
@@ -249,6 +252,7 @@ const fetchGroupMessages = async ({
       // Newest-first page: the canister returns the newest `pageSize` rows
       // plus a backward cursor when older history remains.
       const page = await listLiveLatestMessagesPage(ctx, groupId, null, pageSize);
+      prefetchMessagePolls(queryClient, page.messages, userId, { conversationId: groupId }, true, ctx);
       const messages = await mapLiveGroupRows(ctx, groupId, page.messages);
       const olderCursor =
         Array.isArray(page.next_sequence) && page.next_sequence.length > 0
