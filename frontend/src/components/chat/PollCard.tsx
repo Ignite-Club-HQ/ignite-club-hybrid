@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { pollErrorMessage } from "@/lib/pollErrorMessage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { currentChatScope, chatWrite } from "@/live/chatScope";
 import { BarChart3, Check, Clock, Lock, Loader2, MoreVertical, Trash2, Users, X } from "lucide-react";
