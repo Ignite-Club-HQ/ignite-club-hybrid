@@ -44,7 +44,10 @@ export async function fetchMyRoleGrantsEverywhere(ctx: FeatureBackendContext): P
   return readMembershipDiscovery(key, async () => {
     // Refresh the verified session only for discovery, never for a page refresh.
     if (typeof clubDispatch.refreshMembershipSession === 'function') await clubDispatch.refreshMembershipSession();
-    const grants = await clubDispatch.readAcross("membership", "club_domain", rawGrants, mergeRoleGrants, true);
+    // The verified lookup/session already discovered the complete membership
+    // inventory. Fetch roles only from those owning groups, not every group
+    // plus the shared source and another post-fan-out registry round trip.
+    const grants = await clubDispatch.readMemberGroups("membership", "club_domain", rawGrants, mergeRoleGrants);
     // Team grants already name the team's club: record that so team-scoped
     // reads (events, names, chats) go straight to the club's group instead of
     // asking every group which one owns each team.

@@ -115,6 +115,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   };
   const legacyClubs = new Set<string>();
   let directoryUsed = false;
+  const discoveryStartedAt = Date.now();
   if (transport.readMembershipDirectory) {
     try {
       const directory = await readCompleteMembershipDirectory(principal, initialRegistry,
@@ -127,6 +128,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     } catch {
       sameIdentity();
       clubs.clear(); routing.assignments.clear(); legacyClubs.clear();
+      console.info('[Membership discovery]', { path: 'lookup-fallback', elapsedMs: Date.now() - discoveryStartedAt });
     }
   }
   // Without a complete verified directory, every source must answer. Failures
@@ -165,6 +167,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     }));
   };
   await validateAssignments([...clubs]);
+  console.info('[Membership discovery]', { path: directoryUsed ? 'permanent-lookup' : 'source-scan', elapsedMs: Date.now() - discoveryStartedAt, groupCount: registry.groups.length });
   const openedAt = Date.now();
   let disposed = false;
   const live = () => { if (disposed || context.identity.getPrincipal().toText() !== principal) throw new Error('Group session changed or disposed'); };

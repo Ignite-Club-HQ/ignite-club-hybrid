@@ -49,7 +49,7 @@ export const MAX_DEVICE_OWNERS = 2000;
 const owners = new Map<string, string | null>(); // kind:id -> club (null = shared canisters)
 const inflight = new Map<string, Promise<string | null>>();
 let loadedFor: string | null = null;
-let cached: { principal: string; targetKey: string; session: Promise<Session> } | null = null;
+let cached: { principal: string; targetKey: string; session: Promise<Session>; ready: boolean } | null = null;
 export function clearGroupDispatchCache() { cached?.session.then(s => s.dispose(), () => {}); cached = null; owners.clear(); inflight.clear(); loadedFor = null; unplaced.clear(); hostedChecked.clear(); reopening = null; }
 // Clubs confirmed (after one reopen) to have no group assignment: legacy/shared.
 const unplaced = new Set<string>();
@@ -88,7 +88,12 @@ async function sessionFor(deps: DispatchDeps): Promise<{ ctx: FeatureBackendCont
   const ctx = await deps.context(); const principal = ctx.identity.getPrincipal().toText();
   const targetKey = JSON.stringify([ctx.target.alias, ctx.target.host, ctx.target.networkKind,
     Object.entries(ctx.target.canisterIds ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
-  if (!cached || cached.principal !== principal || cached.targetKey !== targetKey) { clearGroupDispatchCache(); cached = { principal, targetKey, session: deps.open(ctx) }; }
+  if (!cached || cached.principal !== principal || cached.targetKey !== targetKey) {
+    clearGroupDispatchCache();
+    const entry = { principal, targetKey, session: deps.open(ctx), ready: false };
+    cached = entry;
+    entry.session.then(() => { entry.ready = true; }, () => {});
+  }
   hydrate(deps, principal);
   try { return { ctx, s: await cached.session, principal }; } catch (e) { cached = null; throw e; }
 }
@@ -159,6 +164,10 @@ export function createClubDispatcher(deps: DispatchDeps) {
       if (!await active()) return;
       const previous = cached;
       if (!previous) { await sessionFor(deps); return; }
+      // Other startup consumers may already be opening the same complete
+      // inventory. Join it instead of running a second cold lookup in series
+      // and disposing the session those consumers are about to use.
+      if (!previous.ready) { await sessionFor(deps); return; }
       if (!reopening) {
         reopening = (async () => {
           const ctx = await deps.context();

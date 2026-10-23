@@ -15,6 +15,22 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it('cold discovery refresh joins an already opening session', async () => {
+    const { d, session } = deps(ON);
+    let finish: ((value: typeof session) => void) | undefined;
+    d.open = vi.fn(() => new Promise<typeof session>(resolve => { finish = resolve; }));
+    const dispatcher = createClubDispatcher(d);
+    const opening = dispatcher.memberClubIds();
+    await vi.waitFor(() => expect(d.open).toHaveBeenCalledTimes(1));
+    const refresh = dispatcher.refreshMembershipSession();
+    await Promise.resolve(); await Promise.resolve();
+    expect(d.open).toHaveBeenCalledTimes(1);
+    if (!finish) throw new Error('Session was not opened');
+    finish(session);
+    await Promise.all([opening, refresh]);
+    expect(d.open).toHaveBeenCalledTimes(1);
+    expect(session.dispose).not.toHaveBeenCalled();
+  });
   it('verified legacy members do not reopen the session on every club read', async () => {
     const { d, session } = deps(ON);
     const dispatcher = createClubDispatcher({ ...d, open: vi.fn(async () => ({ ...session, isLegacyMember: (id: string) => id === 'legacy-club' })) });
