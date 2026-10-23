@@ -116,6 +116,8 @@ interface AddTeamMemberSheetProps {
   externalOpen?: boolean;
   /** Callback when open state changes externally */
   onExternalOpenChange?: (open: boolean) => void;
+  /** Restrict invitations to players/parents only (competition owners, season captains) */
+  playersOnly?: boolean;
 }
 
 const allRoleOptions: { value: TeamRole; label: string; description: string; color: string; icon?: string; juniorOnly?: boolean; seniorOnly?: boolean }[] = [
@@ -125,9 +127,10 @@ const allRoleOptions: { value: TeamRole; label: string; description: string; col
   { value: "team_admin", label: "Team Admin", description: "Full admin access", color: "bg-blue-500/20 text-blue-600 border-blue-500/30" },
 ];
 
-export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType = "mixed", isClubAdminOnly = false, canBulkInvite = true, triggerVariant = "default", externalOpen, onExternalOpenChange }: AddTeamMemberSheetProps) {
+export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType = "mixed", isClubAdminOnly = false, canBulkInvite = true, triggerVariant = "default", externalOpen, onExternalOpenChange, playersOnly = false }: AddTeamMemberSheetProps) {
   // Filter role options based on team type
   const roleOptions = allRoleOptions.filter(opt => {
+    if (playersOnly && opt.value !== "player" && opt.value !== "parent") return false;
     if (teamType === "junior") {
       // Junior teams: no adult players
       return !opt.seniorOnly;
