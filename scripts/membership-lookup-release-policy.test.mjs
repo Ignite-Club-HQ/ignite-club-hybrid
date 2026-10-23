@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { validateRequest, validateTargets, validateJournal, runFill, digest, PINNED, requireLookupReleaseAcceptance, directorySources, requireReleaseSourceCoverage, lookupReleaseTargets, PRIMARY_SUBNET } from './membership-lookup-release-policy.mjs';
+import { validateRequest, validateTargets, validateJournal, runFill, digest, PINNED, requireLookupReleaseAcceptance, directorySources, requireReleaseSourceCoverage, lookupReleaseTargets, PRIMARY_SUBNET, lookupUpgradeArgs } from './membership-lookup-release-policy.mjs';
 
 const targets = [
   { canisterId: PINNED.identity, groupId: 'shared', name: 'identity_access', subnetId: 'subnet', newHash: 'a'.repeat(64) },
@@ -154,4 +154,17 @@ test('all valid sources fill and over-budget inventories refuse before a release
   assert.deepEqual(called,['g1','g2','g3','g4']);assert.equal(Object.keys(done).length,4);
   const oversized=directorySources(snapshot(['g2',...Array.from({length:100},(_,n)=>`x${n}`)]));
   assert.throws(()=>requireReleaseSourceCoverage(oversized),/no changes/);
+});
+test('identity upgrade uses its record init while club upgrades retain principal init',()=>{
+  const governor='vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
+  for(const t of targets){const args=lookupUpgradeArgs(t,'/tmp/module',governor);
+    assert.equal(args[args.indexOf('--args')+1],t.name==='identity_access'?`(record { governor = principal "${governor}" })`:`(principal "${governor}")`);
+    assert.equal(args[args.indexOf('--mode')+1],'upgrade');
+  }
+});
+test('activation restart requires the exact release and settled snapshot checkpoint',()=>{
+  const release='a'.repeat(40), b={...binding,release};
+  const j={...journal(),binding:b,replicaAcceptance:{snapshotVerified:true,restorationGuardVerified:true},activation:{release,phase:'pending'}};
+  validateJournal(j,b);
+  for(const changes of [{activation:{release:'b'.repeat(40),phase:'pending'}},{complete:false},{replicaAcceptance:{snapshotVerified:true}}])assert.throws(()=>validateJournal({...j,...changes},b));
 });

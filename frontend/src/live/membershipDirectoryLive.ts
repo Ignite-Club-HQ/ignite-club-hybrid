@@ -69,7 +69,7 @@ export function convertReleasedDirectoryReply(reply: ReleasedReply, caller: stri
     }
   }
   return { caller, accountVersion: page.account_version, generation: page.generation, directoryRevision: page.registry_revision,
-    registryFingerprint: fingerprint, instance: reply.instance, verifiedCurrent: true, assignments, legacyClubs, next: page.next[0] ?? null };
+    registryFingerprint: fingerprint, releaseBinding: JSON.stringify([reply.release,Array.from(page.inventory_digest)]), instance: reply.instance, verifiedCurrent: true, assignments, legacyClubs, next: page.next[0] ?? null };
 }
 
 /** Each session owns one consumer and one immutable actor/identity binding. */
