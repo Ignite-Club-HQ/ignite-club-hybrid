@@ -202,22 +202,32 @@ export async function fetchLiveHomeFeed(
   const clubIds = [...new Set([...raw.clubIds, ...raw.clubAdminClubIds, ...raw.leagueAdminClubIds,
     ...raw.roles.map(r => r.club_id).filter((id): id is string => !!id)])];
   const tasks = clubIds.map(async clubId => {
-    const teamIds = raw.roles.filter(r => r.club_id === clubId && r.team_id).map(r => r.team_id as string);
+    const teamIds = [...new Set(raw.roles.filter(r => r.club_id === clubId && r.team_id).map(r => r.team_id as string))];
     const eventRead = read(readContentInScope(ctx, "events", { clubId }, scoped => listLiveEvents(scoped, clubId, null)), "Home club events")
       .then(value => ({ value, error: null }), error => ({ value: [] as LiveEvent[], error }));
     const teamRead = Promise.all(teamIds.map(async teamId => {
       const [team] = await read(readContentInScope(ctx, "membership", { clubId }, scoped => getLiveTeam(scoped, teamId)), "Home team");
-      if (team && team.club_id === clubId && !team.deleted_at_ms.length) { activeTeams.add(teamId); teamNames.set(teamId, team.name); }
-    })).catch(() => { failures++; });
+      return team && team.club_id === clubId && !team.deleted_at_ms.length ? team : null;
+    })).catch(() => { failures++; return []; });
+    const teamEvents = Promise.all(teamIds.map(teamId =>
+      read(readContentInScope(ctx, "events", { clubId }, scoped => listLiveEvents(scoped, null, teamId)), "Home team events")
+        .then(value => ({ value, failed: false }), () => ({ value: [] as LiveEvent[], failed: true }))));
     try {
       const [club] = await read(readContentInScope(ctx, "membership", { clubId }, scoped => getLiveClubProfile(scoped, clubId)), "Home club");
       if (!club || club.deleted_at_ms.length) return;
       activeClubs.add(clubId); clubNames.set(clubId, club.name);
-      await teamRead;
+      for (const team of await teamRead) {
+        if (team) { activeTeams.add(team.id); teamNames.set(team.id, team.name); }
+      }
       const result = await eventRead;
       if (result.error) throw result.error;
       for (const event of result.value) rows.set(event.id, event);
       successes++; publish();
+      for (const result of await teamEvents) {
+        if (result.failed) { failures++; continue; }
+        for (const event of result.value) rows.set(event.id, event);
+      }
+      publish();
     } catch (error) { assertReadNotAborted(signal); failures++; }
   });
   // Team-only grants still need their owning club verified, but do not wait
