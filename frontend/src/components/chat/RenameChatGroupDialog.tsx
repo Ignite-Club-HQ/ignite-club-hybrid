@@ -35,15 +35,31 @@ export function RenameChatGroupDialog({ groupId, currentName, open, onOpenChange
   const save = async () => {
     if (!canSave) return;
     setSaving(true);
-    const { error } = await (supabase.rpc as any)("rename_competition_chat", {
-      _group_id: groupId,
-      _name: trimmed,
-    });
-    setSaving(false);
-    if (error) {
-      toast.error("Couldn't rename chat", { description: error.message });
+    try {
+      if (resolveAuthBackend() === "icp") {
+        // ICP: name-only update; the messaging canister enforces that the
+        // caller is a competition owner/admin for this conversation.
+        await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("Supabase rename is not used in ICP mode");
+          },
+          icp: (ctx) => updateLiveGroup(ctx, groupId, trimmed),
+        }, { conversationId: groupId, writeKey: `rename-chat-${groupId}` });
+      } else {
+        const { error } = await (supabase.rpc as any)("rename_competition_chat", {
+          _group_id: groupId,
+          _name: trimmed,
+        });
+        if (error) throw error;
+      }
+    } catch (e) {
+      setSaving(false);
+      toast.error("Couldn't rename chat", {
+        description: e instanceof Error ? e.message : String(e),
+      });
       return;
     }
+    setSaving(false);
     toast.success("Chat renamed");
     queryClient.invalidateQueries({ queryKey: ["group-chat"] });
     queryClient.invalidateQueries({ queryKey: ["chat-group", groupId] });
