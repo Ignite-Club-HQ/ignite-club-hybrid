@@ -19,6 +19,7 @@ import { SwipeableDropdownContent } from "@/components/ui/swipeable-dropdown-con
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { useClubTheme } from "@/hooks/useClubTheme";
+import { useClubPickerSelection } from "@/hooks/useClubPickerSelection";
 import { guardClubListResult } from "@/lib/clubListEmptyGuard";
 import { useLogoAccentColor } from "@/hooks/useLogoAccentColor";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -94,7 +95,8 @@ function getBestContrastColor(
 
 function LogoClubThemeDropdown() {
   const navigate = useNavigate();
-  const { availableClubThemes, activeClubTheme, setActiveClubTheme } = useClubTheme();
+  const { availableClubThemes, activeClubTheme } = useClubTheme();
+  const setActiveClubTheme = useClubPickerSelection();
   const defaultLogo = igniteIcon;
   const { user, signOut } = useAuth();
   // Fetch ALL user clubs (including non-Pro) to show with lock.
