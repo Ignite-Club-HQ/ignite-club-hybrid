@@ -64,6 +64,12 @@ try {
   identity.actor.setPrincipal(governor);ok(await identity.actor.set_account_status(account.id,{Suspended:null}));
   identity.actor.setPrincipal(member);assert.ok('Err' in await identity.actor.read_my_membership_directory(10n,first.page.next),'suspended replay');
   identity.actor.setPrincipal(governor);ok(await identity.actor.set_account_status(account.id,{Active:null}));
+  const deferred=pic.createDeferredActor(identityIdl,identity.canisterId);deferred.setPrincipal(member);
+  const pending=await deferred.read_my_membership_directory(13n,[]);
+  await pic.tick(1);
+  identity.actor.setPrincipal(governor);ok(await identity.actor.set_account_status(account.id,{Suspended:null}));
+  assert.ok('Err' in await pending(),'caller suspension during consensus awaits must refuse');
+  ok(await identity.actor.set_account_status(account.id,{Active:null}));
 
   // Snapshot accepted identity AND a source. Loading either later must be
   // detectable even if application revisions and Wasm hashes are unchanged.
@@ -83,5 +89,5 @@ try {
   await load(identity.canisterId,identitySnapshot);
   const jointlyRestored=await identity.actor.check_membership_directory_acceptance();assert.ok('Err' in jointlyRestored);assert.match(jointlyRestored.Err,/lifecycle/);
   assert.ok('Err' in await identity.actor.configure_membership_directory(binding,sources.map(s=>s.canisterId),1n),'ordinary configure cannot repin restored state');
-  console.log('PASS: populated three-source released pages, single/multiple/empty callers, suspension/replay/source drift; real three-source fill/ownership/snapshot check, caller refusal, incomplete/mutated refusal, same-Wasm source reload, jointly restored identity/source refusal; app remains disabled.');
+  console.log('PASS: populated three-source released pages, single/multiple/empty callers, suspension during awaits/replay/source drift; real fill/ownership/snapshot check and same-Wasm/joint restore refusal. Disposable canisters only; nothing enabled live.');
 } finally { if(pic)await pic.tearDown();await server.stop(); }
