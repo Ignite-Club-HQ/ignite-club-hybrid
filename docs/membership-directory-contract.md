@@ -1,7 +1,8 @@
 # Stage B: authority-backed membership display directory
 
-Status: source propagation, bounded reconstruction, private diagnostic connection, original G1 ownership and governor consensus snapshot/restoration checks are implemented locally. Real local canisters reject same-Wasm source restoration and jointly restored identity/source snapshots. Per-page released reader, app activation and signed production acceptance remain unfinished. Nothing deployed or accepted live.
-Stage A complete discovery remains mandatory until the requirements below pass.
+Status: caller-bound released private pages, lazy app connection with complete Stage A fallback, and the all-source protected release are implemented and locally verified. Every released page repeats snapshot/source/registry/photo-store/lifecycle verification and account rechecks through awaits. Diagnostic/operator snapshot reports still do not certify permanent freshness. No deployment, publication or signed production performance acceptance has occurred. Current details: `docs/membership-lookup-release.md`.
+
+The dated sections below record earlier stages and their then-open limitations; the release runbook above supersedes historical hard-off/three-target descriptions.
 
 ### 23 October acceptance-check implementation
 

@@ -1,12 +1,10 @@
 # Releasing the permanent club lookup
 
-The release is **not ready to run in upgrade mode**. The draft workflow now
-refuses upgrade before installing tools, restoring the signing key or changing
-any canister. Existing club discovery stays active. Check mode inspects the
-three pinned service targets and all registered membership sources plus original
-Group 1, using bounded consensus exports and unchanged revision checks. It does
-not certify lookup readiness, create grants or enable the app. A missing live
-export method fails the check; there is no public-query fallback.
+The app connection and all-group protected release are implemented and tested
+locally. **Nothing has been deployed or published.** Existing discovery remains
+the fallback until the live identity service releases verified private pages.
+Check mode is read-only; upgrade performs the bounded release described below.
+A missing source-export method fails check mode; there is no public-query fallback.
 
 ## Before you run
 
@@ -17,14 +15,15 @@ export method fails the check; there is no public-query fallback.
 ## Read-only check
 
 1. Open the repository on GitHub → **Actions** → **Release permanent club
-   lookup (both ICP groups)**.
+   lookup (all groups)**.
 2. Click **Run workflow**, choose **check**, leave confirmation empty.
 3. Click the green **Run workflow** button and approve if GitHub asks.
 
 A green **check** means the target/source observation passed, not that the new lookup
-is ready. Do not run **upgrade** yet; it deliberately stops without changes.
+is enabled. For the protected release, choose **upgrade** and type exactly
+`RELEASE MEMBERSHIP LOOKUP`; use the updated commit containing this work.
 
-## Essential work before upgrade
+## Club ownership cross-check
 
 ### Owner-named legacy clubs: public cross-check
 
@@ -51,91 +50,67 @@ relationships, grants, placements or media-key changes. The same transport is
 now used by release check mode, not as upgrade acceptance. It needs the existing signing key and
 supported live source-export methods. It has not been run signed on mainnet.
 
-### Remaining release prerequisites
+## What the upgrade does
 
-The source-grant setup and exact readback orchestration are now connected to the
-draft runner, and the private diagnostic endpoint/app actor connection exist.
-The app's ordinary lookup switch remains off, so navigation makes no new lookup
-calls and continues using existing discovery. Diagnostic replies explicitly
-say they are not verified-current.
+The single protected run derives **every registered club membership source plus
+original Group 1** from the live registry. It upgrades only those existing
+`club_domain` services and the pinned shared `identity_access` service. It does
+not create canisters, move/delete clubs, touch photo stores or keys, open groups,
+or publish the app. A complete inventory over the supported 100-source bound
+refuses before any upgrade; sources are never truncated.
 
-Identity transport includes explicitly pinned original Group 1 without
-inventing a placement. Ownership acceptance implementation is complete locally:
-the governor-only `advance_membership_directory_ownership` operation reuses
-complete retained Club rows, checks exclusive IDs across every source (including
-tombstones), persists bounded progress across upgrades, and binds acceptance to
-exact source revisions/status and inventory. Missing assignments can resolve only
-for the pinned original G1 after this acceptance; no router placement is written.
-Any changed source invalidates acceptance. The generated release driver journals
-its result, never `ready: true`. Signed live acceptance has not run.
+Each target is checked against its approved subnet, sole existing governor,
+module, unchanged settings and fuel floor. Durable receipts are written and read
+back before each upgrade. Unknown upgrade outcomes never reinstall automatically;
+a different commit/inventory cannot replace an existing journal.
 
-Final historical acceptance checks now compare every filled source revision with
-the first and every subsequent ownership response. Saved revisions/ownership are
-validated on restart; foreign or contradictory checkpoints cannot authorize work.
-Grants must name the pinned identity, not simply agree with each other. Identity
-configuration is checked again after all source grants finish.
+The run then configures exact separate source grants, completes bounded fills
+for every source, verifies exclusive club ownership, and checks complete source
+revisions plus independent replica-history restoration guards. Only the
+identity-owned `enable_membership_directory` operation can record the exact
+release commit, after repeating these checks. A lost enable reply is reconciled
+with the same commit, without replaying grants or old fills. The run refreshes
+and saves governor-verified routing fingerprints for the upgraded modules.
 
-The runner then checks all source statuses, identity configuration and installed
-module/settings fingerprints in two complete sweeps. Pending changes, a source
-restored below its acknowledged revision, unavailable sources and late drift stop
-the check. Reports explicitly distinguish `sampledCurrent` from
-`verified_current`, and keep readiness/app activation false. The workflow runs
-these tests before using the signing key; its upgrade block remains in place.
+## App connection
 
-The new generated **governor consensus acceptance operation** now checks a
-snapshot rather than pretending sampled replies are permanently current. Two
-complete ordered source revision scans must match exact accepted ownership/build
-revisions. Independent replica lifecycle history for identity/router/all sources
-is pinned before reconstruction and rechecked around acceptance. Snapshot loading
-advances that history even when code and local counters look unchanged.
+The compatible app lazily calls `read_my_membership_directory` with a
+caller-owned consumer and sequential continuation. **Every page**, including
+saved-page replay, rechecks all source revisions, ownership, complete registry,
+photo-store inventory and replica history. Caller account/aliases are captured
+before awaits and revalidated after replies. Suspended/changed identities,
+incomplete or changing sources, restored state and foreign continuations refuse.
 
-Real disposable-canister tests pass same-code source restore and jointly restored
-identity/source refusal. The workflow runs this rehearsal, and the draft runner
-records the operation's result separately from historical reports. No mutation
-locks, new router service or additional source migration is required.
+The app verifies the returned actual registry, domain/subnet/photo-store sets,
+caller, release/inventory binding and sequential instance. It never supplies an
+invented registry proof or promotes diagnostic replies. If any page fails, it
+discards the partial lookup and runs complete existing Stage A discovery;
+club-resource permissions are still checked by their owning services.
 
-**The checks are implemented locally; live acceptance has not run.** The released
-caller-private reader still needs to apply snapshot verification on every page
-and protect its account binding through awaits. This operator operation never
-enables the app, and ordinary configuration cannot repin a restored instance.
-Populated private-page and signed production acceptance remain separate.
+`verified_current` means a verified **snapshot interval for that page**, not
+permanent freshness at browser delivery or permission to read club resources.
+Regular source updates rebuild through the existing timers; ownership acceptance
+is refreshed after acknowledged updates. Until rebuilding is complete, the app
+falls back rather than hiding clubs.
 
-App-ready verified-current release remains unfinished. Additional registered groups
-are inspected, but cannot be silently ignored or added to this three-target upgrade.
-The protected upgrade still refuses before making changes.
+## Verification completed locally
 
-- The intended upgrade scope is only three existing services: the shared account service
-  (`identity_access`) and each group's club service (`club_domain`). No other
-  service is touched, created or rewired.
-- Configure the exact complete authority inventory and separate source grants;
-  refuse missing Group 1 or additional registered sources rather than ignoring them.
-- Cross-check owner-supplied Group 1 names against authoritative club IDs and
-  complete source inventories. Names identify candidates, not verified ownership;
-  they must never write placements or move clubs or their photo keys.
-- Verify current private reads and interrupted/old-state refusal, then connect
-  the opt-in app reader with complete existing discovery on uncertainty.
+- 124 identity unit tests, 63 operator/generated-wire tests, 56 app tests pass.
+- Real populated three-source rehearsal passes single-group, multi-group and
+  empty callers; sequential pages; suspension during awaits and replay; membership
+  changes; exact release retries; same-code source and joint identity/source
+  restoration refusal.
+- 17 active Candid contracts match; workflow YAML parses and preview builds.
 
-## Fill driver now connected
-
-The runner uses the existing generated `advance_membership_directory_source`
-contract, separately for `g1` and `g2`. Each call resumes bounded durable work;
-only the exact source's `acknowledged` phase records its historical revision.
-Malformed replies, foreign sources, refusals, retry exhaustion and failed
-journal persistence stop the fill. There is no invented global fill API.
-
-Historical acknowledgement may leave newer changes pending. Even both groups
-acknowledging does not establish currentness or exclusive legacy ownership.
-The runner therefore cannot emit a readiness record or enable the app.
-
-After source fill, the runner now invokes the generated ownership operation
-until its bounded traversal completes, verifies the exact digest/source list and
-unchanged revisions, and records the ownership result. This reuses the existing
-trees rather than adding another per-club index or filling club records again.
-Ownership acceptance is not currentness/recovery approval; upgrade remains gated.
+No signed mainnet run, production account traversal, measured speed improvement,
+app publication or native release has occurred. The page checks still perform
+consensus verification across sources, so local correctness is **not** proof of
+faster real-account loading. Real-account timing remains the next acceptance.
 
 ## If it fails
 
-- Send a screenshot of the failed check. Upgrade currently refuses intentionally;
-  rerunning it cannot bypass the missing release checks.
+- Keep the same commit when retrying. Unknown install/receipt outcomes, changed
+  inventory, source drift or insufficient fuel stop without automatic replay.
+- Do not delete the receipts journal or reset a pending release to bypass a refusal.
 - A red run never leaves the app without club discovery — the current search
   stays active throughout.
