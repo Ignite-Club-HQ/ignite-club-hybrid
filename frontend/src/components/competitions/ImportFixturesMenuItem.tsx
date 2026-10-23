@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { supabase } from "@/integrations/supabase/client";
 import { competitionFixtureKey, deriveImportedFinalsLabel, getCompetitionFinalsLabel } from "@/lib/competitionFinalsLabel";
 
@@ -98,6 +100,26 @@ interface ParsedRow {
 }
 
 async function fetchExistingKeys(competitionId: string): Promise<string[]> {
+  if (resolveAuthBackend() === "icp") {
+    return withFeatureBackend("competitions", {
+      supabase: async () => [] as string[],
+      icp: async (ctx) => {
+        const { listLiveCompetitionMatches } = await import("@/live/features/competitions");
+        const matches = (await listLiveCompetitionMatches(ctx, competitionId)) as any[];
+        const opt = (v: any) => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+        return matches
+          .filter((m) => opt(m.scheduled_at_ms) != null)
+          .map((m) => competitionFixtureKey({
+            scheduledAt: new Date(Number(opt(m.scheduled_at_ms))).toISOString(),
+            homeId: m.home_team ?? null,
+            awayId: m.away_team ?? null,
+            venue: opt(m.venue),
+            pitch: opt(m.pitch_number),
+            finalsLabel: getCompetitionFinalsLabel(opt(m.notes)),
+          }));
+      },
+    }, { competitionId });
+  }
   const { data, error } = await supabase
     .from("competition_matches")
     .select("scheduled_at, home_team_id, away_team_id, venue, pitch_number, notes")
