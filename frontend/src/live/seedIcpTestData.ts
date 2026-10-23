@@ -8,7 +8,7 @@ import { Principal } from "@icp-sdk/core/principal";
 import { candidOpt } from "./features/candid";
 import { createLiveClub, saveLiveTeam } from "./features/club";
 import { addLiveRoleGrant } from "./features/membership";
-import { sendLiveMessage } from "./features/messaging";
+import { createLivePoll, sendLiveMessage, voteLivePoll } from "./features/messaging";
 import { createLiveEvent } from "./features/events";
 import { registerLiveAsset, setLiveAssetScope } from "./features/media";
 import { registerLiveVaultFile } from "./features/vault";
@@ -205,8 +205,9 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
     }),
   );
   let evDone = 0;
+  const eventIds: string[] = [];
   await pool(events, 6, async (e) => {
-    await createLiveEvent(ctx, {
+    const created: any = await createLiveEvent(ctx, {
       clubId, teamId: e.teamId,
       title: e.game ? `Game vs ${real ? OPPONENTS[(e.k + e.teamId.length) % OPPONENTS.length] : `Opponent ${e.k}`}` : "Training",
       description: e.game ? "Arrive 30 minutes before kick-off." : " ",
@@ -215,12 +216,14 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
       address: ADDRESSES[e.k % ADDRESSES.length], miniLeagueId: null,
       startsAtMs: e.start.getTime(), endsAtMs: e.start.getTime() + 3_600_000,
     } as any);
+    if (created?.id) eventIds.push(created.id as string);
     step("Creating events", ++evDone, events.length);
   });
 
   // Chats. Each stage is isolated so a chat failure can't skip photos/files.
   let msgs: Array<{ convo: string; body: string }> = [];
   let mOk = 0;
+  const richOk = { polls: 0, images: 0, eventLinks: 0 };
   try {
     const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
     const convo = async (teamId: string | null) => {
@@ -263,6 +266,63 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
         }
       }),
     );
+
+    // Rich content: a poll (with a vote cast), an image message and an event
+    // link in each chat, so those renderers can be tested too.
+    const POLLS: Array<{ q: string; opts: string[] }> = real
+      ? [
+          { q: "Can your child make Saturday's game?", opts: ["Yes", "No", "Maybe"] },
+          { q: "Best night for extra training?", opts: ["Tuesday", "Thursday"] },
+        ]
+      : [
+          { q: "Training tonight — who's in?", opts: ["In", "Out", "Late"] },
+          { q: "BBQ after the game?", opts: ["Yes", "No"] },
+        ];
+    for (const [ci, c] of chats.entries()) {
+      const pollDef = POLLS[ci % POLLS.length];
+      try {
+        step("Adding polls", ci, chats.length);
+        const poll: any = await createLivePoll(ctx, c.id, null, pollDef.q, pollDef.opts);
+        await sendLiveMessage(ctx, c.id, pollDef.q, crypto.randomUUID(), {
+          kind: "poll",
+          refId: poll.id as string,
+          url: null,
+        });
+        await voteLivePoll(ctx, poll.id as string, 0).catch(() => {});
+        richOk.polls++;
+      } catch (e) {
+        noteFail("poll", e);
+      }
+      try {
+        step("Adding chat images", ci, chats.length);
+        const file = await makePhoto(`Chat photo ${ci + 1}`, (ci * 90 + 30) % 360);
+        const storagePath = `clubs/${clubId}/chat/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`;
+        const up = await tryUploadMediaToBlobStore({ storagePath, file, mime: "image/jpeg" });
+        if (!up) throw new Error("Media upload canisters are not configured");
+        await sendLiveMessage(ctx, c.id, " ", crypto.randomUUID(), {
+          kind: "image",
+          refId: up.url,
+          url: up.url,
+        });
+        richOk.images++;
+      } catch (e) {
+        noteFail("chat image", e);
+      }
+      if (eventIds.length) {
+        try {
+          step("Adding event links", ci, chats.length);
+          await sendLiveMessage(
+            ctx,
+            c.id,
+            `Don't forget this one 👇 [event:${eventIds[ci % eventIds.length]}]`,
+            crypto.randomUUID(),
+          );
+          richOk.eventLinks++;
+        } catch (e) {
+          noteFail("event link", e);
+        }
+      }
+    }
   } catch (e) {
     noteFail("chats", e);
   }
@@ -312,5 +372,10 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
   if (seedFailures.length >= total && total > 0) {
     throw new Error(`Nothing was added. First problem — ${seedFailures[0]}`);
   }
-  return { clubId, failures: [...seedFailures], total, summary: `${events.length} events, ${mOk} messages, ${pOk} photos, ${fOk} files added` };
+  return {
+    clubId,
+    failures: [...seedFailures],
+    total,
+    summary: `${events.length} events, ${mOk} messages, ${richOk.polls} polls, ${richOk.images} chat images, ${richOk.eventLinks} event links, ${pOk} photos, ${fOk} files added`,
+  };
 }

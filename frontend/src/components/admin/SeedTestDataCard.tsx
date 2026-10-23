@@ -94,7 +94,7 @@ export function SeedTestDataCard() {
         <div className="space-y-2 rounded-md border border-border p-3">
           <Label>Fill with demo content</Label>
           <p className="text-sm text-muted-foreground">
-            Adds 2 teams with a month of games and trainings, about 60 chat messages across 3 chats, 10 gallery photos and 6 vault files to a club you manage.
+            Adds 2 teams with a month of games and trainings, about 60 chat messages across 3 chats, plus a poll (with a vote), a chat image and an event link in each chat, 10 gallery photos and 6 vault files to a club you manage.
           </p>
           <Select value={fillClubId} onValueChange={setFillClubId} disabled={running}>
             <SelectTrigger><SelectValue placeholder={clubs.length ? "Choose a club" : "Loading your clubs…"} /></SelectTrigger>
