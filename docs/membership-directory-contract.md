@@ -1,6 +1,6 @@
 # Stage B: authority-backed membership display directory
 
-Status: durable source invalidation, bounded reconstruction, dedicated source transport/grants, automatic canister timers and exact acknowledgement/readback are implemented and tested on two disposable local sources plus shared identity. The private public API, frontend connection and protected release workflow are not complete. Nothing deployed.
+Status: durable source invalidation, bounded reconstruction, dedicated source transport/grants, automatic canister timers and exact acknowledgement/readback are implemented and tested on two disposable local sources plus shared identity. Caller-private diagnostic API, lazy app diagnostic connection and source configuration/readback orchestration are implemented locally; the released verified-current API, safe unregistered legacy G1 coverage and runnable protected activation are not complete. Nothing deployed.
 Stage A complete discovery remains mandatory until the requirements below pass.
 
 ## Scope and ownership
