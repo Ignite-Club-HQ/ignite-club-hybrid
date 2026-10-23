@@ -37,7 +37,7 @@ jobs:
           npm install -g @icp-sdk/icp-cli@1.7.0 @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
           node scripts/ensure-frontend-deps.mjs
       - name: Test exact targets, journals and fill
-        run: node --test scripts/membership-lookup-release-policy.test.mjs scripts/membership-source-configuration.test.mjs scripts/membership-legacy-ownership.test.mjs frontend/scripts/membership-fill-contract.test.mjs scripts/group2-journal.test.mjs scripts/group2-upgrade-rules.test.mjs
+        run: node --test scripts/membership-lookup-release-policy.test.mjs scripts/membership-ownership-acceptance.test.mjs scripts/membership-source-configuration.test.mjs scripts/membership-legacy-ownership.test.mjs frontend/scripts/membership-fill-contract.test.mjs scripts/group2-journal.test.mjs scripts/group2-upgrade-rules.test.mjs
       - name: Restore existing governor only
         env:
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}

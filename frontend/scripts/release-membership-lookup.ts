@@ -25,6 +25,7 @@ import type { _SERVICE as ClubService } from '../src/lab/bindings/club_domain/de
 import { membershipOwnershipTransport } from './membership-ownership-transport';
 import { checkLegacyOwnership } from '../../scripts/membership-legacy-ownership.mjs';
 import { fingerprint } from '../../scripts/membership-source-configuration.mjs';
+import { runOwnershipAcceptance } from '../../scripts/membership-ownership-acceptance.mjs';
 
 const [action, artifacts, pem, directory] = process.argv.slice(2);
 validateRequest(action, process.env.CONFIRMATION);
@@ -145,7 +146,7 @@ const sourceActors = new Map(sources.map(s => [s.groupId, Actor.createActor<Club
 const sourceActor = (source: { groupId: string }) => {
   const actor = sourceActors.get(source.groupId); if (!actor) throw new Error('Unknown exact source'); return actor;
 };
-await configureDirectorySources(directoryBinding, sources, 1n, {
+const configured = await configureDirectorySources(directoryBinding, sources, 1n, {
   gate,
   configure: (b: typeof directoryBinding, authorities: Principal[], generation: bigint) => fillActor.configure_membership_directory(b, authorities, generation),
   configuration: () => fillActor.read_membership_directory_configuration(),
@@ -164,5 +165,10 @@ await runFill(['g1', 'g2'], async (groupId: string) => {
   await persist();
 } });
 await gate();
+await runOwnershipAcceptance(() => fillActor.advance_membership_directory_ownership(), {
+  sources, inventoryDigest: configured.grants[0]?.inventory_digest,
+}, { gate, persist: async (ownership: unknown) => {
+  journal.ownership = ownership; journal.ready = false; await persist();
+} });
 journal.ready = false; await persist();
-throw new Error('Historical source fill acknowledged; ownership and verified-current acceptance are still required. No readiness record or app activation.');
+throw new Error('Exclusive source ownership accepted for exact revisions; verified-current release acceptance remains required. No readiness record or app activation.');
