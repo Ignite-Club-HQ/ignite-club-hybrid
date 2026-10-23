@@ -123,7 +123,14 @@ export default function MemberDetailSheet({
               return canLiveDmUser(ctx, Principal.fromText(userId));
             },
           }, { shared: "person" });
-          if (!cancelled) setCanDM(allowed !== false);
+          if (!cancelled) {
+            setCanDM(allowed !== false);
+            if (allowed === false) {
+              fetchDmBlockReason(userId).then((r) => {
+                if (!cancelled) setDmReason(r);
+              });
+            }
+          }
         } catch {
           // Fail open — the canister enforces can_dm_user on send either way.
           if (!cancelled) setCanDM(true);
