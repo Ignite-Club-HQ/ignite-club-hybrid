@@ -120,7 +120,7 @@ import {
 } from "@/live/features/membership";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import * as fixtureData from "@/lab/fixtureDataLayer";
-import { getCachedClub, cacheClub } from "@/lib/clubTeamCache";
+import { getCachedClub, cacheClub, cacheTeams } from "@/lib/clubTeamCache";
 
 
 type ClubRole = "club_admin";
@@ -566,6 +566,17 @@ export default function ClubDetailPage() {
   });
 
   // Fetch user's team memberships to show "My Team" badge
+  useEffect(() => {
+    if (!teams?.length) return;
+    // Reuse the authorized list for immediate team-page identity/owner display.
+    // This metadata never grants access or enables privileged actions.
+    cacheTeams(teams.map(t => ({
+      id: t.id, club_id: t.club_id, name: t.name, logo_url: t.logo_url ?? null,
+      level_age: (t as any).age_group ?? (t as any).level_age ?? null,
+      team_type: t.team_type === "junior" || t.team_type === "senior" || t.team_type === "mixed" ? t.team_type : undefined,
+    })));
+  }, [teams]);
+
   const { data: userTeamIds = [] } = useQuery({
     queryKey: ["user-team-memberships", id, user?.id],
     queryFn: async () => {
