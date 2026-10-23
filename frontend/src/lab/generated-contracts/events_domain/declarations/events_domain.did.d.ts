@@ -675,6 +675,11 @@ export interface Main {
     { 'Ok' : [] | [LineupSnapshot] } |
       { 'Err' : string }
   >,
+  'get_match_event_ids' : ActorMethod<
+    [string],
+    { 'Ok' : Array<{ 'team_id' : string, 'event_id' : string }> } |
+      { 'Err' : string }
+  >,
   'get_pitch_board_settings' : ActorMethod<
     [string],
     { 'Ok' : [] | [PitchBoardSettings] } |

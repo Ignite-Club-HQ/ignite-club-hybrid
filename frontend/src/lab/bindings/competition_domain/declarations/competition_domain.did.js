@@ -529,6 +529,22 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : JoinLinkPreview, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_member_welcome_email_job' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'to' : IDL.Text,
+              'subject' : IDL.Text,
+              'competition_name' : IDL.Text,
+              'message' : IDL.Text,
+              'competition_id' : IDL.Text,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_my_pending_eois' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(EoiSubmission), 'Err' : IDL.Text })],
@@ -901,6 +917,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'register_competition_welcome_job' : IDL.Func(
         [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'register_member_welcome_job' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
