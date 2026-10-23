@@ -223,6 +223,7 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
   // Chats. Each stage is isolated so a chat failure can't skip photos/files.
   let msgs: Array<{ convo: string; body: string }> = [];
   let mOk = 0;
+  const richOk = { polls: 0, images: 0, eventLinks: 0 };
   try {
     const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
     const convo = async (teamId: string | null) => {
@@ -371,5 +372,10 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
   if (seedFailures.length >= total && total > 0) {
     throw new Error(`Nothing was added. First problem — ${seedFailures[0]}`);
   }
-  return { clubId, failures: [...seedFailures], total, summary: `${events.length} events, ${mOk} messages, ${pOk} photos, ${fOk} files added` };
+  return {
+    clubId,
+    failures: [...seedFailures],
+    total,
+    summary: `${events.length} events, ${mOk} messages, ${richOk.polls} polls, ${richOk.images} chat images, ${richOk.eventLinks} event links, ${pOk} photos, ${fOk} files added`,
+  };
 }
