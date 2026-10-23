@@ -66,6 +66,16 @@ function renderSection(overrides: Partial<Parameters<typeof HomeRewardsSection>[
 }
 
 describe("HomeRewardsSection", () => {
+  it("offers a working manual retry after an unavailable rewards read", () => {
+    const { props } = renderSection({ rewardsDialogOpen: true, selectedRewardClubId: "club-1", availableRewards: [], rewardsError: true, onRetryRewards: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(props.onRetryRewards).toHaveBeenCalledOnce();
+  });
+  it("keeps a loaded reward usable while refreshing", () => {
+    const { props } = renderSection({ rewardsDialogOpen: true, selectedRewardClubId: "club-1", rewardsLoading: true });
+    fireEvent.click(screen.getByRole("button", { name: /Free drink/ }));
+    expect(props.onSelectReward).toHaveBeenCalledWith(reward);
+  });
   it("opens points history from the unlocked summary card", () => {
     const { props } = renderSection();
     fireEvent.click(screen.getByRole("button", { name: "View points and rewards" }));
