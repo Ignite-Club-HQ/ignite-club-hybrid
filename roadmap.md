@@ -454,5 +454,5 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 
 ## Requested production competition/events deployment — 23 October 2026
 - [x] Ran Deploy ICP canisters (mainnet), scope history, in Ignite-Club-HQ/ignite-club-hybrid on verified commit 3a5615e8eb89f5fb5aea4b66fc53fd6e11e49cc8. Run 39917668054 completed successfully at 07:27:58 UTC. Group 1 competition/events only; no automatic funding, creation or unrelated upgrades. Live welcome-job query returned the expected invalid-token refusal; fixture method exists and refused the unauthenticated probe. No email sent or fixture changed for verification.
-- [ ] Group 2 competition/events deployment: blocked by the existing workflow's all-thirteen-service scope. Do not run Upgrade Group 2 (closed) on this request; it upgrades unrelated services. Requires a dedicated protected exact competition/events release path before dispatch.
+- [ ] Group 2 competition/events deployment: approved continuation; add and run a dedicated protected two-target release with exact registry, settings, key and journal checks. Never run the unrelated thirteen-service upgrade.
 - [ ] Authenticated welcome-email delivery and fixture-card navigation acceptance: unavailable without an Internet Identity session; successful canister upgrade/probes alone do not establish app or email-delivery release acceptance.
