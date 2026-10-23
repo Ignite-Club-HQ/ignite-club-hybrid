@@ -49,9 +49,10 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - Router index rebuilds from stable rows; writes refresh, picks recheck gates. Never deploy scale-probe.
 - History uses nullable DTOs/exact links and verified humans; PlayHQ keys are tenant-scoped, claims grant no ownership. Deploy history scope upgrades only competition/events, never creates or rewires others. Why: preserve data and isolate releases.
-- /admin/group-infrastructure alone shows live memory/fuel/club/photo-store utilization; other admin pages link there. Why: duplicated readings drift.
+- /admin/group-infrastructure owns utilization; other pages link there. Why: duplicates drift.
 - News uses the listed club, audience checks, cold discovery and retry. Why: rediscovery hides posts.
-- Creation choices share a theme-scope filter; missing scoped clubs never expose others. Why: Home forms retain context.
+- Creation choices filter by theme; absent clubs expose none. Why: retain context.
+- Home rewards share account/backend/club catalogues and retry errors. Why: avoid duplicate waits.
 - Opening reciprocal checks require identity-side admission-release and exact eligibility-reader evidence for every admission-enabled destination; deletion wiring alone is insufficient. Why: configured destination flags can otherwise pass readiness while all membership reads are denied.
 - Group 2 account admission uses a separate stable eligibility-only reader grant derived from the pinned router; its protected identity-only upgrade journals intent/readback and refreshes the verified snapshot without opening placements or releasing lifecycle gates. Why: repair account access without exposing broader rehearsal-only operations.
 
