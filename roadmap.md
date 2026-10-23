@@ -1,3 +1,7 @@
+## Follow-up page-loading audit — 23 October 2026
+- [x] Re-audit complete: nine remaining source defects recorded in docs/icp-page-opening-followup-2026-10-23.md; focused checks pass in both modes. No app code changed.
+- [ ] Repair the nine follow-up defects with regressions (awaiting Paul's go-ahead), then signed-in acceptance (needs Internet Identity session).
+
 ## Safe GitHub setup transfer — 23 October 2026
 - [x] 08:19 UTC cross-page audit and repairs: team-chat header owner routing, metadata error preservation, missing-only chat provisioning, bounded event labels/thread enrichment, scoped Vault loading/link retries, progressive nonpersistent partial Home results, bounded membership refresh/late disposal and scoped ownership probes. Independent audits and focused two-backend regressions recorded in docs/icp-page-opening-audit-2026-10-23.md. No canister deployment/publication/repository transfer.
 - [ ] Live incident acceptance: open Events, Vault, chats and Home Next Up with Paul's Internet Identity account and capture the actual failing stage if it persists. No signed-in II session is available here. Anonymous router probe confirms missing read_routing_approval, but cannot establish whether signed-in configuration drift invokes it; do not bypass approval or claim one root cause for all pages.
