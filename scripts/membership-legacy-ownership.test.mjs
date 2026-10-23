@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { OWNER_GROUP1_CLUBS, readCompleteSourceClubs, verifyOwnerNamedGroup1Clubs, checkLegacyOwnership } from './membership-legacy-ownership.mjs';
+import { OWNER_GROUP1_CLUBS, readCompleteSourceClubs, verifyOwnerNamedGroup1Clubs, checkLegacyOwnership, verifyCompleteClubLocations } from './membership-legacy-ownership.mjs';
 
 const ids = Object.values(OWNER_GROUP1_CLUBS);
 const club = (id, deleted = false) => ({ Club: { id, deleted } });
@@ -18,6 +18,19 @@ test('missing, deleted, duplicated or foreign named clubs fail closed', () => {
     [good()[0], source('g2', [[ids[0], false]], 3n)],
     [source('g2', ids.map(id => [id, false]), 3n)],
   ]) assert.throws(() => verifyOwnerNamedGroup1Clubs(sources, sources));
+});
+
+test('every legacy club is checked, not only the three supplied names', () => {
+  const all = [...good(), source('g3', [['other-test-club', false]], 9n)];
+  const locations = verifyCompleteClubLocations(all, all);
+  assert.equal(locations.length, 5);
+  assert.deepEqual(locations.find(c => c.clubId === 'other-test-club'), { clubId: 'other-test-club', groupId: 'g3', deleted: false, revision: '9' });
+  for (const deleted of [false, true]) {
+    const conflict = [...all, source('g4', [['other-test-club', deleted]], 2n)];
+    assert.throws(() => verifyCompleteClubLocations(conflict, conflict), /conflicting/);
+  }
+  assert.throws(() => verifyCompleteClubLocations(all, all.slice(0, 2)), /Complete/);
+  assert.throws(() => verifyCompleteClubLocations(all, [...good(), source('g3', [['other-test-club', false]], 10n)]), /changed/);
 });
 
 test('source changes, omitted groups and incomplete traversals are refused', async () => {

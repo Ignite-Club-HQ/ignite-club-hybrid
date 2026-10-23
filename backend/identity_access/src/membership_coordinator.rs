@@ -46,6 +46,39 @@ pub fn verify_inventory(snapshot:&group_inventory::Snapshot,pin:&group_inventory
     let digest=Sha256::digest(encode(&(pin,snapshot,&sources,generation))).into();
     Ok(VerifiedInventory(Inventory{generation,digest,sources}))
 }
+/// A separately trusted original writer can participate without manufacturing
+/// a router group or placement. This establishes transport inventory ONLY;
+/// missing club assignments still block private pages and release.
+pub fn original_mainnet_writer(pin:&group_inventory::Binding,identity:Principal)->Option<Principal>{
+    if pin.registry.to_text()!="jcdfe-vqaaa-aaaal-qxloq-cai"||identity.to_text()!="mq2sj-fiaaa-aaaal-qxlqa-cai"||
+        pin.target_alias!="mainnet"||pin.deployment_id!="mainnet"||pin.host!="https://icp-api.io"||pin.network_kind!="public_mainnet"{
+        return None;
+    }
+    Principal::from_text("mzzzv-taaaa-aaaal-qxlrq-cai").ok()
+}
+pub fn verify_inventory_with_original(snapshot:&group_inventory::Snapshot,pin:&group_inventory::Binding,
+    required_authorities:&[Principal],generation:u64,original:Principal)->Outcome<VerifiedInventory>{
+    if original==Principal::anonymous()||original==Principal::management_canister(){return Err("Exact original club authority required".into());}
+    let registered:Vec<_>=snapshot.groups.iter().filter_map(|g|g.domains.iter().find(|d|d.domain=="club_domain").map(|d|d.canister)).collect();
+    let verified=verify_inventory(snapshot,pin,&registered,generation)?;
+    let mut sources=verified.source_bindings();
+    match sources.iter().find(|(id,_)|id=="g1"){
+        Some((_,authority)) if *authority!=original=>return Err("Registered Group 1 differs from original authority".into()),
+        Some(_)=>{},
+        None=>{
+            // Original must not alias any registered domain, even a non-club
+            // service. Absence is permitted only by the explicit trusted pin.
+            if snapshot.groups.iter().any(|g|g.domains.iter().any(|d|d.canister==original)){return Err("Original authority collides with registered service".into());}
+            sources.push(("g1".into(),original));
+        },
+    }
+    sources.sort_by(|a,b|a.0.cmp(&b.0));
+    let mut exact:Vec<_>=sources.iter().map(|(_,p)|*p).collect();exact.sort();
+    let mut required=required_authorities.to_vec();required.sort();
+    if exact!=required{return Err("Exact registered and original authority inventory required".into());}
+    let digest=Sha256::digest(encode(&("explicit-original-source-v1",pin,snapshot,&sources,generation,original))).into();
+    Ok(VerifiedInventory(Inventory{generation,digest,sources}))
+}
 impl<M:Memory+Clone> Coordinator<M>{
     pub fn open(metadata:M,pool:Pool<M>,journal_memory:M)->Self{Self{rows:StableBTreeMap::init(metadata),pool,journal:Journal::open(journal_memory)}}
     fn inventory(&self)->Outcome<Inventory>{self.rows.get(&"inventory".into()).map(|b|decode(&b)).ok_or("Directory inventory unverified".into())}
@@ -222,6 +255,49 @@ impl<M:Memory+Clone> Coordinator<M>{
     type Mem=VirtualMemory<VectorMemory>;
     fn open(m:&MemoryManager<VectorMemory>)->Coordinator<Mem>{Coordinator::open(m.get(MemoryId::new(0)),Pool::open(m.get(MemoryId::new(1)),m.get(MemoryId::new(2)),10000,32).unwrap(),m.get(MemoryId::new(3)))}
     fn viewer(p:Principal)->Viewer{Viewer{account:"member".into(),version:1,aliases:vec![p]}}
+    #[test]fn original_mainnet_pin_matches_exact_existing_canisters_and_deployment(){
+        let (_,mut pin,_)=group_inventory::tests::fixture();pin.registry=Principal::from_text("jcdfe-vqaaa-aaaal-qxloq-cai").unwrap();
+        pin.target_alias="mainnet".into();pin.deployment_id="mainnet".into();pin.host="https://icp-api.io".into();
+        let identity=Principal::from_text("mq2sj-fiaaa-aaaal-qxlqa-cai").unwrap();
+        assert_eq!(original_mainnet_writer(&pin,identity).unwrap().to_text(),"mzzzv-taaaa-aaaal-qxlrq-cai");
+        assert!(original_mainnet_writer(&pin,Principal::from_slice(&[99,1])).is_none());
+        for field in ["router","target","deployment","host","network"]{
+            let mut bad=pin.clone();match field{"router"=>bad.registry=Principal::from_slice(&[99,1]),"target"=>bad.target_alias="other".into(),"deployment"=>bad.deployment_id="other".into(),"host"=>bad.host="https://other.invalid".into(),_=>bad.network_kind="cloud_engine".into()};
+            assert!(original_mainnet_writer(&bad,identity).is_none());
+        }
+    }
+    #[test]fn explicitly_pinned_original_writer_needs_no_invented_placement(){
+        let (snapshot,pin,a)=group_inventory::tests::fixture();let original=Principal::from_slice(&[98,1]);
+        let mut required=a.clone();required.push(original);
+        // Fixture has g1 already, so preserve its real writer rather than alias it.
+        assert!(verify_inventory_with_original(&snapshot,&pin,&required,1,original).is_err());
+        let mut legacy=snapshot.clone();legacy.groups[1].id="g2".into();legacy.placements[1].group_id="g2".into();
+        let verified=verify_inventory_with_original(&legacy,&pin,&required,1,original).unwrap();
+        assert_eq!(verified.source_bindings(),vec![("g0".into(),a[0]),("g1".into(),original),("g2".into(),a[1])]);
+        let manager=MemoryManager::init(VectorMemory::default());let mut c=open(&manager);c.bind_inventory(verified).unwrap();
+        assert!(c.begin("g1",original,1).is_ok());assert!(c.begin("g1",a[0],1).is_err());
+        assert!(c.require_resolved_locations().is_err());assert!(c.sources().is_err());
+        // Registration and placements are never mutated by verification.
+        assert_eq!(legacy.groups.len(),2);assert_eq!(legacy.placements.len(),2);
+    }
+    #[test]fn original_inventory_rejects_omissions_duplicates_collisions_and_stale_binding(){
+        let (mut s,pin,a)=group_inventory::tests::fixture();s.groups[1].id="g2".into();s.placements[1].group_id="g2".into();
+        let original=Principal::from_slice(&[98,1]);let mut required=a.clone();required.push(original);
+        assert!(verify_inventory_with_original(&s,&pin,&a,1,original).is_err());
+        let mut duplicate=required.clone();duplicate.push(original);assert!(verify_inventory_with_original(&s,&pin,&duplicate,1,original).is_err());
+        let collision=s.groups[0].domains[1].canister;
+        assert!(verify_inventory_with_original(&s,&pin,&[a[0],a[1],collision],1,collision).is_err());
+        assert!(verify_inventory_with_original(&s,&pin,&required,1,Principal::anonymous()).is_err());
+        let mut stale=pin.clone();stale.registry_revision+=1;assert!(verify_inventory_with_original(&s,&stale,&required,1,original).is_err());
+        assert!(verify_inventory_with_original(&s,&pin,&required,0,original).is_err());
+    }
+    #[test]fn registered_original_is_not_duplicated_and_changes_bind_the_digest(){
+        let (s,pin,a)=group_inventory::tests::fixture();
+        let first=verify_inventory_with_original(&s,&pin,&a,1,a[1]).unwrap();
+        assert_eq!(first.source_bindings().len(),2);
+        assert_ne!(first.digest(),verify_inventory(&s,&pin,&a,1).unwrap().digest());
+        assert_ne!(first.digest(),verify_inventory_with_original(&s,&pin,&a,2,a[1]).unwrap().digest());
+    }
     #[test]fn two_source_join_publish_readback_reopen_and_removal(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,authorities)=group_inventory::tests::fixture();let user=Principal::from_slice(&[99,1]);
         let mut c=open(&manager);c.bind_inventory(verify_inventory(&snapshot,&pin,&authorities,1).unwrap()).unwrap();let mut sessions=Sessions::open(manager.get(MemoryId::new(4)));

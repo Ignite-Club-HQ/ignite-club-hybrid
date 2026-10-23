@@ -60,6 +60,7 @@ export async function checkLegacyOwnership(transport, expected = OWNER_GROUP1_CL
     return result;
   };
   const first = await scan(), second = await scan();
+  const locations = verifyCompleteClubLocations(first, second);
   const clubs = verifyOwnerNamedGroup1Clubs(first, second, expected);
   for (const source of initial.sources) {
     const current = await transport.status(source);
@@ -68,7 +69,26 @@ export async function checkLegacyOwnership(transport, expected = OWNER_GROUP1_CL
   await gate();
   return { kind: 'operator-consensus-source-observation', registryFingerprint: initial.fingerprint,
     sources: second.map(s => ({ groupId: s.groupId, revision: String(s.revision), scanned: s.scanned, clubCount: s.clubs.size })),
-    clubs, ready: false, appEnabled: false };
+    clubs, locations, ready: false, appEnabled: false };
+}
+
+/** All club IDs, not just supplied names. Conservative tombstone collisions
+ * remain unresolved too; source observations never grant ownership/release. */
+export function verifyCompleteClubLocations(first, second) {
+  const signature = rows => rows.map(s => s.groupId).sort().join('\n');
+  if (!first.length || signature(first) !== signature(second) || new Set(first.map(s => s.groupId)).size !== first.length ||
+      new Set(second.map(s => s.groupId)).size !== second.length) throw new Error('Complete unchanged source inventory required');
+  const locations = new Map();
+  for (const source of first) {
+    const again = second.find(s => s.groupId === source.groupId);
+    if (!again || again.revision !== source.revision || again.scanned !== source.scanned || again.clubs.size !== source.clubs.size ||
+        [...source.clubs].some(([id, deleted]) => again.clubs.get(id) !== deleted)) throw new Error(`${source.groupId} source changed during verification`);
+    for (const [clubId, deleted] of source.clubs) {
+      if (!clubId || clubId.length > 64 || typeof deleted !== 'boolean' || locations.has(clubId)) throw new Error('Club ID has invalid or conflicting source ownership');
+      locations.set(clubId, { clubId, groupId: source.groupId, deleted, revision: String(source.revision) });
+    }
+  }
+  return [...locations.values()].sort((a, b) => a.clubId.localeCompare(b.clubId));
 }
 
 /** Requires every registered source, rechecked unchanged, and each owner-named
