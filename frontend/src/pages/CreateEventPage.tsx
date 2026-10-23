@@ -48,6 +48,7 @@ import { createEventTransaction } from "@/features/events/createEventWorkflow";
 import { type SavedLocation } from "@/components/AddressAutocomplete";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { EventAudienceSelector } from "@/components/event/EventAudienceSelector";
+import { useOrganisableCompetitions, useCompetitionAcceptedCount } from "@/components/competitions/CompetitionEventPicker";
 import { OpponentInput } from "@/components/OpponentInput";
 import { DutyMemberSelect } from "@/components/DutyMemberSelect";
 import { useClubTheme } from "@/hooks/useClubTheme";
@@ -260,6 +261,11 @@ function SupabaseCreateEventPage() {
   const [clubId, setClubId] = useState(themeCreationClubId || presetClubId || "");
   const [teamId, setTeamId] = useState("");
   const [dutyTeamId, setDutyTeamId] = useState<string | null>(null);
+  // Competition-wide events are a Supabase-mode feature (create_competition_event RPC).
+  const [competitionId, setCompetitionId] = useState("");
+  const isSupabaseMode = resolveAuthBackend() !== "icp";
+  const { data: organisableCompetitions = [] } = useOrganisableCompetitions(isSupabaseMode);
+  const { data: competitionTeamCount = 0 } = useCompetitionAcceptedCount(competitionId);
   const [miniLeagueId, setMiniLeagueId] = useState(presetMiniLeagueId || "");
   const [eventDateTime, setEventDateTime] = useState(() => {
     if (prefillDate) return prefillDate;
