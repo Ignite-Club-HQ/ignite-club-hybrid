@@ -1,6 +1,7 @@
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveEvents } from "@/live/features/events";
 import { getCachedTeam, getCachedClub } from "@/lib/clubTeamCache";
+import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
 
 /** Core Event Detail read boundary. */
 export const EVENT_DETAIL_SELECT =
@@ -53,14 +54,12 @@ async function toEventDetailShape(e: any) {
     cachedTeam?.club_id === e.club_id ? Promise.resolve(cachedTeam) : teamId ? withFeatureBackend("membership", {
       supabase: async () => null,
       icp: async ctx => {
-        const { getLiveTeam } = await import("@/live/features/club");
         return (await getLiveTeam(ctx, teamId))[0] ?? null;
       },
     }, { clubId: e.club_id }).catch(() => null) : Promise.resolve(null),
     cachedClub ? Promise.resolve(cachedClub.name) : withFeatureBackend("membership", {
       supabase: async () => null,
       icp: async ctx => {
-        const { getLiveClubProfile } = await import("@/live/features/club");
         return (await getLiveClubProfile(ctx, e.club_id))[0]?.name ?? null;
       },
     }, { clubId: e.club_id }).catch(() => null),
