@@ -3,6 +3,22 @@
 Status: source propagation, bounded reconstruction, private diagnostic connection and explicitly pinned original G1 transport are implemented locally. Exclusive retained-source ownership acceptance is now implemented as a governor-only bounded operation using the existing Club-row trees and two constant-size stable progress/acceptance rows, with generated contracts and a release driver. Verified-current/recovery acceptance and runnable activation remain unfinished. Nothing deployed or accepted live.
 Stage A complete discovery remains mandatory until the requirements below pass.
 
+### 23 October acceptance-check implementation
+
+The release runner now binds complete acknowledged fills to the first ownership
+reply, validates persisted historical revisions/ownership on restart, pins source
+grants to the original identity, and rechecks identity configuration after source
+grant writes. Final generated-contract checks perform two complete source-status,
+configuration and module/settings sweeps; pending changes, observed rollback,
+source outages or late drift refuse. Consensus status also refuses a revision
+below the coordinator's persisted observed watermark after reopening.
+
+These checks emit non-authorizing historical reports only. They cannot distinguish
+a lost/delayed notification from no change, or jointly restored local counters
+from unchanged state. The atomic read-freshness protocol and independently retained
+restoration fence are not implemented. Upgrade remains blocked before live
+mutation, the released-reader stub refuses, and Stage A remains active.
+
 ### 23 October original-source continuation
 
 Identity transport includes original unregistered G1 only under existing pinned deployment and exact original mainnet canister IDs. New ownership acceptance traverses every retained Club row, including tombstones, and checks absence in every other complete source tree; conflicts refuse. It accepts original G1 missing assignments only under that pin plus exclusive complete coverage; registered/nonlegacy missing assignments remain unresolved. All existing positive assignments still verify through the router. Each invocation checks the complete live registry and source status against captured builds, then performs <=100 synchronous local steps. Durable acceptance binds the full inventory and every source revision; notifications/new builds invalidate it. No club placement/media key changes or extra club index are introduced. Ownership acceptance remains historical evidence (`verified_current=false`), not a public lookup/recovery release. Live execution remains pending the protected deployment and existing governor key.

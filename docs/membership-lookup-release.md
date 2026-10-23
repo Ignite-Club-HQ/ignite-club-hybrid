@@ -69,6 +69,25 @@ for the pinned original G1 after this acceptance; no router placement is written
 Any changed source invalidates acceptance. The generated release driver journals
 its result, never `ready: true`. Signed live acceptance has not run.
 
+Final historical acceptance checks now compare every filled source revision with
+the first and every subsequent ownership response. Saved revisions/ownership are
+validated on restart; foreign or contradictory checkpoints cannot authorize work.
+Grants must name the pinned identity, not simply agree with each other. Identity
+configuration is checked again after all source grants finish.
+
+The runner then checks all source statuses, identity configuration and installed
+module/settings fingerprints in two complete sweeps. Pending changes, a source
+restored below its acknowledged revision, unavailable sources and late drift stop
+the check. Reports explicitly distinguish `sampledCurrent` from
+`verified_current`, and keep readiness/app activation false. The workflow runs
+these tests before using the signing key; its upgrade block remains in place.
+
+**These checks cannot finish live currentness by themselves.** A membership can
+change after its status reply and before its notification reaches the lookup.
+Likewise, restoring both a source and its local revision counters can look
+consistent. A real read-freshness protocol and independent restoration fence are
+still missing engineering, not a secret or approval the owner can supply.
+
 The verified-current/old-restored-state release contract remains unfinished. Additional registered groups
 are inspected, but cannot be silently ignored or added to this three-target upgrade.
 The protected upgrade still refuses before making changes.
