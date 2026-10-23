@@ -36,6 +36,7 @@ interface UseGroupMessagesQueryOptions {
   openedFromNotificationRef: RefObject<number | null>;
   pageSize: number;
   supabaseClient: GroupChatSupabaseClient;
+  signal?: AbortSignal;
 }
 
 /**
@@ -46,8 +47,26 @@ export const mapLiveGroupRows = async (
   ctx: any,
   groupId: string,
   rows: any[],
+  onMessagesReady?: (messages: GroupMessage[]) => void,
 ): Promise<GroupMessage[]> => {
   const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
+  // Author photos and reactions enrich the thread; they must not delay its text.
+  if (onMessagesReady) {
+    const rawById = new Map(rows.map(m => [m.id, m]));
+    onMessagesReady(rows.slice().sort((a, b) => Number(b.sequence - a.sequence)).map(m => {
+      const attachment = m.attachment?.[0];
+      const replyToId = m.reply_to_id?.[0] ?? null;
+      const reply = replyToId ? rawById.get(replyToId) : null;
+      return {
+        id: m.id, text: m.body, group_id: m.conversation_id, author_id: m.sender.toText(),
+        created_at: new Date(Number(m.created_at_ms)).toISOString(),
+        edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
+        image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+        author: null, reactions: [], reply_to_id: replyToId,
+        reply_to: reply ? { id: reply.id, text: reply.body, author_id: reply.sender.toText(), author: null } : null,
+      } as GroupMessage;
+    }));
+  }
   const [profilesMap, liveReactions] = await Promise.all([
     fetchProfilesWithCache(authorIds),
     listLiveReactions(ctx, groupId).catch(() => []),
@@ -108,6 +127,7 @@ const fetchGroupMessages = async ({
   queryClient,
   pageSize,
   supabaseClient,
+  signal,
 }: Omit<UseGroupMessagesQueryOptions, "openedFromNotificationRef">): Promise<GroupMessagesQueryData> => {
   markChatFetch();
   if (!groupId || !userId) {
@@ -253,11 +273,20 @@ const fetchGroupMessages = async ({
       // plus a backward cursor when older history remains.
       const page = await listLiveLatestMessagesPage(ctx, groupId, null, pageSize);
       prefetchMessagePolls(queryClient, page.messages, userId, { conversationId: groupId }, true, ctx);
-      const messages = await mapLiveGroupRows(ctx, groupId, page.messages);
       const olderCursor =
         Array.isArray(page.next_sequence) && page.next_sequence.length > 0
           ? Number(page.next_sequence[0])
           : null;
+      const messages = await mapLiveGroupRows(ctx, groupId, page.messages, readyMessages => {
+        if (signal?.aborted) return;
+        // Only unblock a cold thread; do not overwrite loaded reactions or
+        // optimistic/realtime rows while a background refresh is in flight.
+        queryClient.setQueryData<GroupMessagesQueryData>(["group-messages", groupId], previous =>
+          previous?.messages.length ? previous : {
+            messages: readyMessages, reactions: [], olderCursor,
+            hasOlderMessages: olderCursor !== null,
+          });
+      });
       // mapLiveGroupRows embeds canister reactions per message; flatten the
       // same rows for consumers that read the flat reactions list.
       const reactions = messages.flatMap((m: any) =>
@@ -318,7 +347,7 @@ export const useGroupMessagesQuery = (options: UseGroupMessagesQueryOptions) => 
   const { groupId, userId, openedFromNotificationRef } = options;
   return useQuery({
     queryKey: ["group-messages", groupId],
-    queryFn: () => fetchGroupMessages(options),
+    queryFn: ({ signal }) => fetchGroupMessages({ ...options, signal }),
     enabled: !!groupId && !!userId, // session token is sufficient; don't wait for profile fetch (`authReady`) to unblock first paint
     staleTime: 1000 * 60 * 5, // 5 minutes - show cache instantly
     gcTime: 1000 * 60 * 60 * 24,
