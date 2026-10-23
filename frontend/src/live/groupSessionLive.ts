@@ -110,7 +110,6 @@ export async function lookupEntityClub(ctx: FeatureBackendContext, kind: EntityK
     const { listMyLiveMiniLeagues } = await import('./features/miniLeagues');
     const [clubs, leagues] = await Promise.all([listLiveMembershipClubs(ctx), listMyLiveMiniLeagues(ctx)]);
     const ids = [...new Set([...clubs.map(c => c.id), ...leagues.map(l => l.club_id)])];
-    if (!ids.length) return null;
     return (await listLiveNewsMulti(ctx, ids)).find(p => p.id === id)?.club_id ?? null;
   }
   if (kind === 'photo' || kind === 'galleryCard') {

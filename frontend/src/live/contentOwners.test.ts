@@ -28,4 +28,10 @@ describe('authorized content owners', () => {
     mocks.asset.mockRejectedValue(new Error('offline'));
     await expect(lookupEntityClub(context, 'photo', 'photo-b')).rejects.toThrow('offline');
   });
+  it('discovers authorized competition articles without ordinary club memberships', async () => {
+    mocks.clubs.mockResolvedValue([]);
+    mocks.news.mockResolvedValue([{ id: 'competition-post', club_id: 'host-club' }]);
+    expect(await lookupEntityClub(context, 'news', 'competition-post')).toBe('host-club');
+    expect(mocks.news).toHaveBeenCalledWith(context, []);
+  });
 });
