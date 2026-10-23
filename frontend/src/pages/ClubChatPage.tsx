@@ -106,6 +106,8 @@ import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { assertReadNotAborted, withReadDeadline } from "@/live/readDeadline";
+import { readIcpThreadPage } from "@/features/messaging/thread/icpThreadRead";
 import { writeOnce } from "@/live/clubScope";
 import { ensureLiveClubConversations, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
@@ -508,14 +510,16 @@ export default function ClubChatPage() {
 
   // Canister rows → the app's club-message shape. Shared by the first page
   // load and by scroll-back paging so both render identically.
-  const mapLiveClubRows = async (ctx: any, rows: any[]): Promise<Message[]> => {
+  const mapLiveClubRows = async (ctx: any, rows: any[], onReady?: (messages: Message[]) => void, signal?: AbortSignal): Promise<Message[]> => {
+    assertReadNotAborted(signal);
     const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
-    const profilesMap = await fetchProfilesWithCache(authorIds);
+    let profilesMap = getProfilesFromCache(authorIds).cached;
+    const profilesRead = withReadDeadline(fetchProfilesWithCache(authorIds), "Chat profiles", 8_000, signal).catch(() => profilesMap);
     // Reactions persist on the canister; restore them on every refetch.
     // Tolerate older canisters that lack list_reactions.
     const reactionsByMessage = new Map<string, any[]>();
-    try {
-      const liveReactions = await listLiveReactions(ctx, clubId!);
+    const reactionsRead = (async () => { try {
+      const liveReactions = await withReadDeadline(listLiveReactions(ctx, clubId ?? ""), "Chat reactions", 8_000, signal);
       for (const r of liveReactions) {
         const uid = r.user.toText();
         const list = reactionsByMessage.get(r.message_id) ?? [];
@@ -527,12 +531,12 @@ export default function ClubChatPage() {
         });
         reactionsByMessage.set(r.message_id, list);
       }
-    } catch { /* canister without list_reactions — reactions stay empty until redeploy */ }
+    } catch { /* optional reactions retain the readable thread */ } })();
     // Reply quotes persist on the canister as reply_to_id; resolve the quoted
     // snippet from messages in the same page (reply targets outside the loaded
     // page render without a quote, same as a deleted target).
     const rawById = new Map<string, any>(rows.map((m: any) => [m.id, m]));
-    return rows
+    const mapRows = () => rows
       .slice()
       .sort((a: any, b: any) => Number(b.sequence - a.sequence))
       .map((m: any) => {
@@ -560,12 +564,17 @@ export default function ClubChatPage() {
             : null,
         };
       }) as unknown as Message[];
+    onReady?.(mapRows());
+    profilesMap = await profilesRead;
+    await reactionsRead;
+    assertReadNotAborted(signal);
+    return mapRows();
   };
 
   const { data: messagesData, isLoading } = useQuery({
 
     queryKey: ["club-messages", clubId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       markChatFetch();
       if (useIcpLab && clubId && user?.id) {
         return { messages: fixtureData.getLocalLabClubMessages(clubId, user.id) as unknown as Message[], hasOlderMessages: false, reactions: [], fromCache: true };
@@ -579,11 +588,19 @@ export default function ClubChatPage() {
         return await withFeatureBackend("messaging", {
           supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
           icp: async (ctx) => {
-            try { await ensureLiveClubConversations(ctx, clubId); } catch { /* best-effort self-heal */ }
             // Newest-first page: the canister returns the newest MESSAGES_PER_PAGE
             // rows plus a backward cursor when older history remains.
-            const page = await listLiveLatestMessagesPage(ctx, clubId, null, MESSAGES_PER_PAGE);
-            const messages = await mapLiveClubRows(ctx, page.messages);
+            const page = await readIcpThreadPage(
+              () => withReadDeadline(listLiveLatestMessagesPage(ctx, clubId, null, MESSAGES_PER_PAGE), "Club messages", 20_000, signal),
+              () => ensureLiveClubConversations(ctx, clubId),
+            );
+            assertReadNotAborted(signal);
+            const messages = await mapLiveClubRows(ctx, page.messages, ready => {
+              assertReadNotAborted(signal);
+              const key = ["club-messages", clubId];
+              const current = queryClient.getQueryData<{ messages: Message[] }>(key);
+              if (!current?.messages?.length) queryClient.setQueryData(key, { messages: ready, hasOlderMessages: page.next_sequence.length > 0, fromCache: false });
+            }, signal);
             const olderCursor =
               Array.isArray(page.next_sequence) && page.next_sequence.length > 0
                 ? Number(page.next_sequence[0])

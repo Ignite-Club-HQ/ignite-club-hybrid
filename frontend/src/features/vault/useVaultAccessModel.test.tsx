@@ -98,6 +98,16 @@ beforeEach(() => {
 });
 
 describe("useVaultAccessModel — access decision", () => {
+  it("reports failed subscription checks as retryable errors, not established Free access", async () => {
+    fetchVaultUserRoles.mockResolvedValue([{ role: "coach", club_id: "club-a", team_id: null }]);
+    fetchVaultClubHasPro.mockRejectedValueOnce(new Error("Subscription temporarily unavailable")).mockResolvedValue(true);
+    const { result } = renderAccessModel({ currentView: clubView });
+    await waitFor(() => expect(result.current.accessError).toBeInstanceOf(Error));
+    expect(result.current.canAccessVault).toBe(false);
+    result.current.retryAccess();
+    await waitFor(() => expect(result.current.canAccessVault).toBe(true));
+    expect(result.current.accessError).toBeNull();
+  });
   it("opens for an app admin without waiting for unrelated Pro scans", async () => {
     fetchVaultAppAdmin.mockResolvedValue(true);
     fetchVaultAnyProAccess.mockReturnValue(new Promise(() => {}));

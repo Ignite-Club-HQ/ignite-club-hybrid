@@ -33,12 +33,13 @@ export async function fetchVaultAppAdmin(
 ): Promise<boolean> {
   return withFeatureBackend("vault", {
     supabase: async () => {
-      const { data } = await client
+      const { data, error } = await client
         .from("user_roles")
         .select("role")
         .eq("user_id", userId)
         .eq("role", "app_admin")
         .maybeSingle();
+      if (error) throw error;
       return Boolean(data);
     },
     icp: async (ctx) => {
@@ -54,10 +55,11 @@ export async function fetchVaultUserRoles(
 ): Promise<VaultRoleRecord[]> {
   return withFeatureBackend("vault", {
     supabase: async () => {
-      const { data } = await client
+      const { data, error } = await client
         .from("user_roles")
         .select("role, club_id, team_id")
         .eq("user_id", userId);
+      if (error) throw error;
       return data ?? [];
     },
     icp: async (ctx) => {
@@ -115,37 +117,41 @@ async function fetchVaultAccessibleClubsSupabase(
   client: IgniteSupabaseClient,
 ): Promise<VaultClubSummary[]> {
   if (isAppAdmin) {
-    const { data } = await client
+    const { data, error } = await client
       .from("clubs")
       .select("id, name, is_pro, storage_used_bytes")
       .order("name");
-    return data ?? [];
+    if (error) throw error;
+      return data ?? [];
   }
 
-  const { data: roles } = await client
+  const { data: roles, error: rolesError } = await client
     .from("user_roles")
     .select("club_id, team_id")
     .eq("user_id", userId);
+  if (rolesError) throw rolesError;
   if (!roles?.length) return [];
 
   const clubIds = [...new Set(roles.flatMap((role) => role.club_id ? [role.club_id] : []))];
   const teamIds = roles.flatMap((role) => role.team_id ? [role.team_id] : []);
 
   if (teamIds.length) {
-    const { data: teams } = await client
+    const { data: teams, error: teamsError } = await client
       .from("teams")
       .select("club_id")
       .in("id", teamIds);
+    if (teamsError) throw teamsError;
     for (const team of teams ?? []) {
       if (team.club_id && !clubIds.includes(team.club_id)) clubIds.push(team.club_id);
     }
   }
 
   if (!clubIds.length) return [];
-  const { data: clubs } = await client
+  const { data: clubs, error: clubsError } = await client
     .from("clubs")
     .select("id, name, is_pro, storage_used_bytes")
     .in("id", clubIds);
+  if (clubsError) throw clubsError;
   return clubs ?? [];
 }
 
@@ -155,11 +161,12 @@ export async function fetchVaultClubHasPro(
 ): Promise<boolean> {
   return withFeatureBackend("vault", {
     supabase: async () => {
-      const { data } = await client
+      const { data, error } = await client
         .from("club_subscriptions")
     .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
     .eq("club_id", clubId)
     .maybeSingle();
+      if (error) throw error;
       return hasVaultProEntitlement(data);
     },
     // Club "Free Pro" grant on club_domain, or the caller's IAP entitlement.
@@ -176,11 +183,12 @@ export async function fetchVaultTeamHasPro(
 ): Promise<boolean> {
   return withFeatureBackend("vault", {
     supabase: async () => {
-      const { data } = await client
+      const { data, error } = await client
         .from("team_subscriptions")
     .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
     .eq("team_id", teamId)
     .maybeSingle();
+      if (error) throw error;
       return hasVaultProEntitlement(data);
     },
     // Team grant → owning club's grant → caller's IAP entitlement.
@@ -218,12 +226,8 @@ export async function fetchVaultCompetitionAccess(
         import("@/live/features/vault"),
         import("@/live/features/competitions"),
       ]);
-      try {
-        await listLiveVaultFolders(ctx, "", null, null, competitionId);
-      } catch {
-        return { isMember: false, canManage: false };
-      }
-      const canManage = await isLiveCompetitionAdmin(ctx, competitionId).catch(() => false);
+      await listLiveVaultFolders(ctx, "", null, null, competitionId);
+      const canManage = await isLiveCompetitionAdmin(ctx, competitionId);
       return { isMember: true, canManage };
     },
   }, { competitionId });
@@ -258,10 +262,11 @@ async function fetchVaultAnyProAccessSupabase(
   userId: string,
   client: IgniteSupabaseClient,
 ): Promise<boolean> {
-  const { data: roles } = await client
+  const { data: roles, error: rolesError } = await client
     .from("user_roles")
     .select("club_id, team_id")
     .eq("user_id", userId);
+  if (rolesError) throw rolesError;
   if (!roles?.length) return false;
 
   const directClubIds = roles.flatMap((role) => role.club_id ? [role.club_id] : []);
@@ -269,37 +274,41 @@ async function fetchVaultAnyProAccessSupabase(
   const allClubIds = [...directClubIds];
 
   if (teamIds.length) {
-    const { data: teams } = await client
+    const { data: teams, error: teamsError } = await client
       .from("teams")
       .select("id, club_id")
       .in("id", teamIds);
+    if (teamsError) throw teamsError;
     for (const team of teams ?? []) {
       if (team.club_id && !allClubIds.includes(team.club_id)) allClubIds.push(team.club_id);
     }
   }
 
   if (allClubIds.length) {
-    const { data: clubSubscriptions } = await client
+    const { data: clubSubscriptions, error: clubError } = await client
       .from("club_subscriptions")
       .select("club_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
       .in("club_id", allClubIds);
+    if (clubError) throw clubError;
     if (clubSubscriptions?.some(hasVaultProEntitlement)) return true;
   }
 
   if (teamIds.length) {
-    const { data: teamSubscriptions } = await client
+    const { data: teamSubscriptions, error: teamError } = await client
       .from("team_subscriptions")
       .select("team_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
       .in("team_id", teamIds);
+    if (teamError) throw teamError;
     if (teamSubscriptions?.some(hasVaultProEntitlement)) return true;
   }
 
   if (allClubIds.length) {
-    const { data: legacyProClubs } = await client
+    const { data: legacyProClubs, error: legacyError } = await client
       .from("clubs")
       .select("is_pro")
       .in("id", allClubIds)
       .eq("is_pro", true);
+    if (legacyError) throw legacyError;
     return Boolean(legacyProClubs?.length);
   }
 

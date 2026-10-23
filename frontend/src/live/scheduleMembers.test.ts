@@ -18,6 +18,22 @@ beforeEach(() => {
   mocks.profile.mockResolvedValue([{ name: 'Cats', sport: [] }]); mocks.team.mockResolvedValue([{ name: 'U9' }]); mocks.duties.mockResolvedValue([]);
 });
 describe('progressive member schedule', () => {
+  it('settles with visible events and incomplete evidence after stalled optional duties', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.duties.mockReturnValue(new Promise(() => {}));
+      const updates: MemberScheduleSnapshot[] = [];
+      const pending = loadMemberSchedule(ctx, { ...scope, clubIds: ['g1'] }, value => updates.push(value));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(updates.some(value => value.events[0]?.id === 'event-1')).toBe(true);
+      await vi.advanceTimersByTimeAsync(20_001);
+      const result = await pending;
+      expect(result.events[0].id).toBe('event-1');
+      expect(result.pending).toBe(0);
+      expect(result.failed).toContain('duties:g1');
+      expect(result.incomplete).toBe(true);
+    } finally { vi.useRealTimers(); }
+  });
   it('publishes a ready club while another club and the ready club profile are unresolved', async () => {
     let finishClub: ((value: unknown[]) => void) | undefined; let finishProfile: ((value: unknown[]) => void) | undefined;
     mocks.events.mockImplementation(id => id === 'g1' ? Promise.resolve([event]) : new Promise(resolve => { finishClub = resolve; }));

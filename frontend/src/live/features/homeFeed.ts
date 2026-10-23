@@ -220,12 +220,15 @@ export async function fetchLiveHomeFeed(
         if (team) { activeTeams.add(team.id); teamNames.set(team.id, team.name); }
       }
       const result = await eventRead;
-      if (result.error) throw result.error;
-      for (const event of result.value) rows.set(event.id, event);
-      successes++; publish();
+      if (result.error) failures++;
+      else {
+        for (const event of result.value) rows.set(event.id, event);
+        successes++; publish();
+      }
       for (const result of await teamEvents) {
         if (result.failed) { failures++; continue; }
         for (const event of result.value) rows.set(event.id, event);
+        successes++;
       }
       publish();
     } catch (error) { assertReadNotAborted(signal); failures++; }

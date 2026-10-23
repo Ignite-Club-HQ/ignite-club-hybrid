@@ -1,4 +1,3 @@
-import { mergeLists } from "@/live/featureRouter";
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { LogoImage } from "@/components/ui/logo-image";
 import { useQuery } from "@tanstack/react-query";
@@ -20,128 +19,14 @@ import { filterDeletedTeams } from "@/lib/deletedTeamTombstones";
 import { clearMyTeamsCarouselCache } from "@/lib/invalidateTeamLists";
 import { format, isToday, isTomorrow, parseISO, differenceInDays } from "date-fns";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
-import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
-import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
+import { getLiveTeam } from "@/live/features/club";
 import { listLiveEvents } from "@/live/features/events";
 
-/**
- * ICP-mode items loader for the carousel: role grants + teams/clubs from the
- * club canister, mini-leagues from the mini-league canister. PlayHQ managed-
- * competition cards stay Supabase-only (approved exception).
- */
-async function fetchIcpCarouselItems(
-  ctx: FeatureBackendContext,
-  activeClubFilter: string | null,
-): Promise<TeamOrLeague[]> {
-  const grants = (await getLiveMyRoleGrants(ctx)) as unknown as {
-    club: [] | [string];
-    team: [] | [string];
-    role: string;
-  }[];
-  const teamIds = [...new Set(grants.filter((g) => g.team[0]).map((g) => g.team[0]!))];
-  const leagueAdminClubIds = [...new Set(
-    grants.filter((g) => g.club[0] && g.role === "league_admin").map((g) => g.club[0]!),
-  )];
-
-  const clubMeta = new Map<string, { name: string; logo_url: string | null; sport: string | null }>();
-  const getClubMeta = async (clubId: string) => {
-    let meta = clubMeta.get(clubId);
-    if (!meta) {
-      try {
-        const opt = (await getLiveClubProfile(ctx, clubId)) as any;
-        const p = Array.isArray(opt) ? opt[0] : opt;
-        meta = { name: p?.name ?? "", logo_url: p?.logo_url?.[0] ?? null, sport: p?.sport ?? null };
-      } catch {
-        meta = { name: "", logo_url: null, sport: null };
-      }
-      clubMeta.set(clubId, meta);
-    }
-    return meta;
-  };
-
-  const result: TeamOrLeague[] = [];
-
-  await Promise.all(
-    teamIds.map(async (teamId) => {
-      try {
-        const raw = (await getLiveTeam(ctx, teamId)) as any;
-        const team = Array.isArray(raw) ? raw[0] : raw;
-        if (!team || team.archived || team.deleted_at_ms?.length) return;
-        if (activeClubFilter && team.club_id !== activeClubFilter) return;
-        const teamRoles = grants.filter((g) => g.team[0] === teamId);
-        const clubRoles = grants.filter((g) => g.club[0] === team.club_id);
-        const canManage =
-          teamRoles.some((g) => ["coach", "team_admin"].includes(g.role)) ||
-          clubRoles.some((g) => ["club_admin", "app_admin"].includes(g.role));
-        const meta = await getClubMeta(team.club_id);
-        let isOnTrial = false;
-        try {
-          const { getLiveTeamSubscription } = await import("@/live/features/club");
-          const sub = await getLiveTeamSubscription(ctx, team.id);
-          isOnTrial = !!(sub?.is_pro && sub?.trial_ends_at_ms);
-        } catch { /* subscription row absent — not on trial */ }
-        result.push({
-          id: team.id,
-          name: team.name,
-          logo_url: team.logo_url?.[0] ?? null,
-          club_logo_url: meta.logo_url,
-          type: "team",
-          club_name: meta.name,
-          sport: meta.sport,
-          club_id: team.club_id,
-          canManage,
-          isOnTrial,
-        });
-      } catch { /* team not visible to caller */ }
-    }),
-  );
-
-  const leagueIds = new Set<string>();
-  try {
-    const mine = (await listMyLiveMiniLeagues(ctx)) as any[];
-    for (const l of mine || []) if (l?.id) leagueIds.add(l.id);
-  } catch { /* no leagues */ }
-  await Promise.all(
-    leagueAdminClubIds.map(async (clubId) => {
-      try {
-        const ls = (await listLiveMiniLeaguesByClub(ctx, clubId)) as any[];
-        for (const l of ls || []) if (l?.id) leagueIds.add(l.id);
-      } catch { /* club not visible */ }
-    }),
-  );
-  await Promise.all(
-    [...leagueIds].map(async (leagueId) => {
-      try {
-        const raw = (await getLiveMiniLeague(ctx, leagueId)) as any;
-        const league = Array.isArray(raw) ? raw[0] : raw;
-        if (!league || league.status === "deleted" || league.status === "archived") return;
-        if (activeClubFilter && league.club_id !== activeClubFilter) return;
-        const meta = await getClubMeta(league.club_id);
-        result.push({
-          id: league.id,
-          name: league.name,
-          logo_url: league.logo_url?.[0] ?? null,
-          club_logo_url: meta.logo_url,
-          type: "league",
-          club_name: meta.name,
-          sport: meta.sport,
-          club_id: league.club_id,
-          canManage: leagueAdminClubIds.includes(league.club_id),
-        });
-      } catch { /* league not visible */ }
-    }),
-  );
-
-  return result.sort((a, b) => {
-    if (a.canManage && !b.canManage) return -1;
-    if (!a.canManage && b.canManage) return 1;
-    if (a.type === "team" && b.type === "league") return -1;
-    if (a.type === "league" && b.type === "team") return 1;
-    return a.name.localeCompare(b.name);
-  });
-}
+import { fetchIcpCarouselItems } from "@/live/carouselItems";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 
 // Render Supabase storage URLs through the image-transform endpoint at a tiny
 // width so the 28×28 avatar thumbnails don't download full-resolution originals.
@@ -571,6 +456,8 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   const { user, initialized } = useAuth();
   const isIcp = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const incompleteItemsRef = useRef(false);
   const { activeClubFilter } = useClubTheme();
 
   // Hydrate from localStorage so cold opens paint real cards instantly
@@ -603,18 +490,29 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   // Fetch teams & leagues
   const { data: rawItems = snapshot?.items ?? [], isLoading, isFetching, isError } = useQuery({
     queryKey: ["my-teams-premium-v2", user?.id, activeClubFilter],
-    retry: 3,
+    meta: { persist: !isIcp },
+    retry: isIcp ? false : 3,
     initialData: snapshot?.items,
     initialDataUpdatedAt: snapshotWithTs?.timestamp,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!user) return [];
 
       if (isIcp) {
         return withFeatureBackend("competitions", {
           // Unreachable: this branch only runs when ICP mode is active.
           supabase: async () => [] as TeamOrLeague[],
-          icp: (ctx) => fetchIcpCarouselItems(ctx, activeClubFilter ?? null),
-        }, activeClubFilter ? { clubId: activeClubFilter } : { everyGroup: true, merge: mergeLists });
+          icp: async (ctx) => {
+            incompleteItemsRef.current = true;
+            const key = ["my-teams-premium-v2", user.id, activeClubFilter];
+            const previous = queryClient.getQueryData<TeamOrLeague[]>(key) ?? [];
+            const mergeProgress = (ready: TeamOrLeague[]) => [...new Map([...previous, ...ready].map(item => [`${item.type}:${item.id}`, item])).values()];
+            const result = await fetchIcpCarouselItems(ctx, activeClubFilter ?? null, ready => {
+              if (!signal.aborted) queryClient.setQueryData(key, mergeProgress(ready));
+            }, signal);
+            incompleteItemsRef.current = result.incomplete;
+            return result.incomplete ? mergeProgress(result.items) : result.items;
+          },
+        }, { shared: "person" });
       }
 
       const { data: roles, error: rolesError } = await supabase
@@ -1207,7 +1105,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
 
   // Persist snapshot for instant cold-start on next visit
   useEffect(() => {
-    if (!user?.id || scopedItems.length === 0) return;
+    if (!user?.id || scopedItems.length === 0 || (isIcp && (isFetching || incompleteItemsRef.current))) return;
     setCachedCarousel<CarouselSnapshot>(user.id, activeClubFilter, {
       items: scopedItems,
       nextEvents,
@@ -1217,7 +1115,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
     });
   }, [user?.id, activeClubFilter, scopedItems, nextEvents, teamPhotos, unreadCounts, teamMembers]);
 
-  const showSkeleton = (!initialized || isLoading || (isFetching && scopedItems.length === 0)) && !snapshot;
+  const showSkeleton = (!initialized || isLoading || (isFetching && scopedItems.length === 0)) && !snapshot && scopedItems.length === 0;
 
   // Section is "ready" only once the primary teams query has actually settled
   // (i.e. not its first load and not a background refetch with no items yet).
@@ -1225,7 +1123,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   // signal ready off the snapshot alone — otherwise My Teams reports ready
   // immediately while Next Up is still waiting on its first hero, and they
   // visibly desync on native cold opens.
-  const dataSettled = initialized && !isLoading && !(isFetching && scopedItems.length === 0);
+  const dataSettled = initialized && (scopedItems.length > 0 || (!isLoading && !isFetching) || isError);
   const sectionReady = dataSettled || (!!snapshot && !isLoading);
 
   useEffect(() => {

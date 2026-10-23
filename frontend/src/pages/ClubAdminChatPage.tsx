@@ -289,10 +289,10 @@ function SupabaseClubAdminChatPage() {
         return await withFeatureBackend("membership", {
           supabase: async () => null,
           icp: async (ctx) => {
-            const profile: any = await getLiveClubProfile(ctx, icpClubId);
-            return profile ? { id: icpClubId, name: profile.name ?? null, logo_url: null } : null;
+            const [profile] = await getLiveClubProfile(ctx, icpClubId);
+            return profile ? { id: profile.id, name: profile.name, logo_url: profile.logo_url[0] ?? null } : null;
           },
-        }, { clubId: icpClubId! });
+        }, { clubId: icpClubId });
       }
 
       const clubId = conversation?.club_id;
