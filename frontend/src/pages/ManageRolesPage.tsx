@@ -26,6 +26,7 @@ import {
 } from "@/live/features/membership";
 import { IcpLabRoleRosterView } from "@/features/membership/IcpLabRoleRosterView";
 import { groupRoleRowsByUser } from "@/features/membership/roleRoster";
+import { roleMemberProfiles } from "@/features/membership/roleMemberProfiles";
 import {
   RoleManagementHeader,
   RoleManagementTabs,
@@ -168,13 +169,14 @@ function SupabaseManageRolesPage() {
         // the canister — verify against the deployed club_domain.
         icp: async (ctx) => {
           const grants = await listLiveRoleGrants(ctx, clubId!);
+          const profiles = await roleMemberProfiles(grants.map(g => g.account_id));
           return (grants as any[]).map((g) => ({
             id: `${g.account_id}-${g.role}-${g.team[0] ?? "club"}`,
             role: g.role,
             user_id: g.account_id,
             club_id: g.club[0] ?? null,
             team_id: g.team[0] ?? null,
-            profiles: null,
+            profiles: profiles.get(g.account_id) ?? null,
             teams: null,
           }));
         },
@@ -195,6 +197,7 @@ function SupabaseManageRolesPage() {
         // Supabase profile id — no display name/avatar join on the canister.
         icp: async (ctx) => {
           const rows = await listLiveRoleRequests(ctx, clubId!);
+          const profiles = await roleMemberProfiles(rows.filter(r => r.status === "pending").map(r => r.account_id));
           return (rows as any[])
             .filter((r) => r.status === "pending")
             .map((r) => ({
@@ -203,7 +206,7 @@ function SupabaseManageRolesPage() {
               club_id: r.club,
               role: r.role,
               status: r.status,
-              requester: { id: r.account_id, display_name: r.account_id, avatar_url: null },
+              requester: profiles.get(r.account_id),
             }));
         },
       }, { clubId: clubId! }),
