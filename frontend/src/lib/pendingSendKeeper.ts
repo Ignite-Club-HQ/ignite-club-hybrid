@@ -82,9 +82,11 @@ export function installPendingSendKeeper(queryClient: QueryClient): void {
       else if (!present.has(id) && (event.action.type !== "success" || event.action.manual)) map.delete(id);
     }
     if (map.size === 0) tracked.delete(key);
-    if (event.action.type !== "success" || event.action.manual) return;
+    if (event.action.type !== "success") return;
 
-    const merged = mergePendingRows(messages, [...map.values()].map((t) => t.row));
+    // Manual writes may clean already-confirmed previews, but must never
+    // re-add a row explicitly removed by a local rollback.
+    const merged = mergePendingRows(messages, event.action.manual ? [] : [...map.values()].map((t) => t.row));
     if (merged) queryClient.setQueryData(query.queryKey, { ...data, messages: merged });
   });
 }
