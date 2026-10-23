@@ -63,3 +63,16 @@ test('late mutations and registry changes reject the whole operator observation'
   let n = 0;
   await assert.rejects(() => checkLegacyOwnership({ ...transport, registry: async () => ({ fingerprint: ++n === 1 ? 'old' : 'new', sources }) }), /inventory changed/);
 });
+
+test('malformed terminal replies, repeated cursors and excessive work cannot prove inventory completion', async () => {
+  for (const page of [
+    { revision: 7n, scanned: 0n, edges: [] },
+    { revision: 7n, scanned: 101n, edges: [], next: [] },
+    { revision: 7n, scanned: 0n, edges: [club(ids[0])], next: [] },
+    { revision: 7n, scanned: 1n, edges: [null], next: [] },
+  ]) await assert.rejects(() => readCompleteSourceClubs('g1', async () => ({ Ok: page })));
+  const cursor = { revision: 7n, phase: 0n, offset: 1n, nested: 0n };
+  let calls = 0;
+  await assert.rejects(() => readCompleteSourceClubs('g1', async () => { calls++; return { Ok: { revision: 7n, scanned: 1n, edges: [], next: [cursor] } }; }), /advance/);
+  assert.equal(calls, 2);
+});

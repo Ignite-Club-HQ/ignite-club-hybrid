@@ -7,6 +7,7 @@ export const OWNER_GROUP1_CLUBS = Object.freeze({
 });
 
 export async function readCompleteSourceClubs(groupId, read, { maxPages = 10000 } = {}) {
+  if (!Number.isSafeInteger(maxPages) || maxPages < 1 || maxPages > 10000) throw new Error('Bounded source page budget required');
   let cursor = null, revision, scanned = 0;
   const clubs = new Map();
   for (let pages = 0; pages < maxPages; pages++) {
@@ -14,9 +15,11 @@ export async function readCompleteSourceClubs(groupId, read, { maxPages = 10000 
     if (!reply || typeof reply !== 'object' || 'Err' in reply) throw new Error(`${groupId} source export refused: ${reply?.Err ?? 'invalid reply'}`);
     const page = reply.Ok;
     if (!page || typeof page.revision !== 'bigint' || page.revision < 1n || !Array.isArray(page.edges) || typeof page.scanned !== 'bigint' ||
-        page.scanned < 0n || page.scanned > 100n || page.edges.length > Number(page.scanned) || (revision !== undefined && page.revision !== revision)) throw new Error(`${groupId} source export changed or exceeded bounds`);
+        page.scanned < 0n || page.scanned > 100n || page.edges.length > Number(page.scanned) || !Array.isArray(page.next) || page.next.length > 1 ||
+        (revision !== undefined && page.revision !== revision)) throw new Error(`${groupId} source export changed or exceeded bounds`);
     revision ??= page.revision; scanned += Number(page.scanned);
     for (const edge of page.edges) {
+      if (!edge || typeof edge !== 'object' || Object.keys(edge).length !== 1) throw new Error(`${groupId} invalid source edge`);
       if (!('Club' in edge)) continue;
       const club = edge.Club;
       if (!club?.id || club.id.length > 64 || typeof club.deleted !== 'boolean' || clubs.has(club.id)) throw new Error(`${groupId} returned invalid or duplicate club`);
