@@ -4,6 +4,33 @@ import { confirmPendingSend, installPendingSendKeeper, mergePendingRows } from "
 
 describe("mergePendingRows", () => {
   const pending = { id: "temp-1", author_id: "a", text: "", image_url: "https://x" };
+  it("does not resurrect a failed second send with identical text", async () => {
+    const client = new QueryClient();
+    const key = ["team-messages", "u9"];
+    installPendingSendKeeper(client);
+    const first = { id: "temp-first", author_id: "paul", text: "Ok" };
+    const second = { ...first, id: "temp-second" };
+    client.setQueryData(key, { messages: [first, second] });
+    client.setQueryData(key, { messages: [first] });
+    expect(client.getQueryData(key)).toEqual({ messages: [first] });
+    await client.fetchQuery({ queryKey: key, queryFn: async () => ({ messages: [] }) });
+    expect(client.getQueryData(key)).toEqual({ messages: [first] });
+    confirmPendingSend(client, key, first.id, { id: "saved-first", text: "Ok", image_url: null, created_at: "2026-10-23T08:10:00Z" });
+    expect(client.getQueryData<{ messages: { id: string }[] }>(key)?.messages.map(row => row.id)).toEqual(["saved-first"]);
+    client.clear();
+  });
+  it("removes only the failed send while the next send remains pending", async () => {
+    const client = new QueryClient();
+    const key = ["team-messages", "u9"];
+    installPendingSendKeeper(client);
+    const first = { id: "temp-first", author_id: "paul", text: "First" };
+    const second = { ...first, id: "temp-second", text: "Next" };
+    client.setQueryData(key, { messages: [first, second] });
+    client.setQueryData(key, { messages: [second] });
+    await client.fetchQuery({ queryKey: key, queryFn: async () => ({ messages: [] }) });
+    expect(client.getQueryData(key)).toEqual({ messages: [second] });
+    client.clear();
+  });
   it("restores a still-sending photo missing from a refetch", () => {
     expect(mergePendingRows([{ id: "m1", author_id: "b", text: "hi" }], [pending])?.map((m) => m.id)).toEqual(["m1", "temp-1"]);
   });
