@@ -10,8 +10,10 @@
  *   - Selected teams → teamId = "",   targetTeamIds = string[] (≥ 2 to submit)
  *   - Competition    → teamId = "",   targetTeamIds = null, competitionId = <id>
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { cn } from "@/lib/utils";
@@ -79,6 +81,26 @@ export function EventAudienceSelector({
 
   const checklistTeams = clubTeams ?? teams;
   const selected: string[] = Array.isArray(targetTeamIds) ? targetTeamIds : [];
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    const list = checklistTeams ?? [];
+    const q = search.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((t) => t.name.toLowerCase().includes(q));
+  }, [checklistTeams, search]);
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((t) => selected.includes(t.id));
+
+  const toggleAll = () => {
+    const next = new Set(selected);
+    if (allFilteredSelected) {
+      for (const t of filtered) next.delete(t.id);
+    } else {
+      for (const t of filtered) next.add(t.id);
+    }
+    onTargetTeamIdsChange(Array.from(next));
+  };
 
   const pickMode = (next: Mode) => {
     setMode(next);
@@ -163,16 +185,48 @@ export function EventAudienceSelector({
           {(!checklistTeams || checklistTeams.length === 0) ? (
             <p className="text-xs text-muted-foreground">No teams available in this club.</p>
           ) : (
-            checklistTeams.map((t) => (
-              <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox
-                  checked={selected.includes(t.id)}
-                  onCheckedChange={() => toggle(t.id)}
-                  disabled={disabled}
-                />
-                <span>{t.name}</span>
-              </label>
-            ))
+            <>
+              {checklistTeams.length > 6 && (
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search teams"
+                    className="pl-8 h-10"
+                  />
+                </div>
+              )}
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">{selected.length} selected</span>
+                <button
+                  type="button"
+                  onClick={toggleAll}
+                  disabled={disabled || filtered.length === 0}
+                  className="font-medium text-primary py-1 px-1"
+                >
+                  {allFilteredSelected ? "Clear all" : "Select all"}
+                </button>
+              </div>
+              <div className="max-h-64 overflow-y-auto -mx-1">
+                {filtered.map((t) => (
+                  <label
+                    key={t.id}
+                    className="flex items-center gap-3 rounded-md px-1 min-h-[40px] text-sm cursor-pointer hover:bg-muted/40"
+                  >
+                    <Checkbox
+                      checked={selected.includes(t.id)}
+                      onCheckedChange={() => toggle(t.id)}
+                      disabled={disabled}
+                    />
+                    <span className="truncate">{t.name}</span>
+                  </label>
+                ))}
+                {filtered.length === 0 && (
+                  <p className="px-1 py-2 text-xs text-muted-foreground">No teams match.</p>
+                )}
+              </div>
+            </>
           )}
           {selected.length < 2 && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
