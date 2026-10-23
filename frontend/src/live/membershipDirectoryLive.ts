@@ -77,8 +77,11 @@ export function convertReleasedDirectoryReply(reply: ReleasedReply, caller: stri
 }
 
 /** Each session owns one consumer and one immutable actor/identity binding. */
+let lastConsumer = 0n;
 export function releasedMembershipDirectoryReader() {
-  const consumer = BigInt(Date.now()) * 65536n + BigInt(Math.floor(Math.random() * 65536));
+  const clock = BigInt(Date.now()) * 65536n;
+  const consumer = clock > lastConsumer ? clock : lastConsumer + 1n;
+  lastConsumer = consumer;
   let captured: string | undefined;
   return async (ctx: FeatureBackendContext, continuation: DirectoryContinuation | null, fingerprint: string): Promise<DirectoryPage> => {
     const caller = ctx.identity.getPrincipal().toText();

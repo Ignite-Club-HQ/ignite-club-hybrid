@@ -83,6 +83,17 @@ try {
   identity.actor.setPrincipal(member);assert.ok('Err' in await identity.actor.read_my_membership_directory(10n,first.page.next),'membership change refuses old pages');
   identity.actor.setPrincipal(governor);
   assert.ok('Err' in await identity.actor.check_membership_directory_acceptance(),'mutation with notification not relied on cannot pass old ownership');
+  // Release-time ownership must not require an operator after ordinary edits.
+  // Existing timers finish the changed source and bounded ownership rebuild.
+  identity.actor.setPrincipal(member);let refreshed;
+  for(let tick=0;tick<40;tick++){
+    await pic.advanceTime(31_000);await pic.tick(20);
+    const result=await identity.actor.read_my_membership_directory(14n,[]);
+    if('Ok' in result){refreshed=result.Ok;break;}
+  }
+  assert.ok(refreshed,'automatic released-directory update must become readable');
+  assert.deepEqual(refreshed.page.rows.map(r=>r.club_id),['club-1'],'removed club absent after automatic refresh');
+  identity.actor.setPrincipal(governor);
   await load(sources[0].canisterId,sourceSnapshot);
   const sourceRestored=await identity.actor.check_membership_directory_acceptance();assert.ok('Err' in sourceRestored);assert.match(sourceRestored.Err,/lifecycle/);
   identity.actor.setPrincipal(single);assert.ok('Err' in await identity.actor.read_my_membership_directory(11n,[]),'source restore rejects private replay');identity.actor.setPrincipal(governor);
