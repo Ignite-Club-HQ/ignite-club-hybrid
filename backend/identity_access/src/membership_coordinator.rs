@@ -175,6 +175,9 @@ impl<M:Memory+Clone> Coordinator<M>{
     }
     pub fn private_page(&self,sessions:&mut Sessions<M>,caller:Principal,viewer:Viewer,consumer:u64,continuation:Option<Continuation>,now:u64)->Outcome<(Page,Option<Continuation>)>{
         if caller==Principal::anonymous()||viewer.aliases.is_empty()||viewer.aliases.len()>8||!viewer.aliases.contains(&caller){return Err("Caller-private verified account required".into());}
+        // Unresolved legacy ownership or unchecked builds must never supply an
+        // apparently valid empty answer; callers fall back to existing discovery.
+        self.require_resolved_locations()?;
         let mut sources=self.sources()?;
         // Verified aliases are identity-owned. Read at most 100 indexed source
         // candidates per alias; unusually broad accounts fall back explicitly.
@@ -263,6 +266,7 @@ impl<M:Memory+Clone> Coordinator<M>{
         if edges.is_empty(){c.ingest(source,authority,&binding,0,vec![],true).unwrap();}
         while c.advance(source,&binding).unwrap()>0{}
         c.publish(source,&binding).unwrap();c.acknowledge(source,&binding,revision).unwrap();
+        c.finish_location_checks(source,&binding).unwrap();
     }
     #[test]fn single_source_members_skip_empty_groups_after_reopen_and_removal_clears_the_index(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let user=Principal::from_slice(&[99,1]);let mut c=open(&manager);
