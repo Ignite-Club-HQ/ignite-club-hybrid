@@ -615,6 +615,7 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
                     <CalendarPlus className="h-4 w-4 mr-2" /> Generate round-robin
                   </DropdownMenuItem>
                   <AddMatchMenuItem competitionId={competitionId} entries={entries} divisions={divisions} />
+                  {canImport && <ImportFixturesMenuItem onOpen={() => setImportOpen(true)} />}
                   <ImportPlayHQFixturesDialog
                     competitionId={competitionId}
                     entries={entries}
@@ -626,6 +627,7 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
 
                 </DropdownMenuContent>
               </DropdownMenu>
+              {canImport && <ImportFixturesSheet competitionId={competitionId} entries={entries} divisions={divisions} open={importOpen} setOpen={setImportOpen} />}
             </div>
           ) : (
             <Card className="w-full">
