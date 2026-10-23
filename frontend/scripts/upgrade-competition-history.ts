@@ -68,7 +68,25 @@ const observe = async (s: Target) => {
 const gate = async () => {
   const current = await registry();
   if (current.configurationRevision !== initial.configurationRevision || groupApprovalConfiguration(current.groups, current.placements) !== configuration) throw new Error('Routing configuration changed; stop without replay');
+  await verifyWiring();
+  if (keyPinned) keyGate('g2', 'after');
 };
+const configActor = (canisterId: string) => Actor.createActor(() => IDL.Service({
+  read_group_opening_configuration: IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], [])
+}), {agent, canisterId}) as unknown as {read_group_opening_configuration(): Promise<[string, string][]>};
+const wiringSources = [...targets.map(t => t.canisterId), provision.dedicatedBlobStore.canisterId];
+const wiring = new Map<string, string>();
+for (const id of wiringSources) {
+  const rows = await configActor(id).read_group_opening_configuration();
+  if (rows.filter(r => r[0] === 'club_domain' && r[1] === provision.canisters.club_domain).length !== 1) throw new Error('Original Group 2 club authority differs');
+  if (id === provision.canisters.competition_domain && rows.find(r => r[0] === 'events_domain')?.[1] !== provision.canisters.events_domain) throw new Error('Competition event authority differs');
+  if (id === provision.canisters.events_domain && rows.find(r => r[0] === 'competition_domain')?.[1] !== provision.canisters.competition_domain) throw new Error('Events competition authority differs');
+  wiring.set(id, digest(rows));
+}
+const verifyWiring = async () => {
+  for (const id of wiringSources) if (digest(await configActor(id).read_group_opening_configuration()) !== wiring.get(id)) throw new Error('Original history/media wiring changed');
+};
+let keyPinned = false;
 const pii = { g1: shared.pii_access_control, g2: provision.canisters.pii_access_control };
 const keyGate = (groupId: 'g1' | 'g2', phase: string) => {
   const mapping = join(directory, `${groupId}-pii.json`), receipt = join(directory, `${groupId}-original-key.json`);
@@ -108,6 +126,7 @@ if (!journal) {
 }
 validateJournal(journal, binding);
 for (const key of journal.keys) writeFileSync(join(directory, `${key.groupId}-original-key.json`), JSON.stringify(key.receipt));
+keyPinned = true;
 const persist = async () => {
   stored = persistGroup2Journal(api, path, branch, stored, journal, 'history');
   writeFileSync(join(directory, 'progress.json'), JSON.stringify(journal, null, 2));
