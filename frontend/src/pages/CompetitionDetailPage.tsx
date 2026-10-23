@@ -667,6 +667,9 @@ function SupabaseCompetitionDetailPage() {
         />
       )}
 
+      {!isIcp && competition.status !== "draft" && <CompetitionEventsList competitionId={id!} />}
+
+
       {isAdmin && !organizerHasPro && !proLoading && organizerClubId && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-start gap-3">
           <Crown className="h-5 w-5 text-primary mt-0.5 shrink-0" />
