@@ -330,14 +330,15 @@ impl<M:Memory+Clone> Coordinator<M>{
         // Fully published and acknowledged, but ownership never checked: no answer.
         assert!(c.private_page(&mut sessions,user,viewer(user),1,None,1).is_err());
         c.unresolved_location("g0",&binding).unwrap();assert!(c.private_page(&mut sessions,user,viewer(user),1,None,1).is_err());
-        c.finish_location_checks("g0",&binding).unwrap();
-        let (page,next)=c.private_page(&mut sessions,user,viewer(user),1,None,1).unwrap();assert_eq!(page.rows[0].club,"member");assert!(next.is_none());
+        // A marked-unresolved build cannot be certified; a fresh rebuild can.
+        assert!(c.finish_location_checks("g0",&binding).is_ok());assert!(c.private_page(&mut sessions,user,viewer(user),1,None,1).is_err());
+        finish(&mut c,"g0",a[0],2,vec![Edge::Club{id:"member".into(),deleted:false},Edge::Role{subject:user,club:Some("member".into())}]);
+        let (page,next)=c.private_page(&mut sessions,user,viewer(user),1,None,2).unwrap();assert_eq!(page.rows[0].club,"member");assert!(next.is_none());
     }
     #[test]fn unresolved_legacy_ownership_survives_reopen_and_cannot_certify_readiness(){
         let manager=MemoryManager::init(VectorMemory::default());let (snapshot,pin,a)=group_inventory::tests::fixture();let mut c=open(&manager);c.bind_inventory(verify_inventory(&snapshot,&pin,&a,1).unwrap()).unwrap();
         finish(&mut c,"g0",a[0],1,vec![]);finish(&mut c,"g1",a[1],1,vec![]);
-        assert!(c.require_resolved_locations().is_err());
-        for source in ["g0","g1"]{let binding=c.build(source).unwrap().binding;c.finish_location_checks(source,&binding).unwrap();}assert!(c.require_resolved_locations().is_ok());
+        assert!(c.require_resolved_locations().is_ok());
         let binding=c.build("g0").unwrap().binding;c.unresolved_location("g0",&binding).unwrap();drop(c);
         let c=open(&manager);assert!(c.sources().is_ok());assert!(c.require_resolved_locations().is_err());let mut stale=binding;stale.revision=2;assert!(c.builder("g0",&stale).is_err());
     }
