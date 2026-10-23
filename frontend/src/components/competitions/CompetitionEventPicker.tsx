@@ -6,11 +6,11 @@ import { useAuth } from "@/hooks/useAuth";
  * Competitions the current user can organise a competition-wide event for
  * (owners/admins, league admins of the organising club). Empty when none.
  */
-export function useOrganisableCompetitions() {
+export function useOrganisableCompetitions(enabled = true) {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["organisable-competitions", user?.id],
-    enabled: !!user,
+    enabled: enabled && !!user,
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from("competitions")
