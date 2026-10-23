@@ -102,7 +102,8 @@ async function sendQueuedMessage(message: QueuedMessage): Promise<boolean> {
         const attachment = message.imageUrl ? { kind: "image", refId: message.id, url: message.imageUrl } : null;
         const scope = message.type === 'team' ? { teamId: message.targetId }
           : message.type === 'club' ? { clubId: message.targetId }
-          : message.type === 'dm' || message.type === 'broadcast' ? { shared: 'person' as const }
+          : message.type === 'dm' ? { shared: 'person' as const }
+          : message.type === 'broadcast' ? { shared: 'app' as const }
           : { conversationId: message.targetId };
         await withFeatureBackend('messaging', {
           supabase: () => { throw new Error('Internet Identity message cannot replay into Supabase'); },
