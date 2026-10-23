@@ -15,6 +15,24 @@ function deps(gates = OFF, principal = 'p1') {
 beforeEach(() => clearGroupDispatchCache());
 
 describe('club-scoped dispatcher', () => {
+  it('a late owner probe cannot populate a replacement session', async () => {
+    const { d, session } = deps(ON);
+    let finish: ((value: string | null) => void) | undefined;
+    const lookup = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue('moved');
+    const save = vi.fn();
+    const dispatch = createClubDispatcher({ ...d, lookup, store: { load: () => ({}), save },
+      open: async () => ({ ...session, readEveryGroup: async (_domain, read) => read({}) }) } as never);
+    const old = dispatch.readFor('messaging', { conversationId: 'chat' }, 'messaging_domain', async () => 'chat').catch(error => error);
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    clearGroupDispatchCache();
+    await dispatch.readFor('events', { eventId: 'event' }, 'events_domain', async () => 'event');
+    save.mockClear();
+    finish?.('old-club');
+    expect((await old).message).toContain('session changed');
+    expect(save).not.toHaveBeenCalled();
+    await dispatch.readFor('messaging', { conversationId: 'chat' }, 'messaging_domain', async () => 'chat');
+    expect(lookup).toHaveBeenCalledTimes(3);
+  });
   it('a stalled chat content read does not block an event in the same group', async () => {
     const { d, session } = deps(ON);
     const dispatch = createClubDispatcher(d);

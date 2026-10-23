@@ -64,8 +64,10 @@ export async function generalRoutingStatus(ctx: FeatureBackendContext): Promise<
     const p = withReadDeadline(compute(ctx), 'Routing approval').finally(() => { if (inflight?.p === p) inflight = null; });
     inflight = { key, p };
   }
-  const value = await inflight.p;
-  cache = { key, value, atMs: Date.now() };
+  const entry = inflight;
+  const value = await entry.p;
+  // A cleared/replaced request must not restore an old account's cache.
+  if (keyFor(ctx) === key && (!inflight || inflight === entry)) cache = { key, value, atMs: Date.now() };
   return value;
 }
 

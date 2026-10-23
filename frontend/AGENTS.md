@@ -61,6 +61,7 @@
 - Pending sends are QueryClient-scoped; settle temp IDs from server acknowledgements, not photo presence. Why: avoid duplicates after navigation.
 - Optimistically cleared chat composers allow concurrent sends; delivery pending must not lock the next draft or its attachment controls, while empty drafts and duplicate gestures remain blocked. Why: users send consecutive messages before remote acknowledgement.
 - Profile batches: get_profile for missing linked IDs.
+- Read coordination uses bounded waits and generation-safe cleanup; cancelled chats stop enrichment and event reads cancel only themselves, never all REST requests. Why: abandoned pages must not strand shared routing or disrupt the next page; mutations never replay on read timeouts.
 - Share helpers prevent empty vault bubbles in both renderers. Schedule dates validate Date range, not just finiteness. Why: invalid dates crash calendars.
 
 - Provisioning persists mutation intents, individual install acknowledgements and closed/placement revision receipts through durable checkpoints; unresolved intents need exact reconciliation, not phase resets. Why: lost replies cannot duplicate canisters, repeat installs or open incomplete groups.
