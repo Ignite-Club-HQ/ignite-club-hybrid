@@ -1,4 +1,4 @@
-import { acrossLists, memberLists } from "@/live/featureScopes";
+import { acrossLists } from "@/live/featureScopes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -76,39 +76,52 @@ export async function fetchVaultUserRoles(
   }, { shared: "person" });
 }
 
+/** One group stuck (e.g. a service out of fuel) must not hold back the rest. */
+const VAULT_GROUP_READ_MS = 15_000;
+
 export async function fetchVaultAccessibleClubs(
   userId: string,
   isAppAdmin: boolean,
   client: IgniteSupabaseClient = supabase,
 ): Promise<VaultClubSummary[]> {
+  // Asked once per lookup, not once per group: membership comes from the
+  // already-open routing session and the IAP entitlement lives on identity.
+  let memberIdsOnce: Promise<string[] | null> | undefined;
+  let callerIsProOnce: Promise<boolean> | undefined;
   return withFeatureBackend("vault", {
     supabase: async () => fetchVaultAccessibleClubsSupabase(userId, isAppAdmin, client),
     icp: async (ctx) => {
       const { listLiveClubs } = await import("@/live/features/club");
       const { listLiveClubSubscriptions, liveHasAnyPro } = await import("@/live/features/proAccess");
       const { clubDispatch } = await import("@/live/groupDispatch");
-      const [rows, memberIds] = await Promise.all([
-        listLiveClubs(ctx),
-        isAppAdmin ? Promise.resolve<string[] | null>(null) : clubDispatch.memberClubIds(),
-      ]);
-      const clubs = rows.filter(club => (!memberIds || memberIds.includes(club.id)) && !club.deleted_at_ms?.length);
-      // Per-club "Free Pro" grants from club_domain plus the caller's own
-      // IAP entitlement (global Pro for its holder).
-      const [subs, callerIsPro] = await Promise.all([
-        listLiveClubSubscriptions(ctx, clubs.map((club) => club.id)),
-        fetchIcpCallerIsPro(ctx),
-      ]);
-      // Byte accounting for the storage bar stays on Supabase (media bytes
-      // are an approved Supabase area); ICP reports 0 so the bar renders
-      // empty rather than erroring.
-      return clubs.map((club) => ({
-        id: club.id,
-        name: club.name,
-        is_pro: callerIsPro || liveHasAnyPro(subs.get(club.id)),
-        storage_used_bytes: 0,
-      }));
+      const { withReadDeadline } = await import("@/live/readDeadline");
+      memberIdsOnce ??= isAppAdmin ? Promise.resolve(null) : clubDispatch.memberClubIds();
+      // Entitlement failure only drops global IAP Pro; club grants still apply.
+      callerIsProOnce ??= fetchIcpCallerIsPro(ctx).catch(() => false);
+      return withReadDeadline((async () => {
+        const [rows, memberIds] = await Promise.all([listLiveClubs(ctx), memberIdsOnce!]);
+        const clubs = rows.filter(club => (!memberIds || memberIds.includes(club.id)) && !club.deleted_at_ms?.length);
+        if (clubs.length === 0) return [];
+        // Per-club "Free Pro" grants from club_domain plus the caller's own
+        // IAP entitlement (global Pro for its holder).
+        const [subs, callerIsPro] = await Promise.all([
+          listLiveClubSubscriptions(ctx, clubs.map((club) => club.id)),
+          callerIsProOnce!,
+        ]);
+        // Byte accounting for the storage bar stays on Supabase (media bytes
+        // are an approved Supabase area); ICP reports 0 so the bar renders
+        // empty rather than erroring.
+        return clubs.map((club) => ({
+          id: club.id,
+          name: club.name,
+          is_pro: callerIsPro || liveHasAnyPro(subs.get(club.id)),
+          storage_used_bytes: 0,
+        }));
+      })(), "Vault clubs", VAULT_GROUP_READ_MS);
     },
-  }, isAppAdmin ? acrossLists : memberLists);
+    // Shared + every group, each answering for itself: a failing group no
+    // longer empties the whole list (member-group reads fail all-or-nothing).
+  }, acrossLists);
 }
 
 async function fetchVaultAccessibleClubsSupabase(

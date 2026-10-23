@@ -123,7 +123,7 @@ function SupabaseVaultPage() {
     hasProButNoRole,
     isCompetitionVaultMember,
     isCompetitionVaultAdmin,
-    isLoadingAccess, accessError, retryAccess,
+    isLoadingAccess, accessError, retryAccess, clubsError, retryClubs,
   } = useVaultAccessModel({
     userId: user?.id,
     currentView,
@@ -1330,6 +1330,8 @@ function SupabaseVaultPage() {
     rootPicker: {
       isLoadingClubs,
       clubs: userClubs,
+      loadFailed: !!clubsError,
+      onRetry: retryClubs,
       activeClubFilter,
       onSelectClub: (club: { id: string; name: string; is_pro?: boolean | null }) => {
         if (!club.is_pro) {

@@ -72,6 +72,8 @@ export interface UseVaultAccessModelResult {
   isCompetitionVaultMember: boolean;
   isCompetitionVaultAdmin: boolean;
   isLoadingAccess: boolean;
+  clubsError: unknown;
+  retryClubs: () => void;
   accessError: unknown;
   retryAccess: () => void;
 }
@@ -120,9 +122,11 @@ export function useVaultAccessModel({
     [isAppAdmin, userRoles],
   );
 
-  const { data: userClubs, isLoading: isLoadingClubs } = useQuery({
+  // Each group is bounded inside the lookup, so a stuck group drops out on
+  // its own instead of a whole-list cut-off failing every club.
+  const { data: userClubs, isLoading: isLoadingClubs, error: clubsError, refetch: refetchClubs } = useQuery({
     queryKey: vaultKeys.clubsForUser(userId, isAppAdmin),
-    queryFn: () => userId ? withReadDeadline(fetchVaultAccessibleClubs(userId, !!isAppAdmin), "Vault clubs") : [],
+    queryFn: () => userId ? fetchVaultAccessibleClubs(userId, !!isAppAdmin) : [],
     enabled: !!userId && isAppAdmin !== undefined,
   });
 
@@ -246,6 +250,8 @@ export function useVaultAccessModel({
 
   return {
     accessError, retryAccess,
+    clubsError: userClubs ? null : clubsError,
+    retryClubs: () => { void refetchClubs(); },
     isAppAdmin,
     userRoles,
     hasVaultRoleAccess,

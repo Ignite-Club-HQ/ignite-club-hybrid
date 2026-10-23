@@ -230,14 +230,23 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
     expect(calls).toEqual([]);
   });
 
-  it("keeps ordinary Vault discovery within member groups and excludes unrelated clubs", async () => {
+  it("lists only member clubs, reading each group independently so one failing group can't empty Vault", async () => {
     accessMocks.clubs.mockResolvedValue([{ id: "club-a", name: "Club A" }, { id: "unrelated", name: "Other Club" }]);
     accessMocks.clubSubscriptions.mockResolvedValue(new Map([["club-a", true]]));
     accessMocks.entitlements.mockResolvedValue({ isPro: false });
     const clubs = await fetchVaultAccessibleClubs("principal-a", false);
     expect(clubs.map(club => club.id)).toEqual(["club-a"]);
-    expect(accessMocks.scopes).toHaveBeenCalledWith(expect.objectContaining({ memberGroups: true }));
+    // Partial-failure-tolerant fan-out, not the all-or-nothing member-group read.
+    expect(accessMocks.scopes).toHaveBeenCalledWith(expect.objectContaining({ everyGroup: true }));
     expect(accessMocks.clubSubscriptions).toHaveBeenCalledWith(icpContext, ["club-a"]);
+  });
+
+  it("still lists clubs when the caller's Pro entitlement can't be read", async () => {
+    accessMocks.clubs.mockResolvedValue([{ id: "club-a", name: "Club A" }]);
+    accessMocks.clubSubscriptions.mockResolvedValue(new Map([["club-a", true]]));
+    accessMocks.entitlements.mockRejectedValue(new Error("identity unavailable"));
+    const clubs = await fetchVaultAccessibleClubs("principal-a", false);
+    expect(clubs.map(club => club.id)).toEqual(["club-a"]);
   });
 
   it("preserves team lookup failures instead of silently dropping owning club context", async () => {
