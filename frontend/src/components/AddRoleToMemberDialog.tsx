@@ -113,6 +113,10 @@ export default function AddRoleToMemberDialog({
             message: `You have been assigned new role(s) in ${teamName}: ${roleNames}`,
             related_id: teamId,
           });
+
+          void sendCompetitionWelcomeEmail({
+            userId, recipientName: userName, teamId, teamName, clubId, roleName: roleNames,
+          });
         },
       }, writeOnce({ clubId }));
     },

@@ -184,6 +184,10 @@ export default function ManageRolesDialog({
             }));
             const { error } = await supabase.from("user_roles").insert(rows);
             if (error) throw error;
+            void sendCompetitionWelcomeEmail({
+              userId, recipientName: userName, teamId, teamName, clubId,
+              roleName: additions.map((r) => r.label).join(", "),
+            });
           }
           if (removals.length > 0) {
             const ids = removals.map((r) => r.id);
