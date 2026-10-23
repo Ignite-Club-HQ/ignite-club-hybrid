@@ -261,10 +261,10 @@ function SupabaseCreateEventPage() {
   const [clubId, setClubId] = useState(themeCreationClubId || presetClubId || "");
   const [teamId, setTeamId] = useState("");
   const [dutyTeamId, setDutyTeamId] = useState<string | null>(null);
-  // Competition-wide events are a Supabase-mode feature (create_competition_event RPC).
+  // Competition-wide events work in both backends (Supabase RPC /
+  // competition_domain.create_competition_event on ICP).
   const [competitionId, setCompetitionId] = useState("");
-  const isSupabaseMode = resolveAuthBackend() !== "icp";
-  const { data: organisableCompetitions = [] } = useOrganisableCompetitions(isSupabaseMode);
+  const { data: organisableCompetitions = [] } = useOrganisableCompetitions(true);
   const { data: competitionTeamCount = 0 } = useCompetitionAcceptedCount(competitionId);
   const [miniLeagueId, setMiniLeagueId] = useState(presetMiniLeagueId || "");
   const [eventDateTime, setEventDateTime] = useState(() => {
