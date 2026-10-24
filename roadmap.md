@@ -1,6 +1,6 @@
 ## Competition ICP audit — 24 October 2026
-- [ ] Audit competition pages, linked features and canister authority paths; record confirmed off-chain dependencies, parity gaps and release evidence limits without changing application behaviour or deploying.
-- [ ] Run focused dual-mode competition tests and isolation/contract checks; distinguish test-harness failures from live defects.
+- [x] Audit competition pages, linked features and canister authority paths; record confirmed off-chain dependencies, parity gaps, authorization findings and release evidence limits in docs/competition-icp-audit-2026-10-24.md. Application behaviour unchanged; no deployment or mainnet mutation.
+- [x] Run 28 focused files per mode: Supabase 142 passed/25 failed/13 skipped; ICP 136 passed/20 failed/24 skipped. Failures are missing router context in three test files, not proof of deployed router failure. Isolation guards and 17-contract drift pass, but do not certify complete functionality. Current preview build OK; signed-in II and live module/wiring acceptance unavailable.
 
 ## File Vault ICP audit — 24 October 2026
 - [x] Current requested completion batch: owner-wide per-group scans and exact decrypted-marker/strict-grant/store acknowledgement recovery, reference-safe account-erasure hierarchy/principal scrub, and transactional writable-file JSONL export implemented. 76 tests pass per backend mode; real-canister owner/erasure/recovery/upgrade suite, compile/build, guards and 17-contract drift pass. Public Vault reaches auth without errors; no release or signed-in acceptance claim.
