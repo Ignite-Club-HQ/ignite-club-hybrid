@@ -41,7 +41,7 @@ describe("vault backup restore with media recovery", () => {
   });
 
   it("restores rows, re-grants club media access and verifies bytes", async () => {
-    m.getBackup.mockResolvedValue({ Ok: { files: [file("clubs/club-1/a.jpg"), file("clubs/club-1/b.jpg")] } });
+    m.getBackup.mockResolvedValue({ Ok: { id: "backup-1", backup_label: "Backup", created_at_ms: 1n, created_by: "owner", folders: [], files: [file("clubs/club-1/a.jpg"), file("clubs/club-1/b.jpg")] } });
     const report = await restoreLiveVaultBackupWithMedia(ctx, "backup-1");
     expect(report.restoredRows).toBe(2);
     expect(m.grantClub).not.toHaveBeenCalled();
@@ -50,7 +50,7 @@ describe("vault backup restore with media recovery", () => {
   });
 
   it("re-grants club read access for club-scoped blob paths only", async () => {
-    m.getBackup.mockResolvedValue({ Ok: { files: [file("clubs/club-9/photo.jpg"), file("loose/file.bin"), file(null)] } });
+    m.getBackup.mockResolvedValue({ Ok: { id: "backup-1", backup_label: "Backup", created_at_ms: 1n, created_by: "owner", folders: [], files: [file("clubs/club-9/photo.jpg"), file("loose/file.bin"), file(null)] } });
     const report = await restoreLiveVaultBackupWithMedia(ctx, "backup-1");
     expect(m.grantClub).not.toHaveBeenCalled();
     expect(report.grantsRepaired).toBe(0);
@@ -58,7 +58,7 @@ describe("vault backup restore with media recovery", () => {
   });
 
   it("counts grant denials without failing the restore", async () => {
-    m.getBackup.mockResolvedValue({ Ok: { files: [file("clubs/club-1/a.jpg")] } });
+    m.getBackup.mockResolvedValue({ Ok: { id: "backup-1", backup_label: "Backup", created_at_ms: 1n, created_by: "owner", folders: [], files: [file("clubs/club-1/a.jpg")] } });
     m.grantClub.mockResolvedValue({ Err: "Record not found" });
     const report = await restoreLiveVaultBackupWithMedia(ctx, "backup-1");
     expect(report.grantFailures).toBe(0);
@@ -66,14 +66,14 @@ describe("vault backup restore with media recovery", () => {
   });
 
   it("reports blob paths whose bytes no longer load", async () => {
-    m.getBackup.mockResolvedValue({ Ok: { files: [file("clubs/club-1/gone.jpg"), file("clubs/club-1/ok.jpg")] } });
+    m.getBackup.mockResolvedValue({ Ok: { id: "backup-1", backup_label: "Backup", created_at_ms: 1n, created_by: "owner", folders: [], files: [file("clubs/club-1/gone.jpg"), file("clubs/club-1/ok.jpg")] } });
     m.fetch.mockImplementation(async (url: string) => ({ ok: !url.includes("gone.jpg") }));
     const report = await restoreLiveVaultBackupWithMedia(ctx, "backup-1");
     expect(report.missingBytes).toEqual(["clubs/club-1/gone.jpg"]);
   });
 
   it("propagates a restore denial without attempting grants", async () => {
-    m.getBackup.mockResolvedValue({ Ok: { files: [file("clubs/club-1/a.jpg")] } });
+    m.getBackup.mockResolvedValue({ Ok: { id: "backup-1", backup_label: "Backup", created_at_ms: 1n, created_by: "owner", folders: [], files: [file("clubs/club-1/a.jpg")] } });
     m.restorePage.mockResolvedValue({ Err: "App admin only" });
     await expect(restoreLiveVaultBackupWithMedia(ctx, "backup-1")).rejects.toThrow("App admin only");
     expect(m.grantClub).not.toHaveBeenCalled();
