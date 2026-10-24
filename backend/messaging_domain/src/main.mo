@@ -3935,7 +3935,7 @@ persistent actor class Main(governorInit : Principal) = this {
       switch (messages.find(func(m) = m.conversation_id == conversation_id and m.id == message_id)) {
         case null #Err("Message not found");
         case (?target) {
-          let lower = if (target.sequence > 12) target.sequence - 12 else 0;
+          let lower : Nat64 = if (target.sequence > 12) target.sequence - 12 else 0;
           let rows = messages.filter(func(m) = m.conversation_id == conversation_id and m.sequence >= lower and m.sequence <= target.sequence + 24);
           #Ok({ messages = rows; next_sequence = if (lower > 1) ?lower else null; latest_sequence = conversationLatestSequence(conversation_id) })
         };
