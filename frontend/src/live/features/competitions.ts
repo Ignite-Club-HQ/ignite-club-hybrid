@@ -1026,10 +1026,25 @@ export async function fetchLivePublicCompetitionPage(competitionId: string) {
       import("../domains"),
     ]);
   const target = getActiveIcpTarget();
-  const { actor } = await connectLiveCompetitionDomain(target, new AnonymousIdentity());
-  const result = await actor.get_public_competition_page(competitionId);
-  if (result.__kind__ === "Err") throw new Error(result.Err);
-  return result.Ok;
+  const { readUniquePublicGroup } = await import("../publicGroupReads");
+  const value = await readUniquePublicGroup(target, async scoped => {
+    const { actor } = await connectLiveCompetitionDomain(scoped, new AnonymousIdentity());
+    const result = await actor.get_public_competition_page(competitionId);
+    if ("Err" in result) {
+      if (result.Err === "Competition not found") return null;
+      throw new Error(result.Err);
+    }
+    return result.Ok;
+  });
+  if (!value) throw new Error("Competition not found");
+  return value;
+}
+
+export async function fetchLivePublicRoleLinkPreview(token: string) {
+  const [{ AnonymousIdentity }, { getActiveIcpTarget }, { readUniquePublicGroup }] = await Promise.all([
+    import("@icp-sdk/core/agent"), import("../targetRegistry"), import("../publicGroupReads"),
+  ]);
+  return readUniquePublicGroup(getActiveIcpTarget(), target => getLiveRoleLinkPreview({ target, identity: new AnonymousIdentity() }, token));
 }
 
 export async function getLiveScorePrivacy(ctx: FeatureBackendContext, competitionId: string) {
