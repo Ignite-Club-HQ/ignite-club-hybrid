@@ -373,6 +373,8 @@ persistent actor class Main(governorInit : Principal) = this {
     let existingRecovery = clubRecovery(club);
     if (s.recovery == null and (existingRecovery.email_jobs.size() > 0 or existingRecovery.fixture_receipts.size() > 0 or existingRecovery.broadcast_deliveries.size() > 0)) return #Err("Legacy snapshot omits existing recovery records");
     let recovery : ClubSnapshot.Recovery = s.recovery ?? ({ email_jobs = []; fixture_receipts = []; broadcast_deliveries = []; broadcast_plans = [] });
+    if (ClubSnapshot.duplicateKeys(recovery.email_jobs.map(func pair = pair.0)) or ClubSnapshot.duplicateKeys(recovery.fixture_receipts.map(func pair = pair.0)) or ClubSnapshot.duplicateKeys(recovery.broadcast_deliveries.map(func pair = pair.0)) or ClubSnapshot.duplicateKeys(recovery.broadcast_plans.map(func pair = pair.0))) return #Err("Duplicate recovery keys");
+    if (recovery.email_jobs.any(func pair = switch (Map.get(emailJobs, Text.compare, pair.0)) { case (?old) old != pair.1; case null false }) or recovery.broadcast_deliveries.any(func pair = switch (Map.get(broadcastDeliveries, Text.compare, pair.0)) { case (?old) old != pair.1; case null false })) return #Err("Snapshot must not roll back delivery evidence");
     let emailOwned = func(j : EmailOutbox.Job) : Bool {
       if (j.kind == "eoi") return s.eoi.any(func e = e.id == j.resource);
       if (j.kind == "official" or j.kind == "official_welcome") return s.official_invites.any(func i = i.token == j.resource);

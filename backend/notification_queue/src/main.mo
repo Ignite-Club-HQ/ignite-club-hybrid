@@ -172,6 +172,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
     let c = club;
     let proofs = s.broadcast_proofs ?? [];
+    if (proofs.any(func pair = switch (Map.get(competitionBroadcastReceipts, Text.compare, pair.0)) { case (?old) old != pair.1 or Map.get(competitionBroadcastAudiences, Text.compare, pair.0) != ?pair.2; case null false })) return #Err("Snapshot must not replace original broadcast proof");
     if (s.broadcast_proofs == null and Map.entries(competitionBroadcastReceipts).any(func pair = pair.1.club == club)) return #Err("Legacy snapshot omits broadcast proof");
     if (proofs.any(func pair = pair.1.club != club or pair.2.any(recipientFenced))) return #Err("Foreign or fenced broadcast proof");
     if (proofs.any(func pair = switch (Map.get(competitionBroadcastReceipts, Text.compare, pair.0)) { case (?r) r.club != club; case null false })) return #Err("Broadcast proof key collision");

@@ -332,6 +332,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let incomingGroups = snap.groups ?? [];
     let incomingDetails = snap.player_details ?? [];
     let incomingMaterializations = snap.materializations ?? [];
+    if (incomingMaterializations.any(func pair = switch (Map.get(fixtureMaterializations, Text.compare, pair.0)) { case (?old) old.revision > pair.1.revision or (old.revision == pair.1.revision and old != pair.1); case null false })) return #Err("Snapshot must not roll back fixture revisions");
     if (incomingMaterializations.any(func pair = pair.0 != pair.1.input.match_id or pair.1.event_ids.size() == 0 or not pair.1.input.teams.all(func t = t.club_id == club) or not pair.1.event_ids.all(func id = snap.events.any(func e = e.id == id)))) return #Err("Partial or foreign fixture receipt; transfer full scope only");
     if (incomingMaterializations.any(func pair = switch (Map.get(fixtureMaterializations, Text.compare, pair.0)) { case (?old) not old.event_ids.all(func id = events.any(func e = e.id == id and e.club_id == club)); case null false })) return #Err("Fixture receipt collides with another scope");
     if (snap.materializations == null and Map.entries(fixtureMaterializations).any(func pair = pair.1.event_ids.any(func id = events.any(func e = e.id == id and e.club_id == club)))) return #Err("Legacy snapshot omits existing fixture revisions");
