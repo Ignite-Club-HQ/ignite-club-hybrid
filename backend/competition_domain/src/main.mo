@@ -762,6 +762,7 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func purge_my_data() : async { #Ok : Nat; #Err : Text } {
     auth(caller);
     if (isGovernor(caller)) return #Err("Governor erasure forbidden");
+    for ((key, r) in Map.entries(broadcastDeliveries)) if (r.unknown != null and (r.sender == caller or (switch (Map.get(broadcastPlans, Text.compare, key)) { case (?plan) plan.any(func t = t.officials.any(func p = p == caller)); case null false }))) return #Err("Resolve original broadcast before account erasure");
     var count = roles.filter(func r = r.user == caller).size();
     roles := roles.filter(func r = r.user != caller);
     count += competitionInvites.filter(func r = r.invitee == caller or r.created_by == caller).size();
@@ -3042,6 +3043,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (old.equal(new)) return #err("old and new must differ");
     if (old.equal(governor)) return #err("Cannot rekey the governor");
     for((_,r) in Map.entries(broadcastDeliveries))if(r.sender==old and r.unknown!=null)return #err("Resolve original broadcast before account rekey");
+    for ((key, r) in Map.entries(broadcastDeliveries)) if (r.unknown != null and (switch (Map.get(broadcastPlans, Text.compare, key)) { case (?plan) plan.any(func t = t.officials.any(func p = p == old)); case null false })) return #err("Resolve original official broadcast before rekey");
     let oldPrefix=old.toText() # "\u{1f}";let newPrefix=new.toText() # "\u{1f}";
     let fixtureUpdates=Map.entries(fixtureReceipts).toArray();
     for((key,r) in fixtureUpdates.values()) {

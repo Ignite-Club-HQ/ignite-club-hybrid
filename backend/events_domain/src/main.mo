@@ -291,6 +291,8 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before purge");
     let evs = events.filter(func(e) = e.club_id == club);
+    if (Map.entries(fixtureMaterializations).any(func pair = pair.1.event_ids.any(func id = evs.any(func e = e.id == id)) and not pair.1.event_ids.all(func id = evs.any(func e = e.id == id)))) return #Err("Partial fixture receipt scope cannot be purged");
+    for ((key, r) in Map.entries(fixtureMaterializations).toArray().values()) if (r.event_ids.any(func id = evs.any(func e = e.id == id))) Map.remove(fixtureMaterializations, Text.compare, key);
     rsvps := rsvps.filter(func(r) = not evs.any(func(e) = e.id == r.event_id));
     series := series.filter(func(x) = not evs.any(func(e) = e.series_id == ?x.id));
     events := events.filter(func(e) = e.club_id != club);
@@ -306,12 +308,13 @@ persistent actor class Main(governorInit : Principal) = this {
     competitionEventOperations:=competitionEventOperations.map(func(o)={o with event_ids=o.event_ids.filter(func(id)=not evs.any(func(e)=e.id==id))});
     #Ok(evs.size())
   };
-  type EventsSnapshot = { player_details : ?[(Text, [Types.GamePlayerDetail])]; events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty]; match_links : ?[Types.CompetitionEventLink]; operations : ?[Types.CompetitionEventOperation]; results : ?[Types.GameResult]; summaries : ?[Types.GameSummary]; stats : ?[Types.GamePlayerStat] };
+  type MaterializationReceipt = { revision : Nat64; input : Types.MatchEventInput; event_ids : [Text] };
+  type EventsSnapshot = { materializations : ?[(Text, MaterializationReceipt)]; player_details : ?[(Text, [Types.GamePlayerDetail])]; events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty]; match_links : ?[Types.CompetitionEventLink]; operations : ?[Types.CompetitionEventOperation]; results : ?[Types.GameResult]; summaries : ?[Types.GameSummary]; stats : ?[Types.GamePlayerStat] };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before export");
     let evs = events.filter(func(e) = e.club_id == club);
-    let snap : EventsSnapshot = { player_details = ?Map.entries(gamePlayerDetails).filter(func pair = evs.any(func e = e.id == pair.0)).toArray(); events = evs; rsvps = rsvps.filter(func(r) = evs.any(func(e) = e.id == r.event_id));
+    let snap : EventsSnapshot = { materializations = ?Map.entries(fixtureMaterializations).filter(func pair = pair.1.event_ids.any(func id = evs.any(func e = e.id == id))).toArray(); player_details = ?Map.entries(gamePlayerDetails).filter(func pair = evs.any(func e = e.id == pair.0)).toArray(); events = evs; rsvps = rsvps.filter(func(r) = evs.any(func(e) = e.id == r.event_id));
       series = series.filter(func(x) = evs.any(func(e) = e.series_id == ?x.id)); groups = ?eventGroups.filter(func(g) = evs.any(func(e) = e.id == g.event_id)); group_players = ?eventGroupPlayers.filter(func(p) = eventGroups.any(func(g) = g.id == p.group_id and evs.any(func(e) = e.id == g.event_id))); group_duties = ?eventGroupDuties.filter(func(d) = eventGroups.any(func(g) = g.id == d.group_id and evs.any(func(e) = e.id == g.event_id)));
       match_links=?competitionMatchLinks.filter(func(l)=evs.any(func(e)=e.id==l.event_id));
       operations=?competitionEventOperations.filter(func(o)=o.event_ids.any(func(id)=evs.any(func(e)=e.id==id))).map(func(o)={o with event_ids=o.event_ids.filter(func(id)=evs.any(func(e)=e.id==id))});
@@ -328,6 +331,10 @@ persistent actor class Main(governorInit : Principal) = this {
     if (snap.events.any(func(e) = events.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
     let incomingGroups = snap.groups ?? [];
     let incomingDetails = snap.player_details ?? [];
+    let incomingMaterializations = snap.materializations ?? [];
+    if (incomingMaterializations.any(func pair = pair.0 != pair.1.input.match_id or pair.1.event_ids.size() == 0 or not pair.1.input.teams.all(func t = t.club_id == club) or not pair.1.event_ids.all(func id = snap.events.any(func e = e.id == id)))) return #Err("Partial or foreign fixture receipt; transfer full scope only");
+    if (incomingMaterializations.any(func pair = switch (Map.get(fixtureMaterializations, Text.compare, pair.0)) { case (?old) not old.event_ids.all(func id = events.any(func e = e.id == id and e.club_id == club)); case null false })) return #Err("Fixture receipt collides with another scope");
+    if (snap.materializations == null and Map.entries(fixtureMaterializations).any(func pair = pair.1.event_ids.any(func id = events.any(func e = e.id == id and e.club_id == club)))) return #Err("Legacy snapshot omits existing fixture revisions");
     if (incomingDetails.any(func pair = not snap.events.any(func e = e.id == pair.0) or pair.1.size() != (snap.stats ?? []).filter(func s = s.event_id == pair.0).size())) return #Err("Foreign or misaligned player detail records");
     if (snap.player_details == null and Map.entries(gamePlayerDetails).any(func pair = events.any(func e = e.id == pair.0 and e.club_id == club))) return #Err("Legacy snapshot omits existing player details");
     let incomingPlayers = snap.group_players ?? [];
@@ -345,6 +352,8 @@ persistent actor class Main(governorInit : Principal) = this {
     let ids = events.filter(func(e) = e.club_id == club).map(func(e) = e.id);
     for ((id, _) in Map.entries(gamePlayerDetails).toArray().values()) if (ids.any(func old = old == id)) Map.remove(gamePlayerDetails, Text.compare, id);
     for ((id, details) in incomingDetails.values()) Map.add(gamePlayerDetails, Text.compare, id, details);
+    for ((key, r) in Map.entries(fixtureMaterializations).toArray().values()) if (r.event_ids.any(func id = ids.any(func old = old == id))) Map.remove(fixtureMaterializations, Text.compare, key);
+    for ((key, r) in incomingMaterializations.values()) Map.add(fixtureMaterializations, Text.compare, key, r);
     competitionMatchLinks:=competitionMatchLinks.filter(func(l)=not ids.any(func(id)=id==l.event_id)).concat(incomingLinks);
     gameResults:=gameResults.filter(func(r)=not ids.any(func(id)=r.event_id==?id)).concat(incomingResults);
     gameSummaries:=gameSummaries.filter(func(r)=not ids.any(func(id)=r.event_id==id)).concat(incomingSummaries);
@@ -4648,6 +4657,9 @@ persistent actor class Main(governorInit : Principal) = this {
         var i=0;gamePlayerStats:=gamePlayerStats.map(func s {if(s.event_id==eventId){let erase=eraseIndices.any(func j = j==i);i+=1;if(erase){removed+=1;{s with user_id=null;fill_in_player_name=null}}else s}else s});
         Map.add(gamePlayerDetails,Text.compare,eventId,details.map(func d {if(d.user_id==?me or d.user_id==?("principal:" # me) or (switch(d.child_id){case (?id)erasedChildren.any(func c = c==id);case null false})){ {d with user_id=null;child_id=null} }else d}))
       }
+    };
+    for ((key, r) in Map.entries(fixtureMaterializations).toArray().values()) if (r.input.creator == caller) {
+      let input = r.input; Map.add(fixtureMaterializations, Text.compare, key, { r with input = { input with creator = Principal.anonymous() } }); removed += 1
     };
     #Ok(Nat32.fromNat(removed))
   
