@@ -61,6 +61,12 @@ function decodeOnChain(raw: string | null): unknown {
 const ON_CHAIN_WAIT_WITH_ROW_MS = 1500;
 
 export async function fetchStoredBackendRoutingConfig(): Promise<BackendRoutingConfig | null> {
+  // Restored II sessions must not depend on a Supabase row at startup.
+  // Email users retain the existing dual-provider precedence.
+  if (!isSignedInWithEmail() && hasStoredInternetIdentitySession()) {
+    const onChain = decodeOnChain(await readLiveAppConfig(BACKEND_ROUTING_CONFIG_KEY));
+    return onChain ? parseBackendRoutingConfig(onChain) : null;
+  }
   let row: unknown = null;
   let rowError: unknown = null;
   // Read both copies in parallel (they used to run back to back, adding a
@@ -100,7 +106,7 @@ export async function loadBackendRoutingConfig(): Promise<void> {
     }
   } catch (error) {
     console.warn(
-      "[backend-routing] Could not load routing config from Supabase; trying build-time configuration.",
+      "[backend-routing] Could not load routing config; trying build-time configuration.",
       error,
     );
   }
