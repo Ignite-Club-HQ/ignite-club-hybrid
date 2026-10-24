@@ -143,6 +143,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var pitchBoardSettings : [Types.PitchBoardSettings];
   var gameSummaries : [Types.GameSummary];
   var gamePlayerStats : [Types.GamePlayerStat];
+  var gamePlayerDetails : Map.Map<Text, [Types.GamePlayerDetail]>;
   var fixtureMaterializations : Map.Map<Text, { revision : Nat64; input : Types.MatchEventInput; event_ids : [Text] }>;
   var gameResults : [Types.GameResult];
   var activeGames : [Types.ActiveGame];
@@ -2788,6 +2789,12 @@ persistent actor class Main(governorInit : Principal) = this {
     team_id : Text,
     stats : [Types.GamePlayerStatInput],
   ) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
+    await savePlayerStats(caller,event_id,team_id,stats,null)
+  };
+  public shared ({caller}) func save_detailed_game_player_stats(event_id : Text,team_id : Text,stats : [Types.GamePlayerStatInput],details : [Types.GamePlayerDetail]) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
+    await savePlayerStats(caller,event_id,team_id,stats,?details)
+  };
+  func savePlayerStats(caller : Principal,event_id : Text,team_id : Text,stats : [Types.GamePlayerStatInput],details : ?[Types.GamePlayerDetail]) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2799,6 +2806,26 @@ persistent actor class Main(governorInit : Principal) = this {
     let event=switch(events.find(func(e)=e.id==event_id and e.team_id==?team_id and not e.deleted)){case null return #Err("Game-stat team mismatch");case(?e)e};
     switch(do { let removalReply = await matchHistoryAccess(caller,event,true); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }){case(#Ok(true)){};case _ return #Err("Competition manager required")};
     if(eventFenced(event_id) or not canManageTeamBoard(caller,team_id)) return #Err("Game-stat authority changed");
+    if (stats.size() > 200) return #Err("Player-stat batch exceeds limit");
+    switch(details) {
+      case (?rows) {
+        if(rows.size()!=stats.size()) return #Err("Player detail count mismatch");
+        var i=0;
+        for(d in rows.values()) {
+          if(d.user_id!=stats[i].user_id or (d.user_id!=null and d.child_id!=null)) return #Err("Player identity mismatch");
+          switch(d.child_id) { case (?id) { if(not valid(id)) return #Err("Invalid child identity") };case null {} };
+          switch(d.position_seconds) { case (?positions) {
+            if(positions.size()>32) return #Err("Position detail exceeds limit");
+            var total:Nat=0;var names:[Text]=[];
+            for((pos,seconds) in positions.values()) {
+              if(pos.size()==0 or pos.size()>64 or names.any(func n = n==pos)) return #Err("Invalid position detail");
+              names:=names.concat([pos]);total+=Nat32.toNat(seconds)
+            };
+            if(total>Nat32.toNat(stats[i].minutes_played)) return #Err("Position time exceeds playing time")
+          };case null {} };i+=1
+        }
+      };case null {};
+    };
     let rows : [Types.GamePlayerStat] = stats.map(func(input) : Types.GamePlayerStat {
       {
         event_id; team_id;
@@ -2813,6 +2840,7 @@ persistent actor class Main(governorInit : Principal) = this {
       }
     });
     gamePlayerStats := gamePlayerStats.filter(func(item) = item.event_id != event_id).concat(rows);
+    switch(details) {case (?ds) {Map.add(gamePlayerDetails,Text.compare,event_id,ds)};case null {Map.remove(gamePlayerDetails,Text.compare,event_id)}};
     #Ok(rows)
   
     } finally { removalReceiver.leave(caller) };
@@ -2834,6 +2862,27 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func list_game_player_stats(event_id : Text) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
     await protectedPlayerStats(caller,event_id)
+  };
+  public shared ({caller}) func read_detailed_game_player_stats(event_id : Text) : async { #Ok : [Types.DetailedGamePlayerStat]; #Err : Text } {
+    if(not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller);await admitAccount(caller);
+      let rows=switch(await protectedPlayerStats(caller,event_id)){case(#Err(e))return #Err(e);case(#Ok(r))r};
+      if(removalReceiver.denied(caller) or eventFenced(event_id)) return #Err("Report access changed");
+      let details=Map.get(gamePlayerDetails,Text.compare,event_id)??[];
+      var i=0;
+      #Ok(rows.map(func stat { let detail=if(i<details.size())?details[i] else null;i+=1;{stat;detail} }))
+    } finally {removalReceiver.leave(caller)}
+  };
+  public shared ({caller}) func read_event_honours(event_id : Text) : async {#Ok:{captains:[Types.MatchCaptainAssignment];goalkeepers:[Types.MatchGoalkeeperAssignment]};#Err:Text} {
+    if(not removalReceiver.enter(caller))return #Err("Account unavailable");
+    try {
+      auth(caller);await admitAccount(caller);
+      switch(await historyResult(caller,event_id)){case(#Err(e))return #Err(e);case _ {}};
+      let e=events.find(func e = e.id==event_id and not e.deleted)??return #Err("Event unavailable");
+      if(removalReceiver.denied(caller) or eventFenced(event_id) or not canView(caller,e))return #Err("Event access changed");
+      #Ok({captains=matchCaptainAssignments.filter(func c = c.event_id==event_id);goalkeepers=matchGoalkeeperAssignments.filter(func g = g.event_id==event_id)})
+    } finally {removalReceiver.leave(caller)}
   };
 
   // Exact association, never titles/timestamps or all entered-team training.

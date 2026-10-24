@@ -58,6 +58,7 @@ export function usePitchBoardRosterReconciliation({
             : undefined;
         return {
           id: member.user_id,
+          childId: storedPosition?.child_id === member.user_id ? member.user_id : undefined,
           name: member.profiles?.display_name || `Player ${index + 1}`,
           number: storedPosition?.jersey_number || index + 1,
           position: null,

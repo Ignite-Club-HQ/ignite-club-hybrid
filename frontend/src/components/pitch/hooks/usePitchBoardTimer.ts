@@ -151,7 +151,11 @@ export function usePitchBoardTimer({
         setPlayersRef.current?.(prev => prev.map(p => {
           if (p.position !== null) {
             const next = (p.minutesPlayed || 0) + secondsElapsed;
-            return { ...p, minutesPlayed: Math.min(next, totalElapsedNow) };
+            const minutesPlayed = Math.min(next, totalElapsedNow);
+            const credited = Math.max(0, minutesPlayed - (p.minutesPlayed || 0));
+            const positionSeconds = { ...p.positionSeconds };
+            if (p.currentPitchPosition) positionSeconds[p.currentPitchPosition] = (positionSeconds[p.currentPitchPosition] || 0) + credited;
+            return { ...p, minutesPlayed, positionSeconds };
           }
           return p;
         }));
