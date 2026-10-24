@@ -131,6 +131,21 @@ export async function listLiveCompetitions(ctx: FeatureBackendContext, clubId: s
   return unwrapCandid(actor.list_competitions(clubId), "List competitions");
 }
 
+/** Each destination verifies live membership before returning participant cards. */
+export async function listLiveCompetitionCards(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  const cards = await unwrapCandid(actor.read_my_competition_cards(), "Read my competitions");
+  return cards.map(({ competition: c, entries }) => ({
+    id: c.id, name: c.name, sport: null, season: c.season, status: c.status,
+    visibility: c.visibility, starts_on: null, ends_on: null,
+    organizer_club_id: c.club_id, source: null, last_synced_at: null, clubs: null,
+    competition_entries: entries.map(e => ({
+      id: `${e.competition_id}:${e.team_id}`, team_id: e.team_id, status: e.status,
+      competition_id: e.competition_id, teams: { club_id: e.club_id, deleted_at: null },
+    })),
+  }));
+}
+
 export async function updateLiveCompetitionSettings(
   ctx: FeatureBackendContext,
   competitionId: string,
@@ -957,7 +972,7 @@ export async function syncLiveOfficialChats(
   ]);
   for (const role of ["referee", "committee"] as OfficialRole[]) {
     const scope = OFFICIAL_CHAT_SCOPE[role];
-    const holders = grants.filter((g) => g.role === role).map((g) => g.user.toText());
+    const holders = grants.filter((g) => g.role === role || (role === "committee" && g.role === "committee_member")).map((g) => g.user.toText());
     if (holders.length === 0) continue;
     const existing = chats.find((c) => c.scope === scope);
     const label = role === "referee" ? "Referees" : "Committee";

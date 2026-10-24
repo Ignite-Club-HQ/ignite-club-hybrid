@@ -6,6 +6,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { acrossLists } from "@/live/featureScopes";
+import { listLiveCompetitionCards } from "@/live/features/competitions";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Props {
   clubId: string;
@@ -15,9 +20,18 @@ interface Props {
 }
 
 export default function ClubCompetitionsSection({ clubId, teamIds, isAdmin, hasProAccess = false }: Props) {
+  const isIcp = resolveAuthBackend() === "icp";
+  const { user } = useAuth();
+  const { data: liveCards = [] } = useQuery({
+    queryKey: ["my-competitions", user?.id, true],
+    enabled: isIcp && !!user && hasProAccess,
+    queryFn: () => withFeatureBackend("competitions", {
+      supabase: async () => [], icp: listLiveCompetitionCards,
+    }, acrossLists),
+  });
   const { data: organised = [] } = useQuery({
     queryKey: ["club-organised-competitions", clubId],
-    enabled: !!clubId && hasProAccess,
+    enabled: !isIcp && !!clubId && hasProAccess,
     queryFn: async () => {
       const { data } = await supabase
         .from("competitions")
@@ -30,7 +44,7 @@ export default function ClubCompetitionsSection({ clubId, teamIds, isAdmin, hasP
 
   const { data: entered = [] } = useQuery({
     queryKey: ["club-team-competition-entries", clubId, teamIds.join(",")],
-    enabled: teamIds.length > 0 && hasProAccess,
+    enabled: !isIcp && teamIds.length > 0 && hasProAccess,
     queryFn: async () => {
       const { data } = await supabase
         .from("competition_entries")
@@ -40,6 +54,12 @@ export default function ClubCompetitionsSection({ clubId, teamIds, isAdmin, hasP
       return (data ?? []).filter((e: any) => e.competitions && e.competitions.organizer_club_id !== clubId);
     },
   });
+
+  const visibleOrganised = isIcp ? liveCards.filter(c => c.organizer_club_id === clubId) : organised;
+  const visibleEntered = isIcp ? liveCards.filter(c => c.organizer_club_id !== clubId).flatMap(c =>
+    c.competition_entries.filter(e => teamIds.includes(e.team_id) && ["invited", "accepted", "registered"].includes(e.status)).map(e => ({
+      ...e, competitions: c, teams: { name: "" },
+    }))) : entered;
 
   if (!hasProAccess) {
     return (
@@ -59,7 +79,7 @@ export default function ClubCompetitionsSection({ clubId, teamIds, isAdmin, hasP
     );
   }
 
-  if (organised.length === 0 && entered.length === 0 && !isAdmin) return null;
+  if (visibleOrganised.length === 0 && visibleEntered.length === 0 && !isAdmin) return null;
 
   return (
     <Accordion type="multiple" defaultValue={[]} className="space-y-4">
@@ -68,9 +88,9 @@ export default function ClubCompetitionsSection({ clubId, teamIds, isAdmin, hasP
           <div className="flex items-center gap-2">
             <Trophy className="h-5 w-5 text-primary" />
             <span className="text-lg font-semibold">Competitions</span>
-            {(organised.length + entered.length) > 0 && (
+            {(visibleOrganised.length + visibleEntered.length) > 0 && (
               <Badge className="ml-2 font-semibold bg-primary/20 text-primary dark:text-primary-foreground dark:bg-primary">
-                {organised.length + entered.length}
+                {visibleOrganised.length + visibleEntered.length}
               </Badge>
             )}
           </div>
@@ -85,19 +105,19 @@ export default function ClubCompetitionsSection({ clubId, teamIds, isAdmin, hasP
               </Button>
             )}
 
-            {organised.length > 0 && (
+            {visibleOrganised.length > 0 && (
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-muted-foreground">Organised by this club</h3>
-                {organised.map((c: any) => (
+                {visibleOrganised.map((c: any) => (
                   <CompetitionRow key={c.id} c={c} />
                 ))}
               </div>
             )}
 
-            {entered.length > 0 && (
+            {visibleEntered.length > 0 && (
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-muted-foreground">Teams in this club entered into</h3>
-                {entered.map((e: any) => (
+                {visibleEntered.map((e: any) => (
                   <Link key={e.id} to={`/competitions/${e.competition_id}`} className="block">
                     <Card className="hover:border-primary transition-colors">
                       <CardContent className="p-3 flex items-center gap-3">
@@ -116,7 +136,7 @@ export default function ClubCompetitionsSection({ clubId, teamIds, isAdmin, hasP
               </div>
             )}
 
-            {organised.length === 0 && entered.length === 0 && (
+            {visibleOrganised.length === 0 && visibleEntered.length === 0 && (
               <p className="text-sm text-muted-foreground">No competitions yet.</p>
             )}
 
