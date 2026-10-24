@@ -2269,6 +2269,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'read_season_teams' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        [],
+      ),
     'read_vault_erasure_scope' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Bool],

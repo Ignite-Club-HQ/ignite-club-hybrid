@@ -1980,6 +1980,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_season_teams(season_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubTeam>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_vault_erasure_scope(club: string, team: string | null): Promise<boolean>;
     record_presence_heartbeat(): Promise<{
         __kind__: "Ok";
@@ -5851,6 +5858,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.read_season_club(arg0);
         return from_candid_variant_n131(result);
+    }
+    async read_season_teams(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubTeam>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_season_teams(arg0);
+        return from_candid_variant_n179(result);
     }
     async read_vault_erasure_scope(arg0: string, arg1: string | null): Promise<boolean> {
         const result = await this.actor.read_vault_erasure_scope(arg0, to_candid_opt_n18(arg1));

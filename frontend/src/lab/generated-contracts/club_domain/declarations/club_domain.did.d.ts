@@ -1573,6 +1573,11 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_season_teams' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
   'read_vault_erasure_scope' : ActorMethod<[string, [] | [string]], boolean>,
   'record_presence_heartbeat' : ActorMethod<
     [],
