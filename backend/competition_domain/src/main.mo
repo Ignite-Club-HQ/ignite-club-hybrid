@@ -2810,7 +2810,11 @@ persistent actor class Main(governorInit : Principal) = this {
           let service : actor { relay_competition_broadcast : shared (Principal, Text, Text, [Text], [Principal], Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
           let reply = try { await (with timeout = 10) service.relay_competition_broadcast(caller, club, competition, clubTeams, officials, body, receipt.broadcast_id) } catch (_) { return #Err("Broadcast outcome unresolved; retain original operation") };
           switch reply {
-            case (#Err(e)) { return #Err("Broadcast outcome retained: " # e) };
+            case (#Err(e)) {
+              receipt := { receipt with unknown = null };
+              Map.add(broadcastDeliveries, Text.compare, key, receipt);
+              return #Err("Broadcast not queued: " # e)
+            };
             case (#Ok(n)) { count += Nat16.toNat(n); receipt := { receipt with unknown = null; completed = receipt.completed.concat([(club, n)]) }; Map.add(broadcastDeliveries, Text.compare, key, receipt) }
           }
         }

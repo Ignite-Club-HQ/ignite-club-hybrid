@@ -1269,8 +1269,7 @@ function TeamsByDivision({
   );
 }
 // The trusted competition service resolves and queues the audience per club.
-async function sendIcpCompetitionBroadcast(competitionId: string, competitionName: string, message: string, divisionIds: Set<string>): Promise<number> {
-  const operation = crypto.randomUUID();
+async function sendIcpCompetitionBroadcast(competitionId: string, competitionName: string, message: string, divisionIds: Set<string>, operation: string): Promise<number> {
   return withFeatureBackend("competitions", {
     supabase: async () => { throw new Error("ICP competition required"); },
     icp: async ctx => {
@@ -1333,6 +1332,7 @@ function BroadcastsPanel({ competitionId, competitionName, divisions, acceptedTe
   const [selectedDivisionIds, setSelectedDivisionIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
+  const [pendingBroadcast, setPendingBroadcast] = useState<{ operation: string; payload: string } | null>(null);
   const [showDivisions, setShowDivisions] = useState(false);
 
   const MAX_LEN = 1000;
@@ -1384,7 +1384,12 @@ function BroadcastsPanel({ competitionId, competitionName, divisions, acceptedTe
     setSending(true);
     if (resolveAuthBackend() === "icp") {
       try {
-        const count = await sendIcpCompetitionBroadcast(competitionId, competitionName, message.trim(), selectedDivisionIds);
+        const payload = JSON.stringify([competitionId, competitionName, message.trim(), [...selectedDivisionIds].sort()]);
+        if (pendingBroadcast && pendingBroadcast.payload !== payload) throw new Error("Retry the original broadcast before sending a different message.");
+        const operation = pendingBroadcast?.operation ?? crypto.randomUUID();
+        setPendingBroadcast({ operation, payload });
+        const count = await sendIcpCompetitionBroadcast(competitionId, competitionName, message.trim(), selectedDivisionIds, operation);
+        setPendingBroadcast(null);
         try { (navigator as any).vibrate?.(15); } catch {}
         toast({ title: `Broadcast queued for ${count} recipient${count === 1 ? "" : "s"}` });
         setMessage("");

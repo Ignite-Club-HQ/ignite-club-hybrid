@@ -58,6 +58,16 @@ try {
   assert.deepEqual(ok(await c.list_matches(competition)), []);
   c.setPrincipal(manager);
   const fixture = ok(await c.record_match(competition, home, away));
+  c.setPrincipal(stranger);
+  denied(await c.move_team_division(competition, home, [], ['new-division'], true));
+  c.setPrincipal(manager);
+  ok(await c.assign_division(competition, home, ['old-division']));
+  ok(await c.update_match_details(fixture.id, home, away, ['old-division'], [], [], [], [], [], [], [], 1n));
+  const completed = ok(await c.record_match(competition, home, away));
+  ok(await c.set_match_result(completed.id, 2, 1, 'completed', completed.revision));
+  assert.equal(ok(await c.move_team_division(competition, home, ['old-division'], ['new-division'], true)), 1n);
+  assert.ok(ok(await c.list_matches(competition)).some(m => m.id === completed.id && m.status === 'completed'));
+  denied(await c.move_team_division(competition, home, ['old-division'], ['other-division'], true));
   const broadcast = ok(await c.send_competition_broadcast(competition, 'Notice', 'Match confirmed'));
   assert.ok(ok(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Match notice')) > 0n);
   const acknowledged = ok(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Match notice'));

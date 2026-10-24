@@ -22,7 +22,7 @@ const compile=domain=>{
  execFileSync(join(homedir(),'.cache/mops/moc/1.16.1/moc'),[...sources,'--enhanced-migration','src/backend/migrations','-o',wasm,'src/main.mo'],{cwd,stdio:'inherit'});
  return wasm;
 };
- const eventsWasm=compile('events_domain'),competitionWasm=compile('competition_domain');
+const eventsWasm=compile('events_domain'),competitionWasm=compile('competition_domain');
 const server=await PocketIcServer.start({binPath:join(homedir(),'.cache/mops/pocket-ic/15.0.0/pocket-ic')});
 let pic;
 try {
