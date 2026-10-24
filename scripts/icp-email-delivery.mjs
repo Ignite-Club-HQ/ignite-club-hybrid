@@ -24,7 +24,7 @@ export async function deliverClaim(actor, claim, send) {
       const recipient = decrypted.to.trim().toLowerCase();
       const hash = text => createHash('sha256').update(text).digest('hex');
       if (job.kind === 'official') {
-        if (hash(recipient) !== claim.to || typeof decrypted.code !== 'string' || hash(decrypted.code) !== claim.body) throw new Error('Official invitation mismatch');
+        if (hash(`${job.resource}:${recipient}`) !== claim.to || typeof decrypted.code !== 'string' || hash(`${job.resource}:${decrypted.code}`) !== claim.body) throw new Error('Official invitation mismatch');
         payload = { to: recipient, subject: claim.subject, text: `Accept your invitation: ${process.env.ICP_EMAIL_APP_URL}/competitions/officials/join?email=1&token=${encodeURIComponent(job.resource)}\nVerification code: ${decrypted.code}` };
       } else {
         if (job.kind !== 'pending_invite' || recipient !== claim.to.trim().toLowerCase()) throw new Error('Invitation recipient mismatch');
