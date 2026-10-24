@@ -216,7 +216,9 @@ async function fetchReportExtrasIcp(
         const accountIds=[...assignments.captains,...assignments.goalkeepers].flatMap(a=>a.ref_kind==="account"?[a.ref_id]:[]);
         const profiles=await listLiveProfilesByIds(ctx,accountIds);
         const names=new Map(profiles.map(p=>[p.account_id,p.display_name]));
-        const nameFor=(a:(typeof assignments.captains)[number])=>a.ref_kind==="account"?names.get(a.ref_id)??"Player":"Player";
+        const {resolveLivePiiTextBatch}=await import("@/live/features/vault");
+        const childNames=await resolveLivePiiTextBatch(ctx,[...assignments.captains,...assignments.goalkeepers].flatMap(a=>a.ref_kind==="child"?[a.ref_id]:[]),"name","competition_report_honours","Authorized report honours");
+        const nameFor=(a:(typeof assignments.captains)[number])=>a.ref_kind==="account"?names.get(a.ref_id)??"Player":childNames.get(a.ref_id)??"Player";
         for(const stat of stats) {
           const key=playerKey(stat.user_id[0],stat.child_id);if(!key)continue;
           const gkSeconds=Object.entries(stat.position_minutes??{}).reduce((total,[position,seconds])=>total+(isGoalkeeperPosition(position)?seconds:0),0);

@@ -4,6 +4,7 @@ vi.mock("@/integrations/supabase/client",()=>({supabase:{rpc:mocks.rpc}}));
 vi.mock("@/live/featureRouter",()=>({withFeatureBackend:(_:string,p:any)=>mocks.mode==="icp"?p.icp({}):p.supabase()}));
 vi.mock("@/live/features/events",()=>({listLiveEvents:mocks.events,listLiveDetailedGamePlayerStats:mocks.stats,getLiveGameResult:mocks.result}));
 vi.mock("@/live/features/identityAccessClient",()=>({listLiveProfilesByIds:async()=>[]}));
+vi.mock("@/live/features/vault",()=>({resolveLivePiiTextBatch:async()=>new Map([["child-1","Private player"]])}));
 import {readReportPlayerStats,readReportEvents} from "./reportRepository";
 beforeEach(()=>vi.clearAllMocks());
 it("retains authorized playing time without reintroducing protected goals",async()=>{
