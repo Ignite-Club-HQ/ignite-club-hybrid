@@ -433,6 +433,16 @@ export const idlFactory = ({ IDL }) => {
     'subject_id' : IDL.Text,
     'notes' : IDL.Text,
   });
+  const MatchEventInput = IDL.Record({
+    'teams' : IDL.Vec(CompetitionEventTarget),
+    'title' : IDL.Text,
+    'creator' : IDL.Principal,
+    'venue' : IDL.Opt(IDL.Text),
+    'starts_at_ms' : IDL.Nat64,
+    'ends_at_ms' : IDL.Nat64,
+    'match_id' : IDL.Text,
+    'competition_id' : IDL.Text,
+  });
   const HttpHeader = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
   const HttpRequestResult = IDL.Record({
     'status' : IDL.Nat,
@@ -449,6 +459,15 @@ export const idlFactory = ({ IDL }) => {
     'outstanding' : IDL.Nat,
     'request' : Request,
     'receiver' : IDL.Principal,
+  });
+  const GamePlayerDetail = IDL.Record({
+    'position_seconds' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat32))),
+    'user_id' : IDL.Opt(IDL.Text),
+    'child_id' : IDL.Opt(IDL.Text),
+  });
+  const DetailedGamePlayerStat = IDL.Record({
+    'stat' : GamePlayerStat,
+    'detail' : IDL.Opt(GamePlayerDetail),
   });
   const GroupPlayerInput = IDL.Record({
     'account_id' : IDL.Text,
@@ -498,16 +517,6 @@ export const idlFactory = ({ IDL }) => {
     'base_url' : IDL.Text,
     'api_key' : IDL.Text,
     'updated_at_ms' : IDL.Nat64,
-  });
-  const MatchEventInput = IDL.Record({
-    'teams' : IDL.Vec(CompetitionEventTarget),
-    'title' : IDL.Text,
-    'creator' : IDL.Principal,
-    'venue' : IDL.Opt(IDL.Text),
-    'starts_at_ms' : IDL.Nat64,
-    'ends_at_ms' : IDL.Nat64,
-    'match_id' : IDL.Text,
-    'competition_id' : IDL.Text,
   });
   const Main = IDL.Service({
     'addBulkAccessPrincipal' : IDL.Func(
@@ -1227,6 +1236,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(EventAttendance), 'Err' : IDL.Text })],
         [],
       ),
+    'materialize_competition_fixture' : IDL.Func(
+        [MatchEventInput, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
     'memory_stats' : IDL.Func(
         [],
         [
@@ -1676,6 +1690,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(Event), 'Err' : IDL.Text })],
         [],
       ),
+    'read_detailed_game_player_stats' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(DetailedGamePlayerStat),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_event_cancellation_audience' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
@@ -1690,6 +1714,35 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
         ['composite_query'],
+      ),
+    'read_event_honours' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'goalkeepers' : IDL.Vec(MatchGoalkeeperAssignment),
+              'captains' : IDL.Vec(MatchCaptainAssignment),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_fixture_materialization' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(
+              IDL.Record({
+                'event_ids' : IDL.Vec(IDL.Text),
+                'input' : MatchEventInput,
+                'revision' : IDL.Nat64,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
       ),
     'read_group_opening_configuration' : IDL.Func(
         [],
@@ -1779,6 +1832,16 @@ export const idlFactory = ({ IDL }) => {
     'run_photo_prompts' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_detailed_game_player_stats' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(GamePlayerStatInput),
+          IDL.Vec(GamePlayerDetail),
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GamePlayerStat), 'Err' : IDL.Text })],
         [],
       ),
     'save_game_player_stats' : IDL.Func(

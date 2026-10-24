@@ -801,6 +801,11 @@ type Main =
        Err: text;
        Ok: vec EventAttendance;
      });
+   materialize_competition_fixture: (input: MatchEventInput, revision:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: vec text;
+               });
    memory_stats: () ->
     (record {
        heap_bytes: nat;
@@ -1154,6 +1159,11 @@ type Main =
        Err: text;
        Ok: vec Event;
      });
+   read_detailed_game_player_stats: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec DetailedGamePlayerStat;
+     });
    read_event_cancellation_audience: (event_id: text) ->
     (variant {
        Err: text;
@@ -1171,6 +1181,26 @@ type Main =
        Err: text;
        Ok: opt text;
      }) composite_query;
+   read_event_honours: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          captains: vec MatchCaptainAssignment;
+          goalkeepers: vec MatchGoalkeeperAssignment;
+        };
+     });
+   read_fixture_materialization: (match_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        opt
+         record {
+           event_ids: vec text;
+           input: MatchEventInput;
+           revision: nat64;
+         };
+     });
    read_group_opening_configuration: () -> (vec record {
                                                   text;
                                                   text;
@@ -1257,6 +1287,12 @@ type Main =
                                Err: text;
                                Ok: nat;
                              });
+   save_detailed_game_player_stats: (event_id: text, team_id: text, stats:
+    vec GamePlayerStatInput, details: vec GamePlayerDetail) ->
+    (variant {
+       Err: text;
+       Ok: vec GamePlayerStat;
+     });
    save_game_player_stats: (event_id: text, team_id: text, stats:
     vec GamePlayerStatInput) -> (variant {
                                    Err: text;
@@ -1670,6 +1706,15 @@ type GamePlayerStat =
    team_id: text;
    user_id: opt text;
  };
+type GamePlayerDetail = 
+ record {
+   child_id: opt text;
+   position_seconds: opt vec record {
+                               text;
+                               nat32;
+                             };
+   user_id: opt text;
+ };
 type EventView = 
  record {
    event_id: text;
@@ -1800,6 +1845,11 @@ type Duty =
    completed: bool;
    duty: text;
    event_id: text;
+ };
+type DetailedGamePlayerStat = 
+ record {
+   detail: opt GamePlayerDetail;
+   stat: GamePlayerStat;
  };
 type CompetitionEventTarget = 
  record {

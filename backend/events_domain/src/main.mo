@@ -18,6 +18,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Text "mo:core/Text";
+import Iter "mo:core/Iter";
 import Blob "mo:core/Blob";
 import Char "mo:core/Char";
 import Error "mo:core/Error";
@@ -143,6 +144,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var pitchBoardSettings : [Types.PitchBoardSettings];
   var gameSummaries : [Types.GameSummary];
   var gamePlayerStats : [Types.GamePlayerStat];
+  var gamePlayerDetails : Map.Map<Text, [Types.GamePlayerDetail]>;
+  var fixtureMaterializations : Map.Map<Text, { revision : Nat64; input : Types.MatchEventInput; event_ids : [Text] }>;
   var gameResults : [Types.GameResult];
   var activeGames : [Types.ActiveGame];
   var playHQConfig : ?Types.PlayHQConfig;
@@ -690,6 +693,14 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({caller}) func upsert_competition_match_events(input : Types.MatchEventInput) : async {#Ok:[Text];#Err:Text} {
+    if(competitionDomainCanister!=?caller)return #Err("Trusted competition canister only");
+    let revision:Nat64=switch(Map.get(fixtureMaterializations,Text.compare,input.match_id)){case null 1;case (?r){if(r.input==input)r.revision else r.revision+1}};
+    await materializeFixture(caller,input,revision)
+  };
+  public shared ({caller}) func materialize_competition_fixture(input : Types.MatchEventInput, revision : Nat64) : async {#Ok:[Text];#Err:Text} {
+    await materializeFixture(caller,input,revision)
+  };
+  func materializeFixture(caller : Principal,input : Types.MatchEventInput, revision : Nat64) : async {#Ok:[Text];#Err:Text} {
     if (not removalReceiver.enter(input.creator)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -698,6 +709,15 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(input.creator);do { let removalReply = await admitAccount(input.creator); if (removalReceiver.denied(input.creator)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (authority != competitionDomainCanister or input.teams.size() != 2 or input.starts_at_ms >= input.ends_at_ms or input.title.size() > 256) return #Err("Invalid fixture or changed authority");
     if(input.teams[0].team_id==input.teams[1].team_id or input.teams.any(func(t)=not valid(t.team_id) or not valid(t.club_id) or isFenced(t.club_id))) return #Err("Invalid or locked fixture teams");
+    switch (Map.get(fixtureMaterializations,Text.compare,input.match_id)) {
+      case (?receipt) {
+        if (revision < receipt.revision) return #Err("Stale fixture materialization");
+        if (revision == receipt.revision) {
+          if (receipt.input != input) return #Err("Fixture revision payload conflict");
+          return #Ok(receipt.event_ids)
+        }
+      }; case null {};
+    };
     // Validate every existing link before touching either event.
     for(target in input.teams.values()){
       switch(competitionMatchLinks.find(func(l)=l.match_id==input.match_id and l.team_id==target.team_id)){
@@ -716,9 +736,14 @@ persistent actor class Main(governorInit : Principal) = this {
       competitionMatchLinks:=competitionMatchLinks.filter(func(l)=l.event_id!=id).concat([{event_id=id;competition_id=input.competition_id;match_id=input.match_id;team_id=target.team_id}]);
       ids:=ids.concat([id]);
     };
+    Map.add(fixtureMaterializations,Text.compare,input.match_id,{revision;input;event_ids=ids});
     #Ok(ids)
   
     } finally { removalReceiver.leave(input.creator) };
+  };
+  public shared ({caller}) func read_fixture_materialization(match_id : Text) : async { #Ok : ?{ revision : Nat64; input : Types.MatchEventInput; event_ids : [Text] }; #Err : Text } {
+    if (competitionDomainCanister != ?caller) return #Err("Trusted competition authority required");
+    #Ok(Map.get(fixtureMaterializations,Text.compare,match_id))
   };
 
   // Fixture-card tap-to-event: returns the per-team event ids materialized
@@ -2767,6 +2792,12 @@ persistent actor class Main(governorInit : Principal) = this {
     team_id : Text,
     stats : [Types.GamePlayerStatInput],
   ) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
+    await savePlayerStats(caller,event_id,team_id,stats,null)
+  };
+  public shared ({caller}) func save_detailed_game_player_stats(event_id : Text,team_id : Text,stats : [Types.GamePlayerStatInput],details : [Types.GamePlayerDetail]) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
+    await savePlayerStats(caller,event_id,team_id,stats,?details)
+  };
+  func savePlayerStats(caller : Principal,event_id : Text,team_id : Text,stats : [Types.GamePlayerStatInput],details : ?[Types.GamePlayerDetail]) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2778,6 +2809,26 @@ persistent actor class Main(governorInit : Principal) = this {
     let event=switch(events.find(func(e)=e.id==event_id and e.team_id==?team_id and not e.deleted)){case null return #Err("Game-stat team mismatch");case(?e)e};
     switch(do { let removalReply = await matchHistoryAccess(caller,event,true); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }){case(#Ok(true)){};case _ return #Err("Competition manager required")};
     if(eventFenced(event_id) or not canManageTeamBoard(caller,team_id)) return #Err("Game-stat authority changed");
+    if (stats.size() > 200) return #Err("Player-stat batch exceeds limit");
+    switch(details) {
+      case (?rows) {
+        if(rows.size()!=stats.size()) return #Err("Player detail count mismatch");
+        var i=0;
+        for(d in rows.values()) {
+          if(d.user_id!=stats[i].user_id or (d.user_id!=null and d.child_id!=null)) return #Err("Player identity mismatch");
+          switch(d.child_id) { case (?id) { if(not valid(id)) return #Err("Invalid child identity") };case null {} };
+          switch(d.position_seconds) { case (?positions) {
+            if(positions.size() > 32) return #Err("Position detail exceeds limit");
+            var total:Nat=0;var names:[Text]=[];
+            for((pos,seconds) in positions.values()) {
+              if(pos.size()==0 or pos.size() > 64 or names.any(func n = n==pos)) return #Err("Invalid position detail");
+              names:=names.concat([pos]);total+=Nat32.toNat(seconds)
+            };
+            if(total > Nat32.toNat(stats[i].minutes_played)) return #Err("Position time exceeds playing time")
+          };case null {} };i+=1
+        }
+      };case null {};
+    };
     let rows : [Types.GamePlayerStat] = stats.map(func(input) : Types.GamePlayerStat {
       {
         event_id; team_id;
@@ -2792,6 +2843,7 @@ persistent actor class Main(governorInit : Principal) = this {
       }
     });
     gamePlayerStats := gamePlayerStats.filter(func(item) = item.event_id != event_id).concat(rows);
+    switch(details) {case (?ds) {Map.add(gamePlayerDetails,Text.compare,event_id,ds)};case null {Map.remove(gamePlayerDetails,Text.compare,event_id)}};
     #Ok(rows)
   
     } finally { removalReceiver.leave(caller) };
@@ -2813,6 +2865,27 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func list_game_player_stats(event_id : Text) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
     await protectedPlayerStats(caller,event_id)
+  };
+  public shared ({caller}) func read_detailed_game_player_stats(event_id : Text) : async { #Ok : [Types.DetailedGamePlayerStat]; #Err : Text } {
+    if(not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller);await admitAccount(caller);
+      let rows=switch(await protectedPlayerStats(caller,event_id)){case(#Err(e))return #Err(e);case(#Ok(r))r};
+      if(removalReceiver.denied(caller) or eventFenced(event_id)) return #Err("Report access changed");
+      let details=Map.get(gamePlayerDetails,Text.compare,event_id)??[];
+      var i=0;
+      #Ok(rows.map(func stat { let detail=if(i < details.size())?details[i] else null;i+=1;{stat;detail} }))
+    } finally {removalReceiver.leave(caller)}
+  };
+  public shared ({caller}) func read_event_honours(event_id : Text) : async {#Ok:{captains:[Types.MatchCaptainAssignment];goalkeepers:[Types.MatchGoalkeeperAssignment]};#Err:Text} {
+    if(not removalReceiver.enter(caller))return #Err("Account unavailable");
+    try {
+      auth(caller);await admitAccount(caller);
+      switch(await historyResult(caller,event_id)){case(#Err(e))return #Err(e);case _ {}};
+      let e=events.find(func e = e.id==event_id and not e.deleted)??return #Err("Event unavailable");
+      if(removalReceiver.denied(caller) or eventFenced(event_id) or not canView(caller,e))return #Err("Event access changed");
+      #Ok({captains=matchCaptainAssignments.filter(func c = c.event_id==event_id);goalkeepers=matchGoalkeeperAssignments.filter(func g = g.event_id==event_id)})
+    } finally {removalReceiver.leave(caller)}
   };
 
   // Exact association, never titles/timestamps or all entered-team training.
@@ -4061,6 +4134,8 @@ persistent actor class Main(governorInit : Principal) = this {
     individualDutyReminderSent := individualDutyReminderSent.filter(func(id) = not inDoomed(id));
     gameSummaries := gameSummaries.filter(func(g) = not inDoomed(g.event_id) and not inDoomedTeam(g.team_id));
     gamePlayerStats := gamePlayerStats.filter(func(g) = not inDoomed(g.event_id) and not inDoomedTeam(g.team_id));
+    for((id,_) in Map.entries(gamePlayerDetails).toArray().values())if(inDoomed(id))Map.remove(gamePlayerDetails,Text.compare,id);
+    for((id,r) in Map.entries(fixtureMaterializations).toArray().values())if(r.event_ids.any(inDoomed))Map.remove(fixtureMaterializations,Text.compare,id);
     gameResults := gameResults.filter(func(g) = (switch (g.event_id) { case (?e) { not inDoomed(e) }; case null { true } }) and not inDoomedTeam(g.team_id));
     activeGames := activeGames.filter(func(g) = switch (g.team_id) { case (?t) { not inDoomedTeam(t) }; case null { true } });
     pitchBoardSettings := pitchBoardSettings.filter(func(s) = not inDoomedTeam(s.team_id));
@@ -4560,6 +4635,14 @@ persistent actor class Main(governorInit : Principal) = this {
     removed += pushReachability.size() - keepReach.size(); pushReachability := keepReach;
     let keepMini = miniLeagueRsvps.filter(func(r) = switch (r.subject) { case (#account(id)) id != me; case (#mini_league_player(_)) true });
     removed += miniLeagueRsvps.size() - keepMini.size(); miniLeagueRsvps := keepMini;
+    for((eventId,details) in Map.entries(gamePlayerDetails).toArray().values()) {
+      let erasedChildren=childGuardians.filter(func g = g.guardian_id==me).map(func g = g.child_id);
+      let eraseIndices=details.keys().toArray().filter(func i = details[i].user_id==?me or details[i].user_id==?("principal:" # me) or (switch(details[i].child_id){case (?id)erasedChildren.any(func c = c==id);case null false}));
+      if(eraseIndices.size()!=0){
+        var i=0;gamePlayerStats:=gamePlayerStats.map(func s {if(s.event_id==eventId){let erase=eraseIndices.any(func j = j==i);i+=1;if(erase){removed+=1;{s with user_id=null;fill_in_player_name=null}}else s}else s});
+        Map.add(gamePlayerDetails,Text.compare,eventId,details.map(func d {if(d.user_id==?me or d.user_id==?("principal:" # me) or (switch(d.child_id){case (?id)erasedChildren.any(func c = c==id);case null false})){ {d with user_id=null;child_id=null} }else d}))
+      }
+    };
     #Ok(Nat32.fromNat(removed))
   
     } finally { removalReceiver.leave(caller) };
@@ -4611,9 +4694,13 @@ persistent actor class Main(governorInit : Principal) = this {
     conflicts += duties.filter(func(d) = d.account_id == newText).size();
     conflicts += roster.filter(func(r) = r.account_id == newText).size();
     conflicts += childGuardians.filter(func(c) = c.guardian_id == newText).size();
+    for((_,ds) in Map.entries(gamePlayerDetails))conflicts+=ds.filter(func d = d.user_id==?newText or d.user_id==?("principal:" # newText)).size();
+    for((_,r) in Map.entries(fixtureMaterializations))if(r.input.creator==new_principal)conflicts+=1;
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in events_domain");
 
     var changed = 0;
+    for((_,ds) in Map.entries(gamePlayerDetails))changed+=ds.filter(func d = d.user_id==?oldText or d.user_id==?("principal:" # oldText)).size();
+    for((_,r) in Map.entries(fixtureMaterializations))if(r.input.creator==old)changed+=1;
 
     let rolesOld = roles.filter(func(r) = r.user.equal(old)).size();
     changed += rolesOld;
@@ -4658,6 +4745,9 @@ persistent actor class Main(governorInit : Principal) = this {
     if (eventViewOldCount > 0) changed += eventViewOldCount;
 
     if (not dry_run) {
+      gamePlayerStats:=gamePlayerStats.map(func s = if(s.user_id==?oldText)({s with user_id=?newText})else if(s.user_id==?("principal:" # oldText))({s with user_id=?("principal:" # newText)})else s);
+      for((id,ds) in Map.entries(gamePlayerDetails).toArray().values())Map.add(gamePlayerDetails,Text.compare,id,ds.map(func d = if(d.user_id==?oldText)({d with user_id=?newText})else if(d.user_id==?("principal:" # oldText))({d with user_id=?("principal:" # newText)})else d));
+      for((id,r) in Map.entries(fixtureMaterializations).toArray().values())if(r.input.creator==old){let input=r.input;Map.add(fixtureMaterializations,Text.compare,id,{r with input={input with creator=new_principal}})};
       if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new_principal }) else r);
       if (eventsOld > 0) events := events.map(func(e) = if (e.creator.equal(old)) ({ e with creator = new_principal }) else e);
       if (assocOld > 0) associationEvents := associationEvents.map(func(a) = if (a.created_by.equal(old)) ({ a with created_by = new_principal }) else a);

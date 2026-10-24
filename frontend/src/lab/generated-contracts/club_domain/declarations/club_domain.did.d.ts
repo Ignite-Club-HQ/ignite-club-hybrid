@@ -422,6 +422,11 @@ export interface Main {
   >,
   'commit_media_quota' : ActorMethod<[string], Result>,
   'commit_retained_media' : ActorMethod<[string], Result__1>,
+  'compact_email_jobs' : ActorMethod<
+    [[] | [string], bigint],
+    { 'Ok' : { 'scanned' : bigint, 'next_cursor' : [] | [string] } } |
+      { 'Err' : string }
+  >,
   'configure_media_growth' : ActorMethod<
     [bigint, bigint, bigint, Array<string>],
     { 'Ok' : null } |
@@ -1585,6 +1590,16 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_vault_erasure_scope' : ActorMethod<[string, [] | [string]], boolean>,
+  'reconcile_competition_broadcast' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [number] } |
+      { 'Err' : string }
+  >,
+  'reconcile_email_job' : ActorMethod<
+    [string, bigint, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'record_presence_heartbeat' : ActorMethod<
     [],
     { 'Ok' : null } |

@@ -1734,6 +1734,8 @@ export interface LiveGamePlayerStatInput {
   substitutionsCount: number;
   startedOnPitch: boolean;
   goalsScored: number;
+  childId?: string | null;
+  positionSeconds?: Record<string, number> | null;
 }
 
 export async function saveLiveGamePlayerStats(
@@ -1754,7 +1756,7 @@ export async function saveLiveGamePlayerStats(
     })),
   );
   return unwrapCandid(
-    actor.save_game_player_stats(
+    actor.save_detailed_game_player_stats(
       eventId,
       teamId,
       withRefs.map((s) => ({
@@ -1767,6 +1769,7 @@ export async function saveLiveGamePlayerStats(
         started_on_pitch: s.startedOnPitch,
         goals_scored: s.goalsScored,
       })),
+      withRefs.map(s => ({ user_id: candidOpt(s.userId), child_id: candidOpt(s.childId), position_seconds: candidOpt(s.positionSeconds == null ? null : Object.entries(s.positionSeconds).map(([position, seconds]) => [position, Math.floor(seconds)] as [string, number])) })),
     ),
     "Save game player stats",
   );
@@ -1790,6 +1793,18 @@ export async function listLiveGamePlayerStats(ctx: FeatureBackendContext, eventI
     if (!raw || !raw.startsWith("fillin:")) return s;
     return { ...s, fill_in_player_name: [names.get(raw) ?? "Fill-in player"] as [string] };
   });
+}
+
+export async function listLiveDetailedGamePlayerStats(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const rows = await unwrapCandid(actor.read_detailed_game_player_stats(eventId), "Read detailed game player stats");
+  const refs = rows.flatMap(row => row.stat.fill_in_player_name).filter(ref => ref.startsWith("fillin:"));
+  const names = await resolveNameRefs(ctx,refs,"Read detailed game player stats");
+  return rows.map(row => {const positions=row.detail[0]?.position_seconds[0];return {...row.stat, fill_in_player_name: row.stat.fill_in_player_name.map(raw => raw.startsWith("fillin:") ? names.get(raw) ?? "Fill-in player" : raw), child_id: row.detail[0]?.child_id[0] ?? null, position_minutes: positions == null ? null : Object.fromEntries(positions.map(([key,value]) => [key,Number(value)])) }});
+}
+export async function readLiveEventHonours(ctx: FeatureBackendContext,eventId:string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target,ctx.identity);
+  return unwrapCandid(actor.read_event_honours(eventId),"Read exact event honours");
 }
 
 export interface LiveGameResultInput {

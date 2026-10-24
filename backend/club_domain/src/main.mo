@@ -17,6 +17,7 @@ import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Map "mo:core/Map";
+import BroadcastRelay "broadcastRelay";
 import EmailOutbox "../../shared/EmailOutbox";
 import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
@@ -203,6 +204,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var pendingInvites : [Types.PendingInvite];
   var emailJobs : Map.Map<Text, EmailOutbox.Job>;
   var emailWorkers : [Principal];
+  var broadcastRelayReceipts : Map.Map<Text, BroadcastRelay.Receipt>;
   transient let emailOutbox = EmailOutbox.Queue(emailJobs);
   public shared ({ caller }) func set_email_workers(workers : [Principal]) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller) or workers.size() > 10 or workers.any(func p = Principal.isAnonymous(p))) return #Err("Governor and valid workers required");
@@ -228,6 +230,14 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func finish_email_job(id : Text, attempt : Nat, outcome : Text, provider_id : Text) : async { #Ok; #Err : Text } {
     if (not emailWorkers.any(func p = p == caller)) return #Err("Email worker required");
     emailOutbox.finish(caller, id, attempt, outcome, provider_id)
+  };
+  public shared ({caller}) func reconcile_email_job(id:Text,attempt:Nat,provider_id:Text):async{#Ok;#Err:Text} {
+    if(not emailWorkers.any(func p = p==caller))return #Err("Original email worker required");
+    emailOutbox.reconcile(caller,id,attempt,"sent",provider_id)
+  };
+  public shared ({caller}) func compact_email_jobs(cursor:?Text,limit:Nat):async{#Ok:{next_cursor:?Text;scanned:Nat};#Err:Text} {
+    if(not isGovernor(caller) or limit==0 or limit > 200)return #Err("Governor and bounded page required");
+    #Ok(emailOutbox.compact(cursor,limit))
   };
   // (code, invite_id) — short share-link codes, lazily created, stable once minted.
   var inviteShortCodes : [(Text, Text)];
@@ -333,6 +343,13 @@ persistent actor class Main(governorInit : Principal) = this {
     let newText = Principal.toText(new);
     let oldTag = "principal:" # oldText;
     let newTag = "principal:" # newText;
+    let cloneUpdates=Map.entries(seasonCloneReceipts).toArray();
+    for((key,r) in cloneUpdates.values()) {
+      switch(Text.stripStart(key,#text(oldText # "\u{1f}"))) {case (?suffix) {
+        let existing=Map.get(seasonCloneReceipts,Text.compare,newText # "\u{1f}" # suffix);
+        if(existing!=null and existing!=?r)return #err("Season operation receipt conflict")
+      };case null {}}
+    };
 
     func pEq(p : Principal) : Bool { p.equal(old) };
     func tEq(t : Text) : Bool { t == oldText or t == oldTag };
@@ -371,6 +388,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in club_domain");
 
     var changed = 0;
+    for((key,_) in cloneUpdates.values())if(Text.startsWith(key,#text(oldText # "\u{1f}")))changed+=1;
 
     // ---- acl ----
     let newRoles = acl.roles.map(func(g : Types.RoleGrant) : Types.RoleGrant = if (pEq(g.user)) { changed += 1; { g with user = new } } else g);
@@ -487,6 +505,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (themeChanged) { changed += 1 };
 
     if (not dry_run) {
+      for((key,r) in cloneUpdates.values())switch(Text.stripStart(key,#text(oldText # "\u{1f}"))){case (?suffix){Map.remove(seasonCloneReceipts,Text.compare,key);Map.add(seasonCloneReceipts,Text.compare,newText # "\u{1f}" # suffix,r)};case null {}};
       bumpMembershipDiscovery();
       acl := { acl with roles = newRoles; guardians = newGuardians; exclusions = newExclusions; children = newChildren };
       bumpMembershipDiscovery();
@@ -1279,6 +1298,11 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public shared ({ caller }) func relay_competition_broadcast(user : Principal, club : Text, competition : Text, team_ids : [Text], officials : [Principal], body : Text, key : Text) : async { #Ok : Nat16; #Err : Text } {
     if (not trustedCompetition(caller) or isTransferFenced(club)) return #Err("Competition authority required");
+    let receiptKey=club # "\u{1f}" # key;
+    switch(Map.get(broadcastRelayReceipts,Text.compare,receiptKey)) {case (?r) {
+      if(r.authority!=caller or r.user!=user or r.competition!=competition or r.teams!=team_ids or r.officials!=officials or r.body!=body)return #Err("Relay request conflict");
+      switch(r.count){case (?n)return #Ok(n);case null return #Err("Relay outcome unresolved; reconcile exact receipt")}
+    };case null {}};
     if (team_ids.size() > 100 or officials.size() > 500 or body.size() > 4000 or key.size() > 512) return #Err("Invalid broadcast");
     if (team_ids.any(func t = liveTeamClub(t) != ?club)) return #Err("Foreign competition team");
     let audience = { club_id = club; competition_id = competition; team_ids; recipients = officials; can_publish = true };
@@ -1290,7 +1314,23 @@ persistent actor class Main(governorInit : Principal) = this {
     if (current != recipients) return #Err("Broadcast audience changed");
     let queueId = notificationQueueCanister ?? return #Err("Notification queue unavailable");
     let queue : actor { enqueue_competition_broadcast : shared ([Text], Text, Text, Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(queueId.toText());
-    await (with timeout = 10) queue.enqueue_competition_broadcast(recipients.map(func p = p.toText()), club, competition, body, key)
+    let receipt:BroadcastRelay.Receipt={authority=caller;queue=queueId;user;club;competition;teams=team_ids;officials;body;key;audience=recipients.map(func p = p.toText()).sort(Text.compare);count=null};
+    Map.add(broadcastRelayReceipts,Text.compare,receiptKey,receipt);
+    let result=try{await (with timeout = 10) queue.enqueue_competition_broadcast(receipt.audience,club,competition,body,key)}catch(_){return #Err("Relay outcome unresolved; retain receipt")};
+    switch(result){case(#Ok(n)){Map.add(broadcastRelayReceipts,Text.compare,receiptKey,{receipt with count=?n});#Ok(n)};case(#Err(e))#Err(e)}
+  };
+  public shared ({caller}) func reconcile_competition_broadcast(club:Text,key:Text) : async {#Ok:?Nat16;#Err:Text} {
+    let receiptKey=club # "\u{1f}" # key;
+    let r=Map.get(broadcastRelayReceipts,Text.compare,receiptKey)??return #Err("Original relay receipt missing");
+    if(not trustedCompetition(caller) or caller!=r.authority or isTransferFenced(club))return #Err("Original competition authority required");
+    switch(r.count){case (?n)return #Ok(?n);case null {}};
+    let queue:actor{read_competition_broadcast_receipt:shared(Text,Text)->async{#Ok:?{club:Text;related:Text;body:Text;count:Nat16;audience:[Text]};#Err:Text}}=actor(r.queue.toText());
+    let found=switch(await queue.read_competition_broadcast_receipt(club,key)){case(#Err(e))return #Err(e);case(#Ok(v))v};
+    if(Map.get(broadcastRelayReceipts,Text.compare,receiptKey)!=?r or not trustedCompetition(caller))return #Err("Relay changed during reconciliation");
+    switch found {case null #Ok(null);case (?proof){
+      if(proof.club!=r.club or proof.related!=r.competition or proof.body!=r.body or proof.audience!=r.audience)return #Err("Relay evidence conflict");
+      Map.add(broadcastRelayReceipts,Text.compare,receiptKey,{r with count=?proof.count});#Ok(?proof.count)
+    }}
   };
 
   // Club admins see every post; members see published posts, and
@@ -2848,6 +2888,13 @@ persistent actor class Main(governorInit : Principal) = this {
 
   func eraseMembership(principals : [Principal], accountId : Text) : { #Ok; #Err : Text } {
     if (principals.any(func(p) = p.equal(governor))) return #Err("Governor account cannot be erased");
+    let erasedInvites=pendingInvites.filter(func i = principals.any(func p = p==i.invited_by or i.accepted_by==?p)).map(func i = i.id);
+    ignore emailOutbox.scrub(func j = erasedInvites.any(func id = id==j.resource));
+    for((key,r) in Map.entries(seasonCloneReceipts).toArray().values()) {
+      if(principals.any(func p = Text.startsWith(key,#text(p.toText() # "\u{1f}")))) {
+        Map.remove(seasonCloneReceipts,Text.compare,key);Map.add(seasonCloneReceipts,Text.compare,"erased:" # r.season_id,r)
+      }
+    };
     var exclusions = acl.exclusions;
     // Explicitly exclude every club, including family-derived membership.
     for (club in acl.clubs.values()) {

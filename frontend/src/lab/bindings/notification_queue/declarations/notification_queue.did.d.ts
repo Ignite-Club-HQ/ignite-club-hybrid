@@ -183,6 +183,21 @@ export interface Main {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'read_competition_broadcast_receipt' : ActorMethod<
+    [string, string],
+    {
+        'Ok' : [] | [
+          {
+            'body' : string,
+            'club' : string,
+            'count' : number,
+            'related' : string,
+            'audience' : Array<string>,
+          }
+        ]
+      } |
+      { 'Err' : string }
+  >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'record_chat_notify_batch' : ActorMethod<
     [string, string, string, string, Array<string>, Array<string>],

@@ -72,6 +72,10 @@ export interface CompetitionEventTarget {
   'team_id' : string,
   'club_id' : string,
 }
+export interface DetailedGamePlayerStat {
+  'stat' : GamePlayerStat,
+  'detail' : [] | [GamePlayerDetail],
+}
 export interface Duty {
   'account_id' : string,
   'duty' : string,
@@ -187,6 +191,11 @@ export interface EventView {
   'viewed_at_ms' : bigint,
   'event_id' : string,
   'viewer' : Principal,
+}
+export interface GamePlayerDetail {
+  'position_seconds' : [] | [Array<[string, number]>],
+  'user_id' : [] | [string],
+  'child_id' : [] | [string],
 }
 export interface GamePlayerStat {
   'started_on_pitch' : boolean,
@@ -924,6 +933,11 @@ export interface Main {
     { 'Ok' : Array<EventAttendance> } |
       { 'Err' : string }
   >,
+  'materialize_competition_fixture' : ActorMethod<
+    [MatchEventInput, bigint],
+    { 'Ok' : Array<string> } |
+      { 'Err' : string }
+  >,
   'memory_stats' : ActorMethod<
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
@@ -1288,6 +1302,11 @@ export interface Main {
     { 'Ok' : Array<Event> } |
       { 'Err' : string }
   >,
+  'read_detailed_game_player_stats' : ActorMethod<
+    [string],
+    { 'Ok' : Array<DetailedGamePlayerStat> } |
+      { 'Err' : string }
+  >,
   'read_event_cancellation_audience' : ActorMethod<
     [string],
     { 'Ok' : number } |
@@ -1305,6 +1324,29 @@ export interface Main {
   'read_event_group_club' : ActorMethod<
     [string],
     { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'read_event_honours' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'goalkeepers' : Array<MatchGoalkeeperAssignment>,
+          'captains' : Array<MatchCaptainAssignment>,
+        }
+      } |
+      { 'Err' : string }
+  >,
+  'read_fixture_materialization' : ActorMethod<
+    [string],
+    {
+        'Ok' : [] | [
+          {
+            'event_ids' : Array<string>,
+            'input' : MatchEventInput,
+            'revision' : bigint,
+          }
+        ]
+      } |
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
@@ -1392,6 +1434,11 @@ export interface Main {
    * / App admins: run the photo-prompt sweep now (also runs every 15 min).
    */
   'run_photo_prompts' : ActorMethod<[], { 'Ok' : bigint } | { 'Err' : string }>,
+  'save_detailed_game_player_stats' : ActorMethod<
+    [string, string, Array<GamePlayerStatInput>, Array<GamePlayerDetail>],
+    { 'Ok' : Array<GamePlayerStat> } |
+      { 'Err' : string }
+  >,
   'save_game_player_stats' : ActorMethod<
     [string, string, Array<GamePlayerStatInput>],
     { 'Ok' : Array<GamePlayerStat> } |

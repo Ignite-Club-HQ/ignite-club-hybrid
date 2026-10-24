@@ -301,6 +301,19 @@ type Main =
        Err: text;
        Ok: Receipt;
      });
+   read_competition_broadcast_receipt: (club: text, key: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        opt
+         record {
+           audience: vec text;
+           body: text;
+           club: text;
+           count: nat16;
+           related: text;
+         };
+     });
    read_group_opening_configuration: () -> (vec record {
                                                   text;
                                                   text;

@@ -8,15 +8,20 @@ export async function readReportPlayerStats(teamId: string, eventId?: string, ra
       if(error)throw new Error(error.message);return Array.isArray(data)?data:[];
     },
     icp:async(ctx)=>{
-      const {listLiveEvents,listLiveGamePlayerStats,getLiveGameResult}=await import("@/live/features/events");
+      const {listLiveEvents,listLiveDetailedGamePlayerStats,getLiveGameResult}=await import("@/live/features/events");
+      const {listLiveProfilesByIds}=await import("@/live/features/identityAccessClient");
+      const {resolveLivePiiTextBatch}=await import("@/live/features/vault");
       const scopedEvents=await listLiveEvents(ctx,null,teamId);
       if(eventId && !scopedEvents.some(e=>e.id===eventId && e.team_id[0]===teamId && !e.deleted))throw new Error("Forbidden report event/team scope");
       const events=scopedEvents.filter(e=>e.team_id[0]===teamId && e.event_type==="game" && !e.deleted && (!eventId || e.id===eventId) && (!range || (Number(e.starts_at_ms)>=range.from.getTime()&&Number(e.starts_at_ms)<=range.to.getTime())));
       const rows:any[]=[];
       for(const event of events){
-        const stats=await listLiveGamePlayerStats(ctx,event.id);
+        const stats=await listLiveDetailedGamePlayerStats(ctx,event.id);
+        const profiles = await listLiveProfilesByIds(ctx, stats.flatMap(s => s.user_id));
+        const byId = new Map(profiles.map(p => [p.account_id,p]));
+        const childNames=await resolveLivePiiTextBatch(ctx,stats.flatMap(s=>s.child_id?[s.child_id]:[]),"name","competition_player_report","Authorized player report");
         const [result]=await getLiveGameResult(ctx,event.id);
-        stats.forEach((s,index)=>rows.push({...s,id:`${event.id}-${index}`,user_id:Array.isArray(s.user_id)?s.user_id[0]??null:null,child_id:null,fill_in_player_name:s.fill_in_player_name[0]??null,jersey_number:Array.isArray(s.jersey_number)?s.jersey_number[0]??null:null,minutes_played:Number(s.minutes_played),substitutions_count:Number(s.substitutions_count),goals_scored:result?.scores_hidden?null:Number(s.goals_scored),position_minutes:null,profiles:null}));
+        stats.forEach((s,index)=>{const userId=s.user_id[0]??null;const profile=userId?byId.get(userId):undefined;const displayName=s.child_id?childNames.get(s.child_id):profile?.display_name;rows.push({...s,id:`${event.id}-${index}`,user_id:userId,child_id:s.child_id,fill_in_player_name:s.fill_in_player_name[0]??null,jersey_number:s.jersey_number[0]??null,minutes_played:Number(s.minutes_played),substitutions_count:Number(s.substitutions_count),goals_scored:result?.scores_hidden?null:Number(s.goals_scored),position_minutes:s.position_minutes,profiles:displayName?{display_name:displayName,avatar_url:null}:null})});
       }
       return rows;
     },

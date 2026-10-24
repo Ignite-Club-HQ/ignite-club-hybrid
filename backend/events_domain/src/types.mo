@@ -159,6 +159,8 @@ module {
     started_on_pitch : Bool;
     goals_scored : Nat16;
   };
+  public type GamePlayerDetail = { user_id : ?Text; child_id : ?Text; position_seconds : ?[(Text, Nat32)] };
+  public type DetailedGamePlayerStat = { stat : GamePlayerStat; detail : ?GamePlayerDetail };
 
   // Mirrors Supabase game_results. period_scores/player_stats are opaque
   // JSON blobs (Text) — the canister has no cross-sport score/stat schema,

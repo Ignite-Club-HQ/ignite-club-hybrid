@@ -47,6 +47,12 @@ try {
  assert.deepEqual(ok(await e.read_competition_events('unrelated-competition')),[]);
  e.setPrincipal(manager);
  const periods='[{"quarter":1,"home":23,"away":17}]';
+ const stat={user_id:[],fill_in_player_name:[],jersey_number:[7],minutes_played:120,positions_played:['GK'],substitutions_count:1,started_on_pitch:true,goals_scored:2};
+ const detail={user_id:[],child_id:['child-1'],position_seconds:[[['GK',120]]]};
+ ok(await e.save_detailed_game_player_stats(eventId,'team-1',[stat],[detail]));
+ const stored=ok(await e.read_detailed_game_player_stats(eventId))[0];
+ assert.equal(stored.detail[0].child_id[0],'child-1');assert.deepEqual(stored.detail[0].position_seconds[0],[['GK',120]]);
+ assert.ok('Err' in await e.save_detailed_game_player_stats(eventId,'team-1',[stat],[{...detail,position_seconds:[[['GK',121]]]}]));
  const players='[{"id":"player-1","name":"MVP","points":23,"secondsPlayed":120}]';
  ok(await e.save_game_result('team-1',[eventId],'basketball','Home','Away',23,17,periods,players,['player-1'],['MVP']));
  c.setPrincipal(manager); ok(await c.set_score_privacy(cup.id,[],[true]));
@@ -66,6 +72,11 @@ try {
  const exact=ok(await e.upsert_competition_match_events({competition_id:cup.id,match_id:'exact-match',creator:manager,teams:[{team_id:'team-1',club_id:'club'},{team_id:'team-2',club_id:'club'}],starts_at_ms:10n,ends_at_ms:60010n,title:'Exact game',venue:[]}));
  const repeated=ok(await e.upsert_competition_match_events({competition_id:cup.id,match_id:'exact-match',creator:manager,teams:[{team_id:'team-1',club_id:'club'},{team_id:'team-2',club_id:'club'}],starts_at_ms:20n,ends_at_ms:60020n,title:'Exact game',venue:[]}));
  assert.deepEqual(repeated,exact);
+ const revisionInput={competition_id:cup.id,match_id:'revision-match',creator:manager,teams:[{team_id:'team-1',club_id:'club'},{team_id:'team-2',club_id:'club'}],starts_at_ms:20n,ends_at_ms:60020n,title:'Revision game',venue:[]};
+ const revisionEvents=ok(await e.materialize_competition_fixture(revisionInput,4n));
+ assert.deepEqual(ok(await e.materialize_competition_fixture(revisionInput,4n)),revisionEvents);
+ assert.ok('Err' in await e.materialize_competition_fixture({...revisionInput,title:'Changed'},4n));
+ assert.ok('Err' in await e.materialize_competition_fixture(revisionInput,3n));
  e.setPrincipal(outsider);assert.ok('Err' in await e.upsert_competition_match_events({competition_id:cup.id,match_id:'forged',creator:manager,teams:[{team_id:'team-1',club_id:'club'},{team_id:'team-2',club_id:'club'}],starts_at_ms:10n,ends_at_ms:20n,title:'Forged',venue:[]}));
  e.setPrincipal(governor);ok(await e.set_transfer_fence('club',true));
  const saved=ok(await e.export_club_snapshot('club'));

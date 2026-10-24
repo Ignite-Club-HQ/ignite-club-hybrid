@@ -16,6 +16,8 @@ interface Player {
   currentPitchPosition?: PitchPosition;
   minutesPlayed?: number;
   isFillIn?: boolean;
+  childId?: string;
+  positionSeconds?: Record<string, number>;
 }
 
 interface SubstitutionEvent {
@@ -74,6 +76,15 @@ export async function resolveGameStatsTeamId(
     if (candidate && !candidate.startsWith("event-group-")) return candidate;
   }
   if (!eventId) return null;
+  if (resolveAuthBackend() === "icp") {
+    return withFeatureBackend("events", { supabase: async () => null, icp: async ctx => {
+      const { connectLiveEventsDomain } = await import("@/live/domains");
+      const { unwrapCandid } = await import("@/live/features/candid");
+      const {actor}=await connectLiveEventsDomain(ctx.target,ctx.identity);
+      const rows = await unwrapCandid(actor.get_event(eventId),"Resolve game team");
+      return rows[0]?.team_id[0] ?? null;
+    } }, {eventId});
+  }
   const { data } = await supabase
     .from("events")
     .select("team_id")
@@ -194,7 +205,9 @@ export function useGameStats() {
         return {
           event_id: eventId,
           team_id: teamId,
-          user_id: player.isFillIn ? null : player.id,
+          user_id: player.isFillIn || player.childId ? null : player.id,
+          child_id: player.isFillIn ? null : player.childId ?? null,
+          position_minutes: player.positionSeconds ?? null,
           fill_in_player_name: player.isFillIn ? player.name : null,
           jersey_number: player.number || null,
           minutes_played: Math.floor((player.minutesPlayed || 0)), // already in seconds
@@ -261,6 +274,8 @@ export function useGameStats() {
             teamId,
             playerStats.map((row) => ({
               userId: row.user_id,
+              childId: row.child_id,
+              positionSeconds: row.position_minutes,
               fillInPlayerName: row.fill_in_player_name,
               jerseyNumber: row.jersey_number,
               minutesPlayed: row.minutes_played,

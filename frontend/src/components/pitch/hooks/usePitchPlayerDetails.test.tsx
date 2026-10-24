@@ -14,6 +14,12 @@ describe('late pitch-player metadata', () => {
       return players;
     }, { initialProps: { rows: undefined as typeof row[] | undefined } });
     act(() => rerender({ rows: [row] }));
-    expect(result.current[0]).toEqual({ ...initial[0], number: 8, assignedPositions: ['GK'] });
+    expect(result.current[0]).toEqual({ ...initial[0], number: 8, assignedPositions: ['GK'],childId:undefined });
+  });
+  it('retains exact child identity from the authorized position row',()=>{
+    const initial:Player[]=[{id:'child',name:'Private',number:1,position:null}];
+    const row={user_id:null,child_id:'child',preferred_positions:[] as Player['assignedPositions'],jersey_number:1};
+    const {result}=renderHook(()=>{const [players,setPlayers]=useState(initial);usePitchPlayerDetails([row],false,setPlayers);return players});
+    expect(result.current[0].childId).toBe('child');
   });
 });

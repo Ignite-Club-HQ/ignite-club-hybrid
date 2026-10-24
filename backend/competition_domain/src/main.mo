@@ -23,6 +23,8 @@ import Nat8 "mo:core/Nat8";
 import Iter "mo:core/Iter";
 import Types "types";
 import Welcome "welcomeSettings";
+import FixtureOperations "fixtureOperations";
+import BroadcastPlan "broadcastPlan";
 import ScorePrivacy "scorePrivacy";
 import ClubSnapshot "clubSnapshot";
 
@@ -179,6 +181,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var broadcastDeliveries : Map.Map<Text, { sender : Principal; competition : Text; divisions : [Text]; title : Text; body : Text; broadcast_id : Text; completed : [(Text, Nat16)]; unknown : ?Text }>;
   var emailJobs : Map.Map<Text, EmailOutbox.Job>;
   var emailWorkers : [Principal];
+  var fixtureReceipts : Map.Map<Text, FixtureOperations.Receipt>;
+  var broadcastPlans:Map.Map<Text,[BroadcastPlan.Target]>;
   transient let emailOutbox = EmailOutbox.Queue(emailJobs);
   public shared ({ caller }) func set_email_workers(workers : [Principal]) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller) or workers.size() > 10 or workers.any(func p = Principal.isAnonymous(p))) return #Err("Governor and valid workers required");
@@ -233,6 +237,14 @@ persistent actor class Main(governorInit : Principal) = this {
       let job = Map.get(emailJobs, Text.compare, id) ?? return #Err("Email job missing");
       if (job.kind == "eoi") eoiSubmissions := eoiSubmissions.map(func e = if (e.id == job.resource) ({ e with invite_sent_count = e.invite_sent_count + 1; invite_sent_at_ms = ?nowMs() }) else e);
     }; #Ok
+  };
+  public shared ({caller}) func reconcile_email_job(id:Text,attempt:Nat,provider_id:Text):async{#Ok;#Err:Text} {
+    if(not emailWorkers.any(func p = p==caller))return #Err("Original email worker required");
+    emailOutbox.reconcile(caller,id,attempt,"sent",provider_id)
+  };
+  public shared ({caller}) func compact_email_jobs(cursor:?Text,limit:Nat):async{#Ok:{next_cursor:?Text;scanned:Nat};#Err:Text} {
+    if(not isGovernor(caller) or limit==0 or limit > 200)return #Err("Governor and bounded page required");
+    #Ok(emailOutbox.compact(cursor,limit))
   };
   var clubDomainCanister : ?Principal;
   var participantClubAuthorities : [Principal];
@@ -719,10 +731,14 @@ persistent actor class Main(governorInit : Principal) = this {
     competitionJoinLinks := competitionJoinLinks.map(func r = if (r.created_by == caller) ({ r with revoked = true; created_by = Principal.anonymous() }) else r);
     roleLinks := roleLinks.map(func r = if (r.created_by == caller) ({ r with revoked = true; created_by = Principal.anonymous() }) else r);
     let removedInviteTokens = competitionOfficialEmailInvites.filter(func r = r.created_by == caller or r.accepted_by == ?caller).map(func r = r.token);
+    let removedMemberTokens=competitionMemberWelcomeJobs.filter(func r = r.member==caller).map(func r = r.token);
+    let removedEois=eoiSubmissions.filter(func r = r.parent_user_id==?caller).map(func r = r.id);
+    count+=emailOutbox.scrub(func j = removedInviteTokens.any(func t = t==j.resource) or removedMemberTokens.any(func t = t==j.resource) or removedEois.any(func id = id==j.resource));
     competitionWelcomeJobs := competitionWelcomeJobs.filter(func r = not removedInviteTokens.any(func token = token == r.token));
     competitionOfficialEmailInvites := competitionOfficialEmailInvites.filter(func r = r.created_by != caller and r.accepted_by != ?caller);
     competitionMemberWelcomeJobs := competitionMemberWelcomeJobs.filter(func r = r.member != caller);
     personalCompetitionOwners := personalCompetitionOwners.filter(func r = r.1 != caller);
+    for((key,r) in Map.entries(fixtureReceipts).toArray().values())if(r.creator==caller){Map.remove(fixtureReceipts,Text.compare,key);Map.add(fixtureReceipts,Text.compare,"erased:" # r.match_id,{r with creator=Principal.anonymous()})};
     tokens := tokens.map(func r = if (r.issued_by == caller) ({ r with used = true; issued_by = Principal.anonymous() }) else r);
     broadcasts := broadcasts.map(func r = if (r.sender == caller) ({ r with sender = Principal.anonymous() }) else r);
     eoiSubmissions := eoiSubmissions.filter(func r = r.parent_user_id != ?caller);
@@ -733,6 +749,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if (receipt.sender == caller) {
         Map.remove(broadcastDeliveries, Text.compare, key);
         Map.add(broadcastDeliveries, Text.compare, "erased:" # receipt.broadcast_id, { receipt with sender = Principal.anonymous() });
+        switch(Map.get(broadcastPlans,Text.compare,key)){case (?plan){Map.remove(broadcastPlans,Text.compare,key);Map.add(broadcastPlans,Text.compare,"erased:" # receipt.broadcast_id,plan.map(func t = {t with officials=t.officials.filter(func p = p!=caller)}))};case null {}};
       }
     };
     #Ok(count)
@@ -1271,6 +1288,43 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  // Request-bound creation commits all fixture fields together. Replaying an
+  // acknowledged request only reads the same match; it never recreates it.
+  public shared ({ caller }) func create_fixture(operation : Text, input : FixtureOperations.Input) : async { #Ok : Types.Match; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller); await syncForCompetition(caller, input.competition_id);
+      if (removalReceiver.denied(caller) or compFenced(input.competition_id) or not canManageCompetition(caller,input.competition_id)) return #Err("Competition manager required");
+      if (operation.size() == 0 or operation.size() > 128 or input.home_team == input.away_team or not valid(input.home_team) or not valid(input.away_team)) return #Err("Invalid fixture request");
+      let key = caller.toText() # "\u{1f}" # operation;
+      switch (Map.get(fixtureReceipts, Text.compare, key)) {
+        case (?r) {
+          if (r.creator != caller or r.input != input) return #Err("Fixture operation conflict");
+          return #Ok(matches.find(func m = m.id == r.match_id) ?? return #Err("Created fixture no longer exists"))
+        }; case null {};
+      };
+      if (Map.size(fixtureReceipts) >= 100_000) return #Err("Fixture receipt capacity reached");
+      if (not entries.any(func e = e.competition_id == input.competition_id and e.team_id == input.home_team and (e.status == "accepted" or e.status == "registered")) or not entries.any(func e = e.competition_id == input.competition_id and e.team_id == input.away_team and (e.status == "accepted" or e.status == "registered"))) return #Err("Both teams must be registered");
+      switch(input.venue) { case (?v) { if(v.size() > 256) return #Err("Venue too long") }; case null {} };
+      switch(input.notes) { case (?v) { if(v.size() > 2000) return #Err("Notes too long") }; case null {} };
+      switch(input.pitch_number) { case (?v) { if(v.size() > 64) return #Err("Pitch too long") }; case null {} };
+      switch(input.division_id) { case (?v) { if(not seasons.any(func s = s.competition_id == input.competition_id and s.divisions.any(func d = d == v))) return #Err("Division unavailable") }; case null {} };
+      let id = "fixture-" # input.competition_id # "-" # Nat.toText(matches.size()+1) # "-" # Nat64.toText(nowMs());
+      let game : Types.Match = { id; competition_id=input.competition_id; home_team=input.home_team; away_team=input.away_team; division_id=input.division_id; scheduled_at_ms=input.scheduled_at_ms; venue=input.venue; pitch_number=input.pitch_number; round_number=input.round_number; duration_minutes=input.duration_minutes; arrival_minutes_before=input.arrival_minutes_before; notes=input.notes; home_score=0; away_score=0; status="scheduled"; revision=1 };
+      matches := matches.concat([game]); Map.add(fixtureReceipts,Text.compare,key,{creator=caller;input;match_id=id}); #Ok(game)
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({caller}) func read_fixture_operation(operation:Text):async{#Ok:?FixtureOperations.Receipt;#Err:Text} {
+    if(not removalReceiver.enter(caller))return #Err("Account unavailable");
+    try {
+      auth(caller);await admitAccount(caller);
+      let r=Map.get(fixtureReceipts,Text.compare,caller.toText() # "\u{1f}" # operation)??return #Ok(null);
+      await syncForCompetition(caller,r.input.competition_id);
+      if(removalReceiver.denied(caller) or compFenced(r.input.competition_id) or not canManageCompetition(caller,r.input.competition_id))return #Err("Fixture manager required");
+      #Ok(?r)
+    }finally{removalReceiver.leave(caller)}
+  };
+
   public query ({ caller }) func list_competitions(club_id : Text) : async { #Ok : [Types.Competition]; #Err : Text } {
     denyLegacyAccountQuery();
     auth(caller);
@@ -1469,6 +1523,15 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  };
+  public shared ({caller}) func read_competition_welcome_message(competition_id : Text) : async {#Ok:?{subject:Text;message:Text};#Err:Text} {
+    if(not removalReceiver.enter(caller))return #Err("Account unavailable");
+    try {
+      auth(caller);await admitAccount(caller);await syncForCompetition(caller,competition_id);
+      if(not(await privateParticipant(caller,competition_id)) or removalReceiver.denied(caller) or compFenced(competition_id))return #Err("Competition participation required");
+      let settings=competitionWelcomeSettings.find(func s = s.competition_id==competition_id and s.enabled);
+      #Ok(switch settings {case (?s)?{subject=s.subject;message=s.message};case null null})
+    } finally {removalReceiver.leave(caller)}
   };
 
   func findChatSettings(competition_id : Text) : ?Types.ChatSettings {
@@ -2622,12 +2685,12 @@ persistent actor class Main(governorInit : Principal) = this {
     if(matchFenced(match_id) or not canManageCompetition(caller,original.competition_id)) return #Err("Competition manager required");
     let game=switch(matches.find(func(m)=m.id==match_id and m.revision==original.revision)){case null return #Err("Match changed");case(?m)m};
     let starts=switch(game.scheduled_at_ms){case null return #Err("Schedule the match first");case(?s)s};
-    let teams=entries.filter(func(e)=e.competition_id==game.competition_id and (e.team_id==game.home_team or e.team_id==game.away_team)).map(func(e)={team_id=e.team_id;club_id=e.club_id});
+    let teams=entries.filter(func(e)=e.competition_id==game.competition_id and (e.status=="accepted" or e.status=="registered") and (e.team_id==game.home_team or e.team_id==game.away_team)).map(func(e)={team_id=e.team_id;club_id=e.club_id});
     if(teams.size()!=2) return #Err("Both teams must be registered");
     let authority=switch(eventsDomainCanister){case null return #Err("Events authority unavailable");case(?id)id};
-    let service : actor { upsert_competition_match_events : shared ({match_id:Text;competition_id:Text;creator:Principal;teams:[{team_id:Text;club_id:Text}];starts_at_ms:Nat64;ends_at_ms:Nat64;title:Text;venue:?Text}) -> async {#Ok:[Text];#Err:Text} }=actor(authority.toText());
-    let result=try{do { let removalReply = await (with timeout=10) service.upsert_competition_match_events({match_id;competition_id=game.competition_id;creator=caller;teams;starts_at_ms=starts;ends_at_ms=starts+Nat64.fromNat(Nat16.toNat(game.duration_minutes??90))*60_000;title=game.home_team#" vs "#game.away_team;venue=game.venue}); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }}catch(_){return #Err("Fixture synchronization failed; retry the same match")};
-    if(eventsDomainCanister!=?authority or matchFenced(match_id)) return #Err("Fixture authority changed or locked");
+    let service : actor { materialize_competition_fixture : shared ({match_id:Text;competition_id:Text;creator:Principal;teams:[{team_id:Text;club_id:Text}];starts_at_ms:Nat64;ends_at_ms:Nat64;title:Text;venue:?Text},Nat64) -> async {#Ok:[Text];#Err:Text} }=actor(authority.toText());
+    let result=try{do { let removalReply = await (with timeout=10) service.materialize_competition_fixture({match_id;competition_id=game.competition_id;creator=caller;teams;starts_at_ms=starts;ends_at_ms=starts+Nat64.fromNat(Nat16.toNat(game.duration_minutes??90))*60_000;title=game.home_team#" vs "#game.away_team;venue=game.venue},game.revision); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }}catch(_){return #Err("Fixture synchronization unresolved; retain the same fixture request")};
+    if(eventsDomainCanister!=?authority or matchFenced(match_id) or not matches.any(func m = m.id == game.id and m.revision == game.revision)) return #Err("Fixture authority or revision changed");
     result
   
     } finally { removalReceiver.leave(caller) };
@@ -2834,7 +2897,6 @@ persistent actor class Main(governorInit : Principal) = this {
       var receipt = switch (Map.get(broadcastDeliveries, Text.compare, key)) {
         case (?existing) {
           if (existing.sender != caller or existing.competition != competition or existing.divisions != divisions or existing.title != title or existing.body != body) return #Err("Broadcast operation conflict");
-          if (existing.unknown != null) return #Err("Broadcast outcome unresolved; retain original operation");
           existing
         };
         case null {
@@ -2850,37 +2912,51 @@ persistent actor class Main(governorInit : Principal) = this {
       for (entry in selected.values()) if (not clubIds.any(func id = id == entry.club_id)) clubIds := clubIds.concat([entry.club_id]);
       let host = switch (competitions.find(func c = c.id == competition)) { case null return #Err("Competition not found"); case (?c) c.club_id };
       if (host != "" and not clubIds.any(func id = id == host)) clubIds := clubIds.concat([host]);
+      let plan=switch(Map.get(broadcastPlans,Text.compare,key)) {
+        case (?p)p;
+        case null {
+          if(receipt.unknown!=null or receipt.completed.size()!=0)return #Err("Historical broadcast lacks exact plan; retain unresolved evidence");
+          var targets:[BroadcastPlan.Target]=[];
+          for(club in clubIds.values()) {
+            let teams=selected.filter(func e = e.club_id==club).map(func e = e.team_id);
+            var authority=if(club==host)clubDomainCanister else null;
+            for(team in teams.values())for(id in participantAuthorities().values()) {
+              let service:actor{read_competition_team_access:shared query(Text,Principal)->async{club_id:?Text;is_member:Bool;can_manage:Bool}}=actor(id.toText());
+              let access=try{await service.read_competition_team_access(team,caller)}catch(_){return #Err("Broadcast ownership unavailable")};
+              if(access.club_id==?club){if(authority!=null and authority!=?id)return #Err("Ambiguous broadcast owner");authority:=?id}
+            };
+            let id=authority??return #Err("Broadcast club owner unavailable");
+            targets:=targets.concat([{club;authority=id;teams;officials=if(club==host)roles.filter(func r = r.competition_id==competition).map(func r = r.user)else []}])
+          };
+          await syncForCompetition(caller,competition);
+          if(removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller,competition) or not selected.all(func e = entries.any(func current = current==e)) or Map.get(broadcastDeliveries,Text.compare,key)!=?receipt)return #Err("Broadcast planning changed");
+          Map.add(broadcastPlans,Text.compare,key,targets);targets
+        }
+      };
+      switch(receipt.unknown) {case (?club){
+        let target=plan.find(func t = t.club==club)??return #Err("Original broadcast target missing");
+        let service:actor{reconcile_competition_broadcast:shared(Text,Text)->async{#Ok:?Nat16;#Err:Text}}=actor(target.authority.toText());
+        let recovered=switch(try{await service.reconcile_competition_broadcast(club,receipt.broadcast_id)}catch(_){return #Err("Broadcast outcome still unresolved")}){case(#Err(e))return #Err(e);case(#Ok(v))v};
+        if(Map.get(broadcastDeliveries,Text.compare,key)!=?receipt or removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller,competition))return #Err("Broadcast reconciliation changed");
+        let n=recovered??return #Err("No acceptance proof; original broadcast remains locked");
+        receipt:={receipt with unknown=null;completed=receipt.completed.concat([(club,n)])};Map.add(broadcastDeliveries,Text.compare,key,receipt)
+      };case null {}};
       var count : Nat = 0;
       for ((_, n) in receipt.completed.values()) count += Nat16.toNat(n);
-      for (club in clubIds.values()) {
+      for (target in plan.values()) {
+        let club=target.club;
         if (not receipt.completed.any(func pair = pair.0 == club)) {
-          let clubTeams = selected.filter(func e = e.club_id == club).map(func e = e.team_id);
-          var authority : ?Principal = null;
-          if (club == host) authority := clubDomainCanister;
-          for (team in clubTeams.values()) {
-            let candidates = participantAuthorities();
-            for (id in candidates.values()) {
-              let service : actor { read_competition_team_access : shared query (Text, Principal) -> async { club_id : ?Text; is_member : Bool; can_manage : Bool } } = actor(id.toText());
-              let access = try { await (with timeout = 10) service.read_competition_team_access(team, caller) } catch (_) { return #Err("Broadcast ownership unavailable") };
-              if (access.club_id == ?club) {
-                if (authority != null and authority != ?id) return #Err("Ambiguous broadcast owner");
-                authority := ?id
-              }
-            }
-          };
-          let id = authority ?? return #Err("Broadcast club owner unavailable");
+          let clubTeams=target.teams;let id=target.authority;
           await syncForCompetition(caller, competition);
-          if (removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller, competition) or not selected.all(func e = entries.any(func current = current == e))) return #Err("Broadcast access changed");
-          let officials = if (club == host) roles.filter(func r = r.competition_id == competition).map(func r = r.user) else [];
+          if (removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller, competition)) return #Err("Broadcast access changed");
+          let officials=target.officials;
           if (Map.get(broadcastDeliveries, Text.compare, key) != ?receipt) return #Err("Broadcast operation already active");
           receipt := { receipt with unknown = ?club }; Map.add(broadcastDeliveries, Text.compare, key, receipt);
           let service : actor { relay_competition_broadcast : shared (Principal, Text, Text, [Text], [Principal], Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
           let reply = try { await (with timeout = 10) service.relay_competition_broadcast(caller, club, competition, clubTeams, officials, body, receipt.broadcast_id) } catch (_) { return #Err("Broadcast outcome unresolved; retain original operation") };
           switch reply {
             case (#Err(e)) {
-              receipt := { receipt with unknown = null };
-              Map.add(broadcastDeliveries, Text.compare, key, receipt);
-              return #Err("Broadcast not queued: " # e)
+              return #Err("Broadcast unresolved; retain exact receipt: " # e)
             };
             case (#Ok(n)) { count += Nat16.toNat(n); receipt := { receipt with unknown = null; completed = receipt.completed.concat([(club, n)]) }; Map.add(broadcastDeliveries, Text.compare, key, receipt) }
           }
@@ -2923,6 +2999,15 @@ persistent actor class Main(governorInit : Principal) = this {
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
     if (old.equal(new)) return #err("old and new must differ");
     if (old.equal(governor)) return #err("Cannot rekey the governor");
+    for((_,r) in Map.entries(broadcastDeliveries))if(r.sender==old and r.unknown!=null)return #err("Resolve original broadcast before account rekey");
+    let oldPrefix=old.toText() # "\u{1f}";let newPrefix=new.toText() # "\u{1f}";
+    let fixtureUpdates=Map.entries(fixtureReceipts).toArray();
+    for((key,r) in fixtureUpdates.values()) {
+      if(r.creator==old) {
+        let destination=newPrefix # (Text.stripStart(key,#text oldPrefix)??key);
+        if(Map.get(fixtureReceipts,Text.compare,destination)!=null)return #err("Destination fixture operation conflict")
+      }
+    };
 
     var conflicts = 0;
     conflicts += roles.filter(func(item) = item.user.equal(new)).size();
@@ -2933,11 +3018,20 @@ persistent actor class Main(governorInit : Principal) = this {
     conflicts += broadcasts.filter(func(item) = item.sender.equal(new)).size();
     for ((_, receipt) in Map.entries(broadcastDeliveries)) if (receipt.sender == new) conflicts += 1;
     conflicts += playhqClaims.filter(func(item)=item.user==new).size();
+    conflicts+=personalCompetitionOwners.filter(func r = r.1==new).size();
+    conflicts+=roleLinks.filter(func r = r.created_by==new).size();
+    conflicts+=competitionOfficialEmailInvites.filter(func r = r.created_by==new or r.accepted_by==?new).size();
+    conflicts+=competitionMemberWelcomeJobs.filter(func r = r.member==new).size();
     if (bulkAccessPrincipals.any(func(p) = p.equal(new))) { conflicts += 1 };
 
     if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in competition_domain");
 
     var changed = 0;
+    let newOwners=personalCompetitionOwners.map(func r {if(r.1==old){changed+=1;(r.0,new)}else r});
+    let newRoleLinks=roleLinks.map(func r {if(r.created_by==old){changed+=1;{r with created_by=new}}else r});
+    let newOfficialInvites=competitionOfficialEmailInvites.map(func r {if(r.created_by==old or r.accepted_by==?old){changed+=1;{r with created_by=if(r.created_by==old)new else r.created_by;accepted_by=if(r.accepted_by==?old)?new else r.accepted_by}}else r});
+    let newMemberJobs=competitionMemberWelcomeJobs.map(func r {if(r.member==old){changed+=1;{r with member=new}}else r});
+    for((_,r) in fixtureUpdates.values())if(r.creator==old)changed+=1;
 
     let newRoles = roles.map(func(item : Types.RoleGrant) : Types.RoleGrant {
       if (item.user.equal(old)) { changed += 1; { item with user = new } } else item
@@ -2974,12 +3068,15 @@ persistent actor class Main(governorInit : Principal) = this {
     };
 
     if (not dry_run) {
+      personalCompetitionOwners:=newOwners;roleLinks:=newRoleLinks;competitionOfficialEmailInvites:=newOfficialInvites;competitionMemberWelcomeJobs:=newMemberJobs;
+      for((key,r) in fixtureUpdates.values())if(r.creator==old){Map.remove(fixtureReceipts,Text.compare,key);Map.add(fixtureReceipts,Text.compare,newPrefix # (Text.stripStart(key,#text oldPrefix)??key),{r with creator=new})};
       let updates = Map.entries(broadcastDeliveries).toArray();
       for ((key, receipt) in updates.values()) {
         if (receipt.sender == old) {
           let suffix = Text.stripStart(key, #text (old.toText() # "\u{1f}")) ?? key;
           Map.remove(broadcastDeliveries, Text.compare, key);
           Map.add(broadcastDeliveries, Text.compare, new.toText() # "\u{1f}" # suffix, { receipt with sender = new });
+          switch(Map.get(broadcastPlans,Text.compare,key)){case (?plan){Map.remove(broadcastPlans,Text.compare,key);Map.add(broadcastPlans,Text.compare,new.toText() # "\u{1f}" # suffix,plan)};case null {}};
         }
       };
       roles := newRoles;

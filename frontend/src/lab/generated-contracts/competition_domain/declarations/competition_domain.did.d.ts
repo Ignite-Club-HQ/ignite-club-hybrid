@@ -146,6 +146,19 @@ export interface EoiTeamSuggestion {
   'submission_ids' : Array<string>,
   'age_group' : string,
 }
+export interface Input {
+  'round_number' : [] | [number],
+  'venue' : [] | [string],
+  'duration_minutes' : [] | [number],
+  'home_team' : string,
+  'notes' : [] | [string],
+  'pitch_number' : [] | [string],
+  'scheduled_at_ms' : [] | [bigint],
+  'away_team' : string,
+  'division_id' : [] | [string],
+  'arrival_minutes_before' : [] | [number],
+  'competition_id' : string,
+}
 export interface Job {
   'id' : string,
   'resource' : string,
@@ -252,6 +265,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'compact_email_jobs' : ActorMethod<
+    [[] | [string], bigint],
+    { 'Ok' : { 'scanned' : bigint, 'next_cursor' : [] | [string] } } |
+      { 'Err' : string }
+  >,
   'competition_engagement_summary' : ActorMethod<
     [Array<string>, bigint, bigint],
     { 'Ok' : Array<CompetitionEngagementSummary> } |
@@ -290,6 +308,11 @@ export interface Main {
   'create_competition_official_link' : ActorMethod<
     [string, string, string],
     { 'Ok' : CompetitionJoinLink } |
+      { 'Err' : string }
+  >,
+  'create_fixture' : ActorMethod<
+    [string, Input],
+    { 'Ok' : Match } |
       { 'Err' : string }
   >,
   'create_personal_competition' : ActorMethod<
@@ -683,6 +706,16 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_competition_welcome_message' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [{ 'subject' : string, 'message' : string }] } |
+      { 'Err' : string }
+  >,
+  'read_fixture_operation' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [Receipt__1] } |
+      { 'Err' : string }
+  >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'read_history_match_result' : ActorMethod<
     [string, string, Principal],
@@ -735,6 +768,11 @@ export interface Main {
   'read_token_club' : ActorMethod<
     [string],
     { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
+  'reconcile_email_job' : ActorMethod<
+    [string, bigint, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'record_match' : ActorMethod<
@@ -1052,6 +1090,11 @@ export interface Receipt {
   'outstanding' : bigint,
   'request' : Request,
   'receiver' : Principal,
+}
+export interface Receipt__1 {
+  'creator' : Principal,
+  'input' : Input,
+  'match_id' : string,
 }
 export interface Request {
   'account_id' : string,

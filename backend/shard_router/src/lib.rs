@@ -974,6 +974,27 @@ pub struct GroupRegistryPage {
     pub configuration_revision: Option<u64>,
 }
 
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct PublicGroupTarget { pub id: String, pub domains: Vec<groups::DomainCanister> }
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct PublicGroupPage { pub configuration_revision: u64, pub groups: Vec<PublicGroupTarget>, pub next_cursor: Option<String> }
+/// Anonymous infrastructure discovery only: never memberships, placements,
+/// controller details or a grant to read/write any destination resource.
+#[ic_cdk::update]
+fn read_public_group_targets(target_alias: String, expected_revision: Option<u64>, cursor: Option<String>, limit: u32) -> Outcome<PublicGroupPage> {
+    if target_alias.is_empty() || target_alias.len()>64 || limit==0 || limit>64 || cursor.as_ref().is_some_and(|c| c.len()>64) { return Err("Invalid public registry page".into()); }
+    let revision=configuration_revision();
+    if expected_revision.is_some_and(|r|r!=revision) || (cursor.is_some() && expected_revision.is_none()) { return Err("Public registry revision conflict".into()); }
+    let approval=ROUTING_APPROVALS.with(|m|m.borrow().get(&target_alias).map(|b|decode::<RoutingApproval>(&b))).ok_or("Public group configuration awaits approval")?;
+    routing_approval::validate(&approval,revision,&registered_group_ids(&target_alias))?;
+    use std::ops::Bound::{Excluded,Unbounded};
+    let start=cursor.map(|c|Excluded(c.into_bytes())).unwrap_or(Unbounded);
+    let rows=GROUPS.with(|m|m.borrow().range((start,Unbounded)).take(limit as usize+1).map(|e|(e.key().clone(),decode::<ShardGroup>(&e.value()))).collect::<Vec<_>>());
+    let next_cursor=if rows.len()>limit as usize {Some(String::from_utf8(rows[limit as usize-1].0.clone()).map_err(|_|"Invalid group key")?)}else{None};
+    let groups=rows.into_iter().take(limit as usize).filter(|(_,g)|g.target_alias==target_alias).map(|(_,g)|PublicGroupTarget{id:g.id,domains:g.domains}).collect();
+    Ok(PublicGroupPage{configuration_revision:revision,groups,next_cursor})
+}
+
 // Cursor advances over at most 64 stable keys, including foreign targets: no
 // message scans an unbounded registry. Empty nonterminal pages are valid.
 #[ic_cdk::update]

@@ -77,6 +77,7 @@ export function usePitchBoardTimer({
   // doubling minutes.
   const lastTimeUpdateRef = useRef<{ seconds: number; half: 1 | 2 } | null>(null);
   const hasInitializedTimeRef = useRef(false);
+  const lastPositionsRef=useRef(new Map<string,string|undefined>());
   if (savedState && !hasInitializedTimeRef.current) {
     const timerNow = loadTimerStateForMinutes(teamId);
     if (timerNow) {
@@ -151,13 +152,20 @@ export function usePitchBoardTimer({
         setPlayersRef.current?.(prev => prev.map(p => {
           if (p.position !== null) {
             const next = (p.minutesPlayed || 0) + secondsElapsed;
-            return { ...p, minutesPlayed: Math.min(next, totalElapsedNow) };
+            const minutesPlayed = Math.min(next, totalElapsedNow);
+            const credited = Math.max(0, minutesPlayed - (p.minutesPlayed || 0));
+            const positionSeconds = { ...p.positionSeconds };
+            // Only claim position time when both boundaries agree. A changed
+            // position or restored timer without a boundary is unallocated.
+            if (p.currentPitchPosition && lastPositionsRef.current.get(p.id)===p.currentPitchPosition) positionSeconds[p.currentPitchPosition] = (positionSeconds[p.currentPitchPosition] || 0) + credited;
+            return { ...p, minutesPlayed, positionSeconds };
           }
           return p;
         }));
       }
     }
     lastTimeUpdateRef.current = { seconds: elapsedSeconds, half: currentHalf };
+    setPlayersRef.current?.(players=>{lastPositionsRef.current=new Map(players.map(p=>[p.id,p.position===null?undefined:p.currentPitchPosition]));return players});
 
     // Update reactive elapsed game time for MatchStatsPanel
     const totalElapsed = currentHalf === 2

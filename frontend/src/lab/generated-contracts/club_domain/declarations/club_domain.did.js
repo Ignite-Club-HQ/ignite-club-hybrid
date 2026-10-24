@@ -825,6 +825,19 @@ export const idlFactory = ({ IDL }) => {
       ),
     'commit_media_quota' : IDL.Func([IDL.Text], [Result], []),
     'commit_retained_media' : IDL.Func([IDL.Text], [Result__1], []),
+    'compact_email_jobs' : IDL.Func(
+        [IDL.Opt(IDL.Text), IDL.Nat],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'scanned' : IDL.Nat,
+              'next_cursor' : IDL.Opt(IDL.Text),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'configure_media_growth' : IDL.Func(
         [IDL.Nat, IDL.Nat, IDL.Nat, IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -2288,6 +2301,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Bool],
         ['query'],
+      ),
+    'reconcile_competition_broadcast' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Nat16), 'Err' : IDL.Text })],
+        [],
+      ),
+    'reconcile_email_job' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
       ),
     'record_presence_heartbeat' : IDL.Func(
         [],

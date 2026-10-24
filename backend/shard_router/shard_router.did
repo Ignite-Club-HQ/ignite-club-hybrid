@@ -49,9 +49,9 @@ type GroupPlacement = record {
   primary_subnet : principal;
 };
 type GroupRegistryPage = record {
-  configuration_revision : opt nat64;
   groups : vec ShardGroup;
   placements : vec GroupPlacement;
+  configuration_revision : opt nat64;
   next_cursor : opt text;
   revision : nat64;
 };
@@ -87,6 +87,12 @@ type OwnerOpeningApproval = record {
   evidence_sha256 : text;
 };
 type Page = record { next : opt text; routes : vec Route; revision : nat64 };
+type PublicGroupPage = record {
+  groups : vec PublicGroupTarget;
+  configuration_revision : nat64;
+  next_cursor : opt text;
+};
+type PublicGroupTarget = record { id : text; domains : vec DomainCanister };
 type Result = variant { Ok : nat64; Err : text };
 type Result_1 = variant { Ok : DeletionLock; Err : text };
 type Result_10 = variant { Ok : opt GroupAssignment; Err : text };
@@ -102,16 +108,9 @@ type Result_19 = variant { Ok : vec GroupAssignment; Err : text };
 type Result_2 = variant { Ok : AssignResult; Err : text };
 type Result_20 = variant { Ok : opt OwnerOpening; Err : text };
 type Result_21 = variant { Ok : bool; Err : text };
-type Result_22 = variant { Ok : RoutingApproval; Err : text };
+type Result_22 = variant { Ok : PublicGroupPage; Err : text };
 type Result_23 = variant { Ok : opt RoutingApproval; Err : text };
-type RoutingApproval = record {
-  target_alias : text;
-  configuration_revision : nat64;
-  approved_configuration_sha256 : text;
-  removal_wiring_group_ids : vec text;
-  removal_checked_at_ms : nat64;
-  evidence_sha256 : text;
-};
+type Result_24 = variant { Ok : RoutingApproval; Err : text };
 type Result_3 = variant { Ok : AssignDomainResult; Err : text };
 type Result_4 = variant { Ok : GroupAssignment; Err : text };
 type Result_5 = variant { Ok : DomainMigration; Err : text };
@@ -120,6 +119,18 @@ type Result_7 = variant { Ok; Err : text };
 type Result_8 = variant { Ok : opt DomainMigration; Err : text };
 type Result_9 = variant { Ok : opt DomainRoute; Err : text };
 type Route = record { shard : principal; revision : nat64; club_id : text };
+type RoutingApproval = record {
+  // Exact configuration revision the governor verified.
+  configuration_revision : nat64;
+  removal_checked_at_ms : nat64;
+  // Lowercase hex SHA-256 of the canonical approved configuration text.
+  approved_configuration_sha256 : text;
+  target_alias : text;
+  // Every registered group for the target, all with verified removal wiring.
+  removal_wiring_group_ids : vec text;
+  // Lowercase hex SHA-256 of the full off-chain evidence report.
+  evidence_sha256 : text;
+};
 type ShardGroup = record {
   id : text;
   max_clubs : nat32;
@@ -198,16 +209,23 @@ service : (Init) -> {
   // No private approval data: admins deleting a different account still need
   // the complete group inventory, even when they have no test-club membership.
   read_owner_test_deletion_required : (text) -> (Result_21);
+  // Anonymous infrastructure discovery only: never memberships, placements,
+  // controller details or a grant to read/write any destination resource.
+  read_public_group_targets : (text, opt nat64, opt text, nat32) -> (Result_22);
+  // Consensus read for signed-in clients; infrastructure metadata only.
   read_routing_approval : (text) -> (Result_23);
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
-  // Governor-only live routing approval; never changes groups or revisions.
-  record_routing_approval : (RoutingApproval, nat64) -> (Result_22);
+  // Governor-only. Binds the exact configuration revision and approved digest;
+  // any later group/placement/policy change makes clients fail closed again.
+  record_routing_approval : (RoutingApproval, nat64) -> (Result_24);
   register_group : (ShardGroup, nat64) -> (Result);
   register_group_placement : (GroupPlacement, nat64) -> (Result);
   release_deletion_lock : (text, nat64) -> (Result_7);
   reserve_group_media_growth : (text, text, text, nat64) -> (Result);
   set_deletion_authority : (principal) -> (Result_7);
-  stop_owner_test_group : (text, nat64) -> (Result_15);
+  // Governor-only stop for general and trial admission. Never removes assignments
+  // or changes membership, service endpoints, media, or opening authorization.
   stop_group_new_placements : (text, text, nat64) -> (Result);
+  stop_owner_test_group : (text, nat64) -> (Result_15);
   version : () -> (nat64) query;
 }

@@ -24,6 +24,10 @@ try {
   for (const actor of [a, b, c, v]) actor.setPrincipal(governor);
   ok(await a.create_club('host', 'Host FC', 'host', [], []));
   ok(await b.create_club('guest', 'Guest FC', 'guest', [], []));
+  for(const [actor,club] of [[a,'host'],[b,'guest']]) {
+    ok(await actor.save_season({id:'season',club_id:club,name:'Season',status:'active',start_date:'',end_date:'',created_at_ms:0n,updated_at_ms:0n}));
+    ok(await actor.set_season_public_eoi_config('season',[],'{}'));
+  }
   const home = ok(await a.create_shell_team_invite('host', 'Home', [], [])).id;
   const away = ok(await b.create_shell_team_invite('guest', 'Away', [], [])).id;
   ok(await a.add_role_grant(manager, 'host', 'club_admin', []));
@@ -42,6 +46,7 @@ try {
   ok(await v.set_competition_domain_canister(C.canisterId));
   c.setPrincipal(manager);
   const competition = ok(await c.create_competition('host', 'Cup', '2026')).id;
+  ok(await c.set_competition_welcome_email(competition,true,'Welcome','Season welcome'));
   denied(await c.register_team(competition, away, 'host')); // forged foreign ownership
   ok(await c.register_team(competition, home, 'host'));
   assert.equal(ok(await c.invite_team(competition, away)).club_id, 'guest');
@@ -54,10 +59,20 @@ try {
   assert.deepEqual(ok(await c.read_competition_club(competition)), ['host']);
   denied(await c.list_matches(competition)); // invited is not yet a participant
   assert.equal(ok(await c.respond_to_entry_invite(competition, away, true)).club_id, 'guest');
+  assert.equal(ok(await c.read_competition_welcome_message(competition))[0].message,'Season welcome');
+  c.setPrincipal(stranger);denied(await c.read_competition_welcome_message(competition));c.setPrincipal(parent);
   assert.deepEqual(ok(await c.read_competition_club(competition)), ['host']);
   assert.deepEqual(ok(await c.list_matches(competition)), []);
   c.setPrincipal(manager);
   const fixture = ok(await c.record_match(competition, home, away));
+  const input={competition_id:competition,home_team:home,away_team:away,division_id:[],scheduled_at_ms:[],venue:['Oval'],pitch_number:['2'],round_number:[3],duration_minutes:[60],arrival_minutes_before:[20],notes:['Final']};
+  const atomic=ok(await c.create_fixture('fixture-operation',input));
+  assert.equal(atomic.venue[0],'Oval');assert.equal(atomic.duration_minutes[0],60);
+  assert.equal(ok(await c.create_fixture('fixture-operation',input)).id,atomic.id);
+  assert.equal(ok(await c.read_fixture_operation('fixture-operation'))[0].match_id,atomic.id);
+  denied(await c.create_fixture('fixture-operation',{...input,notes:['Changed']}));
+  c.setPrincipal(stranger);assert.deepEqual(ok(await c.read_fixture_operation('fixture-operation')),[]);
+  c.setPrincipal(manager);
   c.setPrincipal(stranger);
   denied(await c.move_team_division(competition, home, [], ['new-division'], true));
   c.setPrincipal(manager);
@@ -72,6 +87,7 @@ try {
   assert.ok(ok(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Match notice')) > 0n);
   const acknowledged = ok(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Match notice'));
   assert.ok(acknowledged > 0n);
+  QA.actor.setPrincipal(stranger);denied(await QA.actor.read_competition_broadcast_receipt('host','anything'));
   denied(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Changed payload'));
   QB.actor.setPrincipal(parent);
   assert.equal(ok(await QB.actor.list_inbox(parent.toText(), ['guest'], 100)).filter(n => n.kind === 'competition_broadcast').length, 1);
@@ -124,8 +140,7 @@ try {
   c.setPrincipal(stranger);
   denied(await c.claim_eoi_by_token(row.claim_token));
   c.setPrincipal(governor);
-  ok(await c.submit_public_eoi('guest', 'season', 'Other', 'other@example.invalid', [], 'Other child', [], [], [], [], [3], [], [], [], 'app'));
-  denied(await c.suggest_eoi_teams('season')); // no mixed-club candidate IDs
+  denied(await c.submit_public_eoi('guest', 'season', 'Other', 'other@example.invalid', [], 'Other child', [], [], [], [], [3], [], [], [], 'app')); // wrong EOI authority refuses foreign club
   ok(await c.set_transfer_fence('host', true));
   c.setPrincipal(parent);
   denied(await c.update_eoi_submission(eoi, ['changed'], [], []));

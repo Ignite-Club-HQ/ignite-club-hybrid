@@ -8,6 +8,8 @@ export interface Player {
   assignedPositions?: PitchPosition[];
   currentPitchPosition?: PitchPosition;
   minutesPlayed?: number; // Total seconds played (displayed as minutes)
+  childId?: string;
+  positionSeconds?: Record<string, number>;
   isInjured?: boolean; // Player is injured and cannot be subbed on
   isFillIn?: boolean; // Temporary fill-in player (not part of regular team roster)
   teamSide?: "a" | "b"; // For mini-league two-team mode

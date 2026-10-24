@@ -78,6 +78,11 @@ describe("usePitchBoardTimer handleTimerUpdate", () => {
     act(() => hook.result.current.handleTimerUpdate(60, 1));
     expect(get()[1].minutesPlayed).toBe(0);
   });
+  it("credits position seconds only with matching observed boundaries",()=>{
+    const {hook,get}=setup([{...onPitch(),currentPitchPosition:"GK"} as Player]);
+    act(()=>hook.result.current.handleTimerUpdate(0,1));act(()=>hook.result.current.handleTimerUpdate(60,1));
+    expect(get()[0].positionSeconds).toEqual({GK:60});
+  });
 
   it("credits the unreported tail of H1 on a normal halftime wrap", () => {
     const { hook, get } = setup([onPitch()]);
