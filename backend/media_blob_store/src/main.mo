@@ -175,9 +175,11 @@ persistent actor MediaBlobStore {
   var retained_snapshot_revision : Nat;
   var retained_revisions : Map.Map<Text, Nat>;
   var retained_deletions : Map.Map<Text, RetainedProtocol.Deletion>;
+  var deletionHashes : Map.Map<Text, Text>;
   transient let retainedRehearsal = Runtime.envVar<system>("IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL") == ?"1";
   func retainedBlocked() : Bool { retained_mode == #frozen or (retained_mode == #active and not retainedRehearsal) };
   func pathMutationPending(path : Text) : Bool {
+    if (pending_uploads.any(func upload = upload.path == path)) return true;
     if (retained_deletions.get(path) != null) return true;
     for ((_, op) in quota_operations.entries()) { if (op.path == path and op.status != #committed and op.status != #aborted) return true };
     false
@@ -357,12 +359,13 @@ persistent actor MediaBlobStore {
           };
           case (#Ok(op)) { if (op.state != #reserved) return #Err("Deletion preparation conflict") }
         };
-        if (authority != club_domain_canister or retainedBlocked()) return #Err("Deletion authority changed");
+        if (authority != club_domain_canister or retainedBlocked() or mediaFenced(path)) return #Err("Deletion authority changed or fenced");
         let ?latest = retained_deletions.get(path) else return #Ok;
         if (not latest.removed) {
           if (latest.token != original.token or (retained_revisions.get(path) ?? 0) != original.revision) return #Err("Deletion revision changed");
           let ?record = metadata(path) else return #Err("Deletion object unavailable");
           if (record.length != original.bytes or record.owner != original.owner) return #Err("Deletion object changed");
+          switch (deletionHashes.get(path)) { case (?hash) { if (record.content_hash != hash) return #Err("Deletion hash changed") }; case null return #Err("Legacy deletion requires hash reconciliation") };
           retained_deletions.add(path, { latest with removed = true }); removeStored(path)
         }
       };
@@ -395,14 +398,15 @@ persistent actor MediaBlobStore {
   func deleteRetained(path : Text) : async Result {
     if (retainedBlocked()) return #Err("Retained store frozen or unavailable");
     if (retained_deletions.get(path) != null) return await creditDeletion(path);
-    if (retained_mode != #active or RetainedProtocol.club(path) == null) { removeStored(path); return #Ok };
     if (pathMutationPending(path)) return #Err("Upload mutation pending; retry delete after settlement");
+    if (retained_mode != #active or RetainedProtocol.club(path) == null) { removeStored(path); return #Ok };
     let ?record = metadata(path) else return #Err("Unknown blob");
     let ?club = RetainedProtocol.club(path) else return #Err("Club path required");
     if (retained_deletions.size() >= 100_000) return #Err("Deletion ledger full");
     next_upload_seq += 1;
     let receipt : RetainedProtocol.Deletion = { token = "r1:" # currentCycle().toText() # ":" # next_upload_seq.toText() # ":delete"; path; club; bytes = record.length; revision = retained_revisions.get(path) ?? 0; owner = record.owner; removed = false };
     retained_deletions.add(path, receipt);
+    deletionHashes.add(path, record.content_hash);
     await creditDeletion(path)
   };
   public shared ({ caller }) func reconcile_retained_deletions(cursor : Text) : async { #Ok : { cursor : Text; attempted : Nat }; #Err : Text } {
@@ -1035,7 +1039,7 @@ persistent actor MediaBlobStore {
     if (pending_uploads.size() >= UploadPolicy.maxPending) return #Err("StoreFull");
     if (pending_uploads.filter(func(item) { item.owner.equal(caller) }).size() >= UploadPolicy.maxPendingPerOwner) return #Err("Too many pending uploads");
     if (pending_uploads.any(func(item) { item.path == path })) return #Err("Upload already in progress for path");
-    if (retained_mode == #active and pathMutationPending(path)) return #Err("Path mutation pending");
+    if (pathMutationPending(path)) return #Err("Path mutation pending");
     if (mediaFenced(path)) return #Err("Club media frozen for transfer");
     bumpInventory();
     next_upload_seq += 1;
@@ -1356,6 +1360,7 @@ persistent actor MediaBlobStore {
           switch (retained_deletions.get(path)) {
             case null return #Ok;
             case (?receipt) {
+              if (deletionHashes.get(path) != ?expected_hash) return #Err("Cleanup receipt hash mismatch");
               if (not receipt.owner.equal(subject) and not isGovernor<system>(subject) and not (await isClubStaffForPath(subject, path))) return #Err("Scoped staff required");
               if (vaultAuthority != authority or mediaFenced(path) or removalReceiver.denied(subject)) return #Err("Cleanup authority changed");
               return await creditDeletion(path)
@@ -1364,6 +1369,7 @@ persistent actor MediaBlobStore {
         };
         case (?record) {
           if (record.content_hash != expected_hash) return #Err("Vault blob hash changed");
+          if (retained_deletions.get(path) != null and deletionHashes.get(path) != ?expected_hash) return #Err("Cleanup receipt hash mismatch");
           if (not record.owner.equal(subject) and not isGovernor<system>(subject) and not (await isClubStaffForPath(subject, path))) return #Err("Scoped staff required");
           if (vaultAuthority != authority or removalReceiver.denied(subject) or mediaFenced(path) or retainedBlocked() or metadata(path) != ?record) return #Err("Cleanup object or authority changed");
           if (pathMutationPending(path) and retained_deletions.get(path) == null) return #Err("Upload mutation pending");

@@ -75,6 +75,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var messagingDomainCanister : ?Principal;
   var vaultStores : [Principal];
   var deletionIntents : Map.Map<Text, Text>;
+  type CleanupRecord = { club : Text; team : ?Text; competition : ?Text; blob_ref : Types.BlobRef; state : { #pending; #erased; #complete } };
+  var cleanupRecords : Map.Map<Text, CleanupRecord>;
   var backupRestoreProgress : Map.Map<Text, { next : Nat; restored : Nat; skipped : Nat; complete : Bool }>;
   transient let backupRestoreLocks = Map.empty<Text, Bool>();
 
@@ -706,6 +708,9 @@ persistent actor class Main(governorInit : Principal) = this {
       if (not (await verifyFileBytes(caller, ref, size))) return #Err("File byte evidence unavailable or mismatched");
       if (not (await canWrite(caller, club, team, competition_id)) or files.any(func f = f.id == id) or mediaEvidenceRevision != registrationRevision or deletionIntents.get(id) != null or isFenced(club)) return #Err("Registration scope changed");
     } else if (blob_ref != null or size != 0 or not Text.startsWith(file_url, #text "https://")) return #Err("Invalid external link");
+    switch blob_ref { case (?ref) {
+      if (cleanupRecords.entries().any(func entry = entry.1.state != #complete and entry.1.blob_ref.canister == ref.canister and entry.1.blob_ref.path == ref.path)) return #Err("File path cleanup pending")
+    }; case null {} };
     // No await after this check: a removed/restricted destination cannot admit a late upload.
     if (removalReceiver.denied(caller) or isFenced(club) or deletionIntents.get(id) != null or files.any(func f = f.id == id)) return #Err("Registration scope changed");
     switch destination {
@@ -997,10 +1002,15 @@ persistent actor class Main(governorInit : Principal) = this {
     if (files.any(func other = other.id != id and other.blob_ref == f.blob_ref)) return #Err("Shared file bytes require reference reconciliation");
     if (not vaultStores.any(func id = id.toText() == ref.canister)) return #Err("Original store not configured");
     switch (deletionIntents.get(id)) {
-      case (?hash) { if (hash != ref.content_hash or f.deleted_at_ms == null) return #Err("Cleanup identity changed"); return #Ok(f) };
+      case (?hash) {
+        if (hash != ref.content_hash or f.deleted_at_ms == null) return #Err("Cleanup identity changed");
+        cleanupRecords.add(id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #pending });
+        return #Ok(f)
+      };
       case null {}
     };
     deletionIntents.add(id, ref.content_hash);
+    cleanupRecords.add(id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #pending });
     let hidden = { f with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
     files := files.map(func row = if (row.id == id) hidden else row); mediaEvidenceRevision += 1;
     #Ok(hidden)
@@ -1012,7 +1022,15 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) return #Err("Account fenced");
     try {
       await admitAccount(caller); auth(caller);
-      let f = files.find(func row = row.id == id) ?? return #Err("File not found");
+      let f = switch (files.find(func row = row.id == id)) {
+        case (?row) row;
+        case null {
+          let receipt = cleanupRecords.get(id) ?? return #Err("File not found");
+          if (receipt.state != #complete or not (await canWrite(caller, receipt.club, receipt.team, receipt.competition))) return #Err("Scoped completed cleanup required");
+          if (cleanupRecords.get(id) != ?receipt or isFenced(receipt.club) or removalReceiver.denied(caller)) return #Err("Cleanup scope changed");
+          return #Ok
+        }
+      };
       let ref = f.blob_ref ?? return #Err("File provenance unavailable");
       if (deletionIntents.get(id) != ?ref.content_hash or f.deleted_at_ms == null) return #Err("File cleanup required");
       if (not (await canWrite(caller, f.club, f.team, f.competition_id))) return #Err("Scoped staff required");
@@ -1030,6 +1048,7 @@ persistent actor class Main(governorInit : Principal) = this {
       for ((source, _) in sources.values()) gallerySourceFiles.remove(source);
       pinned_vaults := pinned_vaults.filter(func pin = pin.vault_file_id != ?id);
       deletionIntents.add(id, "removed:" # ref.content_hash); mediaEvidenceRevision += 1;
+      cleanupRecords.add(id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #complete });
       #Ok
     } finally { removalReceiver.leave(caller) }
   };
@@ -1405,7 +1424,10 @@ persistent actor class Main(governorInit : Principal) = this {
     // Metadata erasure must never be undone by another administrator's backup.
     // Physical-byte cleanup remains separately reconciled, not guessed here.
     for (f in files.values()) {
-      if (f.uploaded_by.equal(caller)) deletionIntents.add(f.id, "erased:" # (f.blob_ref.map(func ref = ref.content_hash) ?? "external"));
+      if (f.uploaded_by.equal(caller)) {
+        deletionIntents.add(f.id, "erased:" # (f.blob_ref.map(func ref = ref.content_hash) ?? "external"));
+        switch f.blob_ref { case (?ref) cleanupRecords.add(f.id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #erased }); case null {} }
+      }
     };
     var removed : Nat = 0;
     let keepFiles = files.filter(func(f : Types.VaultFile) : Bool = not f.uploaded_by.equal(caller));
