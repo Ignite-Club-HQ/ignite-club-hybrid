@@ -84,7 +84,7 @@ describe("ingress expiry recovery", () => {
   }
 
   function actorTarget(): IcpTargetConfig {
-    return { ...target(), canisterIds: { messaging: "aaaaa-bb" } } as IcpTargetConfig;
+    return { ...target(), canisterIds: { messaging: "jcdfe-vqaaa-aaaal-qxloq-cai" } } as IcpTargetConfig;
   }
 
   async function actorFor(methods: Record<string, (...args: unknown[]) => Promise<unknown>>) {
