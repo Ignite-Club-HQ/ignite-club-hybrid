@@ -32,7 +32,7 @@ try {
   q.setPrincipal(gov);for(const n of pending)ok(await q.acknowledge(n.id,n.idempotency_key));
   c.setPrincipal(manager);ok(await c.purge_my_broadcast_data());ok(await c.purge_my_broadcast_data());
   q.setPrincipal(manager);ok(await q.purge_my_data());ok(await q.purge_my_data());
-  q.setPrincipal(other);const inbox=ok(await q.list_inbox(other.toText(),[]));assert.ok(inbox.length>0);assert.ok(inbox.every(n=>n.user===other.toText()));
+  q.setPrincipal(other);const inbox=ok(await q.list_inbox(other.toText(),[],100));assert.ok(inbox.length>0);assert.ok(inbox.every(n=>n.user===other.toText()));
   k.setPrincipal(manager);ok(await k.purge_my_data());denied(await k.queue_competition_broadcast('op',competition,[],'Notice','Body'));
   k.setPrincipal(alias);denied(await k.queue_competition_broadcast('new-op',competition,[],'Notice','Body'));
   for(const [f,wasm] of [[C,process.env.CLUB_DOMAIN_WASM],[K,process.env.COMPETITION_DOMAIN_WASM],[Q,process.env.NOTIFICATION_QUEUE_WASM]])await pic.upgradeCanister({canisterId:f.canisterId,sender:gov,wasm,arg:IDL.encode([IDL.Principal],[gov]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
