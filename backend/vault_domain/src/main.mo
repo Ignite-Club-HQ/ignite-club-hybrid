@@ -1186,8 +1186,12 @@ persistent actor class Main(governorInit : Principal) = this {
       lifecycleFileCursor := if (end < files.size()) end else 0;
       for (f in candidates.values()) {
         if (f.is_external_link or nowMs() <= f.created_at_ms or nowMs() - f.created_at_ms <= 15_552_000_000 or isFenced(f.club)) continue;
-        let ref = switch f.blob_ref { case (?r) r; case null continue };
-        if (not vaultStores.any(func s = s.toText() == ref.canister) or files.find(func row = row.id == f.id) != ?f or files.any(func other = other.id != f.id and (switch other.blob_ref { case (?r) r.canister == ref.canister and r.path == ref.path; case null false }))) continue;
+        let ref = switch (f.blob_ref) { case (?r) r; case null continue };
+        let cid = switch club_domain_canister { case (?id) id; case null continue };
+        let cd : actor { get_media_allowance : shared query (Text, ?Text) -> async { #Ok : { premium : Bool }; #Err : Text } } = actor(cid.toText());
+        let allowance = try { await (with timeout = 10) cd.get_media_allowance(f.club, f.team) } catch (_) { continue };
+        switch allowance { case (#Ok(a)) if (a.premium) continue; case (#Err(_)) continue };
+        if (club_domain_canister != ?cid or isFenced(f.club) or not vaultStores.any(func s = s.toText() == ref.canister) or files.find(func row = row.id == f.id) != ?f or files.any(func other = other.id != f.id and (switch (other.blob_ref) { case (?r) r.canister == ref.canister and r.path == ref.path; case null false }))) continue;
         // Persist the path lock before the remote delete. Do not hide a paid file
         // merely because allowance/transport checks fail.
         switch (deletionIntents.get(f.id)) { case (?hash) if (hash != ref.content_hash) continue; case null deletionIntents.add(f.id, ref.content_hash) };
