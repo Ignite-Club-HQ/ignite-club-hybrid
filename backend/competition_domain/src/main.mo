@@ -167,6 +167,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var divisionSettings : [Types.DivisionSetting];
   var competitionLadderSettings : [Types.CompetitionLadderSetting];
   var broadcasts : [Types.Broadcast];
+  var broadcastDeliveries : Map.Map<Text, { sender : Principal; competition : Text; divisions : [Text]; title : Text; body : Text; broadcast_id : Text; completed : [(Text, Nat16)]; unknown : ?Text }>;
   var clubDomainCanister : ?Principal;
   var participantClubAuthorities : [Principal];
   var eventsDomainCanister : ?Principal;
@@ -2697,6 +2698,66 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   // ---------------- Competition broadcasts ----------------
+  public shared ({ caller }) func queue_competition_broadcast(operation : Text, competition : Text, divisions : [Text], title : Text, body : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller); await syncForCompetition(caller, competition);
+      if (removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller, competition)) return #Err("Competition manager required");
+      if (operation.size() == 0 or operation.size() > 128 or divisions.size() > 100 or title.size() > 200 or body.size() == 0 or body.size() > 4000) return #Err("Invalid broadcast");
+      let key = caller.toText() # "\u{1f}" # operation;
+      var receipt = switch (Map.get(broadcastDeliveries, Text.compare, key)) {
+        case (?existing) {
+          if (existing.sender != caller or existing.competition != competition or existing.divisions != divisions or existing.title != title or existing.body != body) return #Err("Broadcast operation conflict");
+          if (existing.unknown != null) return #Err("Broadcast outcome unresolved; retain original operation");
+          existing
+        };
+        case null {
+          let id = "bc-" # competition # "-" # Nat.toText(broadcasts.size() + 1);
+          broadcasts := broadcasts.concat([{ id; competition_id = competition; sender = caller; title; body; created_at_ms = Nat64.fromIntWrap(Time.now() / 1_000_000) }]);
+          { sender = caller; competition; divisions; title; body; broadcast_id = id; completed = [] : [(Text, Nat16)]; unknown = null : ?Text }
+        }
+      };
+      Map.add(broadcastDeliveries, Text.compare, key, receipt);
+      let selected = entries.filter(func e = e.competition_id == competition and (e.status == "accepted" or e.status == "registered") and (divisions.size() == 0 or (switch e.division_id { case null false; case (?d) divisions.any(func v = v == d) })));
+      if (selected.size() > 100) return #Err("Broadcast team inventory exceeds bound");
+      var clubIds : [Text] = [];
+      for (entry in selected.values()) if (not clubIds.any(func id = id == entry.club_id)) clubIds := clubIds.concat([entry.club_id]);
+      let host = switch (competitions.find(func c = c.id == competition)) { case null return #Err("Competition not found"); case (?c) c.club_id };
+      if (host != "" and not clubIds.any(func id = id == host)) clubIds := clubIds.concat([host]);
+      var count : Nat = 0;
+      for ((_, n) in receipt.completed.values()) count += Nat16.toNat(n);
+      for (club in clubIds.values()) {
+        if (not receipt.completed.any(func pair = pair.0 == club)) {
+          let clubTeams = selected.filter(func e = e.club_id == club).map(func e = e.team_id);
+          var authority : ?Principal = null;
+          if (club == host) authority := clubDomainCanister;
+          for (team in clubTeams.values()) {
+            let candidates = participantAuthorities();
+            for (id in candidates.values()) {
+              let service : actor { read_competition_team_access : shared query (Text, Principal) -> async { club_id : ?Text; is_member : Bool; can_manage : Bool } } = actor(id.toText());
+              let access = try { await (with timeout = 10) service.read_competition_team_access(team, caller) } catch (_) { return #Err("Broadcast ownership unavailable") };
+              if (access.club_id == ?club) {
+                if (authority != null and authority != ?id) return #Err("Ambiguous broadcast owner");
+                authority := ?id
+              }
+            }
+          };
+          let id = authority ?? return #Err("Broadcast club owner unavailable");
+          await syncForCompetition(caller, competition);
+          if (removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller, competition) or not selected.all(func e = entries.any(func current = current == e))) return #Err("Broadcast access changed");
+          let officials = if (club == host) roles.filter(func r = r.competition_id == competition).map(func r = r.user) else [];
+          receipt := { receipt with unknown = ?club }; Map.add(broadcastDeliveries, Text.compare, key, receipt);
+          let service : actor { relay_competition_broadcast : shared (Principal, Text, Text, [Text], [Principal], Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
+          let reply = try { await (with timeout = 10) service.relay_competition_broadcast(caller, club, competition, clubTeams, officials, body, receipt.broadcast_id) } catch (_) { return #Err("Broadcast outcome unresolved; retain original operation") };
+          switch reply {
+            case (#Err(e)) { receipt := { receipt with unknown = null }; Map.add(broadcastDeliveries, Text.compare, key, receipt); return #Err(e) };
+            case (#Ok(n)) { count += Nat16.toNat(n); receipt := { receipt with unknown = null; completed = receipt.completed.concat([(club, n)]) }; Map.add(broadcastDeliveries, Text.compare, key, receipt) }
+          }
+        }
+      };
+      #Ok(count)
+    } finally { removalReceiver.leave(caller) }
+  };
   // Stored log only; push delivery is fanned out by the sender's client
   // through notification_queue (same path as announcement broadcasts).
   public shared ({ caller }) func send_competition_broadcast(competition_id : Text, title : Text, body : Text) : async { #Ok : Types.Broadcast; #Err : Text } {
