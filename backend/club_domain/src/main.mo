@@ -1,4 +1,5 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import BroadcastErasure "../../shared/BroadcastErasure";
 import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
 import Error "mo:core/Error";
@@ -205,6 +206,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var emailJobs : Map.Map<Text, EmailOutbox.Job>;
   var emailWorkers : [Principal];
   var broadcastRelayReceipts : Map.Map<Text, BroadcastRelay.Receipt>;
+  var broadcastErasureSubjects : Map.Map<Principal, [Principal]>;
+  var erasedBroadcastRelays : Map.Map<Text, Bool>;
   transient let emailOutbox = EmailOutbox.Queue(emailJobs);
   public shared ({ caller }) func set_email_workers(workers : [Principal]) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller) or workers.size() > 10 or workers.any(func p = Principal.isAnonymous(p))) return #Err("Governor and valid workers required");
@@ -1299,6 +1302,7 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func relay_competition_broadcast(user : Principal, club : Text, competition : Text, team_ids : [Text], officials : [Principal], body : Text, key : Text) : async { #Ok : Nat16; #Err : Text } {
     if (not trustedCompetition(caller) or isTransferFenced(club)) return #Err("Competition authority required");
     let receiptKey=club # "\u{1f}" # key;
+    if (erasedBroadcastRelays.get(receiptKey) != null or broadcastErasureSubjects.get(user) != null or officials.any(func p = broadcastErasureSubjects.get(p) != null)) return #Err("Broadcast account cleanup is terminal or pending");
     switch(Map.get(broadcastRelayReceipts,Text.compare,receiptKey)) {case (?r) {
       if(r.authority!=caller or r.user!=user or r.competition!=competition or r.teams!=team_ids or r.officials!=officials or r.body!=body)return #Err("Relay request conflict");
       switch(r.count){case (?n)return #Ok(n);case null return #Err("Relay outcome unresolved; reconcile exact receipt")}
@@ -1313,6 +1317,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let current = competitionNewsRecipients(audience).filter(func p = not Principal.isAnonymous(p) and not removalReceiver.denied(p) and not isExcluded(p, club)).sort(Principal.compare);
     if (current != recipients) return #Err("Broadcast audience changed");
     let queueId = notificationQueueCanister ?? return #Err("Notification queue unavailable");
+    if (broadcastErasureSubjects.get(user) != null or recipients.any(func p = broadcastErasureSubjects.get(p) != null)) return #Err("Broadcast account cleanup pending");
     let queue : actor { enqueue_competition_broadcast : shared ([Text], Text, Text, Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(queueId.toText());
     let receipt:BroadcastRelay.Receipt={authority=caller;queue=queueId;user;club;competition;teams=team_ids;officials;body;key;audience=recipients.map(func p = p.toText()).sort(Text.compare);count=null};
     Map.add(broadcastRelayReceipts,Text.compare,receiptKey,receipt);
@@ -1321,6 +1326,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({caller}) func reconcile_competition_broadcast(club:Text,key:Text) : async {#Ok:?Nat16;#Err:Text} {
     let receiptKey=club # "\u{1f}" # key;
+    if (erasedBroadcastRelays.get(receiptKey) != null) return #Err("Broadcast proof terminally erased");
     let r=Map.get(broadcastRelayReceipts,Text.compare,receiptKey)??return #Err("Original relay receipt missing");
     if(not trustedCompetition(caller) or caller!=r.authority or isTransferFenced(club))return #Err("Original competition authority required");
     switch(r.count){case (?n)return #Ok(?n);case null {}};
@@ -2875,6 +2881,36 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?account) { #Ok(account) };
       case null { #Err("Unlinked identity") };
     }
+  };
+
+  // Freeze only account-linked broadcast work. Identity supplies aliases, not the browser.
+  public shared ({ caller }) func prepare_my_broadcast_erasure() : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (isGovernor(caller)) return #Err("Governor erasure forbidden");
+    if (broadcastErasureSubjects.get(caller) != null) return #Ok;
+    let configured = identityAccessCanister;
+    let account = await AccountAdmission.Gate(true, configured).account(caller);
+    if (configured != identityAccessCanister) return #Err("Identity authority changed");
+    let a = account ?? return #Err("Authoritative account aliases unavailable");
+    if (a.principals.size() == 0 or a.principals.size() > 8 or a.principals.any(isGovernor)) return #Err("Invalid erasure account");
+    for (p in a.principals.values()) broadcastErasureSubjects.add(p, a.principals);
+    #Ok
+  };
+  public shared ({ caller }) func purge_my_broadcast_data() : async { #Ok : Nat; #Err : Text } {
+    auth(caller);
+    let subjects = broadcastErasureSubjects.get(caller) ?? return #Err("Prepare broadcast cleanup first");
+    let affected = broadcastRelayReceipts.entries().filter(func pair = subjects.any(func p = p == pair.1.user or pair.1.officials.any(func o = o == p)) or BroadcastErasure.matches(subjects, pair.1.audience.find(func u = BroadcastErasure.matches(subjects, u)) ?? "")).toArray();
+    if (affected.size() > 200) return #Err("Broadcast cleanup inventory exceeds bound");
+    if (affected.any(func pair = pair.1.count == null)) return #Err("Original broadcast relay must settle before erasure");
+    for ((key, r) in affected.values()) {
+      let queue : actor { retire_competition_broadcast : shared (Text, Text, [Text], Nat16) -> async { #Ok; #Err : Text } } = actor(r.queue.toText());
+      let count = r.count ?? return #Err("Original relay count missing");
+      switch (try { await (with timeout = 10) queue.retire_competition_broadcast(r.club, r.key, r.audience, count) } catch (_) { return #Err("Queue cleanup unconfirmed; retry without resending") }) { case (#Err(e)) return #Err(e); case (#Ok) {} };
+      if (broadcastRelayReceipts.get(key) != ?r) return #Err("Relay changed during cleanup");
+      erasedBroadcastRelays.add(key, true);
+      broadcastRelayReceipts.remove(key);
+    };
+    #Ok(affected.size())
   };
 
   // Self-service erasure revokes all linked principals' club authority.

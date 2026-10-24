@@ -1,4 +1,5 @@
 import AccountAdmission "../../shared/AccountAdmission";
+import BroadcastErasure "../../shared/BroadcastErasure";
 import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
 import Map "mo:core/Map";
@@ -65,6 +66,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var items : [Types.Notification];
   var competitionBroadcastReceipts : Map.Map<Text, { club : Text; related : Text; body : Text; count : Nat16 }>;
   var competitionBroadcastAudiences : Map.Map<Text, [Text]>;
+  var broadcastErasureSubjects : Map.Map<Principal, [Principal]>;
+  var erasedCompetitionBroadcasts : Map.Map<Text, Bool>;
   var leases : [Types.Lease];
   var governor : ?Principal;
 
@@ -425,6 +428,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   func recipientAllowed(user : Text, kind : Text) : Bool {
+    if (recipientFenced(user)) return false;
     switch (findPreference(user)) {
       case (?prefs) { categoryAllowed(prefs, kind) };
       case null { true };
@@ -610,6 +614,8 @@ persistent actor class Main(governorInit : Principal) = this {
     if (clubDomainCanister != ?caller or isFenced(club)) return #Err("Trusted club relay required");
     if (users.size() > 500 or body.size() > 4000 or not valid(club) or not valid(related) or key.size() > 512) return #Err("Invalid broadcast scope");
     let receiptKey = club # "\u{1f}" # key;
+    if (erasedCompetitionBroadcasts.get(receiptKey) != null) return #Err("Broadcast proof terminally erased; no replay");
+    if (users.any(recipientFenced)) return #Err("Broadcast recipient cleanup pending");
     let audience = users.sort(Text.compare);
     if (audience.any(func user = not valid(user))) return #Err("Invalid broadcast recipient");
     switch (Map.get(competitionBroadcastReceipts, Text.compare, receiptKey)) {
@@ -639,9 +645,51 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({caller}) func read_competition_broadcast_receipt(club:Text,key:Text) : async {#Ok:?{club:Text;related:Text;body:Text;count:Nat16;audience:[Text]};#Err:Text} {
     if(clubDomainCanister!=?caller)return #Err("Trusted club authority required");
     let receiptKey=club # "\u{1f}" # key;
+    if (erasedCompetitionBroadcasts.get(receiptKey) != null) return #Err("Broadcast proof terminally erased");
     let r=Map.get(competitionBroadcastReceipts,Text.compare,receiptKey)??return #Ok(null);
     let audience=Map.get(competitionBroadcastAudiences,Text.compare,receiptKey)??return #Err("Broadcast audience evidence missing");
     #Ok(?{club=r.club;related=r.related;body=r.body;count=r.count;audience})
+  };
+
+  // Only the original club relay can retire exact settled proof. Unknown worker
+  // claims remain untouched; a terminal marker prevents enqueue/reconciliation replay.
+  public shared ({ caller }) func retire_competition_broadcast(club : Text, key : Text, audience : [Text], count : Nat16) : async { #Ok; #Err : Text } {
+    if (clubDomainCanister != ?caller) return #Err("Trusted club authority required");
+    let receiptKey = club # "\u{1f}" # key;
+    if (erasedCompetitionBroadcasts.get(receiptKey) != null) return #Ok;
+    let r = competitionBroadcastReceipts.get(receiptKey) ?? return #Err("Original queue proof missing");
+    if (r.count != count or competitionBroadcastAudiences.get(receiptKey) != ?audience) return #Err("Original queue proof differs");
+    if (items.any(func n = n.club == club and n.idempotency_key == key and n.status == #Processing)) return #Err("Worker delivery must settle before erasure");
+    erasedCompetitionBroadcasts.add(receiptKey, true);
+    competitionBroadcastAudiences.remove(receiptKey);
+    #Ok
+  };
+  public shared ({ caller }) func prepare_my_broadcast_erasure() : async { #Ok; #Err : Text } {
+    authenticated(caller);
+    if (fenceGov(caller)) return #Err("Governor erasure forbidden");
+    if (broadcastErasureSubjects.get(caller) != null) return #Ok;
+    let configured = identityAccessCanister;
+    let account = await AccountAdmission.Gate(true, configured).account(caller);
+    if (configured != identityAccessCanister) return #Err("Identity authority changed");
+    let a = account ?? return #Err("Authoritative account aliases unavailable");
+    if (a.principals.size() == 0 or a.principals.size() > 8 or a.principals.any(fenceGov)) return #Err("Invalid erasure account");
+    for (p in a.principals.values()) broadcastErasureSubjects.add(p, a.principals);
+    #Ok
+  };
+  public shared ({ caller }) func purge_my_data() : async { #Ok : Nat; #Err : Text } {
+    authenticated(caller);
+    let subjects = broadcastErasureSubjects.get(caller) ?? return #Err("Prepare broadcast cleanup first");
+    if (items.any(func n = BroadcastErasure.matches(subjects, n.user) and n.status == #Processing)) return #Err("Worker delivery must settle before erasure");
+    if (competitionBroadcastAudiences.entries().any(func pair = pair.1.any(func u = BroadcastErasure.matches(subjects, u)))) return #Err("Original club relay cleanup required before queue erasure");
+    let removed = items.filter(func n = BroadcastErasure.matches(subjects, n.user));
+    for (n in removed.values()) clearLease(n.id);
+    items := items.filter(func n = not BroadcastErasure.matches(subjects, n.user));
+    scheduled := scheduled.filter(func n = not BroadcastErasure.matches(subjects, n.author));
+    preferences := preferences.filter(func n = not BroadcastErasure.matches(subjects, n.user));
+    device_tokens := device_tokens.filter(func n = not BroadcastErasure.matches(subjects, n.user));
+    deviceVersions := deviceVersions.filter(func n = not BroadcastErasure.matches(subjects, n.user));
+    digests := digests.map(func n = { n with mentions = n.mentions.filter(func u = not BroadcastErasure.matches(subjects, u)) });
+    #Ok(removed.size())
   };
 
   // ---- Browser inbox surface ----
@@ -1877,6 +1925,9 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
   func recipientFenced(user : Text) : Bool {
+    for ((subject, _) in broadcastErasureSubjects.entries()) {
+      if (subject.toText() == user or "principal:" # subject.toText() == user) return true;
+    };
     for ((subject, _) in removal_subjects.entries()) {
       if (subject.toText() == user or "principal:" # subject.toText() == user) return true;
     };
