@@ -1717,6 +1717,7 @@ type Main =
                                       Err: text;
                                       Ok: opt text;
                                     }) query;
+   read_vault_erasure_scope: (club: text, team: opt text) -> (bool) query;
    record_presence_heartbeat: () -> (variant {
                                        Err: text;
                                        Ok;

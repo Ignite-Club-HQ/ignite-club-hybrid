@@ -49,9 +49,19 @@ export interface CleanupRecord {
   'competition' : [] | [string],
 }
 export interface Main {
+  'acknowledge_file_upload' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'begin_file_cleanup' : ActorMethod<
     [string],
     { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
+  'begin_file_upload' : ActorMethod<
+    [VaultFile],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'clear_pinned_vault' : ActorMethod<
@@ -303,6 +313,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_my_upload_page' : ActorMethod<
+    [string, string],
+    { 'Ok' : { 'ids' : Array<string>, 'next' : [] | [string] } } |
+      { 'Err' : string }
+  >,
   'read_resource_club' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [string] } |
@@ -331,6 +346,11 @@ export interface Main {
   'reconcile_erased_file' : ActorMethod<
     [string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'recover_file_upload' : ActorMethod<
+    [string],
+    { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
   'register_file' : ActorMethod<
@@ -439,6 +459,11 @@ export interface Main {
   >,
   'set_vault_stores' : ActorMethod<
     [Array<Principal>],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'sweep_vault_lifecycle' : ActorMethod<
+    [],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
