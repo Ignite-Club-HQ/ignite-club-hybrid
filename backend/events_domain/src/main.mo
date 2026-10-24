@@ -18,6 +18,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Text "mo:core/Text";
+import Iter "mo:core/Iter";
 import Blob "mo:core/Blob";
 import Char "mo:core/Char";
 import Error "mo:core/Error";
@@ -693,7 +694,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public shared ({caller}) func upsert_competition_match_events(input : Types.MatchEventInput) : async {#Ok:[Text];#Err:Text} {
     if(competitionDomainCanister!=?caller)return #Err("Trusted competition canister only");
-    let revision=switch(Map.get(fixtureMaterializations,Text.compare,input.match_id)){case null 1;case (?r){if(r.input==input)r.revision else r.revision+1}};
+    let revision:Nat64=switch(Map.get(fixtureMaterializations,Text.compare,input.match_id)){case null 1;case (?r){if(r.input==input)r.revision else r.revision+1}};
     await materializeFixture(caller,input,revision)
   };
   public shared ({caller}) func materialize_competition_fixture(input : Types.MatchEventInput, revision : Nat64) : async {#Ok:[Text];#Err:Text} {

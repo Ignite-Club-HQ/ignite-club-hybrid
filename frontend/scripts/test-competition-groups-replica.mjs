@@ -24,6 +24,10 @@ try {
   for (const actor of [a, b, c, v]) actor.setPrincipal(governor);
   ok(await a.create_club('host', 'Host FC', 'host', [], []));
   ok(await b.create_club('guest', 'Guest FC', 'guest', [], []));
+  for(const [actor,club] of [[a,'host'],[b,'guest']]) {
+    ok(await actor.save_season({id:'season',club_id:club,name:'Season',status:'active',start_date:'',end_date:'',created_at_ms:0n,updated_at_ms:0n}));
+    ok(await actor.set_season_public_eoi_config('season',[],'{}'));
+  }
   const home = ok(await a.create_shell_team_invite('host', 'Home', [], [])).id;
   const away = ok(await b.create_shell_team_invite('guest', 'Away', [], [])).id;
   ok(await a.add_role_grant(manager, 'host', 'club_admin', []));
