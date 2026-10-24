@@ -559,7 +559,7 @@ persistent actor class Main(governorInit : Principal) = this {
       });
       switch (seriesId) { case null {}; case (?id) {
         let first = created[0]; let last = created[created.size() - 1];
-        series := series.concat([{ id; club_id = input.club_id; team_id = input.team_id; title = input.title; description = input.description; event_type = input.event_type; location = input.location; frequency = "weekly"; first_starts_at_ms = first.starts_at_ms; first_ends_at_ms = first.ends_at_ms; until_ms = last.starts_at_ms; creator = caller; revision = 1; deleted = false; rsvp_audience = input.rsvp_audience; adults_only = input.adults_only; restricted_to_roles = input.restricted_to_roles; target_team_ids = input.target_team_ids }])
+        series := series.concat([{ id; club_id = input.club_id; team_id = input.team_id; title = input.title; description = input.description; event_type = input.event_type; location = input.location; frequency = "weekly"; first_starts_at_ms = first.starts_at_ms; first_ends_at_ms = first.ends_at_ms; until_ms = last.starts_at_ms; creator = caller; revision = (1 : Nat64); deleted = false; rsvp_audience = input.rsvp_audience; adults_only = input.adults_only; restricted_to_roles = input.restricted_to_roles; target_team_ids = input.target_team_ids }])
       } };
       for (event in created.values()) {
         for (duty in input.duties.values()) switch (duty.account_id) {
@@ -4193,7 +4193,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let authority = clubDomainCanister ?? return #Err("Club authority unavailable");
     let service : actor { relay_event_notice : shared ([Text], Text, Text, Text, Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(authority.toText());
     let timestamp = nowMs();
-    eventNoticeAttempts := eventNoticeAttempts.concat([{ event_id = event.id; kind; users; key; created_at_ms = timestamp; status = "pending"; queued = 0 }]);
+    eventNoticeAttempts := eventNoticeAttempts.concat([{ event_id = event.id; kind; users; key; created_at_ms = timestamp; status = "pending"; queued = (0 : Nat16) }]);
     let body = if (kind == "event_reminder") "Please RSVP for the event" else if (kind == "event_invite") "You have been invited to an event" else if (kind == "event_cancelled") "An event has been cancelled" else "An event duty has been completed";
     let result = try { await (with timeout = 10) service.relay_event_notice(users, event.club_id, kind, body, key, event.id) } catch (_) {
       eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) ({ a with status = "unknown" }) else a);
