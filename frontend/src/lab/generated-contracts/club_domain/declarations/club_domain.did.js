@@ -764,6 +764,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'can_accept_public_eoi' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
     'cancel_media_quota' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Nat],
         [Result],

@@ -545,6 +545,7 @@ type Main =
                          Err: text;
                          Ok: nat;
                        });
+   can_accept_public_eoi: (club_id: text, season_id: text) -> (bool);
    cancel_media_quota: (token: text, club_id: text, category: text, bytes:
     nat, cycle: nat) -> (Result);
    cancel_retained_media: (token: text, club: text, path: text, bytes:

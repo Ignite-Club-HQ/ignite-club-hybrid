@@ -365,6 +365,7 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'can_accept_public_eoi' : ActorMethod<[string, string], boolean>,
   'cancel_media_quota' : ActorMethod<
     [string, string, string, bigint, bigint],
     Result

@@ -383,6 +383,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    can_accept_public_eoi(club_id: string, season_id: string): Promise<boolean>;
     cancel_media_quota(token: string, club_id: string, category: string, bytes: bigint, cycle: bigint): Promise<Result>;
     cancel_retained_media(token: string, club: string, path: string, bytes: bigint): Promise<Result__1>;
     /**
@@ -3513,6 +3514,10 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.bulk_add_team_members(arg0, arg1, arg2, arg3);
         return from_candid_variant_n37(result);
+    }
+    async can_accept_public_eoi(arg0: string, arg1: string): Promise<boolean> {
+        const result = await this.actor.can_accept_public_eoi(arg0, arg1);
+        return result;
     }
     async cancel_media_quota(arg0: string, arg1: string, arg2: string, arg3: bigint, arg4: bigint): Promise<Result> {
         const result = await this.actor.cancel_media_quota(arg0, arg1, arg2, arg3, arg4);
