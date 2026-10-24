@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, MapPin, Bell, Calendar, FileText, DollarSign, ClipboardList, X, Star, Trash2, UserPlus } from "lucide-react";
@@ -267,6 +267,7 @@ function SupabaseCreateEventPage() {
   const { data: organisableCompetitions = [] } = useOrganisableCompetitions(true);
   const { data: competitionTeamCount = 0 } = useCompetitionAcceptedCount(competitionId);
   const [miniLeagueId, setMiniLeagueId] = useState(presetMiniLeagueId || "");
+  const createRequestRef = useRef<{ payload: string; id: string } | null>(null);
   const [eventDateTime, setEventDateTime] = useState(() => {
     if (prefillDate) return prefillDate;
     const now = new Date();
@@ -1287,18 +1288,11 @@ function SupabaseCreateEventPage() {
         if (childDates.length === 0) childDates = null;
       }
 
-      // Routed through the hybrid workflow: Supabase uses the atomic
-      // create_event_with_duties RPC; the ICP branch creates the event on the
-      // events_domain canister and syncs duties as follow-up calls.
+      const payloadKey = JSON.stringify([baseEventData, parsedDateTime.toISOString(), childDates, dutyPayload]);
+      if (createRequestRef.current?.payload !== payloadKey) createRequestRef.current = { payload: payloadKey, id: crypto.randomUUID() };
       const newEventId = await createEventTransaction(supabase, {
-        event: baseEventData,
-        eventDate: parsedDateTime.toISOString(),
-        childDates,
-        duties: dutyPayload,
-        onBackgroundDone: (failed) => {
-          refreshEventCaches(queryClient, user!.id);
-          if (failed > 0) toast({ title: "Some event details didn't save", description: `${failed} follow-up item(s) (dates, duties or reminders) failed. Please check the event.`, variant: "destructive" });
-        },
+        requestId: createRequestRef.current.id,
+        event: baseEventData, eventDate: parsedDateTime.toISOString(), childDates, duties: dutyPayload,
       });
       if (!newEventId) throw new Error("Event could not be created.");
 

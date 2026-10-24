@@ -144,6 +144,7 @@ interface Event {
   title: string;
   type: EventType;
   event_date: string;
+  start_time?: string | null;
   address: string | null;
   suburb: string | null;
   location_name: string | null;

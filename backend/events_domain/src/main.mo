@@ -562,7 +562,8 @@ persistent actor class Main(governorInit : Principal) = this {
         series := series.concat([{ id; club_id = input.club_id; team_id = input.team_id; title = input.title; description = input.description; event_type = input.event_type; location = input.location; frequency = "weekly"; first_starts_at_ms = first.starts_at_ms; first_ends_at_ms = first.ends_at_ms; until_ms = last.starts_at_ms; creator = caller; revision = (1 : Nat64); deleted = false; rsvp_audience = input.rsvp_audience; adults_only = input.adults_only; restricted_to_roles = input.restricted_to_roles; target_team_ids = input.target_team_ids }])
       } };
       for (event in created.values()) {
-        for (duty in input.duties.values()) switch (duty.account_id) {
+        // Preserve existing creation behavior: assignments belong to the first occurrence.
+        if (event.id == created[0].id) for (duty in input.duties.values()) switch (duty.account_id) {
           case (?account_id) duties := duties.concat([{ event_id = event.id; account_id; duty = duty.duty; completed = false }]);
           case null openDuties := openDuties.concat([{ id = "open-" # event.id # "-" # openDuties.size().toText(); event_id = event.id; duty = duty.duty; claimed_by = null; created_at_ms = timestamp }]);
         };
@@ -1491,6 +1492,8 @@ persistent actor class Main(governorInit : Principal) = this {
     let created = records.map(func(r : Types.AttendanceInput) : Types.EventAttendance {
       { event_id; subject_id = r.subject_id; subject_kind = r.subject_kind; status = r.status; marked_by = caller; marked_at_ms = now; notes = r.notes }
     });
+    eventSetupReceipts := eventSetupReceipts.filter(func((_, _, _, result)) = not result.event_ids.any(func(id) = inDoomed(id)));
+    eventNoticeAttempts := eventNoticeAttempts.filter(func(a) = not inDoomed(a.event_id));
     eventAttendance := eventAttendance.filter(func(item) = not (item.event_id == event_id and created.any(func(c) = c.subject_id == item.subject_id and c.subject_kind == item.subject_kind)));
     eventAttendance := eventAttendance.concat(created);
     #Ok(created)
@@ -4082,7 +4085,7 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     let event = events.find(func(e) = e.id == event_id) ?? return #Err("Event not found");
     if (not (await freshEventManager(caller, event))) return #Err("Event management forbidden");
-    await fanOutReminder(event);
+    await fanOutReminder(event, ?caller);
   
     } finally { removalReceiver.leave(caller) };
   };
@@ -4211,17 +4214,18 @@ persistent actor class Main(governorInit : Principal) = this {
       }
     }
   };
-  func fanOutReminder(event : Types.Event) : async { #Ok : Nat16; #Err : Text } {
+  func fanOutReminder(event : Types.Event, requestedBy : ?Principal) : async { #Ok : Nat16; #Err : Text } {
     if (event.cancelled or event.deleted or event.starts_at_ms <= nowMs()) return #Err("Event is not awaiting RSVP");
-    if (not removalReceiver.enter(event.creator)) return #Err("Event author fenced");
+    let manager = requestedBy ?? event.creator;
+    if (not removalReceiver.enter(manager)) return #Err("Event manager fenced");
     try {
-      await admitAccount(event.creator);
-      if (not (await freshEventManager(event.creator, event))) return #Err("Event author no longer authorized");
+      await admitAccount(manager);
+      if (not (await freshEventManager(manager, event))) return #Err("Event manager no longer authorized");
       let subjects = switch (await eventSubjects(event)) { case (#Err(e)) return #Err(e); case (#Ok(rows)) rows };
-      if (removalReceiver.denied(event.creator)) return #Err("Event author fenced");
+      if (removalReceiver.denied(manager) or not (await freshEventManager(manager, event))) return #Err("Event manager authorization changed");
       let users = EventAudience.users(EventAudience.unanswered(event, subjects, rsvps));
       await sendEventNotice(event, "event_reminder", users, "event-reminder-" # event.id # "-" # nowMs().toText())
-    } finally { removalReceiver.leave(event.creator) }
+    } finally { removalReceiver.leave(manager) }
   };
   public shared ({ caller }) func send_individual_event_reminder(event_id : Text, account_id : ?Text, child_id : ?Text) : async { #Ok : Nat16; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
@@ -4232,7 +4236,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if (event.cancelled or event.deleted or event.starts_at_ms <= nowMs()) return #Err("Event is not awaiting RSVP");
       let all = switch (await eventSubjects(event)) { case (#Err(e)) return #Err(e); case (#Ok(rows)) rows };
       let subjects = EventAudience.unanswered(event, all, rsvps).filter(func(s) = switch (child_id) { case (?id) s.child == ?id; case null s.child == null and account_id == ?s.user });
-      if (removalReceiver.denied(caller)) return #Err("Account fenced");
+      if (removalReceiver.denied(caller) or not (await freshEventManager(caller, event))) return #Err("Account or permission changed");
       let count = await sendEventNotice(event, "event_reminder", EventAudience.users(subjects), "individual-event-reminder-" # event.id # "-" # nowMs().toText());
       switch (count) { case (#Ok(0)) #Err("No eligible recipients or already reminded in the last 24 hours"); case _ count }
     } finally { removalReceiver.leave(caller) }
@@ -4244,7 +4248,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let event = events.find(func(e) = e.id == event_id) ?? return #Err("Event not found");
       if (not (await freshEventManager(caller, event))) return #Err("Event management forbidden");
       let subjects = switch (await eventSubjects(event)) { case (#Err(e)) return #Err(e); case (#Ok(rows)) rows };
-      if (removalReceiver.denied(caller) or not events.any(func(e) = e == event)) return #Err("Event changed");
+      if (removalReceiver.denied(caller) or not events.any(func(e) = e == event) or not (await freshEventManager(caller, event))) return #Err("Event or permission changed");
       #Ok(Nat32.fromNat(EventAudience.users(subjects).size()))
     } finally { removalReceiver.leave(caller) }
   };
@@ -4257,7 +4261,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if (kind == "event_cancelled" and not event.cancelled) return #Err("Event is not cancelled");
       if (not (await freshEventManager(caller, event))) return #Err("Event management forbidden");
       let subjects = switch (await eventSubjects(event)) { case (#Err(e)) return #Err(e); case (#Ok(rows)) rows };
-      if (removalReceiver.denied(caller)) return #Err("Account fenced");
+      if (removalReceiver.denied(caller) or not (await freshEventManager(caller, event))) return #Err("Account or permission changed");
       let users = EventAudience.users(subjects).filter(func(id) = id != caller.toText());
       await sendEventNotice(event, kind, users, kind # "-" # event.id # "-" # (if (kind == "event_invite") "invite" else event.revision.toText()))
     } finally { removalReceiver.leave(caller) }
@@ -4276,15 +4280,19 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) }
   };
   public shared ({ caller }) func get_schedule_view() : async ?Text {
-    await admitAccount(caller); auth(caller);
-    if (removalReceiver.denied(caller)) throw Error.reject("Account fenced");
-    scheduleViewPreferences.get(caller)
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
+    try { await admitAccount(caller); auth(caller);
+      if (removalReceiver.denied(caller)) throw Error.reject("Account fenced");
+      scheduleViewPreferences.get(caller)
+    } finally { removalReceiver.leave(caller) }
   };
   public shared ({ caller }) func set_schedule_view(view : Text) : async { #Ok; #Err : Text } {
-    await admitAccount(caller); auth(caller);
-    if (removalReceiver.denied(caller)) return #Err("Account fenced");
-    if (view != "list" and view != "calendar") return #Err("Invalid schedule view");
-    scheduleViewPreferences.add(caller, view); #Ok
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
+    try { await admitAccount(caller); auth(caller);
+      if (removalReceiver.denied(caller)) return #Err("Account fenced");
+      if (view != "list" and view != "calendar") return #Err("Invalid schedule view");
+      scheduleViewPreferences.add(caller, view); #Ok
+    } finally { removalReceiver.leave(caller) }
   };
 
   // ---- Scheduled (auto) RSVP reminders ----
@@ -4366,7 +4374,7 @@ persistent actor class Main(governorInit : Principal) = this {
             if (event.deleted or event.cancelled or event.starts_at_ms <= now) {
               markReminderSent(r.event_id);
             } else if (now >= dueAt) {
-              switch (await fanOutReminder(event)) {
+              switch (await fanOutReminder(event, null)) {
                 case (#Ok(_)) markReminderSent(r.event_id);
                 case (#Err(_)) {};
               };
@@ -4454,7 +4462,7 @@ persistent actor class Main(governorInit : Principal) = this {
         } catch (_) { #Err("Scheduled reminder queue call failed") }
       };
     }
-    } finally { removalReceiver.leave(event.creator) };
+    } finally { removalReceiver.leave(manager) };
   };
 
   func fanOutDutyTeamReminder(event : Types.Event, team_id : Text) : async { #Ok : Nat16; #Err : Text } {
@@ -4489,7 +4497,7 @@ persistent actor class Main(governorInit : Principal) = this {
         } catch (_) { #Err("Duty reminder queue call failed") }
       };
     }
-    } finally { removalReceiver.leave(event.creator) };
+    } finally { removalReceiver.leave(manager) };
   };
 
   func markReminderSent(event_id : Text) {
@@ -4533,7 +4541,7 @@ persistent actor class Main(governorInit : Principal) = this {
             ignore await queue.fan_out(recipients, event.club_id, "photo_prompt_reminder", "Got photos from \"" # event.title # "\"? Add them to the team gallery.", "photo-prompt-" # event.id, ?event.id);
           } catch (_) {};
         };
-        } finally { removalReceiver.leave(event.creator) };
+        } finally { removalReceiver.leave(manager) };
       };
     };
     if (photoPromptsSent.size() > 5000) photoPromptsSent := photoPromptsSent.sliceToArray(photoPromptsSent.size() - 5000, photoPromptsSent.size());

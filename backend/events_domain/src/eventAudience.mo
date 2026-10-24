@@ -24,10 +24,10 @@ module {
     let allowed = if (restricted.size() > 0) restricted else switch (event.rsvp_audience) {
       case ( ?"players_only") ["player"];
       case ( ?"parents_only") ["parent"];
-      case _ ["player", "parent"];
+      case _ [];
     };
     for (role in membership.roles.values()) {
-      if (teamInScope(event, role.team_id) and allowed.any(func(r) = r == role.role)) {
+      if (teamInScope(event, role.team_id) and (allowed.size() == 0 or allowed.any(func(r) = r == role.role) or role.role == "club_admin")) {
         let user = role.user.toText();
         if (not out.any(func(s) = s.user == user and s.child == null)) out := out.concat([{ user; child = null }]);
       }
