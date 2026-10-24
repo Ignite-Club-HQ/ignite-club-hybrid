@@ -2899,7 +2899,7 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func purge_my_broadcast_data() : async { #Ok : Nat; #Err : Text } {
     auth(caller);
     let subjects = broadcastErasureSubjects.get(caller) ?? return #Err("Prepare broadcast cleanup first");
-    let affected = broadcastRelayReceipts.entries().filter(func pair = subjects.any(func p = p == pair.1.user or pair.1.officials.any(func o = o == p)) or BroadcastErasure.matches(subjects, pair.1.audience.find(func u = BroadcastErasure.matches(subjects, u)) ?? "")).toArray();
+    let affected = broadcastRelayReceipts.entries().filter(func pair = subjects.any(func p = p == pair.1.user or pair.1.officials.any(func o = o == p)) or pair.1.audience.any(func u = BroadcastErasure.matches(subjects, u))).toArray();
     if (affected.size() > 200) return #Err("Broadcast cleanup inventory exceeds bound");
     if (affected.any(func pair = pair.1.count == null)) return #Err("Original broadcast relay must settle before erasure");
     for ((key, r) in affected.values()) {

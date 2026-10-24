@@ -778,6 +778,9 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func check_my_broadcast_erasure() : async { #Ok; #Err : Text } {
     auth(caller);
     let subjects = broadcastErasureSubjects.get(caller) ?? return #Err("Prepare broadcast cleanup first");
+    checkBroadcastErasure(subjects)
+  };
+  func checkBroadcastErasure(subjects : [Principal]) : { #Ok; #Err : Text } {
     for ((key, r) in broadcastDeliveries.entries()) {
       let plan = broadcastPlans.get(key);
       let affected = subjects.any(func p = p == r.sender) or (switch plan { case (?rows) rows.any(func t = t.officials.any(func p = subjects.any(func s = s == p))); case null false });
@@ -792,8 +795,8 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     if (isGovernor(caller)) return #Err("Governor erasure forbidden");
     // Preparation is durable and blocks new broadcasts, including suspended callbacks.
-    if (broadcastErasureSubjects.get(caller) == null) return #Err("Prepare broadcast cleanup first");
-    for ((key, r) in Map.entries(broadcastDeliveries)) if (r.unknown != null and (r.sender == caller or (switch (Map.get(broadcastPlans, Text.compare, key)) { case (?plan) plan.any(func t = t.officials.any(func p = p == caller)); case null false }))) return #Err("Resolve original broadcast before account erasure");
+    let subjects = broadcastErasureSubjects.get(caller) ?? return #Err("Prepare broadcast cleanup first");
+    switch (checkBroadcastErasure(subjects)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
     var count = roles.filter(func r = r.user == caller).size();
     roles := roles.filter(func r = r.user != caller);
     count += competitionInvites.filter(func r = r.invitee == caller or r.created_by == caller).size();
@@ -810,21 +813,21 @@ persistent actor class Main(governorInit : Principal) = this {
     personalCompetitionOwners := personalCompetitionOwners.filter(func r = r.1 != caller);
     for((key,r) in Map.entries(fixtureReceipts).toArray().values())if(r.creator==caller){Map.remove(fixtureReceipts,Text.compare,key);Map.add(fixtureReceipts,Text.compare,"erased:" # r.match_id,{r with creator=Principal.anonymous()})};
     tokens := tokens.map(func r = if (r.issued_by == caller) ({ r with used = true; issued_by = Principal.anonymous() }) else r);
-    broadcasts := broadcasts.map(func r = if (r.sender == caller) ({ r with sender = Principal.anonymous() }) else r);
+    broadcasts := broadcasts.map(func r = if (subjects.any(func p = p == r.sender)) ({ r with sender = Principal.anonymous() }) else r);
     eoiSubmissions := eoiSubmissions.filter(func r = r.parent_user_id != ?caller);
     playhqClaims := playhqClaims.filter(func r = r.user != caller);
     bulkAccessPrincipals := bulkAccessPrincipals.filter(func p = p != caller);
     // Keep unknown-write evidence, but scrub identity and make it non-replayable.
     for ((key, receipt) in Map.entries(broadcastDeliveries).toArray().values()) {
-      if (receipt.sender == caller) {
+      if (subjects.any(func p = p == receipt.sender)) {
         Map.remove(broadcastDeliveries, Text.compare, key);
         Map.add(broadcastDeliveries, Text.compare, "erased:" # receipt.broadcast_id, { receipt with sender = Principal.anonymous() });
-        switch(Map.get(broadcastPlans,Text.compare,key)){case (?plan){Map.remove(broadcastPlans,Text.compare,key);Map.add(broadcastPlans,Text.compare,"erased:" # receipt.broadcast_id,plan.map(func t = {t with officials=t.officials.filter(func p = p!=caller)}))};case null {}};
+        switch(Map.get(broadcastPlans,Text.compare,key)){case (?plan){Map.remove(broadcastPlans,Text.compare,key);Map.add(broadcastPlans,Text.compare,"erased:" # receipt.broadcast_id,plan.map(func t = {t with officials=t.officials.filter(func p = not subjects.any(func s = s == p))}))};case null {}};
       }
     };
     // Officials also occur in other senders' frozen plans.
     for ((key, plan) in Map.entries(broadcastPlans).toArray().values()) {
-      Map.add(broadcastPlans, Text.compare, key, plan.map(func t = { t with officials = t.officials.filter(func p = p != caller) }));
+      Map.add(broadcastPlans, Text.compare, key, plan.map(func t = { t with officials = t.officials.filter(func p = not subjects.any(func s = s == p)) }));
     };
     #Ok(count)
   };
@@ -1371,6 +1374,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if (removalReceiver.denied(caller) or compFenced(input.competition_id) or not canManageCompetition(caller,input.competition_id)) return #Err("Competition manager required");
       if (operation.size() == 0 or operation.size() > 128 or input.home_team == input.away_team or not valid(input.home_team) or not valid(input.away_team)) return #Err("Invalid fixture request");
       let key = caller.toText() # "\u{1f}" # operation;
+      if (broadcastErasureSubjects.get(caller) != null) return #Err("Broadcast account cleanup pending or complete");
       switch (Map.get(fixtureReceipts, Text.compare, key)) {
         case (?r) {
           if (r.creator != caller or r.input != input) return #Err("Fixture operation conflict");
