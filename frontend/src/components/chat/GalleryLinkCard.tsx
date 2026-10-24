@@ -1,3 +1,5 @@
+import { getCachedTeam } from "@/lib/clubTeamCache";
+import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ImageIcon, ChevronRight } from "lucide-react";
@@ -20,9 +22,10 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
   const isIcp = resolveAuthBackend() === "icp";
+  const { user, sessionRestoration } = useAuth();
 
   const { data: card, isLoading } = useQuery({
-    queryKey: ["gallery-chat-card", cardId],
+    queryKey: ["gallery-chat-card", cardId, user?.id, isIcp],
     queryFn: async () => {
       if (isIcp) {
         return withFeatureBackend("media", {
@@ -32,7 +35,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
             // Team name resolves from club_domain; the canister Event record
             // has no opponent field, so opponentLabel/eventStart stay null and
             // the headline falls back to the team-name wording.
-            const team = await withFeatureBackend("membership", { supabase: async () => null, icp: scoped => getLiveTeam(scoped, row.team_id) }, { teamId: row.team_id });
+            const team = getCachedTeam(row.team_id) ?? await withFeatureBackend("membership", { supabase: async () => null, icp: scoped => getLiveTeam(scoped, row.team_id) }, { teamId: row.team_id });
             const teamRow = Array.isArray(team) ? team[0] : team;
             return {
               id: row.id,
@@ -70,7 +73,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
 
       return data ? { ...data, opponentLabel, eventStart } : null;
     },
-    enabled: !!cardId,
+    enabled: !!cardId && !!user && sessionRestoration === 'authenticated',
     staleTime: 30 * 1000,
   });
 

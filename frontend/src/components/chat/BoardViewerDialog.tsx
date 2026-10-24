@@ -5,6 +5,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { boardQueryOptions } from "@/lib/boardReadRepository";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveTeamRoleGrants } from "@/live/features/membership";
+import { getCachedTeam } from "@/lib/clubTeamCache";
+
 // Football-only build: netball / basketball boards archived (see archive/sports/).
 const PitchBoard = lazyWithRetry(() => import("@/components/pitch/PitchBoard"));
 
@@ -39,6 +47,9 @@ export function BoardViewerDialog({
   onOpenChange,
   gameId,
 }: BoardViewerDialogProps) {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === 'icp';
   const [game, setGame] = useState<LoadedGame | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,6 +62,19 @@ export function BoardViewerDialog({
     setGame(null);
 
     (async () => {
+      if (isIcp) {
+        const row = await queryClient.ensureQueryData(boardQueryOptions(gameId, user?.id, true));
+        if (!row) throw new Error('This board is no longer available.');
+        const grants = await withFeatureBackend('membership', {
+          supabase: async () => { throw new Error('unreachable'); },
+          icp: ctx => listLiveTeamRoleGrants(ctx, gameId),
+        }, { teamId: gameId });
+        if (cancelled) return;
+        setGame({ teamId: gameId, teamName: getCachedTeam(gameId)?.name ?? 'Team', sport: 'soccer',
+          members: grants.map(r => ({ id: `${gameId}:${r.user.toText()}:${r.role}`, user_id: r.user.toText(), role: r.role, profiles: null })) });
+        setLoading(false);
+        return;
+      }
       const { data: row, error: rowErr } = await supabase
         .from("active_games")
         .select("team_id, teams(id, name, clubs!club_id(sport))")
@@ -101,12 +125,14 @@ export function BoardViewerDialog({
         members,
       });
       setLoading(false);
-    })();
+    })().catch(() => {
+      if (!cancelled) { setError('This board could not be opened just now.'); setLoading(false); }
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [open, gameId]);
+  }, [open, gameId, isIcp, queryClient, user?.id]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

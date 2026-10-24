@@ -7,6 +7,9 @@ import { detectGameBoardKind, type GameBoardKind } from "@/lib/sportDetection";
 import { BoardViewerDialog } from "./BoardViewerDialog";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
+import { useAuth } from "@/hooks/useAuth";
+import { boardQueryOptions } from "@/lib/boardReadRepository";
+
 interface BoardLinkCardProps {
   gameId: string;
 }
@@ -23,49 +26,11 @@ export const BoardLinkCard = memo(function BoardLinkCard({
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const isIcp = resolveAuthBackend() === "icp";
+  const { user, sessionRestoration } = useAuth();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["board-link-card", gameId],
-    enabled: !!gameId,
-    queryFn: async () => {
-      if (isIcp) {
-        // The [board:gameId] token actually carries the team id on the ICP
-        // branch (events_domain keys the live board by team, not a row id).
-        const { getCurrentInternetIdentityConfirmed } = await import("@/live/internetIdentityAuth");
-        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
-        const { getLiveActiveGame } = await import("@/live/features/events");
-        const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
-        if (!identity) return null;
-        const ctx = { identity, target: getActiveIcpTarget() };
-        const rows = (await getLiveActiveGame(ctx, gameId)) as unknown as Array<{
-          team_id?: [] | [string];
-          is_active?: boolean;
-          updated_at_ms?: bigint;
-          pitch_state_json?: string;
-          timer_state_json?: string;
-        }>;
-        if (rows.length === 0) return null;
-        const row = rows[0];
-        return {
-          id: gameId,
-          team_id: row.team_id?.[0] ?? gameId,
-          is_active: row.is_active ?? true,
-          pitch_state: row.pitch_state_json ? JSON.parse(row.pitch_state_json) : {},
-          timer_state: row.timer_state_json ? JSON.parse(row.timer_state_json) : {},
-          teams: null as unknown,
-        };
-      }
-      const { data, error } = await supabase
-        .from("active_games")
-        .select(
-          "id, team_id, is_active, updated_at, pitch_state, timer_state, teams(id, name, club_id, clubs!club_id(sport))"
-        )
-        .eq("id", gameId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    staleTime: 5 * 1000,
+    ...boardQueryOptions(gameId, user?.id, isIcp),
+    enabled: !!gameId && !!user && sessionRestoration === 'authenticated',
   });
 
   // Realtime: refresh card whenever this active_games row changes
@@ -89,7 +54,7 @@ export const BoardLinkCard = memo(function BoardLinkCard({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [gameId, queryClient]);
+  }, [gameId, queryClient, isIcp]);
 
   const view = useMemo(() => {
     if (!data) return null;
