@@ -136,25 +136,8 @@ export function usePitchBoardPersistence({
             .eq("is_active", true);
           if (error) console.warn("[PitchBoard] auto-sub plan sync failed", error);
         },
-        // Wired: events_domain.sync_active_game mirrors the auto-sub plan +
-        // roster so GlobalSubMonitor's ICP-mode equivalent can read it back
-        // (board_session_id is a local random token — each device syncs its
-        // own in-progress plan; the canister keeps the latest write per team).
-        icp: async (ctx) => {
-          const { syncLiveActiveGame } = await import("@/live/features/events");
-          await syncLiveActiveGame(ctx, {
-            teamId,
-            timerStateJson: "{}",
-            pitchStateJson: JSON.stringify({
-              sport: "soccer",
-              autoSubActive,
-              autoSubPlan,
-              players,
-              linkedEventId,
-            }),
-            boardSessionId: `pitch-${teamId}`,
-          });
-        },
+        // Shared ICP snapshots belong only to the revision-CAS owner.
+        icp: async () => {},
       }, writeOnce({ teamId })).catch((error) => console.warn("[PitchBoard] auto-sub plan sync failed", error));
     }, 800);
     return () => clearTimeout(t);

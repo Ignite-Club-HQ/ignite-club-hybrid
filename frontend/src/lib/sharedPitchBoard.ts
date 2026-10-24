@@ -1,4 +1,4 @@
-import { withFeatureBackend } from '@/live/featureRouter';
+import { withFeatureBackend, type FeatureBackendContext } from '@/live/featureRouter';
 import { writeOnce } from '@/live/clubScope';
 
 export interface SharedBoardSnapshot {
@@ -6,7 +6,7 @@ export interface SharedBoardSnapshot {
   pitch: Record<string, unknown>;
 }
 
-async function owner(ctx: Parameters<Parameters<typeof withFeatureBackend>[1]['icp']>[0], teamId: string) {
+async function owner(ctx: FeatureBackendContext, teamId: string) {
   const { getLiveTeam } = await import('@/live/features/club');
   const [team] = await getLiveTeam(ctx, teamId);
   if (!team?.club_id) throw new Error('Pitch board has no club scope');

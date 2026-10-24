@@ -2019,7 +2019,14 @@ export async function readLiveSharedBoard(ctx: FeatureBackendContext, clubId: st
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   const [row] = await unwrapCandid(actor.read_shared_board(clubId, teamId), 'Read shared pitch board');
   if (!row) return null;
-  return { revision: row.updated_at_ms, pitch: JSON.parse(row.pitch_state_json) as Record<string, unknown> };
+  const pitch = JSON.parse(row.pitch_state_json) as Record<string, unknown>;
+  const players = Array.isArray(pitch.players) ? pitch.players : [];
+  const refs = players.map(p => p?.name).filter((n): n is string => typeof n === 'string' && n.startsWith(PITCH_NAME_REF_PREFIX));
+  if (refs.length) {
+    const names = await resolveNameRefs(ctx, refs, 'Read shared pitch board');
+    pitch.players = resolveNameRefsInDoc(players, PITCH_NAME_REF_PREFIX, names);
+  }
+  return { revision: row.updated_at_ms, pitch };
 }
 
 export async function writeLiveSharedBoard(ctx: FeatureBackendContext, clubId: string, teamId: string, expected: bigint | null, pitch: Record<string, unknown>, session: string) {

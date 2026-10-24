@@ -39,7 +39,7 @@ export function useIcpSharedPitchBoard({ teamId, userId, enabled, readOnly, appl
         if (document.visibilityState === 'hidden' || !navigator.onLine) return;
         const remote = await readSharedPitchBoard(teamId);
         if (disposed) return;
-        if (!hydrated || uncertain || remote?.revision !== (revision ?? undefined)) {
+        if (!hydrated || uncertain || (remote?.revision ?? null) !== revision) {
           adopt(remote);
           uncertain = false;
           return;
