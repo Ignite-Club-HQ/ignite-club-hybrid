@@ -1671,6 +1671,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
+    'read_competition_events' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Event), 'Err' : IDL.Text })],
+        [],
+      ),
     'read_event_cancellation_audience' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],

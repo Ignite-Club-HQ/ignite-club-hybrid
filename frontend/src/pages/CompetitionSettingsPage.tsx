@@ -302,11 +302,7 @@ function LiveIcpCompetitionSettingsPage() {
 
       <CompetitionChatsCard competitionId={id!} />
 
-      <CompetitionOfficialsCard
-        competitionId={id!}
-        competitionName={competition.name}
-        organizerClubId={competition.club_id || null}
-      />
+      <WelcomeEmailSettingsCard scopeKind="competition" scopeId={id ?? ""} />
 
       <div
         className={cn(

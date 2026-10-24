@@ -35,7 +35,7 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: {
 } }));
 import { ScorePrivacyControls } from './CompetitionSettingsPage';
 import { CompetitionFixturesPanel } from '@/components/CompetitionFixturesPanel';
-function mount(settings = false) { return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{settings && <ScorePrivacyControls competitionId='c' divisions={[{ id: 'd', name: 'Junior' }]} />}<CompetitionFixturesPanel competitionId='c' isAdmin={db.manager} divisions={[]} entries={[]} /></QueryClientProvider>); }
+function mount(settings = false) { return render(<MemoryRouter><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{settings && <ScorePrivacyControls competitionId='c' divisions={[{ id: 'd', name: 'Junior' }]} />}<CompetitionFixturesPanel competitionId='c' isAdmin={db.manager} divisions={[]} entries={[]} /></QueryClientProvider></MemoryRouter>); }
 beforeEach(() => Object.assign(db, { hide: false, override: null, manager: false, home: 4, away: 2, writes: 0 }));
 it.each([[true, null, true], [true, false, false], [false, true, true], [false, null, false]] as const)('selects member policy default %s override %s', async (hide, override, hidden) => {
  Object.assign(db, { hide, override }); mount();

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   response: { error: null as { message: string } | null },
   backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
   recordLiveMatch: vi.fn(),
+  updateLiveMatchDetails: vi.fn(),
 }));
 
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
@@ -20,6 +21,7 @@ vi.mock("@/live/featureRouter", () => ({
 }));
 vi.mock("@/live/features/competitions", () => ({
   recordLiveMatch: (...args: unknown[]) => mocks.recordLiveMatch(...args),
+  updateLiveMatchDetails: (...args: unknown[]) => mocks.updateLiveMatchDetails(...args),
 }));
 
 import { buildManualMatchRow, createManualMatch } from "./manualMatchWorkflow";
@@ -112,7 +114,7 @@ describe("manual match workflow", () => {
   });
 
   it.runIf(!supabaseMode)("records the teams through competition_domain without a Supabase write", async () => {
-    mocks.recordLiveMatch.mockResolvedValue({ id: "match-icp" });
+    mocks.recordLiveMatch.mockResolvedValue({ id: "match-icp", revision: 1n });
     const row = buildManualMatchRow({
       competitionId: "competition-icp",
       homeTeamId: "home-1",
@@ -129,6 +131,12 @@ describe("manual match workflow", () => {
 
     await expect(createManualMatch(row)).resolves.toEqual({ error: null });
     expect(mocks.recordLiveMatch).toHaveBeenCalledWith(icpContext, "competition-icp", "home-1", "away-1");
+    expect(mocks.updateLiveMatchDetails).toHaveBeenCalledWith(icpContext, "match-icp", {
+      homeTeamId: "home-1", awayTeamId: "away-1", divisionId: null,
+      scheduledAtMs: new Date(row.scheduled_at), venue: "Riverside Park",
+      pitchNumber: null, roundNumber: null, durationMinutes: null,
+      arrivalMinutesBefore: null, notes: null, expectedRevision: 1,
+    });
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
@@ -150,6 +158,14 @@ describe("manual match workflow", () => {
 
     await expect(createManualMatch(row)).resolves.toEqual({ error: { message: "competition access denied" } });
     expect(mocks.recordLiveMatch).toHaveBeenCalledWith(icpContext, "competition-icp", "home-1", "away-1");
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+  it.runIf(!supabaseMode)("does not acknowledge a fixture whose detail synchronization failed", async () => {
+    mocks.recordLiveMatch.mockResolvedValueOnce({ id: "match-saved", revision: 1n });
+    mocks.updateLiveMatchDetails.mockRejectedValueOnce(new Error("Event synchronization unresolved"));
+    const row = buildManualMatchRow({ competitionId: "c", homeTeamId: "h", awayTeamId: "a", divisionId: "d", scheduledAt: "2026-10-25T12:00:00Z", venue: "Oval", pitch: "2", round: "3", duration: "60", arrival: "20", notes: "Final" });
+    expect(await createManualMatch(row)).toEqual({ error: { message: "Event synchronization unresolved" } });
+    expect(mocks.updateLiveMatchDetails).toHaveBeenCalledWith(icpContext, "match-saved", expect.objectContaining({ divisionId: "d", pitchNumber: "2", roundNumber: 3, durationMinutes: 60, arrivalMinutesBefore: 20, notes: "Final" }));
     expect(mocks.from).not.toHaveBeenCalled();
   });
 });

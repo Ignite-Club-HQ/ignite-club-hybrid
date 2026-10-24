@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 const mocks = vi.hoisted(() => ({
   backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
@@ -81,13 +82,15 @@ const match = (overrides: Record<string, any> = {}) => ({
 
 function renderPanel(props: { isAdmin?: boolean; source?: string } = {}) {
   return render(
+    <MemoryRouter>
     <CompetitionFixturesPanel
       competitionId="competition-1"
       isAdmin={props.isAdmin ?? true}
       divisions={[]}
       entries={[]}
       source={props.source}
-    />,
+    />
+    </MemoryRouter>
   );
 }
 

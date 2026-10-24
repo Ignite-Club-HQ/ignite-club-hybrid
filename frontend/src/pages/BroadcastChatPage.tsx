@@ -781,6 +781,7 @@ export default function BroadcastChatPage() {
 
   // Realtime subscription - directly update cache instead of invalidating
   useEffect(() => {
+    if (useIcpLab) return;
     const channel = supabase
       .channel("broadcast-messages-realtime")
       .on(
@@ -929,7 +930,7 @@ export default function BroadcastChatPage() {
       cacheKeys: [["broadcast-messages"]],
       queryClient,
     });
-  }, [queryClient, user?.id, reconcileScope, applyRealtimeReaction, applyRealtimeReactionDelete]);
+  }, [useIcpLab, queryClient, user?.id, reconcileScope, applyRealtimeReaction, applyRealtimeReactionDelete]);
 
   const handleReply = useCallback((m: { id: string; text: string; authorName: string | null }) => {
     // Don't allow replying to optimistic or queued messages (temp/queued IDs)

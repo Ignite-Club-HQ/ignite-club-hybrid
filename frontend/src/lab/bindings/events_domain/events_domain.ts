@@ -1361,6 +1361,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_competition_events(competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Event>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_event_cancellation_audience(event_id: string): Promise<{
         __kind__: "Ok";
         Ok: number;
@@ -4012,6 +4019,16 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.read_account_removal_drain(arg0);
         return from_candid_variant_n186(result);
+    }
+    async read_competition_events(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Event>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_competition_events(arg0);
+        return from_candid_variant_n163(result);
     }
     async read_event_cancellation_audience(arg0: string): Promise<{
         __kind__: "Ok";

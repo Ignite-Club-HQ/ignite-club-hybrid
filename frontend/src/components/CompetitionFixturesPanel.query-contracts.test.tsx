@@ -1,5 +1,8 @@
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("react-router-dom", async importOriginal => ({
+  ...await importOriginal<typeof import("react-router-dom")>(), useNavigate: () => vi.fn(),
+}));
 
 type QueryResult = { data: any; error: any };
 

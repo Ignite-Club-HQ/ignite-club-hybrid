@@ -15,6 +15,7 @@ import {
   acceptLiveCompetitionOfficialEmailInvite,
   getLiveCompetitionOfficialEmailInvitePreview,
   getLiveRoleLinkPreview,
+  fetchLivePublicRoleLinkPreview,
 } from "@/live/features/competitions";
 import { hashOfficialInviteCode, hashOfficialInviteEmail } from "@/features/competitions/officialEmailInvite";
 
@@ -56,14 +57,7 @@ export default function CompetitionOfficialJoinPage() {
       }
       try {
         if (isIcpLink) {
-          const [{ AnonymousIdentity }, { getActiveIcpTarget }] = await Promise.all([
-            import("@icp-sdk/core/agent"),
-            import("@/live/targetRegistry"),
-          ]);
-          const preview = await getLiveRoleLinkPreview(
-            { identity: new AnonymousIdentity(), target: getActiveIcpTarget() } as any,
-            token,
-          );
+          const preview = await fetchLivePublicRoleLinkPreview(token);
           if (active) {
             setInfo(preview
               ? {

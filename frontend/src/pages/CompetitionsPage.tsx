@@ -17,8 +17,7 @@ import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isLocalCompetitionCanisterUnavailable, listLocalCompetitions } from "@/lab/localCompetitionService";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { listLiveCompetitions, listLiveCompetitionsMulti } from "@/live/features/competitions";
-import { listLiveMembershipClubs } from "@/live/features/membership";
+import { listLiveCompetitionCards } from "@/live/features/competitions";
 
 export default function CompetitionsPage() {
   usePageTitle("Competitions");
@@ -141,7 +140,7 @@ function SupabaseCompetitionsPage() {
   // that club or which include a team from that club — otherwise app/club
   // admins would see every competition across the platform.
   const { data: allCompetitions = [], isLoading } = useQuery({
-    queryKey: ["my-competitions", user?.id],
+    queryKey: ["my-competitions", user?.id, isIcp],
     enabled: !!user,
     queryFn: () =>
       withFeatureBackend("competitions", {
@@ -153,45 +152,7 @@ function SupabaseCompetitionsPage() {
           if (error) throw error;
           return data ?? [];
         },
-        // Provisional: without a club filter the ICP branch unions the
-        // competitions of every club visible to the caller (list_clubs is
-        // caller-scoped); the canister competition has no sport/visibility/
-        // date fields yet.
-        icp: async (ctx) => {
-          const comps = activeClubFilter
-            ? await listLiveCompetitions(ctx, activeClubFilter)
-            : await (async () => {
-                const clubs = await listLiveMembershipClubs(ctx);
-                const clubIds = clubs.map((c) => c.id);
-                const clubComps = clubIds.length === 0 ? [] : await listLiveCompetitionsMulti(ctx, clubIds);
-                const { listLivePersonalCompetitions } = await import("@/live/features/competitions");
-                const personalComps = await listLivePersonalCompetitions(ctx).catch(() => []);
-                const seen = new Set(clubComps.map((c: any) => c.id));
-                const merged = [...clubComps];
-                for (const c of personalComps as any[]) {
-                  if (!seen.has(c.id)) {
-                    seen.add(c.id);
-                    merged.push(c);
-                  }
-                }
-                return merged;
-              })();
-          return (comps as any[]).map((c) => ({
-            id: c.id,
-            name: c.name,
-            sport: null,
-            season: c.season,
-            status: c.status,
-            visibility: null,
-            starts_on: null,
-            ends_on: null,
-            organizer_club_id: c.club_id,
-            source: null,
-            last_synced_at: null,
-            clubs: null,
-            competition_entries: [],
-          }));
-        },
+        icp: listLiveCompetitionCards,
       }, acrossLists),
   });
 
@@ -207,7 +168,7 @@ function SupabaseCompetitionsPage() {
       // the competition — stale entries must not resurrect it in the list.
       return entries.some(
         (e: any) =>
-          e?.status === "accepted" &&
+          (e?.status === "accepted" || e?.status === "registered") &&
           !e?.teams?.deleted_at &&
           e?.teams?.club_id === activeClubFilter,
       );

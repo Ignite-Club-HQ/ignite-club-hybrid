@@ -50,6 +50,8 @@ import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabEoiSubmissions } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function EoiAdminPage() {
   const navigate = useNavigate();
@@ -90,6 +92,7 @@ export default function EoiAdminPage() {
 
 function SupabaseEoiAdminPage() {
   const { clubId } = useParams<{ clubId: string }>();
+  const isIcp = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const { hasPro, isLoading: proLoading } = useClubProAccess(clubId);
   const [seasonId, setSeasonId] = useState<string | "all">("all");
@@ -101,9 +104,17 @@ function SupabaseEoiAdminPage() {
   const bulkResend = useBulkResendEoiInvites();
 
   const { data: club } = useQuery({
-    queryKey: ["club", clubId],
+    queryKey: ["club", clubId, isIcp],
     queryFn: async () => {
       if (!clubId) return null;
+      if (isIcp) return withFeatureBackend("membership", {
+        supabase: async () => { throw new Error("ICP club required"); },
+        icp: async ctx => {
+          const { getLiveClubBranding } = await import("@/live/features/club");
+          const row = await getLiveClubBranding(ctx, clubId);
+          return row ? { id: clubId, name: row.name } : null;
+        },
+      }, { clubId });
       const { data, error } = await supabase
         .from("clubs")
         .select("id, name")
@@ -116,9 +127,20 @@ function SupabaseEoiAdminPage() {
   });
 
   const { data: seasons = [] } = useQuery({
-    queryKey: ["club-seasons-eoi", clubId],
+    queryKey: ["club-seasons-eoi", clubId, isIcp],
     queryFn: async () => {
       if (!clubId) return [];
+      if (isIcp) return withFeatureBackend("membership", {
+        supabase: async () => { throw new Error("ICP seasons required"); },
+        icp: async ctx => {
+          const { listLiveSeasons, getLiveSeasonEoiConfig } = await import("@/live/features/club");
+          return Promise.all((await listLiveSeasons(ctx, clubId)).map(async season => {
+            const config = await getLiveSeasonEoiConfig(ctx, season.id);
+            const settings = config[0] ? JSON.parse(config[0]) : {};
+            return { id: season.id, name: season.name, eoi_enabled: settings.eoi_enabled === true, eoi_slug: settings.eoi_slug ?? null };
+          }));
+        },
+      }, { clubId });
       const { data, error } = await supabase
         .from("seasons")
         .select("id, name, eoi_enabled, eoi_slug")

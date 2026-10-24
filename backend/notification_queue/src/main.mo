@@ -62,6 +62,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   var items : [Types.Notification];
+  var competitionBroadcastReceipts : Map.Map<Text, { club : Text; related : Text; body : Text; users : [Text]; count : Nat16 }>;
   var leases : [Types.Lease];
   var governor : ?Principal;
 
@@ -452,6 +453,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
 
     let trustedService = clubDomainCanister == ?caller or messagingDomainCanister == ?caller;
+    if (kind == "competition_broadcast") return #Err("Use trusted competition broadcast relay");
     if ((kind == "photo_uploaded" or kind == "photo_comment" or kind == "photo_reaction" or kind == "comment_reply") and clubDomainCanister != ?caller) return #Err("Trusted gallery relay required");
     if (not trustedService) do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
@@ -512,6 +514,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
 
     let trustedService = clubDomainCanister == ?caller or messagingDomainCanister == ?caller;
+    if (kind == "competition_broadcast") return #Err("Use trusted competition broadcast relay");
     if ((kind == "photo_uploaded" or kind == "photo_comment" or kind == "photo_reaction" or kind == "comment_reply") and clubDomainCanister != ?caller) return #Err("Trusted gallery relay required");
     if (not trustedService) do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
@@ -591,6 +594,32 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(created)
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  public shared ({ caller }) func enqueue_competition_broadcast(users : [Text], club : Text, related : Text, body : Text, key : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (clubDomainCanister != ?caller or isFenced(club)) return #Err("Trusted club relay required");
+    if (users.size() > 500 or body.size() > 4000 or not valid(club) or not valid(related) or key.size() > 512) return #Err("Invalid broadcast scope");
+    let receiptKey = club # "\u{1f}" # key;
+    switch (Map.get(competitionBroadcastReceipts, Text.compare, receiptKey)) {
+      case (?r) {
+        if (r.club != club or r.related != related or r.body != body or r.users != users) return #Err("Broadcast receipt conflict");
+        return #Ok(r.count)
+      };
+      case null {}
+    };
+    if (users.any(func user = not valid(user))) return #Err("Invalid broadcast recipient");
+    var count : Nat16 = 0;
+    let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    // No await between the dedup check, queue writes and permanent receipt.
+    for (user in users.values()) {
+      let id = receiptKey # "-" # user;
+      if (recipientAllowed(user, "competition_broadcast") and get(id) == null) {
+        items := items.concat([{ id; user; club; kind = "competition_broadcast"; body; idempotency_key = key; status = #Pending; attempts = 0; next_attempt_ms = 0; read = false; related_id = ?related; created_at_ms = stamp }]);
+        count += 1
+      }
+    };
+    Map.add(competitionBroadcastReceipts, Text.compare, receiptKey, { club; related; body; users; count });
+    #Ok(count)
   };
 
   // ---- Browser inbox surface ----

@@ -880,6 +880,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
         [],
       ),
+    'read_my_competition_cards' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'entries' : IDL.Vec(TeamEntry),
+                'competition' : Competition,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_playhq_stats' : IDL.Func(
         [IDL.Text],
         [

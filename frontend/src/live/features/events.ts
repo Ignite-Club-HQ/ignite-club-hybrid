@@ -144,6 +144,11 @@ export async function getLiveMatchEventIds(
   }
 }
 
+export async function listLiveCompetitionEvents(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.read_competition_events(competitionId), "Read competition events");
+}
+
 export async function listLiveEventDutyTeams(
   ctx: FeatureBackendContext,
   eventIds: string[],
@@ -1769,7 +1774,7 @@ export async function saveLiveGamePlayerStats(
 
 export async function listLiveGamePlayerStats(ctx: FeatureBackendContext, eventId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  const stats = unwrapCandid(actor.list_game_player_stats(eventId), "List game player stats") as unknown as Array<{
+  const stats = await unwrapCandid(actor.list_game_player_stats(eventId), "List game player stats") as unknown as Array<{
     fill_in_player_name: [] | [string];
     [key: string]: unknown;
   }>;

@@ -665,6 +665,14 @@ type Main =
        Err: text;
        Ok: bool;
      });
+   read_my_competition_cards: () ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 competition: Competition;
+                 entries: vec TeamEntry;
+               };
+     });
    read_playhq_stats: (competition_id: text) ->
     (variant {
        Err: text;

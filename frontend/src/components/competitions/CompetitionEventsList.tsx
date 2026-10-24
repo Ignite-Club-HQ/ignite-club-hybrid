@@ -10,8 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 /**
  * Upcoming competition-wide events. Supabase stores one shared event
  * (team_id null); ICP fans the event out as per-team copies, so the ICP
- * branch lists events for the competition's entered teams and dedupes the
- * copies by title + start time back into one row per competition event.
+ * branch uses the canister's exact competition/event associations.
  */
 export function CompetitionEventsList({ competitionId }: { competitionId: string }) {
   const isIcp = resolveAuthBackend() === "icp";
@@ -19,26 +18,11 @@ export function CompetitionEventsList({ competitionId }: { competitionId: string
     queryKey: ["competition-events", competitionId, isIcp],
     queryFn: async () => {
       if (isIcp) {
-        const entries = await withFeatureBackend("competitions", {
-          supabase: async () => [] as any[],
-          icp: async (ctx) => {
-            const { listLiveCompetitionEntries } = await import("@/live/features/competitions");
-            return (await listLiveCompetitionEntries(ctx, competitionId)) as any[];
-          },
-        }, { competitionId });
-        const teamIds = entries
-          .filter((e) => e.status === "accepted" || e.status === "registered")
-          .map((e) => e.team_id as string)
-          .filter(Boolean);
-        if (teamIds.length === 0) return [];
         const rows = await withFeatureBackend("events", {
           supabase: async () => [] as any[],
           icp: async (ctx) => {
-            const { listLiveEvents } = await import("@/live/features/events");
-            const perTeam = await Promise.all(
-              teamIds.map((tid) => listLiveEvents(ctx, null, tid).catch(() => [] as any[])),
-            );
-            return perTeam.flat();
+            const { listLiveCompetitionEvents } = await import("@/live/features/events");
+            return listLiveCompetitionEvents(ctx, competitionId);
           },
         }, { memberGroups: true, merge: mergeLists });
         const cutoff = Date.now() - 12 * 3600 * 1000;
@@ -47,7 +31,7 @@ export function CompetitionEventsList({ competitionId }: { competitionId: string
           if (e.cancelled || e.deleted) continue;
           const start = Number(e.starts_at_ms);
           if (!Number.isFinite(start) || start < cutoff) continue;
-          const key = `${e.title}|${start}`;
+          const key = e.id;
           if (!seen.has(key)) {
             seen.set(key, {
               id: e.id,
