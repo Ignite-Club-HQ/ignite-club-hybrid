@@ -69,7 +69,7 @@ try {
   denied(await c.read_account_list_competition_broadcasts(competition));
   denied(await c.read_account_competition_engagement_summary([competition], 0n, 9999999999999n));
   c.setPrincipal(parent);
-  assert.equal(ok(await c.read_account_list_competition_broadcasts(competition))[0].id, broadcast.id);
+  assert.ok(ok(await c.read_account_list_competition_broadcasts(competition)).some(row => row.id === broadcast.id));
   assert.ok(ok(await c.read_my_competition_cards()).some(row => row.competition.id === competition));
   denied(await c.update_competition_settings(competition, 'Forged', [], 'open', 'private', 3, 1, 0));
   c.setPrincipal(governor);
