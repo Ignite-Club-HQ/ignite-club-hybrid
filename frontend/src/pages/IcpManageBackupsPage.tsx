@@ -71,12 +71,11 @@ export default function IcpManageBackupsPage() {
         icp: async (ctx) => {
           const v = await import("@/live/features/vault");
           if (kind === "download") {
-            const b = await v.getLiveVaultBackup(ctx, id);
-            const blob = new Blob([JSON.stringify(b, jsonSafe, 2)], { type: "application/json" });
+            const blob = await v.exportLiveVaultBackupBlob(ctx, id);
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = `vault-backup-${id}.json`;
+            a.download = `vault-backup-${id}.jsonl`;
             a.click();
             setTimeout(() => URL.revokeObjectURL(url), 5000);
           } else if (kind === "restore") {

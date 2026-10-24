@@ -98,11 +98,27 @@ try {
   vault.actor.setPrincipal(governor);
   const backup = ok(await vault.actor.create_backup('Large resumable local backup'));
   assert.ok(backup.files.length > 200);
+  const boundedBackup = ok(await vault.actor.create_backup_summary('Bounded snapshot'));
+  assert.equal(boundedBackup.file_count, BigInt(backup.files.length));
+  let exportPage = ok(await vault.actor.read_backup_page(boundedBackup.id, 0n, []));
+  const exportRevision = exportPage.revision;
+  let exportCount = exportPage.files.length + exportPage.folders.length;
+  assert.equal(exportCount, 40);
+  while (exportPage.next.length) {
+    exportPage = ok(await vault.actor.read_backup_page(boundedBackup.id, exportPage.next[0], [exportRevision]));
+    assert.ok(exportPage.files.length + exportPage.folders.length <= 40);
+    exportCount += exportPage.files.length + exportPage.folders.length;
+  }
+  assert.equal(exportCount, Number(boundedBackup.file_count + boundedBackup.folder_count));
   vault.actor.setPrincipal(outsider);
+  assert.ok('Err' in await vault.actor.read_backup_page(boundedBackup.id, 0n, []));
   assert.ok('Err' in await vault.actor.restore_backup_page(backup.id, 0n));
   vault.actor.setPrincipal(member);
   ok(await vault.actor.purge_my_data());
   vault.actor.setPrincipal(governor);
+  assert.ok('Err' in await vault.actor.read_backup_page(boundedBackup.id, 40n, [exportRevision]));
+  const scrubbed = ok(await vault.actor.read_account_get_backup(backup.id));
+  assert.ok(!scrubbed.files.some(f => f.uploaded_by.toText() === member.toText()));
   assert.deepEqual(ok(await vault.actor.read_account_get_file('restore-missing')), []);
   const restoreFirst = ok(await vault.actor.restore_backup_page(backup.id, 0n));
   assert.equal(restoreFirst.next, 40n);
