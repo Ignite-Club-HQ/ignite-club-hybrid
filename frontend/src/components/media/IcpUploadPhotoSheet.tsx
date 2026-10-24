@@ -194,6 +194,7 @@ export function IcpUploadPhotoSheet({
     let scopePending = false;
     let vaultCopyFailed = false;
     let noticeFailed = false;
+    let chatCardFailed = false;
     const registeredAssetIds: string[] = [];
     try {
       await withFeatureBackend("media", {
@@ -271,6 +272,12 @@ export function IcpUploadPhotoSheet({
             while (nextIndex < files.length) await uploadOne(nextIndex++);
           };
           await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
+          if (teamId && registeredAssetIds.length) {
+            const { publishLiveGalleryChatCard } = await import('@/live/features/media');
+            const firstUrl = [...localUploadPreviews.keys()][0] ?? '';
+            await publishLiveGalleryChatCard(ctx, { clubId, teamId, eventId: defaultEventId, assetIds: registeredAssetIds,
+              heroUrl: firstUrl, receipt: `gallery-${albumId}` }).catch(() => { chatCardFailed = true; });
+          }
           if (registeredAssetIds[0]) {
             const notice = await announceLiveGalleryAsset(ctx, registeredAssetIds[0]).catch(() => "unknown");
             noticeFailed = notice !== "queued";
@@ -283,6 +290,7 @@ export function IcpUploadPhotoSheet({
         );
       }
       if (vaultCopyFailed) toast.warning('Photos published; some Vault copies could not be saved.');
+      if (chatCardFailed) toast.warning('Photos published; the team chat announcement could not be confirmed.');
       if (noticeFailed) toast.warning('Photos published; the notification could not be confirmed.');
       // Keep the local copies on screen until the refreshed feed has them.
       await Promise.resolve(onUploaded()).catch(() => undefined);

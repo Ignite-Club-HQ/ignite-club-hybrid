@@ -667,7 +667,8 @@ persistent actor class Main(governorInit : Principal) = this {
     (allowed or admin) and galleryClubAuthority == ?id and not removalReceiver.denied(user) and not isFenced(asset.club_id)
   };
   func galleryNotice(asset : Types.Asset, user : Principal, kind : Text, rawKey : Text, parent : ?Principal) : async Text {
-    let key = asset.club_id # ":" # rawKey;
+    let key = asset.club_id # ":" # asset.owner.toText() # ":" # rawKey;
+    if (galleryNoticeAttempts.get(key) == null and galleryNoticeAttempts.size() >= MAX_COMMENTS + MAX_REACTIONS + MAX_ASSETS) return "capacity";
     if (galleryNoticeAttempts.get(key) != null) return galleryNoticeAttempts.get(key) ?? "unknown";
     let id = galleryClubAuthority ?? return "not_configured";
     if (removalReceiver.denied(user) or assetFenced(asset.id)) return "denied";
@@ -796,9 +797,21 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     if (not valid(club_id) or not valid(team_id) or not valid(message_id)) return #Err("Invalid gallery chat card");
     if (not validGalleryPhotoIds(photo_ids)) return #Err("Too many photo ids");
+    if (not is_prompt and (photo_ids.size() == 0 or Nat32.toNat(photo_count) != photo_ids.size())) return #Err("Gallery card requires exact photos");
+    for (pid in photo_ids.values()) {
+      let a = assets.find(func a = a.id == pid) ?? return #Err("Gallery photo not found");
+      if (not canView(caller, a) or a.club_id != club_id or a.team_id != ?team_id or (not a.owner.equal(caller) and not isClubStaff(caller, club_id))) return #Err("Gallery photo scope or owner mismatch");
+    };
+    if (hero_photo_id != null and not photo_ids.any(func pid = ?pid == hero_photo_id)) return #Err("Hero must belong to gallery photos");
+    if (id == null) {
+      switch (galleryChatCards.find(func c = c.message_id == message_id and c.uploader_id.equal(caller))) {
+        case (?existing) { if (existing.club_id == club_id and existing.team_id == team_id and existing.photo_ids == photo_ids) return #Ok(existing) else return #Err("Gallery card receipt conflict") };
+        case null {};
+      }
+    };
     switch (id) {
       case null {
-        if (not isClubStaff(caller, club_id)) return #Err("Club staff required");
+        if (is_prompt and not isClubStaff(caller, club_id)) return #Err("Club staff required for prompts");
         if (galleryChatCards.size() >= MAX_GALLERY_CHAT_CARDS) return #Err("Gallery chat card limit reached");
         let now = nowMs();
         let card : Types.GalleryChatCard = {
@@ -826,6 +839,7 @@ persistent actor class Main(governorInit : Principal) = this {
           case null { #Err("Gallery chat card not found") };
           case (?i) {
             let existing = galleryChatCards[i];
+            if (existing.club_id != club_id or existing.team_id != team_id) return #Err("Gallery card scope is immutable");
             if (not existing.uploader_id.equal(caller) and not isClubStaff(caller, existing.club_id)) return #Err("Card author or club staff required");
             let updated : Types.GalleryChatCard = {
               existing with

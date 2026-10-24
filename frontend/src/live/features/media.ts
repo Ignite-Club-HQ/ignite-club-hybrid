@@ -256,3 +256,16 @@ export async function readLiveGalleryViewCounts(ctx: FeatureBackendContext, ids:
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
   return unwrapCandid(actor.read_gallery_view_counts(ids), 'Read gallery views');
 }
+
+export async function publishLiveGalleryChatCard(ctx: FeatureBackendContext, input: {
+  clubId: string; teamId: string; eventId?: string | null; assetIds: string[]; heroUrl: string; receipt: string;
+}) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  const card = await unwrapCandid(actor.save_gallery_chat_card([], input.clubId, input.teamId,
+    candidOpt(input.eventId), input.receipt, candidOpt(input.assetIds[0]), [input.heroUrl], input.assetIds.length, input.assetIds, false, false), 'Save gallery chat card');
+  const { sendLiveMessage } = await import('./messaging');
+  const { readContentInScope } = await import('../contentRouting');
+  await readContentInScope(ctx, 'messaging', { clubId: input.clubId }, scoped =>
+    sendLiveMessage(scoped, input.teamId, `[gallery:${card.id}]`, input.receipt));
+  return card;
+}

@@ -547,7 +547,11 @@ export function UploadPhotoSheet({
             contentLength: file.size,
             blobRef: blobUpload.blobRef,
           });
-          if (competitionId) await setLiveAssetScope(ctx, registered.id, { competitionId });
+          await setLiveAssetScope(ctx, registered.id, { competitionId: competitionId || null, teamId: teamId || null,
+            miniLeagueId: miniLeagueId || null, eventId: eventId || null, caption: photoCaption || null, albumId });
+          const { copyGalleryAssetToVault } = await import('./media/galleryVaultCopy');
+          await copyGalleryAssetToVault(ctx, { assetId: registered.id, clubId, teamId: teamId || null, file, name: file.name })
+            .catch(() => toast.warning('Photo published; its Vault copy could not be saved.'));
           return { url: blobUpload.url, photoId: registered.id };
         },
       }, writeOnce({ clubId }));
@@ -882,7 +886,7 @@ export function UploadPhotoSheet({
     // photo rows, albums, or gallery chat cards are written (those tables are
     // never read back on the ICP branch).
     const mediaOnIcp = !!clubId && isFeatureRoutedToIcp("media");
-    let albumId: string | null = null;
+    let albumId: string | null = mediaOnIcp ? crypto.randomUUID() : null;
     if (!mediaOnIcp && photosToUpload.length > 1) {
       const args = {
         _club_id: clubId || null,
@@ -978,6 +982,15 @@ export function UploadPhotoSheet({
     }
 
     // ---------------------------------------------------------------------
+    if (mediaOnIcp && uploadedPhotoIds.length) {
+      await withFeatureBackend('media', { supabase: async () => undefined, icp: async ctx => {
+        const { announceLiveGalleryAsset, publishLiveGalleryChatCard } = await import('@/live/features/media');
+        const first = uploadedPhotoIds[0];
+        if (first) await announceLiveGalleryAsset(ctx, first).catch(() => toast.warning('Photos published; notifications could not be confirmed.'));
+        if (teamId) await publishLiveGalleryChatCard(ctx, { clubId, teamId, eventId: eventId || null, assetIds: uploadedPhotoIds,
+          heroUrl: uploadedUrls[0] ?? '', receipt: `gallery-${albumId}` }).catch(() => toast.warning('Photos published; the chat announcement could not be confirmed.'));
+      } }, writeOnce({ clubId }));
+    }
     // Team Gallery → Chat Card
     // Trigger for batches uploaded to a TEAM gallery with ≥2 successful items.
     // Aggregation (10-min window) and message text are handled in the RPC.
