@@ -652,6 +652,8 @@ persistent actor class Main(governorInit : Principal) = this {
     competitionInvites := competitionInvites.filter(func r = r.invitee != caller and r.created_by != caller);
     competitionJoinLinks := competitionJoinLinks.map(func r = if (r.created_by == caller) ({ r with revoked = true; created_by = Principal.anonymous() }) else r);
     roleLinks := roleLinks.map(func r = if (r.created_by == caller) ({ r with revoked = true; created_by = Principal.anonymous() }) else r);
+    let removedInviteTokens = competitionOfficialEmailInvites.filter(func r = r.created_by == caller or r.accepted_by == ?caller).map(func r = r.token);
+    competitionWelcomeJobs := competitionWelcomeJobs.filter(func r = not removedInviteTokens.any(func token = token == r.token));
     competitionOfficialEmailInvites := competitionOfficialEmailInvites.filter(func r = r.created_by != caller and r.accepted_by != ?caller);
     competitionMemberWelcomeJobs := competitionMemberWelcomeJobs.filter(func r = r.member != caller);
     personalCompetitionOwners := personalCompetitionOwners.filter(func r = r.1 != caller);
