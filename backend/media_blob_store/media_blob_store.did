@@ -177,6 +177,8 @@ service : {
   /// Public: remaining cycles (shown in admin settings).
   cycles_balance: () -> (nat) query;
   delete_blob: (path: text) -> (Result);
+  delete_vault_blob: (subject: principal, path: text, expected_hash: 
+   text) -> (Result);
   enable_retained_media_quota: () -> (Result);
   enable_shared_media_quota: () -> (Result);
   enable_stable_media_storage: () -> (Result);
