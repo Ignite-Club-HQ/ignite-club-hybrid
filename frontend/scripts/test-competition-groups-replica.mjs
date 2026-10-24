@@ -148,22 +148,22 @@ try {
   ok(await restored.actor.purge_my_data());
   assert.deepEqual(ok(await restored.actor.read_fixture_operation('fixture-operation')),[]);
   // Queue proof survives independently; replay must not enqueue again.
-  QA.actor.setPrincipal(governor);ok(await QA.actor.set_transfer_fence('host',true));
-  const queueSaved=ok(await QA.actor.export_club_snapshot('host'));
+  QB.actor.setPrincipal(governor);ok(await QB.actor.set_transfer_fence('guest',true));
+  const queueSaved=ok(await QB.actor.export_club_snapshot('guest'));
   const queueRestored=await setup(queueIdl,'NOTIFICATION_QUEUE_WASM');
-  queueRestored.actor.setPrincipal(governor);ok(await queueRestored.actor.set_transfer_fence('host',true));
-  ok(await queueRestored.actor.import_club_snapshot('host',queueSaved));
-  assert.deepEqual(ok(await queueRestored.actor.export_club_snapshot('host')),queueSaved);
-  ok(await queueRestored.actor.import_club_snapshot('host',queueSaved));
-  ok(await queueRestored.actor.set_club_domain_canister(A.canisterId));
-  ok(await queueRestored.actor.set_transfer_fence('host',false));
-  queueRestored.actor.setPrincipal(A.canisterId);
+  queueRestored.actor.setPrincipal(governor);ok(await queueRestored.actor.set_transfer_fence('guest',true));
+  ok(await queueRestored.actor.import_club_snapshot('guest',queueSaved));
+  assert.deepEqual(ok(await queueRestored.actor.export_club_snapshot('guest')),queueSaved);
+  ok(await queueRestored.actor.import_club_snapshot('guest',queueSaved));
+  ok(await queueRestored.actor.set_club_domain_canister(B.canisterId));
+  ok(await queueRestored.actor.set_transfer_fence('guest',false));
+  queueRestored.actor.setPrincipal(B.canisterId);
   // Discover the exact retained receipt from its generated message key.
   restored.actor.setPrincipal(governor);
   const originalBroadcast=ok(await restored.actor.read_account_list_competition_broadcasts(competition)).find(n=>n.title==='Cup');
   assert.ok(originalBroadcast);
-  const proof=ok(await queueRestored.actor.read_competition_broadcast_receipt('host',originalBroadcast.id))[0];
-  assert.ok(proof);assert.ok(proof.audience.length>0);
+  const proof=ok(await queueRestored.actor.read_competition_broadcast_receipt('guest',originalBroadcast.id))[0];
+  assert.ok(proof);assert.deepEqual(proof.audience,[parent.toText()]);
   ok(await c.set_transfer_fence('host',false));
   // Token is capability-only; EOI IDs never reveal personal data to strangers.
   const eoi = ok(await c.submit_public_eoi('host', 'season', 'Parent', 'parent@example.invalid', [], 'Child', [], [], [], [], [3], [], [], [], 'app'));

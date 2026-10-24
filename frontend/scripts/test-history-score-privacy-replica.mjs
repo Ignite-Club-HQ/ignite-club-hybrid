@@ -85,6 +85,7 @@ try {
  assert.deepEqual(ok(await restored.actor.export_club_snapshot('club')),saved);
  ok(await restored.actor.set_transfer_fence('club',false));
  ok(await restored.actor.set_competition_domain_canister(competition.canisterId));
+ c.setPrincipal(governor);ok(await c.set_events_domain_canister(restored.canisterId));
  assert.equal(ok(await restored.actor.read_detailed_game_player_stats(eventId))[0].detail[0].child_id[0],'child-1');
  assert.deepEqual(ok(await restored.actor.read_detailed_game_player_stats(eventId))[0].detail[0].position_seconds[0],[['GK',120]]);
  restored.actor.setPrincipal(competition.canisterId);
@@ -94,6 +95,7 @@ try {
  restored.actor.setPrincipal(manager);ok(await restored.actor.purge_my_data());
  restored.actor.setPrincipal(competition.canisterId);
  assert.ok('Err' in await restored.actor.materialize_competition_fixture(revisionInput,4n));
+ c.setPrincipal(governor);ok(await c.set_events_domain_canister(events.canisterId));
  ok(await e.set_transfer_fence('club',false));
  c.setPrincipal(member); assert.ok('Err' in await c.read_history_score_access(cup.id,'team-1',1n,manager,false));
  c.setPrincipal(manager); ok(await c.set_score_privacy(cup.id,[],[false]));
