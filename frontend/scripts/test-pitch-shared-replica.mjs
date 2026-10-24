@@ -41,7 +41,7 @@ try {
   events.actor.setPrincipal(stranger);
   assert.equal((await events.actor.read_shared_board('club-a','team-a')).Err,'Forbidden');
   events.actor.setPrincipal(governor);
-  const event = ok(await events.actor.create_event('club-a',[], 'Local match','', 'game',[],[],[],[],1000n,2000n,[],false,[],[]));
+  const event = ok(await events.actor.create_event('club-a',[], 'Local match','Local round', 'game',[],[],[],[],1000n,2000n,[],false,[],[]));
   const group = ok(await events.actor.create_event_group(event.id,'Local pitch',[],[],[],[]));
   ok(await events.actor.save_group_duty_slot(group.id,'ref','Referee',[coach.toText()]));
   ok(await events.actor.save_group_duty_slot(group.id,'subs','Subs Manager',[coach.toText()]));
