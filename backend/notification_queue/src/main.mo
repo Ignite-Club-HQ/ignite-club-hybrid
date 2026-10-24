@@ -628,6 +628,13 @@ persistent actor class Main(governorInit : Principal) = this {
     Map.add(competitionBroadcastAudiences, Text.compare, receiptKey, audience);
     #Ok(count)
   };
+  public shared ({caller}) func read_competition_broadcast_receipt(club:Text,key:Text) : async {#Ok:?{club:Text;related:Text;body:Text;count:Nat16;audience:[Text]};#Err:Text} {
+    if(clubDomainCanister!=?caller)return #Err("Trusted club authority required");
+    let receiptKey=club # "\u{1f}" # key;
+    let r=Map.get(competitionBroadcastReceipts,Text.compare,receiptKey)??return #Ok(null);
+    let audience=Map.get(competitionBroadcastAudiences,Text.compare,receiptKey)??return #Err("Broadcast audience evidence missing");
+    #Ok(?{club=r.club;related=r.related;body=r.body;count=r.count;audience})
+  };
 
   // ---- Browser inbox surface ----
   // Latest durable schedule signal per club/team for the actual caller.

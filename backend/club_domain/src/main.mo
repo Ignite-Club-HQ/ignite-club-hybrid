@@ -17,6 +17,7 @@ import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Map "mo:core/Map";
+import BroadcastRelay "broadcastRelay";
 import EmailOutbox "../../shared/EmailOutbox";
 import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
@@ -203,6 +204,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var pendingInvites : [Types.PendingInvite];
   var emailJobs : Map.Map<Text, EmailOutbox.Job>;
   var emailWorkers : [Principal];
+  var broadcastRelayReceipts : Map.Map<Text, BroadcastRelay.Receipt>;
   transient let emailOutbox = EmailOutbox.Queue(emailJobs);
   public shared ({ caller }) func set_email_workers(workers : [Principal]) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller) or workers.size() > 10 or workers.any(func p = Principal.isAnonymous(p))) return #Err("Governor and valid workers required");
@@ -1279,6 +1281,11 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public shared ({ caller }) func relay_competition_broadcast(user : Principal, club : Text, competition : Text, team_ids : [Text], officials : [Principal], body : Text, key : Text) : async { #Ok : Nat16; #Err : Text } {
     if (not trustedCompetition(caller) or isTransferFenced(club)) return #Err("Competition authority required");
+    let receiptKey=club # "\u{1f}" # key;
+    switch(Map.get(broadcastRelayReceipts,Text.compare,receiptKey)) {case (?r) {
+      if(r.authority!=caller or r.user!=user or r.competition!=competition or r.teams!=team_ids or r.officials!=officials or r.body!=body)return #Err("Relay request conflict");
+      switch(r.count){case (?n)return #Ok(n);case null return #Err("Relay outcome unresolved; reconcile exact receipt")}
+    };case null {}};
     if (team_ids.size() > 100 or officials.size() > 500 or body.size() > 4000 or key.size() > 512) return #Err("Invalid broadcast");
     if (team_ids.any(func t = liveTeamClub(t) != ?club)) return #Err("Foreign competition team");
     let audience = { club_id = club; competition_id = competition; team_ids; recipients = officials; can_publish = true };
@@ -1290,7 +1297,23 @@ persistent actor class Main(governorInit : Principal) = this {
     if (current != recipients) return #Err("Broadcast audience changed");
     let queueId = notificationQueueCanister ?? return #Err("Notification queue unavailable");
     let queue : actor { enqueue_competition_broadcast : shared ([Text], Text, Text, Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(queueId.toText());
-    await (with timeout = 10) queue.enqueue_competition_broadcast(recipients.map(func p = p.toText()), club, competition, body, key)
+    let receipt:BroadcastRelay.Receipt={authority=caller;queue=queueId;user;club;competition;teams=team_ids;officials;body;key;audience=recipients.map(func p = p.toText());count=null};
+    Map.add(broadcastRelayReceipts,Text.compare,receiptKey,receipt);
+    let result=try{await (with timeout = 10) queue.enqueue_competition_broadcast(receipt.audience,club,competition,body,key)}catch(_){return #Err("Relay outcome unresolved; retain receipt")};
+    switch(result){case(#Ok(n)){Map.add(broadcastRelayReceipts,Text.compare,receiptKey,{receipt with count=?n});#Ok(n)};case(#Err(e))#Err(e)}
+  };
+  public shared ({caller}) func reconcile_competition_broadcast(club:Text,key:Text) : async {#Ok:?Nat16;#Err:Text} {
+    let receiptKey=club # "\u{1f}" # key;
+    let r=Map.get(broadcastRelayReceipts,Text.compare,receiptKey)??return #Err("Original relay receipt missing");
+    if(not trustedCompetition(caller) or caller!=r.authority or isTransferFenced(club))return #Err("Original competition authority required");
+    switch(r.count){case (?n)return #Ok(?n);case null {}};
+    let queue:actor{read_competition_broadcast_receipt:shared(Text,Text)->async{#Ok:?{club:Text;related:Text;body:Text;count:Nat16;audience:[Text]};#Err:Text}}=actor(r.queue.toText());
+    let found=switch(await queue.read_competition_broadcast_receipt(club,key)){case(#Err(e))return #Err(e);case(#Ok(v))v};
+    if(Map.get(broadcastRelayReceipts,Text.compare,receiptKey)!=?r or not trustedCompetition(caller))return #Err("Relay changed during reconciliation");
+    switch found {case null #Ok(null);case (?proof){
+      if(proof.club!=r.club or proof.related!=r.competition or proof.body!=r.body or proof.audience!=r.audience)return #Err("Relay evidence conflict");
+      Map.add(broadcastRelayReceipts,Text.compare,receiptKey,{r with count=?proof.count});#Ok(?proof.count)
+    }}
   };
 
   // Club admins see every post; members see published posts, and
