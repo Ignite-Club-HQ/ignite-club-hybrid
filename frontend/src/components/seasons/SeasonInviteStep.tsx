@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { lookupInvitableUserByEmail } from "@/lib/inviteEmailDedupe";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { createLivePendingInvite, getLiveClubBranding, listLiveTeams } from "@/live/features/club";
+import { createLivePendingInvite, getLiveClubBranding, readLiveSeasonTeams } from "@/live/features/club";
 
 type InviteRole = "player" | "parent" | "coach" | "team_admin";
 
@@ -85,7 +85,7 @@ export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) 
     queryKey: ["season-target-teams", targetSeasonId],
     enabled: !!targetSeasonId,
     queryFn: async () => {
-      if (isIcp) return withFeatureBackend("membership", { supabase: async () => [], icp: async ctx => (await listLiveTeams(ctx, clubId)).filter(t => t.deleted_at_ms.length === 0 && !t.archived).map(t => ({ id: t.id, name: t.name })) }, { clubId });
+      if (isIcp) return withFeatureBackend("membership", { supabase: async () => [], icp: async ctx => (await readLiveSeasonTeams(ctx, targetSeasonId ?? "")).map(t => ({ id: t.id, name: t.name })) }, { clubId });
       const { data, error } = await supabase
         .from("teams")
         .select("id, name")

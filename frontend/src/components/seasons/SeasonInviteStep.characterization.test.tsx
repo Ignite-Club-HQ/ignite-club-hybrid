@@ -19,7 +19,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from,
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "admin-1" } }) }));
 vi.mock("@/lib/inviteEmailDedupe", () => ({ lookupInvitableUserByEmail: mocks.lookup }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
-vi.mock("@/live/features/club", () => ({ createLivePendingInvite: vi.fn(), getLiveClubBranding: async () => ({ name: "Club", logo_url: [], contact_email: [] }), listLiveTeams: async () => [] }));
+vi.mock("@/live/features/club", () => ({ createLivePendingInvite: vi.fn(), getLiveClubBranding: async () => ({ name: "Club", logo_url: [], contact_email: [] }), readLiveSeasonTeams: async () => [] }));
 vi.mock("@/live/featureRouter", () => ({
   withFeatureBackend: (_feature: unknown, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
     mocks.mode === "icp" ? providers.icp({}) : providers.supabase(),

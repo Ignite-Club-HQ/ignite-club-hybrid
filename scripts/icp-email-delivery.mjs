@@ -19,7 +19,7 @@ export async function deliverClaim(actor, claim, send) {
   try {
     const payload = job.ciphertext ? decryptPayload(job.ciphertext, process.env.ICP_EMAIL_PRIVATE_KEY) : {
       to: claim.to, subject: claim.subject,
-      text: claim.body + (claim.token ? `\n${process.env.ICP_EMAIL_APP_URL}/eoi/complete/${encodeURIComponent(claim.token)}` : ''),
+      text: claim.body + (claim.token ? `\n${process.env.ICP_EMAIL_APP_URL}/eoi-complete/${encodeURIComponent(claim.token)}` : ''),
     };
     const reply = await send(payload, `ignite:${job.id}`);
     if (reply.ok && reply.id) { outcome = 'sent'; provider = reply.id; }
