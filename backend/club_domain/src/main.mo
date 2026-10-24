@@ -236,6 +236,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var eventsDomainCanister : ?Principal;
   var messagingDomainCanister : ?Principal;
   var piiCanister : ?Principal;
+  var vaultErasedClubs : Map.Map<Text, Bool>;
+  var vaultErasedTeams : Map.Map<Text, Text>;
   var clubSubscriptions : [Types.ClubSubscription];
   var teamSubscriptions : [Types.TeamSubscription];
   // New state added 20261015_000000: pending-invite labels, season EOI
@@ -5489,6 +5491,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // Removes every club_domain record scoped to one team. Callers must have
   // already verified the team is soft-deleted and the caller may delete it.
   func purgeTeamLocal(teamId : Text) {
+    switch (teams.find(func t = t.id == teamId)) { case (?t) vaultErasedTeams.add(teamId, t.club_id); case null {} };
     bumpMembershipDiscovery();
     teams := teams.filter(func(t) = t.id != teamId);
     bumpMembershipDiscovery();
@@ -5519,6 +5522,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // events_domain) and are deliberately kept; global account records,
   // theme preferences, and app config are not club-scoped.
   func purgeClubLocal(id : Text) {
+    vaultErasedClubs.add(id, true);
     let clubTeamIds = teams.filter(func(t) = t.club_id == id).map(func(t) = t.id);
     let clubNewsIds = newsPosts.filter(func(post) = post.club_id == id).map(func(post) = post.id);
     func isClubTeam(teamId : Text) : Bool { clubTeamIds.any(func(t) = t == teamId) };
@@ -5708,6 +5712,12 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor only");
     #Ok(await purgeExpiredDeletions())
+  };
+  // Only permanent local erasure creates these receipts; absence is never deletion proof.
+  // Return one boolean, no roster or private content. Current records defeat stale receipts.
+  public query func read_vault_erasure_scope(club : Text, team : ?Text) : async Bool {
+    if (vaultErasedClubs.get(club) == ?true and not profiles.any(func p = p.id == club)) return true;
+    switch team { case (?id) vaultErasedTeams.get(id) == ?club and not teams.any(func t = t.id == id); case null false }
   };
 
   // Daily auto-purge sweep. The timer id is intentionally discarded — the

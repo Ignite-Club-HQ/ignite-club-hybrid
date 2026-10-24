@@ -1185,23 +1185,28 @@ persistent actor class Main(governorInit : Principal) = this {
       let candidates = Array.tabulate<Types.VaultFile>(end - start, func i = files[start + i]);
       lifecycleFileCursor := if (end < files.size()) end else 0;
       for (f in candidates.values()) {
-        if (f.is_external_link or nowMs() <= f.created_at_ms or nowMs() - f.created_at_ms <= 15_552_000_000 or isFenced(f.club)) continue;
+        if (f.is_external_link or isFenced(f.club)) continue;
         let ref = switch (f.blob_ref) { case (?r) r; case null continue };
         let cid = switch club_domain_canister { case (?id) id; case null continue };
-        let cd : actor { get_media_allowance : shared query (Text, ?Text) -> async { #Ok : { premium : Bool }; #Err : Text } } = actor(cid.toText());
-        let allowance = try { await (with timeout = 10) cd.get_media_allowance(f.club, f.team) } catch (_) { continue };
-        switch allowance { case (#Ok(a)) if (a.premium) continue; case (#Err(_)) continue };
+        let cd : actor { get_media_allowance : shared query (Text, ?Text) -> async { #Ok : { premium : Bool }; #Err : Text }; read_vault_erasure_scope : shared query (Text, ?Text) -> async Bool } = actor(cid.toText());
+        let erased = try { await (with timeout = 10) cd.read_vault_erasure_scope(f.club, f.team) } catch (_) { false };
+        if (not erased) {
+          if (nowMs() <= f.created_at_ms or nowMs() - f.created_at_ms <= 15_552_000_000) continue;
+          let allowance = try { await (with timeout = 10) cd.get_media_allowance(f.club, f.team) } catch (_) { continue };
+          switch allowance { case (#Ok(a)) if (a.premium) continue; case (#Err(_)) continue }
+        };
         if (club_domain_canister != ?cid or isFenced(f.club) or not vaultStores.any(func s = s.toText() == ref.canister) or files.find(func row = row.id == f.id) != ?f or files.any(func other = other.id != f.id and (switch (other.blob_ref) { case (?r) r.canister == ref.canister and r.path == ref.path; case null false }))) continue;
         // Persist the path lock before the remote delete. Do not hide a paid file
         // merely because allowance/transport checks fail.
         switch (deletionIntents.get(f.id)) { case (?hash) if (hash != ref.content_hash) continue; case null deletionIntents.add(f.id, ref.content_hash) };
         cleanupRecords.add(f.id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #pending });
         let pinned = vaultStores;
-        let store : actor { delete_expired_vault_blob : shared (Text, Text) -> async { #Ok; #Err : Text } } = actor(ref.canister);
-        let result = try { await (with timeout = 10) store.delete_expired_vault_blob(ref.path, ref.content_hash) } catch (_) { continue };
+        let store : actor { delete_expired_vault_blob : shared (Text, Text) -> async { #Ok; #Err : Text }; delete_erased_scope_vault_blob : shared (Text, Text) -> async { #Ok; #Err : Text } } = actor(ref.canister);
+        let result = try { if (erased) await (with timeout = 10) store.delete_erased_scope_vault_blob(ref.path, ref.content_hash) else await (with timeout = 10) store.delete_expired_vault_blob(ref.path, ref.content_hash) } catch (_) { continue };
         switch result { case (#Err(_)) continue; case (#Ok) {} };
         if (vaultStores != pinned or isFenced(f.club) or files.find(func row = row.id == f.id) != ?f or deletionIntents.get(f.id) != ?ref.content_hash) continue;
         files := files.filter(func row = row.id != f.id);
+        backups := backups.map(func b = { b with files = b.files.filter(func row = row.id != f.id) });
         pinned_vaults := pinned_vaults.filter(func pin = pin.vault_file_id != ?f.id);
         let sources = gallerySourceFiles.entries().filter(func e = e.1 == f.id).toArray();
         for ((source, _) in sources.values()) gallerySourceFiles.remove(source);

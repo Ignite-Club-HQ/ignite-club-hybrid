@@ -1370,6 +1370,21 @@ persistent actor MediaBlobStore {
     }
   };
 
+  public shared ({ caller }) func delete_erased_scope_vault_blob(path : Text, expected_hash : Text) : async Result {
+    if (vaultAuthority != ?caller or categoryForPath(path) != ?"vault") return #Err("Vault authority required");
+    if (mediaFenced(path) or retainedBlocked() or quota_mode == #frozen or pathMutationPending(path)) return #Err("Media mutation pending");
+    let cid = club_domain_canister ?? return #Err("Club authority unavailable");
+    let club = clubIdFromPath(path) ?? return #Err("Club scope unavailable");
+    let authority = vaultAuthority; let record = metadata(path);
+    let cd : actor { read_vault_erasure_scope : shared query (Text, ?Text) -> async Bool } = actor(cid.toText());
+    let erased = try { await (with timeout = 10) cd.read_vault_erasure_scope(club, mediaTeam(path)) } catch (_) { return #Err("Erasure evidence unavailable") };
+    if (not erased or club_domain_canister != ?cid or vaultAuthority != authority or metadata(path) != record or mediaFenced(path) or retainedBlocked() or pathMutationPending(path)) return #Err("Erasure scope changed");
+    switch record {
+      case null { if (deletionHashes.get(path) != ?expected_hash) return #Err("Erasure receipt unavailable"); await creditDeletion(path) };
+      case (?r) { if (r.content_hash != expected_hash) return #Err("Erased file hash changed"); deletionHashes.add(path, expected_hash); await deleteRetained(path) }
+    }
+  };
+
   // The final hash comparison and creation of the retained deletion intent have no await between them.
   public shared ({ caller }) func delete_vault_blob(subject : Principal, path : Text, expected_hash : Text) : async Result {
     if (vaultAuthority != ?caller) return #Err("Vault authority required");
