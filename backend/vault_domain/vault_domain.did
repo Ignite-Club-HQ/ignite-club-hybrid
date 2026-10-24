@@ -136,6 +136,11 @@ type Main =
                                 Err: text;
                                 Ok: opt VaultFolder;
                               }) query;
+   get_gallery_copy: (source: text) ->
+    (variant {
+       Err: text;
+       Ok: opt VaultFile;
+     });
    get_pinned_vault: (chat_type: text, chat_id: text) ->
     (variant {
        Err: text;
@@ -309,6 +314,12 @@ type Main =
                     Err: text;
                     Ok: VaultFile;
                   });
+   register_gallery_copy: (source: text, name: text, file_url: text, size:
+    nat64, mime: text, blob_ref: BlobRef) ->
+    (variant {
+       Err: text;
+       Ok: VaultFile;
+     });
    rekey_principal: (old: principal, new_principal: principal, dry_run:
     bool) -> (variant {
                 err: text;
@@ -342,6 +353,10 @@ type Main =
        Err: text;
        Ok;
      });
+   set_gallery_media_authority: (id: principal) -> (variant {
+                                                      Err: text;
+                                                      Ok;
+                                                    });
    set_pinned_vault: (chat_type: text, chat_id: text, club: text,
     vault_file_id: opt text, vault_folder_id: opt text, root_scope: opt text,
     root_id: opt text, enabled: bool) ->
@@ -363,6 +378,11 @@ type Main =
                                 Err: text;
                                 Ok: VaultFile;
                               });
+   trash_gallery_copy: (user: principal, source: text, club: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
    update_folder: (id: text, name: text, restricted_roles: vec text,
     sort_order: nat32, description: opt text, color: opt text) ->
     (variant {

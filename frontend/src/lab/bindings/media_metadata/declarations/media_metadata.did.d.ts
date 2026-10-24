@@ -51,6 +51,7 @@ export interface Comment {
   'id' : string,
   'deleted' : boolean,
   'body' : string,
+  'reply_to_id' : [] | [string],
   'author' : Principal,
   'created_at_ms' : bigint,
   'asset_id' : string,
@@ -87,9 +88,19 @@ export interface Main {
     { 'Ok' : Comment } |
       { 'Err' : string }
   >,
+  'add_comment_reply' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : Comment } |
+      { 'Err' : string }
+  >,
   'add_reaction' : ActorMethod<
     [string, string, bigint],
     { 'Ok' : Reaction } |
+      { 'Err' : string }
+  >,
+  'announce_gallery_asset' : ActorMethod<
+    [string],
+    { 'Ok' : string } |
       { 'Err' : string }
   >,
   'build_asset_page_index' : ActorMethod<
@@ -193,6 +204,11 @@ export interface Main {
     { 'Ok' : Page } |
       { 'Err' : string }
   >,
+  'read_gallery_asset_for_service' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : Asset } |
+      { 'Err' : string }
+  >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'register_asset' : ActorMethod<
     [string, string, string, string, string, string, bigint],
@@ -207,6 +223,11 @@ export interface Main {
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_gallery_asset' : ActorMethod<
+    [string, string],
+    { 'Ok' : { 'vault_updated' : boolean } } |
       { 'Err' : string }
   >,
   'remove_reaction' : ActorMethod<
@@ -252,6 +273,11 @@ export interface Main {
   'set_blob_ref' : ActorMethod<
     [string, [] | [BlobRef]],
     { 'Ok' : Asset } |
+      { 'Err' : string }
+  >,
+  'set_gallery_authorities' : ActorMethod<
+    [Principal, Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_transfer_fence' : ActorMethod<

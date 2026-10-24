@@ -175,6 +175,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(VaultFolder), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_gallery_copy' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(VaultFile), 'Err' : IDL.Text })],
+        [],
+      ),
     'get_pinned_vault' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(PinnedVault), 'Err' : IDL.Text })],
@@ -404,6 +409,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
         [],
       ),
+    'register_gallery_copy' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Nat64, IDL.Text, BlobRef],
+        [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
     'rekey_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
@@ -439,6 +449,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'set_gallery_media_authority' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_pinned_vault' : IDL.Func(
         [
           IDL.Text,
@@ -466,6 +481,11 @@ export const idlFactory = ({ IDL }) => {
     'trash_file' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'trash_gallery_copy' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
         [],
       ),
     'update_folder' : IDL.Func(

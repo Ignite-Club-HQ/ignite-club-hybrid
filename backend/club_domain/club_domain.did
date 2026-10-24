@@ -1765,6 +1765,12 @@ type Main =
                                            Err: text;
                                            Ok: nat16;
                                          });
+   relay_gallery_notice: (user: principal, club: text, team: opt text, owner:
+    principal, parent: opt principal, kind: text, key: text, asset_id:
+    text) -> (variant {
+                Err: text;
+                Ok: nat16;
+              });
    relay_group_pitch_alert: (users: vec text, club: text, kind: text, body:
     text, key: text, related: text) -> (variant {
                                           Err: text;
@@ -2058,6 +2064,10 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   set_gallery_media_authority: (id: principal) -> (variant {
+                                                      Err: text;
+                                                      Ok;
+                                                    });
    set_guardian_relationship: (child_id: text, user: principal,
     relationship_type: text, is_primary: bool) -> (variant {
                                                      Err: text;

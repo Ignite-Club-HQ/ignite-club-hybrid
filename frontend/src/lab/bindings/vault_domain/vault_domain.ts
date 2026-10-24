@@ -161,6 +161,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_gallery_copy(source: string): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFile | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_pinned_vault(chat_type: string, chat_id: string): Promise<{
         __kind__: "Ok";
         Ok: PinnedVault | null;
@@ -398,6 +405,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    register_gallery_copy(source: string, name: string, file_url: string, size: bigint, mime: string, blob_ref: BlobRef): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFile;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -447,6 +461,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_gallery_media_authority(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_pinned_vault(chat_type: string, chat_id: string, club: string, vault_file_id: string | null, vault_folder_id: string | null, root_scope: string | null, root_id: string | null, enabled: boolean): Promise<{
         __kind__: "Ok";
         Ok: PinnedVault;
@@ -471,6 +492,13 @@ export interface MainInterface {
     trash_file(id: string): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    trash_gallery_copy(user: Principal, source: string, club: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
     } | {
         __kind__: "Err";
         Err: string;
@@ -670,6 +698,16 @@ export class Vault_domain implements vault_domainInterface {
     }> {
         const result = await this.actor.get_folder(arg0);
         return from_candid_variant_n18(result);
+    }
+    async get_gallery_copy(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFile | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_gallery_copy(arg0);
+        return from_candid_variant_n20(result);
     }
     async get_pinned_vault(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -1013,6 +1051,16 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n15(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n46(arg9), to_candid_opt_n15(arg10), to_candid_opt_n15(arg11));
         return from_candid_variant_n34(result);
     }
+    async register_gallery_copy(arg0: string, arg1: string, arg2: string, arg3: bigint, arg4: string, arg5: BlobRef): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFile;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.register_gallery_copy(arg0, arg1, arg2, arg3, arg4, arg5);
+        return from_candid_variant_n34(result);
+    }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -1083,6 +1131,16 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.set_competition_domain_canister(arg0);
         return from_candid_variant_n1(result);
     }
+    async set_gallery_media_authority(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_gallery_media_authority(arg0);
+        return from_candid_variant_n1(result);
+    }
     async set_pinned_vault(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: string | null, arg5: string | null, arg6: string | null, arg7: boolean): Promise<{
         __kind__: "Ok";
         Ok: PinnedVault;
@@ -1122,6 +1180,16 @@ export class Vault_domain implements vault_domainInterface {
     }> {
         const result = await this.actor.trash_file(arg0);
         return from_candid_variant_n34(result);
+    }
+    async trash_gallery_copy(arg0: Principal, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.trash_gallery_copy(arg0, arg1, arg2);
+        return from_candid_variant_n49(result);
     }
     async update_folder(arg0: string, arg1: string, arg2: Array<string>, arg3: number, arg4: string | null, arg5: string | null): Promise<{
         __kind__: "Ok";
@@ -1754,6 +1822,25 @@ function from_candid_variant_n48(value: {
     return "Ok" in value ? {
         __kind__: "Ok",
         Ok: from_candid_PinnedVault_n24(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n49(value: {
+    Ok: boolean;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: boolean;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
