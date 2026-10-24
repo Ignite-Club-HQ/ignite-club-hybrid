@@ -2,19 +2,40 @@
 
 ## Status
 
-Vault is **not fully closed**. Two independent source audits traced the app paths through live wrappers and canister implementations. Existing upload, document opening, ZIP decryption, trash and chat-card routing have ICP implementations; this is not a wholesale missing Vault implementation. No production canister upgrade or app publication was performed.
+Vault is **not fully closed or released**. Two independent source audits traced the app paths through live wrappers and canister implementations. The completion batch below repairs core authorization, paging, destinations and byte-cleanup issues locally. No production canister upgrade or app publication was performed.
 
 ## Repairs made in this audit
 
 - Folder renames preserve restricted roles, ordering, description and colour. Explicit role changes remain supported.
 - Mini-league folder/link writes send their actual club rather than an empty placeholder.
 - Move destinations read on-chain folders, use account/backend/scoped query keys and preserve request errors with retry.
-- Unsupported virtual-team and team-to-club-root ICP moves are withheld rather than falsely acknowledged; a destination-scope canister operation is still required.
+- Authorized team/club-root moves now use a destination-scope canister operation; competition folder traversal retains competition context.
 - Large-file deletion matches ICP image IDs to the canister's file acknowledgements.
 - Export thumbnails use the authorized/decrypted photo resolver; ordinary Vault photos no longer fall back to raw ciphertext URLs.
 - ICP storage grants no longer expose Supabase recurring-downgrade controls; mutations also reject before an off-chain write.
 
 ## Remaining implementation gaps
+
+### Completion batch implemented and locally verified
+
+- Legacy private query endpoints refuse direct calls; protected reads establish current authority. Folder reads and writes apply scoped current roles and ancestor restrictions.
+- File listings use revision-bound pages; a disposable canister with 205 files verifies continuation, stale-revision refusal, outsider denial and upgrade retention. The client falls back to an older deployed read only for a missing first-page method, never for denial or incomplete pages.
+- Chat pins consult the configured messaging authority for canonical conversation scope, participation and management. Real canisters verify participant reads and outsider/non-manager refusals.
+- Registered internal files require pinned-store hash and actual size evidence. Registration retries preserve the same file identity. Gallery IDs allocate monotonically rather than using current file count.
+- Permanent deletion retains a hash-bound intent until physical bytes are confirmed absent; unknown/interrupted cleanup keeps metadata and blocks blind replay. Permanent tombstones prevent file-ID resurrection. Shared-byte references refuse individual cleanup pending reconciliation.
+- Private chat mirrors make independent encrypted copies; raw URLs/zero-byte internal registrations are no longer accepted as copies.
+- Small metadata backups restore only available files into valid destinations after fresh authority checks. Recovery no longer grants club-wide decryption rights. Large backups currently refuse above 200 rows instead of silently restoring an incomplete inventory.
+- Exact club/team media allowance controls paid Vault access; personal global Pro does not unlock an unpaid club. Media usage failures remain errors instead of publishing incomplete zero/low totals.
+- Reciprocal Vault/messaging/store wiring is included in provisioning/release configuration; no wiring has been applied live.
+
+### Still-open engineering and integration limits
+
+- Upload registration now has a stable ID and store evidence, but there is not yet a durable cross-device orphan-upload/unknown-registration reconciliation journal.
+- Backup restoration above 200 folder/file rows still needs bounded resumable pages; it intentionally fails closed today.
+- Blob retention and whole-account erasure still need coordinated Vault metadata/source/pin reconciliation under the existing separately gated lifecycle design. Missing physical bytes are not recovered by a metadata backup.
+- Google Drive import/sync remains an actual external integration gap; blocking Supabase calls in ICP mode is not a replacement for Google authorization.
+
+The original audit findings below are retained as a reference; several are addressed by the completion batch, and the unresolved limits above must not be described as closed.
 
 ### Authorization and inventory
 
@@ -45,5 +66,6 @@ Google Drive OAuth import, linked-folder sync and title resolution remain Supaba
 ## Verification and release requirements
 
 - Focused dual-mode unit tests exercise the repaired app paths; regression coverage includes preservation of committee restrictions, exact move scope, errors and ICP image deletion acknowledgement.
-- These unit tests do not prove the remaining actor authorization/lifecycle issues solved. Add disposable real-canister tests for outsiders/revocation/ancestors/pins, >200 records, expired/missing objects, interrupted cleanup and populated upgrade preservation before claiming completion.
+- Completion verification: 12 focused files passed with 101 ICP and 131 Supabase checks (before two additional paging-compatibility checks); 17-contract drift and ICP guards passed. Real disposable Vault, club, messaging and blob-store actors verified outsider/direct-query denial, role revocation/ancestors, 205-file paging, stale revision, forged size/provenance, private pin permissions, idempotent registration, interrupted cleanup/tombstone and populated upgrade readback.
+- Public `/vault` redirected to `/auth` with zero runtime errors. This is not signed-in Vault acceptance and does not verify private file opening on a phone.
 - Existing and future canister changes require separately authorized exact protected upgrades in both groups, reciprocal authority verification, compatible web/native release and signed-in Internet Identity acceptance. No signed-in II session is available in this sandbox; private Vault UI acceptance is unverified.
