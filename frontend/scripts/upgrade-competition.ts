@@ -96,7 +96,10 @@ for (const t of targets) {
   if (t.name === 'club_domain' || t.name === 'competition_domain') {
     const role = t.name === 'club_domain' ? 'competition_authority' : 'participant_club_authority';
     const domain = t.name === 'club_domain' ? 'competition_domain' : 'club_domain';
-    for (const peer of targets.filter(s => s.name === domain)) {
+    // Authorities are same-group by design (deploy-mainnet.sh and the G2 provision
+    // each wire only their own group's pair); cross-group rows are neither required
+    // nor forbidden.
+    for (const peer of targets.filter(s => s.groupId === t.groupId && s.name === domain)) {
       const direct = t.name === 'club_domain' ? 'competition_domain' : 'club_domain';
       if (!rows.some(r => (r[0] === role || r[0] === direct) && r[1] === peer.canisterId)) throw Error('Reciprocal competition authority missing; no implicit setters');
     }
