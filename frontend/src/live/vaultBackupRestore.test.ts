@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeatureBackendContext } from "./featureRouter";
-import { restoreLiveVaultBackupWithMedia } from "./features/vault";
+import { restoreLiveVaultBackup, restoreLiveVaultBackupWithMedia } from "./features/vault";
 
 const m = vi.hoisted(() => ({
   getBackup: vi.fn(),
@@ -72,9 +72,23 @@ describe("vault backup restore with media recovery", () => {
 
   it("propagates a restore denial without attempting grants", async () => {
     m.getBackup.mockResolvedValue({ Ok: { files: [file("clubs/club-1/a.jpg")] } });
-    m.restoreBackup.mockResolvedValue({ Err: "App admin only" });
+    m.restorePage.mockResolvedValue({ Err: "App admin only" });
     await expect(restoreLiveVaultBackupWithMedia(ctx, "backup-1")).rejects.toThrow("App admin only");
     expect(m.grantClub).not.toHaveBeenCalled();
     expect(m.fetch).not.toHaveBeenCalled();
+  });
+  it("restores more than 200 rows using acknowledged continuation receipts", async () => {
+    m.restorePage.mockResolvedValueOnce({ Ok: { next: 40n, restored: 40n, skipped: 0n, complete: false } })
+      .mockResolvedValueOnce({ Ok: { next: 205n, restored: 205n, skipped: 0n, complete: true } });
+    await expect(restoreLiveVaultBackup(ctx, "large")).resolves.toBe(205n);
+    expect(m.restorePage.mock.calls).toEqual([["large", 0n], ["large", 40n]]);
+    expect(m.restoreBackup).not.toHaveBeenCalled();
+  });
+  it("does not retry or fall back after an uncertain second-page outcome", async () => {
+    m.restorePage.mockResolvedValueOnce({ Ok: { next: 40n, restored: 1n, skipped: 39n, complete: false } })
+      .mockRejectedValueOnce(new Error("Connection interrupted"));
+    await expect(restoreLiveVaultBackup(ctx, "large")).rejects.toThrow("Connection interrupted");
+    expect(m.restoreBackup).not.toHaveBeenCalled();
+    expect(m.restorePage).toHaveBeenCalledTimes(2);
   });
 });

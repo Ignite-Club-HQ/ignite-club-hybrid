@@ -697,10 +697,11 @@ persistent actor class Main(governorInit : Principal) = this {
       }; case null {}
     };
     if (not is_external_link) {
+      let registrationRevision = mediaEvidenceRevision;
       let ref = blob_ref ?? return #Err("Encrypted file provenance required");
       if (not Text.startsWith(ref.path, #text ("clubs/" # club # "/vault/")) or file_url != "https://" # ref.canister # ".raw.icp0.io/" # ref.path) return #Err("Private Vault bytes required");
       if (not (await verifyFileBytes(caller, ref, size))) return #Err("File byte evidence unavailable or mismatched");
-      if (not (await canWrite(caller, club, team, competition_id)) or files.any(func f = f.id == id)) return #Err("Registration scope changed");
+      if (not (await canWrite(caller, club, team, competition_id)) or files.any(func f = f.id == id) or mediaEvidenceRevision != registrationRevision or deletionIntents.get(id) != null or isFenced(club)) return #Err("Registration scope changed");
     } else if (blob_ref != null or size != 0 or not Text.startsWith(file_url, #text "https://")) return #Err("Invalid external link");
     let file : Types.VaultFile = {
       id; folder_id; club; team; name; file_url; size; mime;
