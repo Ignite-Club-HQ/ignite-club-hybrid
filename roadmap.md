@@ -1,6 +1,7 @@
 ## Chat links and polls — 24 October 2026
 - [x] Audit found pitch-card unscoped ICP reads and Supabase-only viewer; cards/viewer now share account-scoped team-authorized reads, and viewer roster routes to ICP. Team/club polls prefetch before enrichment; gallery names reuse display metadata after authorization. Event/gallery queries bind account and restored sign-in.
-- [ ] Focused checks and signed-in board/poll/link timing acceptance pending; Internet Identity session unavailable.
+- [x] All 17 focused board/poll/Vault/news/group-message checks pass in both ICP and Supabase modes; ICP guard and preview build pass. Cold news discovery and external-site previews retain authorized/network-dependent reads; no promise of instant first retrieval.
+- [ ] Signed-in board/poll/link timing acceptance: Internet Identity session unavailable; no publication or canister changes.
 
 ## Slow chat photos — 24 October 2026
 - [x] Found duplicate concurrent unlock/download work and a Cache API write/remount race; shared account/target-scoped resolution retains completed object URLs and retries failures, with original-group authorization unchanged.
