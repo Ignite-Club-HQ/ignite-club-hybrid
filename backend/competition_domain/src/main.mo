@@ -2718,7 +2718,7 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
       Map.add(broadcastDeliveries, Text.compare, key, receipt);
-      let selected = entries.filter(func e = e.competition_id == competition and (e.status == "accepted" or e.status == "registered") and (divisions.size() == 0 or (switch e.division_id { case null false; case (?d) divisions.any(func v = v == d) })));
+      let selected = entries.filter(func e = e.competition_id == competition and (e.status == "accepted" or e.status == "registered") and (divisions.size() == 0 or (switch (e.division_id) { case null false; case (?d) divisions.any(func v = v == d) })));
       if (selected.size() > 100) return #Err("Broadcast team inventory exceeds bound");
       var clubIds : [Text] = [];
       for (entry in selected.values()) if (not clubIds.any(func id = id == entry.club_id)) clubIds := clubIds.concat([entry.club_id]);
@@ -2746,11 +2746,12 @@ persistent actor class Main(governorInit : Principal) = this {
           await syncForCompetition(caller, competition);
           if (removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller, competition) or not selected.all(func e = entries.any(func current = current == e))) return #Err("Broadcast access changed");
           let officials = if (club == host) roles.filter(func r = r.competition_id == competition).map(func r = r.user) else [];
+          if (Map.get(broadcastDeliveries, Text.compare, key) != ?receipt) return #Err("Broadcast operation already active");
           receipt := { receipt with unknown = ?club }; Map.add(broadcastDeliveries, Text.compare, key, receipt);
           let service : actor { relay_competition_broadcast : shared (Principal, Text, Text, [Text], [Principal], Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
           let reply = try { await (with timeout = 10) service.relay_competition_broadcast(caller, club, competition, clubTeams, officials, body, receipt.broadcast_id) } catch (_) { return #Err("Broadcast outcome unresolved; retain original operation") };
           switch reply {
-            case (#Err(e)) { receipt := { receipt with unknown = null }; Map.add(broadcastDeliveries, Text.compare, key, receipt); return #Err(e) };
+            case (#Err(e)) { return #Err("Broadcast outcome retained: " # e) };
             case (#Ok(n)) { count += Nat16.toNat(n); receipt := { receipt with unknown = null; completed = receipt.completed.concat([(club, n)]) }; Map.add(broadcastDeliveries, Text.compare, key, receipt) }
           }
         }

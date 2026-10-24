@@ -614,7 +614,8 @@ persistent actor class Main(governorInit : Principal) = this {
     for (user in users.values()) {
       let id = receiptKey # "-" # user;
       if (recipientAllowed(user, "competition_broadcast") and get(id) == null) {
-        items := items.concat([{ id; user; club; kind = "competition_broadcast"; body; idempotency_key = key; status = #Pending; attempts = 0; next_attempt_ms = 0; read = false; related_id = ?related; created_at_ms = stamp }]);
+        let item : Types.Notification = { id; user; club; kind = "competition_broadcast"; body; idempotency_key = key; status = #Pending; attempts = 0; next_attempt_ms = 0; read = false; related_id = ?related; created_at_ms = stamp };
+        items := items.concat([item]);
         count += 1
       }
     };
