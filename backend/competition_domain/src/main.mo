@@ -2383,7 +2383,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not canManageClub(caller, current.club_id)) return #Err("Club admin required");
         let pending = Map.entries(emailJobs).any(func pair = pair.1.kind == "eoi" and pair.1.resource == id and (pair.1.state == "pending" or pair.1.state == "processing" or pair.1.state == "unknown"));
         if (pending) return #Err("Previous email is pending or unresolved");
-        switch (emailOutbox.enqueue("eoi:" # id # ":" # Nat.toText(current.invite_sent_count + 1), "eoi", id, "", nowMs())) { case (#Err(e)) #Err(e); case (#Ok) #Ok(current) }
+        switch (emailOutbox.enqueue("eoi:" # id # ":" # Nat16.toText(current.invite_sent_count + 1), "eoi", id, "", nowMs())) { case (#Err(e)) #Err(e); case (#Ok) #Ok(current) }
       };
     }
   

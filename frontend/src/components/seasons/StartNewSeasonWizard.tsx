@@ -61,6 +61,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
   const [archiveCurrent, setArchiveCurrent] = useState(true);
   const [seasonName, setSeasonName] = useState("");
   const [duplicateStructure, setDuplicateStructure] = useState(!isIcp);
+  const [cloneOperation] = useState(() => crypto.randomUUID());
   const [copyStaff, setCopyStaff] = useState(true);
   const [createdSeasonId, setCreatedSeasonId] = useState<string | null>(null);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(new Set());
@@ -120,8 +121,9 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
             if (error) throw error;
             return data as string;
           },
-          icp: async () => {
-            throw new Error("Duplicating season teams and staff isn't available in ICP yet.");
+          icp: async ctx => {
+            const { duplicateLiveClubSeason } = await import("@/live/features/club");
+            return (await duplicateLiveClubSeason(ctx, cloneOperation, currentSeason.id, seasonName.trim(), copyStaff)).id;
           },
         }, writeOnce({ clubId }));
       }
@@ -310,15 +312,12 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
                       id="dup"
                       checked={duplicateStructure}
                       onCheckedChange={(v) => setDuplicateStructure(!!v)}
-                      disabled={isIcp}
                       className="mt-0.5"
                     />
                     <div className="flex-1">
                       <Label htmlFor="dup" className="cursor-pointer">Duplicate structure from {currentSeason.name}</Label>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {isIcp
-                          ? "Team and staff cloning isn't available in ICP yet."
-                          : "Copies team names. You'll choose which players to carry over next."}
+                        Copies team names. You'll choose which players to carry over next.
                       </p>
                     </div>
                   </div>

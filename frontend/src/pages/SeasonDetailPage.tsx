@@ -376,7 +376,7 @@ function SupabaseSeasonDetailPage() {
         <DraftTeamBuilder clubId={clubId} seasonId={seasonId} teams={teams} />
       )}
 
-      {isDraft && !isIcp && priorSeasons.length > 0 && teams.length > 0 && (
+      {isDraft && priorSeasons.length > 0 && teams.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -588,6 +588,7 @@ function SupabaseSeasonDetailPage() {
 
       {bulkRolloverOpen && clubId && seasonId && (
         <BulkRolloverDialog
+          clubId={clubId}
           open={bulkRolloverOpen}
           onOpenChange={setBulkRolloverOpen}
           targetSeasonId={seasonId}
