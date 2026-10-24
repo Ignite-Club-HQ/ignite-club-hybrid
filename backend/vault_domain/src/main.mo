@@ -987,18 +987,51 @@ persistent actor class Main(governorInit : Principal) = this {
 
   // Metadata finalization requires byte absence; unknown cleanup keeps the row and intent.
   public shared ({ caller }) func begin_file_cleanup(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
     await admitAccount(caller); auth(caller);
     let f = files.find(func row = row.id == id) ?? return #Err("File not found");
     if (not (await canWrite(caller, f.club, f.team, f.competition_id))) return #Err("Scoped staff required");
     if (files.find(func row = row.id == id) != ?f or isFenced(f.club)) return #Err("File changed");
-    if (deletionIntents.get(id) != null) return #Err("Cleanup outcome requires reconciliation");
     let ref = f.blob_ref ?? return #Err("File provenance unavailable");
     if (files.any(func other = other.id != id and other.blob_ref == f.blob_ref)) return #Err("Shared file bytes require reference reconciliation");
     if (not vaultStores.any(func id = id.toText() == ref.canister)) return #Err("Original store not configured");
+    switch (deletionIntents.get(id)) {
+      case (?hash) { if (hash != ref.content_hash or f.deleted_at_ms == null) return #Err("Cleanup identity changed"); return #Ok(f) };
+      case null {}
+    };
     deletionIntents.add(id, ref.content_hash);
     let hidden = { f with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
     files := files.map(func row = if (row.id == id) hidden else row); mediaEvidenceRevision += 1;
     #Ok(hidden)
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  // Resume only a previously acknowledged intent; never delete by a browser-supplied path.
+  public shared ({ caller }) func resume_file_cleanup(id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      let f = files.find(func row = row.id == id) ?? return #Err("File not found");
+      let ref = f.blob_ref ?? return #Err("File provenance unavailable");
+      if (deletionIntents.get(id) != ?ref.content_hash or f.deleted_at_ms == null) return #Err("File cleanup required");
+      if (not (await canWrite(caller, f.club, f.team, f.competition_id))) return #Err("Scoped staff required");
+      let pinned = vaultStores;
+      if (not pinned.any(func store = store.toText() == ref.canister) or files.find(func row = row.id == id) != ?f or isFenced(f.club) or removalReceiver.denied(caller)) return #Err("Cleanup scope changed");
+      if (files.any(func other = other.id != id and other.blob_ref == f.blob_ref)) return #Err("Shared file bytes require reference reconciliation");
+      let store : actor { delete_vault_blob : shared (Principal, Text, Text) -> async { #Ok; #Err : Text } } = actor(ref.canister);
+      let result = try { await (with timeout = 10) store.delete_vault_blob(caller, ref.path, ref.content_hash) } catch (_) { return #Err("Cleanup outcome unknown; reconcile same file") };
+      switch result { case (#Err(e)) return #Err(e); case (#Ok) {} };
+      await admitAccount(caller);
+      if (not (await canWrite(caller, f.club, f.team, f.competition_id)) or vaultStores != pinned or files.find(func row = row.id == id) != ?f or deletionIntents.get(id) != ?ref.content_hash or isFenced(f.club) or removalReceiver.denied(caller)) return #Err("Cleanup scope changed");
+      // The store's successful acknowledgement includes retained-accounting settlement.
+      files := files.filter(func row = row.id != id);
+      let sources = gallerySourceFiles.entries().filter(func entry = entry.1 == id).toArray();
+      for ((source, _) in sources.values()) gallerySourceFiles.remove(source);
+      pinned_vaults := pinned_vaults.filter(func pin = pin.vault_file_id != ?id);
+      deletionIntents.add(id, "removed:" # ref.content_hash); mediaEvidenceRevision += 1;
+      #Ok
+    } finally { removalReceiver.leave(caller) }
   };
   public shared ({ caller }) func delete_file_permanent(id : Text) : async { #Ok; #Err : Text } {
     if (not removalReceiver.enter(caller)) return #Err("Account fenced");

@@ -1339,6 +1339,40 @@ persistent actor MediaBlobStore {
     } finally { removalReceiver.leave(caller) };
   };
 
+  // Only the configured Vault may delegate a human-authorized, exact-object delete.
+  // The final hash comparison and creation of the retained deletion intent have no await between them.
+  public shared ({ caller }) func delete_vault_blob(subject : Principal, path : Text, expected_hash : Text) : async Result {
+    if (vaultAuthority != ?caller) return #Err("Vault authority required");
+    if (not removalReceiver.enter(subject)) return #Err("Account fenced");
+    try {
+      await admitAccount(subject); auth(subject);
+      if (categoryForPath(path) != ?"vault" or expected_hash == "") return #Err("Vault path and hash required");
+      if (mediaFenced(path) or retainedBlocked()) return #Err("Media frozen");
+      let authority = vaultAuthority;
+      let original = metadata(path);
+      switch original {
+        case null {
+          // A remaining credit operation must settle before Vault can finalize metadata.
+          switch (retained_deletions.get(path)) {
+            case null return #Ok;
+            case (?receipt) {
+              if (not receipt.owner.equal(subject) and not isGovernor<system>(subject) and not (await isClubStaffForPath(subject, path))) return #Err("Scoped staff required");
+              if (vaultAuthority != authority or mediaFenced(path) or removalReceiver.denied(subject)) return #Err("Cleanup authority changed");
+              return await creditDeletion(path)
+            }
+          }
+        };
+        case (?record) {
+          if (record.content_hash != expected_hash) return #Err("Vault blob hash changed");
+          if (not record.owner.equal(subject) and not isGovernor<system>(subject) and not (await isClubStaffForPath(subject, path))) return #Err("Scoped staff required");
+          if (vaultAuthority != authority or removalReceiver.denied(subject) or mediaFenced(path) or retainedBlocked() or metadata(path) != ?record) return #Err("Cleanup object or authority changed");
+          if (pathMutationPending(path) and retained_deletions.get(path) == null) return #Err("Upload mutation pending");
+          await deleteRetained(path)
+        }
+      }
+    } finally { removalReceiver.leave(subject) }
+  };
+
   // Serves ciphertext only — see the module header. No authorization here:
   // read access is enforced at vetKey derivation time on pii_access_control.
   public query func http_request(request : HttpRequest) : async HttpResponse {

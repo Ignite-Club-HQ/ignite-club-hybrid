@@ -1,4 +1,5 @@
 ## File Vault ICP audit — 24 October 2026
+- [ ] Continue safe cleanup recovery: conditional original-hash store deletion, resumable Vault cleanup and retained erasure provenance; verify real interrupted/replacement/upgrade behavior without deploying.
 - [x] Current continuation: summary-only backup creation, 40-row revision-bound manifest export/JSONL download, incremental restore media checking, erasure snapshot/role/pin/source cleanup and final destination-registration checks implemented; dual-mode and disposable-canister checks pass. No live deployment.
 - [x] Implement current-role/ancestor authorization, revision-bound file pages, canonical chat pins, authorized root moves, store hash/actual-size registration evidence, deletion intents/tombstones, small availability-aware backup restore, competition context and scoped storage reporting; verify locally without deploying.
 - [x] Remove Supabase routing reads for restored II sessions; add 40-row durable backup restore receipts with replay/future-cursor checks, upgrade resume, post-await revision guards and erased-file tombstones.
