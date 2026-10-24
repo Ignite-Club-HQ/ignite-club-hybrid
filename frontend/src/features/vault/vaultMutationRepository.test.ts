@@ -584,7 +584,7 @@ describe.runIf(!supabaseMode)("Vault mutation repository — ICP", () => {
         miniLeagueId: "league-a",
         miniLeagueName: "League A",
       },
-      clubId: "",
+      clubId: "club-a",
       teamId: null,
       miniLeagueId: "league-a",
       competitionId: null,
