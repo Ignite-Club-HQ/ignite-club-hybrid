@@ -286,6 +286,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
         [],
       ),
+    'move_file_to_root' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
     'prepare_account_removal' : IDL.Func(
         [Request],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -503,6 +508,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_transfer_fence' : IDL.Func(
         [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_vault_stores' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

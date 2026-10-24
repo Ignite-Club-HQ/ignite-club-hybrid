@@ -250,6 +250,13 @@ export interface _SERVICE {
       } |
       { 'Err' : string }
   >,
+  'read_vault_blob_evidence' : ActorMethod<
+    [Principal, string],
+    {
+        'Ok' : { 'owner' : Principal, 'content_hash' : string, 'size' : bigint }
+      } |
+      { 'Err' : string }
+  >,
   'reconcile_retained_deletions' : ActorMethod<
     [string],
     { 'Ok' : { 'attempted' : bigint, 'cursor' : string } } |
@@ -282,6 +289,7 @@ export interface _SERVICE {
     [string, boolean, [] | [bigint]],
     Result
   >,
+  'set_vault_authority' : ActorMethod<[Principal], Result>,
   'stable_storage_status' : ActorMethod<
     [],
     {

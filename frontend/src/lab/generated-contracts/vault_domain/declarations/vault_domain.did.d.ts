@@ -179,6 +179,11 @@ export interface Main {
     { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
+  'move_file_to_root' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
   'prepare_account_removal' : ActorMethod<
     [Request],
     { 'Ok' : null } |
@@ -370,6 +375,11 @@ export interface Main {
   >,
   'set_transfer_fence' : ActorMethod<
     [string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_vault_stores' : ActorMethod<
+    [Array<Principal>],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

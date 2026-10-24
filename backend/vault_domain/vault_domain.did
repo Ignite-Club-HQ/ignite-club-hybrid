@@ -220,6 +220,11 @@ type Main =
        Err: text;
        Ok: VaultFile;
      });
+   move_file_to_root: (id: text, team: opt text) ->
+    (variant {
+       Err: text;
+       Ok: VaultFile;
+     });
    prepare_account_removal: (request: Request) -> (variant {
                                                      Err: text;
                                                      Ok;
@@ -390,6 +395,10 @@ type Main =
        Err: text;
        Ok;
      });
+   set_vault_stores: (ids: vec principal) -> (variant {
+                                                Err: text;
+                                                Ok;
+                                              });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;

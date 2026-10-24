@@ -278,6 +278,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    move_file_to_root(id: string, team: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFile;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     prepare_account_removal(request: Request): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -501,6 +508,13 @@ export interface MainInterface {
         Err: string;
     }>;
     set_transfer_fence(club: string, fenced: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_vault_stores(ids: Array<Principal>): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -892,6 +906,16 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.move_file(arg0, arg1);
         return from_candid_variant_n1(result);
     }
+    async move_file_to_root(arg0: string, arg1: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: VaultFile;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.move_file_to_root(arg0, to_candid_opt_n16(arg1));
+        return from_candid_variant_n1(result);
+    }
     async prepare_account_removal(arg0: Request): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1218,6 +1242,16 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_transfer_fence(arg0, arg1);
+        return from_candid_variant_n8(result);
+    }
+    async set_vault_stores(arg0: Array<Principal>): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_vault_stores(arg0);
         return from_candid_variant_n8(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
