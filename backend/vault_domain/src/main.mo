@@ -71,6 +71,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var nextBackupSeq : Nat64;
   var nextGalleryFileSeq : Nat;
   var messagingDomainCanister : ?Principal;
+  var vaultStores : [Principal];
   var deletionIntents : Map.Map<Text, Text>;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
@@ -588,8 +589,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let original = a.blob_ref ?? return #Err("Gallery source has no configured store");
       if (blob_ref.canister != original.canister) return #Err("Gallery copy store mismatch");
       let store : actor { get_content_hash : shared query (Text) -> async ?Text } = actor(original.canister);
-      let acknowledgedHash = await (with timeout = 10) store.get_content_hash(blob_ref.path);
-      if (acknowledgedHash != ?blob_ref.content_hash) return #Err("Private copy not acknowledged by source store");
+      if (not (await verifyFileBytes(caller, blob_ref, size))) return #Err("Private copy not acknowledged by source store");
       // Recheck source access after every external authorization await.
       let current = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(row)) row };
       if (current != a or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery source changed");
@@ -614,6 +614,20 @@ persistent actor class Main(governorInit : Principal) = this {
     if (galleryMediaAuthority != ?caller or isFenced(club) or removalReceiver.denied(user) or files.find(func f = f.id == id) != ?file) return #Err("Gallery copy changed");
     if (file.deleted_at_ms == null) { files := files.map(func f = if (f.id == id) ({ f with deleted_at_ms = ?nowMs(); deleted_by = ?user }) else f); mediaEvidenceRevision += 1 };
     #Ok(true)
+  };
+
+  public shared ({ caller }) func set_vault_stores(ids : [Principal]) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or ids.size() == 0 or ids.size() > 64 or ids.any(func id = id.equal(Principal.anonymous()) or id.toText() == "aaaaa-aa")) return #Err("Governor and valid stores required");
+    vaultStores := ids; #Ok
+  };
+  func verifyFileBytes(user : Principal, ref : Types.BlobRef, size : Nat64) : async Bool {
+    let pinned = vaultStores;
+    if (not pinned.any(func id = id.toText() == ref.canister)) return false;
+    let store : actor { read_vault_blob_evidence : shared (Principal, Text) -> async { #Ok : { owner : Principal; size : Nat; content_hash : Text }; #Err : Text } } = actor(ref.canister);
+    let evidence = try { await (with timeout = 10) store.read_vault_blob_evidence(user, ref.path) } catch (_) { return false };
+    await admitAccount(user);
+    if (vaultStores != pinned) return false;
+    switch evidence { case (#Ok(e)) e.content_hash == ref.content_hash and e.size == size.toNat(); case (#Err(_)) false }
   };
 
   public shared ({ caller }) func register_file(
@@ -672,9 +686,8 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     if (not is_external_link) {
       let ref = blob_ref ?? return #Err("Encrypted file provenance required");
-      if (not Text.startsWith(ref.path, #text ("clubs/" # club # "/vault/"))) return #Err("Private Vault bytes required");
-      let store : actor { get_content_hash : shared query (Text) -> async ?Text } = actor(ref.canister);
-      if ((await (with timeout = 10) store.get_content_hash(ref.path)) != ?ref.content_hash) return #Err("File bytes unavailable");
+      if (not Text.startsWith(ref.path, #text ("clubs/" # club # "/vault/")) or file_url != "https://" # ref.canister # ".raw.icp0.io/" # ref.path) return #Err("Private Vault bytes required");
+      if (not (await verifyFileBytes(caller, ref, size))) return #Err("File byte evidence unavailable or mismatched");
       if (not (await canWrite(caller, club, team, competition_id)) or files.any(func f = f.id == id)) return #Err("Registration scope changed");
     } else if (blob_ref != null or size != 0 or not Text.startsWith(file_url, #text "https://")) return #Err("Invalid external link");
     let file : Types.VaultFile = {
@@ -937,6 +950,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (files.find(func row = row.id == id) != ?f or isFenced(f.club)) return #Err("File changed");
     if (deletionIntents.get(id) != null) return #Err("Cleanup outcome requires reconciliation");
     let ref = f.blob_ref ?? return #Err("File provenance unavailable");
+    if (not vaultStores.any(func id = id.toText() == ref.canister)) return #Err("Original store not configured");
     deletionIntents.add(id, ref.content_hash);
     let hidden = { f with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
     files := files.map(func row = if (row.id == id) hidden else row); mediaEvidenceRevision += 1;

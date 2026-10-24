@@ -146,6 +146,7 @@ persistent actor MediaBlobStore {
   // set_club_domain_canister. While unset, only owner/governor may delete
   // (fail closed).
   var club_domain_canister : ?Principal;
+  var vaultAuthority : ?Principal;
   // Sharding (migration 20261012): running byte total and capacity limit.
   var total_bytes : Nat64;
   var capacity_limit_bytes : Nat64;
@@ -1242,6 +1243,21 @@ persistent actor MediaBlobStore {
   };
 
   // ==================== Reads ====================
+
+  // Ciphertext length/hash are public byte properties; principal evidence is service-private.
+  public shared ({ caller }) func read_vault_blob_evidence(subject : Principal, path : Text) : async { #Ok : { owner : Principal; size : Nat; content_hash : Text }; #Err : Text } {
+    if (vaultAuthority != ?caller) return #Err("Vault authority required");
+    await admitAccount(subject);
+    if (mediaFenced(path)) return #Err("Media frozen");
+    let record = metadata(path) ?? return #Err("File bytes unavailable");
+    if (not record.owner.equal(subject) and not isGovernor<system>(subject) and not (await isClubStaffForPath(subject, path))) return #Err("File access forbidden");
+    if (vaultAuthority != ?caller or metadata(path) != ?record or mediaFenced(path)) return #Err("File evidence changed");
+    #Ok({ owner = record.owner; size = MediaByteAccounting.storedBytes(readRange(path, 0), record.length); content_hash = record.content_hash })
+  };
+  public shared ({ caller }) func set_vault_authority(id : Principal) : async Result {
+    if (not isGovernor<system>(caller) or id.equal(Principal.anonymous())) return #Err("Governor required");
+    vaultAuthority := ?id; #Ok
+  };
 
   public query func get_content_hash(path : Text) : async ?Text {
     switch (metadata(path)) {

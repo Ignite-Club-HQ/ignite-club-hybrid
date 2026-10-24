@@ -163,13 +163,18 @@ fi
 
 echo "==> Wiring: media_blob_store -> club_domain"
 icp canister call media_blob_store set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
+icp canister call media_blob_store set_vault_authority "(principal \"$VAULT_DOMAIN\")" -e "$ICP_ENV"
 # Photo-store shards (media_blob_store_2, _3, …) get the same wiring. Each
 # shard is its own canister entry in icp.yaml built from the media_blob_store
 # source with GOVERNOR_PRINCIPAL set; register its ID in Placement Settings.
 for SHARD in $(node -e "const m=require('$IDS_JSON');console.log(Object.keys(m).filter(k=>/^media_blob_store_\\d+$/.test(k)).join(' '))"); do
   echo "==> Wiring: $SHARD -> club_domain"
   icp canister call "$SHARD" set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
+  icp canister call "$SHARD" set_vault_authority "(principal \"$VAULT_DOMAIN\")" -e "$ICP_ENV"
 done
+
+VAULT_STORES="$(node -e "const m=require('$IDS_JSON');console.log(Object.keys(m).filter(k=>/^media_blob_store(_\\d+)?$/.test(k)).map(k=>'principal \"'+m[k]+'\"').join('; '))")"
+icp canister call vault_domain set_vault_stores "(vec { $VAULT_STORES })" -e "$ICP_ENV"
 
 echo "==> Wiring: permanent-delete fan-out (club_domain -> events/messaging/pii, events/messaging <- club_domain)"
 # Without these, club_domain skips cross-canister cleanup (local purge still
