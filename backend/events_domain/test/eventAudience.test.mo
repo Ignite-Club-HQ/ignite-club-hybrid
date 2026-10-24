@@ -1,4 +1,5 @@
 import Audience "../src/eventAudience";
+import Array "mo:core/Array";
 import Types "../src/types";
 import Principal "mo:core/Principal";
 let parent = Principal.fromText("aaaaa-aa");
@@ -11,7 +12,7 @@ let membership : Audience.Membership = {
 let subjects = Audience.subjects(event, membership);
 assert subjects.size() == 2;
 assert not subjects.any(func(s) = s.user == player.toText());
-let responses : [Types.Rsvp] = [{ event_id = "e"; account_id = parent.toText(); child_id = null; state = "going"; notes = ""; created_at_ms = 0 }];
+let responses : [Types.Rsvp] = [{ event_id = "e"; account_id = parent.toText(); child_id = null; state = "going"; notes = ""; has_paid = null; source = "manual"; updated_at_ms = 0 }];
 assert Audience.unanswered(event, subjects, responses) == [{ user = parent.toText(); child = ?"child" }];
 assert Audience.users(subjects) == [parent.toText()];
 assert Audience.subjects({ event with adults_only = true }, membership).size() == 1;
