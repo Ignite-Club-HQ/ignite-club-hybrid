@@ -2,6 +2,14 @@
 
 ## Verdict and scope
 
+### Recovery continuation (local implementation)
+
+Scoped snapshots now include competition fixture receipts, broadcast plans/deliveries and source-linked email jobs; club seasons, team-copy maps, assignments, clone receipts, pending invitations, mail jobs and relay receipts; event player details and full fixture materialization revision/input receipts; and paired notification broadcast/audience proof. Imports preserve existing unrelated scopes, reject recovery-key collisions and rollback of known delivery/revision evidence, and refuse unresolved provider/relay outcomes or partial multi-club fixture receipts. Legacy snapshots cannot replace existing omitted recovery evidence. No transfer or deployment has been activated.
+
+Competition erasure/rekey covers officials in other senders' frozen plans, with unresolved affected broadcasts refusing mutation; event erasure anonymizes materialization creators while retaining conflict/revision evidence. Broader coordinated relay/queue identity scrubbing and historical receipt recovery remain uncertified; exact proof must not be independently rewritten or fabricated.
+
+Disposable production-actor tests exercise recovered fixture and season operation replay, changed-payload rejection, detailed child/position readback, equal/lower fixture revisions, original queue audiences, repeated import and blocked replacement/purge for provider claims. These tests are separate from signed-in deployed acceptance. Full-state `export_state` remains a legacy partial interface, not a complete backup; this batch extends fenced club snapshots only. Historical unknown outcomes still require original evidence, protected upgrades/provider setup and real Internet Identity acceptance remain outstanding.
+
 ### Closure batch update
 
 Core repairs are implemented and locally exercised: fresh result/detail manager authorization; accepted/registered fixture eligibility; private broadcasts and date-scoped engagement reads; caller-authorized competition cards; club-section routing; pinned anonymous multi-group reads with conflict rejection; public EOI owner target carried with the loaded form; exact competition/event association reads; awaited player statistics; manual fixture details; atomic division moves preserving completed results; trusted per-club broadcasts with durable queue/audience receipts; ICP broadcast-thread polling; committee role vocabulary; and explicit account competition purge. Test harnesses now include navigation context.

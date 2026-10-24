@@ -59,6 +59,9 @@ try {
   denied(await k.finish_email_job(claim.job.id,claim.job.attempt,'sent',''));
   ok(await k.finish_email_job(claim.job.id,claim.job.attempt,'sent','provider'));
   ok(await k.finish_email_job(claim.job.id,claim.job.attempt,'sent','provider'));
+  k.setPrincipal(governor);ok(await k.set_transfer_fence('club',true));
+  const settledSnapshot=ok(await k.export_club_snapshot('club'));
+  ok(await k.set_transfer_fence('club',false));k.setPrincipal(worker);
   k.setPrincipal(manager);assert.equal(ok(await k.resend_eoi_invite(eoi)).invite_sent_count,1);
   k.setPrincipal(worker);const retry=ok(await k.claim_email_job())[0];
   // An active provider claim must not disappear through replacement/purge.
@@ -68,6 +71,9 @@ try {
   denied(await k.purge_club_snapshot('club'));
   ok(await k.set_transfer_fence('club',false));k.setPrincipal(worker);
   ok(await k.finish_email_job(retry.job.id,retry.job.attempt,'unknown',''));
+  k.setPrincipal(governor);ok(await k.set_transfer_fence('club',true));
+  denied(await k.import_club_snapshot('club',settledSnapshot));
+  ok(await k.set_transfer_fence('club',false));k.setPrincipal(worker);
   k.setPrincipal(outsider);denied(await k.reconcile_email_job(retry.job.id,retry.job.attempt,'provider-recovered'));
   k.setPrincipal(worker);denied(await k.reconcile_email_job(retry.job.id,retry.job.attempt+1n,'provider-recovered'));
   k.setPrincipal(manager);denied(await k.resend_eoi_invite(eoi));
