@@ -387,7 +387,7 @@ const GameTimer = forwardRef<GameTimerRef, GameTimerProps>(({
       } catch (error) { console.warn('[GameTimer] Clock refresh failed', error); }
       finally { if (!cancelled) timer = setTimeout(refresh, 5000); }
     }
-    void refresh();
+    timer = setTimeout(refresh, 5000);
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [teamId, applyServerSnapshot]);
 

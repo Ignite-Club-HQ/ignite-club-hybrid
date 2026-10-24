@@ -200,10 +200,10 @@ describe("GameTimer lock, background and hydration lifecycle", () => {
   });
 
   it("credits real wall-clock time when interval callbacks are throttled", async () => {
-    server.read.mockResolvedValue(response(snapshot(16 * 60, {
+    server.read.mockImplementation(async () => ({ ...response(snapshot(16 * 60, {
       is_running: true,
       half_paused_at: null,
-    })));
+    })), server_now: new Date(Date.now()).toISOString() }));
     const ref = createRef<GameTimerRef>();
     render(<GameTimer ref={ref} teamId="team-a" compact />);
     await settle();
