@@ -2306,7 +2306,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (competition_ids.any(func id = compFenced(id) or not canManageCompetition(caller, id))) return #Err("Competition access changed");
     #Ok(competition_ids.map(func(cid : Text) : Types.CompetitionEngagementSummary {
       let compEntries = entries.filter(func(item) = item.competition_id == cid and (item.status == "accepted" or item.status == "registered"));
-      let compMatches = matches.filter(func item = item.competition_id == cid and (switch item.scheduled_at_ms { case null false; case (?time) Nat64.toNat(time) >= since_ms and Nat64.toNat(time) <= until_ms }));
+      let compMatches = matches.filter(func item = item.competition_id == cid and (switch (item.scheduled_at_ms) { case null false; case (?time) Nat64.toNat(time) >= since_ms and Nat64.toNat(time) <= until_ms }));
       let completed = compMatches.filter(func(item) = item.status == "completed");
       let count = broadcasts.filter(func item = item.competition_id == cid and Nat64.toNat(item.created_at_ms) >= since_ms and Nat64.toNat(item.created_at_ms) <= until_ms).size();
       { competition_id = cid; active_teams = compEntries.size(); total_matches = compMatches.size(); results_entered = completed.size(); broadcasts = count }
@@ -2963,7 +2963,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (competition_ids.any(func id = compFenced(id) or not canManageCompetition(caller, id))) return #Err("Competition access changed");
     #Ok(competition_ids.map(func(cid : Text) : Types.CompetitionEngagementSummary {
       let compEntries = entries.filter(func(item) = item.competition_id == cid and (item.status == "accepted" or item.status == "registered"));
-      let compMatches = matches.filter(func item = item.competition_id == cid and (switch item.scheduled_at_ms { case null false; case (?time) Nat64.toNat(time) >= since_ms and Nat64.toNat(time) <= until_ms }));
+      let compMatches = matches.filter(func item = item.competition_id == cid and (switch (item.scheduled_at_ms) { case null false; case (?time) Nat64.toNat(time) >= since_ms and Nat64.toNat(time) <= until_ms }));
       let completed = compMatches.filter(func(item) = item.status == "completed");
       let count = broadcasts.filter(func item = item.competition_id == cid and Nat64.toNat(item.created_at_ms) >= since_ms and Nat64.toNat(item.created_at_ms) <= until_ms).size();
       { competition_id = cid; active_teams = compEntries.size(); total_matches = compMatches.size(); results_entered = completed.size(); broadcasts = count }
