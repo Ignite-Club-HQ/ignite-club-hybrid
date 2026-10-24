@@ -1,3 +1,7 @@
+## Pitch-board ICP completion — 24 October 2026
+- [ ] Route player-position/jersey prefill and self substitution notifications through ICP; retain Supabase behaviour and account isolation.
+- [ ] Run focused checks in both modes and ICP guards; signed-in phone acceptance requires an available Internet Identity session.
+
 ## Chat links and polls — 24 October 2026
 - [x] Audit found pitch-card unscoped ICP reads and Supabase-only viewer; cards/viewer now share account-scoped team-authorized reads, and viewer roster routes to ICP. Team/club polls prefetch before enrichment; gallery names reuse display metadata after authorization. Event/gallery queries bind account and restored sign-in.
 - [x] All 17 focused board/poll/Vault/news/group-message checks pass in both ICP and Supabase modes; ICP guard and preview build pass. Cold news discovery and external-site previews retain authorized/network-dependent reads; no promise of instant first retrieval.
