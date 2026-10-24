@@ -20,6 +20,7 @@ import Time "mo:core/Time";
 import Types "types";
 import PinScope "pinScope";
 import BackupPages "backupPages";
+import UploadJournal "uploadJournal";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
@@ -77,6 +78,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var deletionIntents : Map.Map<Text, Text>;
   type CleanupRecord = { club : Text; team : ?Text; competition : ?Text; blob_ref : Types.BlobRef; state : { #pending; #erased; #complete } };
   var cleanupRecords : Map.Map<Text, CleanupRecord>;
+  var uploadIntents : Map.Map<Text, UploadJournal.Intent>;
   var backupRestoreProgress : Map.Map<Text, { next : Nat; restored : Nat; skipped : Nat; complete : Bool }>;
   transient let backupRestoreLocks = Map.empty<Text, Bool>();
 
@@ -648,7 +650,78 @@ persistent actor class Main(governorInit : Principal) = this {
     cleanupRecords.entries().any(func entry = entry.1.state != #complete and entry.1.blob_ref.canister == ref.canister and entry.1.blob_ref.path == ref.path)
   };
 
-  public shared ({ caller }) func register_file(
+  // Before encryption leaves the device, bind the exact ciphertext hash, store,
+  // destination and original file identity. Unknown results never release the path.
+  public shared ({ caller }) func begin_file_upload(file : Types.VaultFile) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      auth(caller); await admitAccount(caller);
+      if (not file.uploaded_by.equal(caller) or file.is_external_link or file.deleted_at_ms != null or file.deleted_by != null) return #Err("Invalid upload subject");
+      if (not valid(file.id) or not valid(file.club) or file.folder_id.size() > 128 or not validLong(file.name, 160) or not validLong(file.mime, 128) or file.size > 10_485_760) return #Err("Invalid upload fields");
+      let ref = file.blob_ref ?? return #Err("Upload provenance required");
+      if (not validBlobRef(ref) or not vaultStores.any(func s = s.toText() == ref.canister) or not ref.path.startsWith(#text ("clubs/" # file.club # "/vault/")) or file.file_url != "https://" # ref.canister # ".raw.icp0.io/" # ref.path) return #Err("Original private store required");
+      if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Scoped staff required");
+      var destination : ?Types.VaultFolder = null;
+      if (file.folder_id != "") {
+        let folder = folders.find(func f = f.id == file.folder_id and f.deleted_at_ms == null) ?? return #Err("Folder unavailable");
+        if (folder.club != file.club or folder.team != file.team or folder.competition_id != file.competition_id or folder.mini_league_id != file.mini_league_id) return #Err("Destination scope mismatch");
+        if (file.competition_id == null and not (await canAccessFolder(caller, folder))) return #Err("Folder access forbidden");
+        destination := ?folder
+      };
+      if (not (await canWrite(caller, file.club, file.team, file.competition_id)) or isFenced(file.club) or removalReceiver.denied(caller) or not vaultStores.any(func s = s.toText() == ref.canister) or blobCleanupPending(ref) or deletionIntents.get(file.id) != null) return #Err("Upload scope changed");
+      switch destination { case (?f) if (folders.find(func row = row.id == f.id) != ?f) return #Err("Destination changed"); case null {} };
+      switch (uploadIntents.get(file.id)) {
+        case (?intent) { if (UploadJournal.sameDestination(intent.file, file)) return #Ok; return #Err("Upload identity already bound") };
+        case null {}
+      };
+      if (files.any(func f = f.id == file.id or (switch f.blob_ref { case (?r) r.canister == ref.canister and r.path == ref.path; case null false })) or uploadIntents.entries().any(func e = switch e.1.file.blob_ref { case (?r) r.canister == ref.canister and r.path == ref.path; case null false })) return #Err("Upload path already reserved");
+      if (uploadIntents.size() >= 10_000 or uploadIntents.entries().filter(func e = e.1.file.uploaded_by.equal(caller) and not files.any(func f = f.id == e.0)).toArray().size() >= 32) return #Err("Upload recovery capacity reached");
+      uploadIntents.add(file.id, { file = { file with created_at_ms = nowMs() }; ready = false }); mediaEvidenceRevision += 1; #Ok
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  // Only acknowledge after byte finalization AND private access-record/grant acknowledgement.
+  public shared ({ caller }) func acknowledge_file_upload(id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      auth(caller); await admitAccount(caller);
+      let intent = uploadIntents.get(id) ?? return #Err("Upload intent unavailable");
+      let f = intent.file; let ref = f.blob_ref ?? return #Err("Upload provenance required");
+      if (not f.uploaded_by.equal(caller) or not (await canWrite(caller, f.club, f.team, f.competition_id))) return #Err("Upload owner and current authority required");
+      if (not (await verifyFileBytes(caller, ref, f.size))) return #Err("Upload bytes unavailable");
+      if (uploadIntents.get(id) != ?intent or deletionIntents.get(id) != null or removalReceiver.denied(caller) or isFenced(f.club)) return #Err("Upload changed");
+      uploadIntents.add(id, { intent with ready = true }); #Ok
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func recover_file_upload(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      auth(caller); await admitAccount(caller);
+      let intent = uploadIntents.get(id) ?? return #Err("Upload intent unavailable"); let f = intent.file;
+      if (not f.uploaded_by.equal(caller) or not intent.ready) return #Err("Upload outcome unresolved");
+      await registerFileAs(caller, f.id, f.folder_id, f.club, f.team, f.name, f.file_url, f.size, f.mime, false, f.blob_ref, f.mini_league_id, f.competition_id)
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func read_my_upload_page(club : Text, after : Text) : async { #Ok : { ids : [Text]; next : ?Text }; #Err : Text } {
+    auth(caller); await admitAccount(caller);
+    if (not (await currentClubMember(caller, club))) return #Err("Club membership required");
+    var scanned = 0; var ids : [Text] = []; var last = after;
+    for ((id, intent) in uploadIntents.entriesFrom(after)) {
+      if (id == after and after != "") continue;
+      if (scanned == 40) return #Ok({ ids; next = ?last });
+      scanned += 1; last := id;
+      if (intent.ready and intent.file.club == club and intent.file.uploaded_by.equal(caller) and deletionIntents.get(id) == null and not files.any(func f = f.id == id)) ids := ids.concat([id])
+    };
+    #Ok({ ids; next = null })
+  };
+
+  public shared ({ caller }) func register_file(id : Text, folder_id : Text, club : Text, team : ?Text, name : Text, file_url : Text, size : Nat64, mime : Text, is_external_link : Bool, blob_ref : ?Types.BlobRef, mini_league_id : ?Text, competition_id : ?Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    await registerFileAs(caller, id, folder_id, club, team, name, file_url, size, mime, is_external_link, blob_ref, mini_league_id, competition_id)
+  };
+
+  func registerFileAs(caller : Principal,
     id : Text,
     folder_id : Text,
     club : Text,
@@ -670,6 +743,14 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not (await canWrite(caller, club, team, competition_id))) return #Err("Club or competition admin required");
     // folder_id "" = vault root (same convention as move_file).
     if (deletionIntents.get(id) != null) return #Err("File identity already removed or cleanup pending");
+    switch (uploadIntents.get(id)) {
+      case (?intent) {
+        let f = intent.file;
+        if (not intent.ready or not f.uploaded_by.equal(caller) or f.club != club or f.team != team or f.folder_id != folder_id or f.competition_id != competition_id or f.mini_league_id != mini_league_id or f.blob_ref != blob_ref or f.file_url != file_url or f.name != name or f.mime != mime or f.size != size or is_external_link) return #Err("Upload intent mismatch or unresolved")
+      }; case null {
+        switch blob_ref { case (?ref) if (uploadIntents.entries().any(func e = switch e.1.file.blob_ref { case (?r) r.canister == ref.canister and r.path == ref.path; case null false })) return #Err("Upload path reserved"); case null {} }
+      }
+    };
     if (not valid(id) or folder_id.size() > 128 or not valid(club)) return #Err("Invalid file fields");
     if (not validLong(name, 160) or not validLong(file_url, 2048) or not validLong(mime, 128)) return #Err("Invalid file fields");
     switch (team) { case (?t) { if (not valid(t)) return #Err("Invalid team") }; case null {} };
@@ -1459,6 +1540,15 @@ persistent actor class Main(governorInit : Principal) = this {
         switch (f.blob_ref) { case (?ref) cleanupRecords.add(f.id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #erased }); case null {} }
       }
     };
+    let erasedUploads = uploadIntents.entries().filter(func e = e.1.file.uploaded_by.equal(caller)).toArray();
+    for ((id, intent) in erasedUploads.values()) {
+      deletionIntents.add(id, "erased-upload");
+      // Unacknowledged byte/PII outcomes are never automatically deleted.
+      if (intent.ready and not files.any(func f = f.id == id)) {
+        switch intent.file.blob_ref { case (?ref) cleanupRecords.add(id, { club = intent.file.club; team = intent.file.team; competition = intent.file.competition_id; blob_ref = ref; state = #erased }); case null {} }
+      };
+      uploadIntents.add(id, { intent with file = { intent.file with name = "Erased upload"; folder_id = "" }; ready = false })
+    };
     var removed : Nat = 0;
     let keepFiles = files.filter(func(f : Types.VaultFile) : Bool = not f.uploaded_by.equal(caller));
     mediaEvidenceRevision += 1;
@@ -1510,6 +1600,7 @@ persistent actor class Main(governorInit : Principal) = this {
     conflicts += files.filter(func(f : Types.VaultFile) : Bool = f.uploaded_by.equal(new_principal) or optEq(f.deleted_by, new_principal)).size();
     conflicts += pinned_vaults.filter(func(p : Types.PinnedVault) : Bool = p.set_by.equal(new_principal)).size();
     conflicts += backups.filter(func(b : Types.Backup) : Bool = b.created_by.equal(new_principal)).size();
+    conflicts += uploadIntents.entries().filter(func e = e.1.file.uploaded_by.equal(new_principal)).toArray().size();
     if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in vault_domain");
 
     var changed = 0;
@@ -1551,6 +1642,10 @@ persistent actor class Main(governorInit : Principal) = this {
       files := newFiles;
       pinned_vaults := newPinned;
       backups := newBackups;
+      let entries = uploadIntents.entries().toArray();
+      for ((id, intent) in entries.values()) {
+        if (intent.file.uploaded_by.equal(old)) { uploadIntents.add(id, { intent with file = { intent.file with uploaded_by = new_principal } }); changed += 1 }
+      };
     };
 
     #ok(changed)
