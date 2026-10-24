@@ -2,10 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ admin: true, list: vi.fn(), create: vi.fn(), get: vi.fn(), restore: vi.fn(), restoreMedia: vi.fn(), remove: vi.fn(), exportDomain: vi.fn(), success: vi.fn(), error: vi.fn() }));
+const m = vi.hoisted(() => ({ admin: true, list: vi.fn(), create: vi.fn(), get: vi.fn(), stream: vi.fn(), restore: vi.fn(), restoreMedia: vi.fn(), remove: vi.fn(), exportDomain: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock("@/hooks/useIsAppAdmin", () => ({ useIsAppAdmin: () => ({ isAppAdmin: m.admin, isLoading: false }) }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, h: { icp: (ctx: unknown) => unknown }) => h.icp({}) }));
-vi.mock("@/live/features/vault", () => ({ listLiveVaultBackups: m.list, createLiveVaultBackup: m.create, exportLiveVaultBackupBlob: m.get, restoreLiveVaultBackup: m.restore, restoreLiveVaultBackupWithMedia: m.restoreMedia, deleteLiveVaultBackup: m.remove }));
+vi.mock("@/live/features/vault", () => ({ listLiveVaultBackups: m.list, createLiveVaultBackup: m.create, exportLiveVaultBackupBlob: m.get, exportLiveVaultBackupToSink: m.stream, restoreLiveVaultBackup: m.restore, restoreLiveVaultBackupWithMedia: m.restoreMedia, deleteLiveVaultBackup: m.remove }));
 vi.mock("@/live/adminBackupExport", () => ({ BACKUP_DOMAINS: ["club_domain"], exportAdminDomain: (...args: unknown[]) => m.exportDomain(...args) }));
 vi.mock("sonner", () => ({ toast: { success: m.success, error: m.error, warning: m.error } }));
 import Page from "./IcpManageBackupsPage";
@@ -86,5 +86,14 @@ describe("ICP vault metadata backup administration", () => {
     expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:domain-export");
     expect(m.success).toHaveBeenCalledWith("Export downloaded");
     expect(click).toHaveBeenCalledOnce();
+  });
+  it("selects a writable destination and streams rather than accumulating a backup Blob", async () => {
+    const sink = { write: vi.fn(), close: vi.fn(), abort: vi.fn() };
+    const picker = vi.fn().mockResolvedValue({ createWritable: async () => sink });
+    vi.stubGlobal("showSaveFilePicker", picker); m.stream.mockResolvedValue(undefined);
+    open(); fireEvent.click(await screen.findByRole("button", { name: "Download Snapshot" }));
+    await waitFor(() => expect(m.stream).toHaveBeenCalledWith({}, "backup-1", sink));
+    expect(picker).toHaveBeenCalledWith({ suggestedName: "vault-backup-backup-1.jsonl" });
+    expect(m.get).not.toHaveBeenCalled();
   });
 });

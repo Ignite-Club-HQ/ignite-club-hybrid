@@ -364,7 +364,7 @@ async function readVaultPages(ctx: FeatureBackendContext, clubId: string, teamId
   // Shared quiet recovery traverses every bounded journal page, including empty
   // filtered pages. It never holds up normal file reads or retries unknown bytes.
   void (async () => {
-    await recoverLiveVaultPendingUploads(ctx, clubId);
+    await recoverLiveVaultPendingUploads(ctx);
   })().catch(() => { /* older canisters or unavailable recovery never block file reads */ });
   const items: import("../../lab/bindings/vault_domain/declarations/vault_domain.did.js").VaultFileWithFolder[] = [];
   let offset = 0n;
