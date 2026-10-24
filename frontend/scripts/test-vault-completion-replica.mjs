@@ -206,5 +206,37 @@ try {
   assert.deepEqual(ok(await vault.actor.read_account_get_file('restore-missing')), []);
   assert.deepEqual(ok(await vault.actor.restore_backup_page(backup.id, restoreReceipt.next)), restoreReceipt);
   assert.equal(ok(await vault.actor.read_account_get_file('new-file'))[0].id, 'new-file');
-  console.log('PASS: authorized cleanup resumes after upgrade/lost acknowledgement; unknown uploads and replacement hashes preserved; pending reference registration denied; erased provenance survives upgrade and governor-only exact cleanup is idempotent; outsider/direct-query denial, ancestor restrictions, 205-file paging, authorized pins, bounded backups and erased-file resurrection denial.');
+  // Concrete retention rules: Free expires at 180 days; paid/active trial survives.
+  const retentionCases = [['ret-free', false, false], ['ret-paid', true, false], ['ret-trial', false, true], ['ret-expired-trial', false, true]];
+  const fixtureNow = BigInt(await pic.getTime());
+  for (const [id, paid, trial] of retentionCases) {
+    ok(await club.actor.create_club(id, id, id, [], []));
+    ok(await club.actor.save_club_subscription({ club_id: id, is_pro: paid, is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false, is_trial: trial, trial_ends_at_ms: trial ? [fixtureNow + BigInt((id === 'ret-trial' ? 400 : 1) * 86_400_000)] : [], plan: paid ? 'pro' : 'free', team_limit: [], activated_at_ms: [], cancelled_at_ms: [], expires_at_ms: [] }));
+    const p = `clubs/${id}/vault/retention.pdf`;
+    const token = ok(await store.actor.begin_upload(p, 'application/pdf', 4n, 1));
+    ok(await store.actor.put_chunk(token, 0, payload));
+    const completed = ok(await store.actor.finalize_upload(token));
+    ok(await vault.actor.register_file(id, '', id, [], 'retention.pdf', `https://${ref.canister}.raw.icp0.io/${p}`, 4n, 'application/pdf', false, [{ canister: ref.canister, path: p, content_hash: completed.content_hash }], [], []));
+  }
+  await pic.advanceTime(180 * 86_400_000);
+  // At the boundary, not strictly expired yet.
+  assert.equal((await store.actor.get_content_hash('clubs/ret-free/vault/retention.pdf')).length, 1);
+  await pic.advanceTime(86_400_000);
+  for (let i = 0; i < 20; i++) ok(await vault.actor.sweep_vault_lifecycle());
+  for (const id of ['ret-free', 'ret-expired-trial']) {
+    assert.deepEqual(await store.actor.get_content_hash(`clubs/${id}/vault/retention.pdf`), []);
+    assert.deepEqual(ok(await vault.actor.read_account_get_file(id)), []);
+  }
+  for (const id of ['ret-paid', 'ret-trial']) {
+    assert.equal((await store.actor.get_content_hash(`clubs/${id}/vault/retention.pdf`)).length, 1);
+    assert.equal(ok(await vault.actor.read_account_get_file(id))[0].id, id);
+  }
+  // Explicit club erasure is authoritative even for paid retained content.
+  ok(await club.actor.soft_delete_club('ret-paid', true));
+  ok(await club.actor.delete_club_permanent('ret-paid'));
+  assert.equal(await club.actor.read_vault_erasure_scope('ret-paid', []), true);
+  for (let i = 0; i < 20; i++) ok(await vault.actor.sweep_vault_lifecycle());
+  assert.deepEqual(await store.actor.get_content_hash('clubs/ret-paid/vault/retention.pdf'), []);
+  assert.deepEqual(ok(await vault.actor.read_account_get_file('ret-paid')), []);
+  console.log('PASS: durable pre-byte intent/path locks; unresolved upload refusal; acknowledged upload recovered exactly once after upgrade; automatic Free/expired-trial retention removes bytes and metadata, paid/active-trial survives, permanent paid-club erasure cleans exact bytes; authorized cleanup/erasure retry, replacement preservation, 205-file paging, pins and backups.');
 } finally { await pic?.tearDown(); await server.stop(); }
