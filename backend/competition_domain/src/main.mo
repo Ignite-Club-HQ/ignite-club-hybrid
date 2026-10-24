@@ -2313,12 +2313,12 @@ persistent actor class Main(governorInit : Principal) = this {
   // underlying rows (NEEDS-CANISTER: scheduled_at_ms exists but matches
   // outside the window are intentionally still counted for now, matching
   // the existing CompetitionPanel Supabase behaviour of using all rows).
-  public shared ({ caller }) func competition_engagement_summary(competition_ids : [Text], since_ms : Int, until_ms : Int) : async { #Ok : [Types.CompetitionEngagementSummary]; #Err : Text } {
+  public query ({ caller }) func competition_engagement_summary(competition_ids : [Text], since_ms : Int, until_ms : Int) : async { #Ok : [Types.CompetitionEngagementSummary]; #Err : Text } {
     auth(caller);
-    await admitAccount(caller);
+    // Legacy query cannot refresh authority; use the protected consensus read.
+    if (not isGovernor(caller)) return #Err("Use authorized competition summary");
     if (competition_ids.size() > 100 or since_ms > until_ms) return #Err("Invalid summary scope");
     for (id in competition_ids.values()) {
-      await syncForCompetition(caller, id);
       if (removalReceiver.denied(caller) or compFenced(id) or not canManageCompetition(caller, id)) return #Err("Competition manager required");
     };
     if (competition_ids.any(func id = compFenced(id) or not canManageCompetition(caller, id))) return #Err("Competition access changed");
@@ -2717,12 +2717,9 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
-  public shared ({ caller }) func list_competition_broadcasts(competition_id : Text) : async { #Ok : [Types.Broadcast]; #Err : Text } {
+  public query ({ caller }) func list_competition_broadcasts(competition_id : Text) : async { #Ok : [Types.Broadcast]; #Err : Text } {
     auth(caller);
-    await admitAccount(caller);
-    await syncForCompetition(caller, competition_id);
-    let permitted = await privateParticipant(caller, competition_id);
-    if (not permitted or removalReceiver.denied(caller) or compFenced(competition_id)) return #Err("Competition access forbidden");
+    if (not isGovernor(caller) or compFenced(competition_id)) return #Err("Use authorized competition broadcasts");
     #Ok(broadcasts.filter(func(item) = item.competition_id == competition_id).reverse())
   };
 
