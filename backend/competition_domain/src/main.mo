@@ -23,6 +23,7 @@ import Nat8 "mo:core/Nat8";
 import Iter "mo:core/Iter";
 import Types "types";
 import Welcome "welcomeSettings";
+import FixtureOperations "fixtureOperations";
 import ScorePrivacy "scorePrivacy";
 import ClubSnapshot "clubSnapshot";
 
@@ -179,6 +180,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var broadcastDeliveries : Map.Map<Text, { sender : Principal; competition : Text; divisions : [Text]; title : Text; body : Text; broadcast_id : Text; completed : [(Text, Nat16)]; unknown : ?Text }>;
   var emailJobs : Map.Map<Text, EmailOutbox.Job>;
   var emailWorkers : [Principal];
+  var fixtureReceipts : Map.Map<Text, FixtureOperations.Receipt>;
   transient let emailOutbox = EmailOutbox.Queue(emailJobs);
   public shared ({ caller }) func set_email_workers(workers : [Principal]) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller) or workers.size() > 10 or workers.any(func p = Principal.isAnonymous(p))) return #Err("Governor and valid workers required");
@@ -1269,6 +1271,33 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  // Request-bound creation commits all fixture fields together. Replaying an
+  // acknowledged request only reads the same match; it never recreates it.
+  public shared ({ caller }) func create_fixture(operation : Text, input : FixtureOperations.Input) : async { #Ok : Types.Match; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller); await syncForCompetition(caller, input.competition_id);
+      if (removalReceiver.denied(caller) or compFenced(input.competition_id) or not canManageCompetition(caller,input.competition_id)) return #Err("Competition manager required");
+      if (operation.size() == 0 or operation.size() > 128 or input.home_team == input.away_team or not valid(input.home_team) or not valid(input.away_team)) return #Err("Invalid fixture request");
+      let key = caller.toText() # "\u{1f}" # operation;
+      switch (Map.get(fixtureReceipts, Text.compare, key)) {
+        case (?r) {
+          if (r.creator != caller or r.input != input) return #Err("Fixture operation conflict");
+          return #Ok(matches.find(func m = m.id == r.match_id) ?? return #Err("Created fixture no longer exists"))
+        }; case null {};
+      };
+      if (Map.size(fixtureReceipts) >= 100_000) return #Err("Fixture receipt capacity reached");
+      if (not entries.any(func e = e.competition_id == input.competition_id and e.team_id == input.home_team and (e.status == "accepted" or e.status == "registered")) or not entries.any(func e = e.competition_id == input.competition_id and e.team_id == input.away_team and (e.status == "accepted" or e.status == "registered"))) return #Err("Both teams must be registered");
+      switch(input.venue) { case (?v) { if(v.size()>256) return #Err("Venue too long") }; case null {} };
+      switch(input.notes) { case (?v) { if(v.size()>2000) return #Err("Notes too long") }; case null {} };
+      switch(input.pitch_number) { case (?v) { if(v.size()>64) return #Err("Pitch too long") }; case null {} };
+      switch(input.division_id) { case (?v) { if(not divisionSettings.any(func d = d.id == v and d.competition_id == input.competition_id)) return #Err("Division unavailable") }; case null {} };
+      let id = "fixture-" # input.competition_id # "-" # Nat.toText(matches.size()+1) # "-" # Nat64.toText(nowMs());
+      let game : Types.Match = { id; competition_id=input.competition_id; home_team=input.home_team; away_team=input.away_team; division_id=input.division_id; scheduled_at_ms=input.scheduled_at_ms; venue=input.venue; pitch_number=input.pitch_number; round_number=input.round_number; duration_minutes=input.duration_minutes; arrival_minutes_before=input.arrival_minutes_before; notes=input.notes; home_score=null; away_score=null; status="scheduled"; referee_id=null; revision=0 };
+      matches := matches.concat([game]); Map.add(fixtureReceipts,Text.compare,key,{creator=caller;input;match_id=id}); #Ok(game)
+    } finally { removalReceiver.leave(caller) }
   };
 
   public query ({ caller }) func list_competitions(club_id : Text) : async { #Ok : [Types.Competition]; #Err : Text } {
