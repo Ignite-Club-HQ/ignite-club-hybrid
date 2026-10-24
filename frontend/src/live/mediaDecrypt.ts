@@ -23,6 +23,20 @@ import type { IcpTargetConfig } from "./targetRegistry";
  */
 export const MEDIA_BLOB_PII_FIELD = "blob";
 
+// Keep pending and completed object URLs together: Cache API writes can finish
+// after a row remounts. Account/target scope prevents cross-account reuse.
+const photoResolutions = new Map<string, Promise<string | null>>();
+let photoGeneration = 0;
+export function clearIcpPhotoResolutionCache(): void {
+  photoGeneration += 1;
+  photoResolutions.clear();
+}
+
+export function icpPhotoResolutionScope(): string {
+  const target = getActiveIcpTarget();
+  return JSON.stringify([storedSessionPrincipal(), target?.host, target?.canisterIds]);
+}
+
 const ICP_GATEWAY_HOSTS = ["icp0.io", "raw.icp0.io"];
 
 /** Principal from the stored Internet Identity session, without awaiting
@@ -95,6 +109,28 @@ export async function readCachedIcpBlobObjectUrl(url: string): Promise<string | 
  * raw URL, which serves only ciphertext.
  */
 export async function resolveIcpBlobObjectUrl(url: string): Promise<string | null> {
+  if (!parseIcpBlobUrl(url, getActiveIcpTarget(), false)) return null;
+  const scope = icpPhotoResolutionScope();
+  // Without an account, do not retain an identity-restoration result.
+  if (!storedSessionPrincipal()) return resolveUncachedIcpBlobObjectUrl(url);
+  const key = `${scope}:${url}`;
+  const existing = photoResolutions.get(key);
+  if (existing) return existing;
+  const generation = photoGeneration;
+  const pending = resolveUncachedIcpBlobObjectUrl(url).then(result => {
+    if (generation !== photoGeneration || scope !== icpPhotoResolutionScope()) {
+      throw new Error("Photo account changed during loading");
+    }
+    return result;
+  });
+  photoResolutions.set(key, pending);
+  void pending.catch(() => {
+    if (photoResolutions.get(key) === pending) photoResolutions.delete(key);
+  });
+  return pending;
+}
+
+async function resolveUncachedIcpBlobObjectUrl(url: string): Promise<string | null> {
   let target = getActiveIcpTarget();
   const candidate = parseIcpBlobUrl(url, target, false);
   // Public/Supabase images need no identity restoration or routing RPC.

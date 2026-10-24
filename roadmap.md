@@ -1,3 +1,7 @@
+## Slow chat photos — 24 October 2026
+- [x] Found duplicate concurrent unlock/download work and a Cache API write/remount race; shared account/target-scoped resolution retains completed object URLs and retries failures, with original-group authorization unchanged.
+- [ ] Focused photo checks and signed-in phone timing: checks pending; Internet Identity session unavailable for real U9 acceptance.
+
 ## Sent-message preview delay — 24 October 2026
 - [x] Vault link-card delay: each file/folder formerly required all-group resource-owner discovery; cards now try the open chat's known club/team with destination access checks, retaining resource discovery on absence and preserving failures. Query keys bind account/backend and start after auth restoration. Routing/repository/upload checks pass in ICP (34) and Supabase (44), with mode-specific skips; ICP guard and preview build OK. Rendered-card dedup/auth tests added.
 - [x] Found ICP previews wait for polling (30 seconds web / 120 seconds native) and full directory refreshes; acknowledged team/club/group sends now update existing exact-account inbox rows directly, retaining newer messages across stale responses and clearing marks with removed queries. All 38 focused checks pass in both ICP and Supabase modes; ICP guard passes and preview build OK.
