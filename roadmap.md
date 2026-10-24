@@ -1,7 +1,7 @@
 ## Messaging ICP completion — 24 October 2026
-- [ ] Replace legacy DM metadata/send cleanup and group message/Vault link reads with authorized ICP paths.
-- [ ] Enable complete ICP shared-media previews and competition-admin thread entry; wire online indicators to on-chain presence without public presence enumeration.
-- [ ] Run focused two-mode regressions and ICP guards; live signed-in acceptance requires an Internet Identity session, and any new APIs require protected upgrades.
+- [x] Replace legacy DM metadata/send cleanup and group deep-link reads with exact authorized ICP APIs; acknowledged sends retain canister IDs/timestamps. Group Vault entry resolves the on-chain pin/root mirror before the authorized scope fallback.
+- [x] Enable ICP shared-media photos/file tokens/links with bounded latest pages and independent profile/Vault labels; competition-admin legacy entry opens the standard on-chain thread. Shared/person and owning-group heartbeats plus participant-only presence power online indicators without global enumeration.
+- [ ] Final focused two-mode regressions and guards; protected messaging_domain upgrades in both groups and signed-in Internet Identity acceptance remain required, no mainnet deployment requested.
 
 ## Pitch-board ICP completion — 24 October 2026
 - [x] Implement shared ICP board CAS/polling, foreground authoritative clocks and event-group state application; disable competing ICP mirrors, keep spectators read-only, resolve match duties on events_domain and relay only via configured club authority. Both canisters compile; 56 ICP/61 Supabase focused checks pass, local real-canister peer/permission/conflict/duty-inbox proof passes, guards/interfaces/preview pass.
