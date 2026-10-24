@@ -1,3 +1,4 @@
+import { prefetchMessagePolls } from "@/lib/pollReadRepository";
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, Suspense } from "react";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
@@ -605,6 +606,7 @@ export default function TeamChatPage() {
               clubId ? () => ensureLiveClubConversations(ctx, clubId) : undefined,
               () => isLiveConversationAbsent(ctx, teamId),
             );
+            prefetchMessagePolls(queryClient, page.messages, user.id, { teamId }, true, ctx);
             const messages = await mapLiveTeamRows(ctx, page.messages);
             const olderCursor =
               Array.isArray(page.next_sequence) && page.next_sequence.length > 0
@@ -661,6 +663,7 @@ export default function TeamChatPage() {
       }
 
       const { items: messagesToDisplay, hasMore } = splitPageWindow(rawMessages, MESSAGES_PER_PAGE);
+      if (user?.id && teamId) prefetchMessagePolls(queryClient, messagesToDisplay, user.id, { teamId }, false);
 
       // Fetch reactions and reply_to data in parallel (profiles fetched separately for faster initial render)
       const messageIds = messagesToDisplay.map((m) => m.id);

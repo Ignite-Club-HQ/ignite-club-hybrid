@@ -1,3 +1,4 @@
+import { prefetchMessagePolls } from "@/lib/pollReadRepository";
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
@@ -597,6 +598,7 @@ export default function ClubChatPage() {
               () => isLiveConversationAbsent(ctx, clubId),
             );
             assertReadNotAborted(signal);
+            prefetchMessagePolls(queryClient, page.messages, user.id, { clubId }, true, ctx);
             const messages = await mapLiveClubRows(ctx, page.messages, ready => {
               assertReadNotAborted(signal);
               const key = ["club-messages", clubId];
@@ -652,6 +654,7 @@ export default function ClubChatPage() {
       }
 
       const { items: messagesToDisplay, hasMore } = splitPageWindow(rawMessages, MESSAGES_PER_PAGE);
+      if (user?.id && clubId) prefetchMessagePolls(queryClient, messagesToDisplay, user.id, { clubId }, false);
 
       const messageIds = messagesToDisplay.map((m) => m.id);
       const replyToIds = messagesToDisplay
