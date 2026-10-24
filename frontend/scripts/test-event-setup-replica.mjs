@@ -38,6 +38,8 @@ try {
   assert.ok('Err' in await events.actor.create_event_with_setup({...input,title:'conflict'}));
   assert.equal(ok(await events.actor.read_account_list_duties(created.first_event_id)).length,1);
   assert.equal(ok(await events.actor.read_account_list_duties(created.event_ids[1])).length,0);
+  ok(await events.actor.sync_active_game(['team-a'],'{}','{"sport":"basketball"}','device'));
+  assert.equal(JSON.parse(ok(await events.actor.get_active_game(['team-a']))[0].pitch_state_json).sport,'basketball');
   assert.equal(ok(await events.actor.send_individual_event_reminder(created.first_event_id,[member.toText()],[])),1);
   assert.ok('Err' in await events.actor.send_individual_event_reminder(created.first_event_id,[member.toText()],[]));
   assert.ok('Err' in await events.actor.send_individual_event_reminder(created.first_event_id,[stranger.toText()],[]));
@@ -55,5 +57,10 @@ try {
   assert.deepEqual(await events.actor.get_schedule_view(),['calendar']);
   events.actor.setPrincipal(member);
   assert.deepEqual(await events.actor.get_schedule_view(),[]);
+  await pic.upgradeCanister({ canisterId: events.canisterId, wasm: process.env.EVENTS_DOMAIN_WASM, sender: governor, arg: IDL.encode([IDL.Principal],[governor]) });
+  events.actor.setPrincipal(coach);
+  assert.deepEqual(await events.actor.get_schedule_view(),['calendar']);
+  assert.deepEqual(ok(await events.actor.create_event_with_setup(input)),created);
+  assert.ok('Err' in await events.actor.send_individual_event_reminder(created.first_event_id,[member.toText()],[]));
   console.log('PASS: complete setup, exact dates, first-occurrence duties, idempotent receipt, conflicts/foreign writes refused, queued reminder readback/cooldown, relay denial and private preference.');
 } finally { await pic?.tearDown(); await server.stop(); }
