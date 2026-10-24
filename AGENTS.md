@@ -77,5 +77,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Media paging releases only via upgrade-media-paging.yml on the exact G1/G2 media_metadata canisters, finishing backfill before snapshot refresh. Why: never hide photos or touch photo stores.
 
 - ICP event setup atomically commits exact dates, first-occurrence duties and reminders under caller/request receipts; configured club/league consensus supplies audiences, relays retain unknown outcomes. Why: prevent partial saves, foreign notices and deleted-request resurrection.
-- Vault uses current roles/pages/pins and pre-byte ciphertext/store/destination intents; only acknowledged uploads recover. Bounded cleanup verifies age/allowance or permanent erasure receipts; unknown outcomes retain path locks. Backups page immutable snapshots; erasure scrubs roles/pins/snapshots. Why: prevent leaks, paid/replacement deletion and resurrection.
+- Vault uses current roles/pages/pins and pre-byte intents; only acknowledged uploads recover. Recovery coalesces by identity/target/club and retains failed-page cursors. Bounded cleanup verifies age/allowance or permanent erasure; empty-folder sweeps preserve child/file/uncertain-upload references. Unknown outcomes retain locks; backups use immutable pages. Why: prevent leaks, lost destinations and resurrection.
 
