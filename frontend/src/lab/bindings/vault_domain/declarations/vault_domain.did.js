@@ -57,6 +57,14 @@ export const idlFactory = ({ IDL }) => {
     'created_by' : IDL.Principal,
     'created_at_ms' : IDL.Nat64,
   });
+  const BackupSummary = IDL.Record({
+    'id' : IDL.Text,
+    'backup_label' : IDL.Text,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'file_count' : IDL.Nat,
+    'folder_count' : IDL.Nat,
+  });
   const PinnedVault = IDL.Record({
     'root_id' : IDL.Opt(IDL.Text),
     'root_scope' : IDL.Opt(IDL.Text),
@@ -68,14 +76,6 @@ export const idlFactory = ({ IDL }) => {
     'chat_id' : IDL.Text,
     'vault_file_id' : IDL.Opt(IDL.Text),
     'chat_type' : IDL.Text,
-  });
-  const BackupSummary = IDL.Record({
-    'id' : IDL.Text,
-    'backup_label' : IDL.Text,
-    'created_by' : IDL.Principal,
-    'created_at_ms' : IDL.Nat64,
-    'file_count' : IDL.Nat,
-    'folder_count' : IDL.Nat,
   });
   const VaultFileWithFolder = IDL.Record({
     'folder_name' : IDL.Opt(IDL.Text),
@@ -92,6 +92,14 @@ export const idlFactory = ({ IDL }) => {
     'outstanding' : IDL.Nat,
     'request' : Request,
     'receiver' : IDL.Principal,
+  });
+  const BackupPage = IDL.Record({
+    'files' : IDL.Vec(VaultFile),
+    'next' : IDL.Opt(IDL.Nat),
+    'offset' : IDL.Nat,
+    'folders' : IDL.Vec(VaultFolder),
+    'summary' : BackupSummary,
+    'revision' : IDL.Nat,
   });
   const Reference = IDL.Record({
     'url' : IDL.Text,
@@ -120,6 +128,11 @@ export const idlFactory = ({ IDL }) => {
     'create_backup' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Backup, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_backup_summary' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : BackupSummary, 'Err' : IDL.Text })],
         [],
       ),
     'create_folder' : IDL.Func(
@@ -384,6 +397,11 @@ export const idlFactory = ({ IDL }) => {
     'read_account_removal_drain' : IDL.Func(
         [Request],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_backup_page' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : BackupPage, 'Err' : IDL.Text })],
         [],
       ),
     'read_club_media_references' : IDL.Func(

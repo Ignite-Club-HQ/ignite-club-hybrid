@@ -19,6 +19,7 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
 import PinScope "pinScope";
+import BackupPages "backupPages";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
@@ -679,10 +680,12 @@ persistent actor class Main(governorInit : Principal) = this {
       case null {};
     };
     switch (blob_ref) { case (?ref) { if (not validBlobRef(ref)) return #Err("Invalid blob ref") }; case null {} };
+    var destination : ?Types.VaultFolder = null;
     if (folder_id != "") {
       switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
         case null { return #Err("Folder not found") };
         case (?folder) {
+          destination := ?folder;
           if (folder.club != club) return #Err("Folder belongs to another club");
           if (folder.competition_id != competition_id or folder.team != team or folder.mini_league_id != mini_league_id) return #Err("Folder belongs to another vault scope");
           if (competition_id == null and not (await canAccessFolder(caller, folder))) return #Err("Folder access forbidden");
@@ -703,6 +706,12 @@ persistent actor class Main(governorInit : Principal) = this {
       if (not (await verifyFileBytes(caller, ref, size))) return #Err("File byte evidence unavailable or mismatched");
       if (not (await canWrite(caller, club, team, competition_id)) or files.any(func f = f.id == id) or mediaEvidenceRevision != registrationRevision or deletionIntents.get(id) != null or isFenced(club)) return #Err("Registration scope changed");
     } else if (blob_ref != null or size != 0 or not Text.startsWith(file_url, #text "https://")) return #Err("Invalid external link");
+    // No await after this check: a removed/restricted destination cannot admit a late upload.
+    if (removalReceiver.denied(caller) or isFenced(club) or deletionIntents.get(id) != null or files.any(func f = f.id == id)) return #Err("Registration scope changed");
+    switch destination {
+      case (?folder) { if (folder.deleted_at_ms != null or folders.find(func f = f.id == folder_id) != ?folder) return #Err("Registration destination changed") };
+      case null { if (folder_id != "") return #Err("Registration destination unavailable") }
+    };
     let file : Types.VaultFile = {
       id; folder_id; club; team; name; file_url; size; mime;
       uploaded_by = caller;
@@ -1185,6 +1194,31 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  // Snapshot arrays are immutable generations; creation returns counts, not an unbounded payload.
+  public shared ({ caller }) func create_backup_summary(backup_label : Text) : async { #Ok : Types.BackupSummary; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      if (not isAppAdmin(caller)) return #Err("App admin required");
+      if (not validLong(backup_label, 160)) return #Err("Invalid backup label");
+      let backup : Types.Backup = { id = freshBackupId(); backup_label; created_at_ms = nowMs(); created_by = caller; folders; files };
+      backups := backups.concat([backup]);
+      #Ok(BackupPages.summary(backup))
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func read_backup_page(id : Text, offset : Nat, expected : ?Nat) : async { #Ok : Types.BackupPage; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      if (not isAppAdmin(caller)) return #Err("App admin required");
+      switch expected { case (?r) { if (r != mediaEvidenceRevision) return #Err("Backup export revision changed") }; case null { if (offset != 0) return #Err("Backup revision required") } };
+      let backup = backups.find(func b = b.id == id) ?? return #Err("Backup not found");
+      if (offset > backup.folders.size() + backup.files.size()) return #Err("Invalid backup cursor");
+      #Ok(BackupPages.page(backup, offset, mediaEvidenceRevision))
+    } finally { removalReceiver.leave(caller) }
+  };
+
   public query ({ caller }) func list_backups() : async { #Ok : [Types.BackupSummary]; #Err : Text } {
     denyLegacyAccountQuery();
     auth(caller);
@@ -1345,12 +1379,24 @@ persistent actor class Main(governorInit : Principal) = this {
     mediaEvidenceRevision += 1;
     removed += files.size() - keepFiles.size(); files := keepFiles;
     let keepBackups = backups.filter(func(b : Types.Backup) : Bool = not b.created_by.equal(caller));
-    removed += backups.size() - keepBackups.size(); backups := keepBackups;
+    removed += backups.size() - keepBackups.size();
+    // Other administrators' snapshots must not retain the erased person's metadata.
+    backups := keepBackups.map(func b = { b with
+      files = b.files.filter(func f = not f.uploaded_by.equal(caller));
+      folders = b.folders.filter(func f = not f.created_by.equal(caller)) });
     let keepFolders = folders.filter(func(folder : Types.VaultFolder) : Bool =
       not folder.created_by.equal(caller)
       or files.any(func(f : Types.VaultFile) : Bool = f.folder_id == folder.id)
       or folders.any(func(other : Types.VaultFolder) : Bool = other.parent_id == ?folder.id and not other.created_by.equal(caller)));
     removed += folders.size() - keepFolders.size(); folders := keepFolders;
+    let keepRoles = roles.filter(func r = not r.user.equal(caller));
+    removed += roles.size() - keepRoles.size(); roles := keepRoles;
+    let keepPins = pinned_vaults.filter(func p = not p.set_by.equal(caller) and
+      (p.vault_file_id == null or files.any(func f = ?f.id == p.vault_file_id)) and
+      (p.vault_folder_id == null or folders.any(func f = ?f.id == p.vault_folder_id)));
+    removed += pinned_vaults.size() - keepPins.size(); pinned_vaults := keepPins;
+    let staleSources = gallerySourceFiles.entries().filter(func entry = not files.any(func f = f.id == entry.1)).toArray();
+    for ((source, _) in staleSources.values()) gallerySourceFiles.remove(source);
     #Ok(Nat32.fromNat(removed))
   };
 

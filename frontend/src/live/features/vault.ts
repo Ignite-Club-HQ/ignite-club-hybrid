@@ -718,15 +718,69 @@ export async function clearLivePinnedVault(
 // ---- On-chain vault metadata backups (app admin only; blob refs, never plaintext) ----
 export async function createLiveVaultBackup(ctx: FeatureBackendContext, label: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.create_backup(label), "Create backup");
+  try {
+    return await unwrapCandid(actor.create_backup_summary(label), "Create backup");
+  } catch (error) {
+    if (!isMissingBackupMethod(error)) throw error;
+    return unwrapCandid(actor.create_backup(label), "Create legacy backup");
+  }
 }
 export async function listLiveVaultBackups(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.read_account_list_backups(), "List backups");
 }
 export async function getLiveVaultBackup(ctx: FeatureBackendContext, id: string) {
+  let result;
+  for await (const page of readLiveVaultBackupPages(ctx, id)) {
+    result ??= { id: page.summary.id, backup_label: page.summary.backup_label, created_at_ms: page.summary.created_at_ms, created_by: page.summary.created_by, folders: [] as typeof page.folders, files: [] as typeof page.files };
+    result.folders.push(...page.folders); result.files.push(...page.files);
+  }
+  if (!result) throw new Error("Backup export incomplete");
+  return result;
+}
+function isMissingBackupMethod(error: unknown) {
+  return /has no (?:query |update |)method|method not found|IC0536|is not a function/i.test(error instanceof Error ? error.message : String(error));
+}
+
+/** Each page is authorized afresh and bound to one immutable snapshot generation. */
+export async function* readLiveVaultBackupPages(ctx: FeatureBackendContext, id: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.read_account_get_backup(id), "Get backup");
+  let cursor = 0n;
+  let revision: bigint | undefined;
+  let summary: string | undefined;
+  let folders = 0n; let files = 0n;
+  for (;;) {
+    let page;
+    try { page = await unwrapCandid(actor.read_backup_page(id, cursor, candidOpt(revision)), "Read backup page"); }
+    catch (error) {
+      if (cursor !== 0n || !isMissingBackupMethod(error)) throw error;
+      const legacy = await unwrapCandid(actor.read_account_get_backup(id), "Get legacy backup");
+      yield { summary: { id: legacy.id, backup_label: legacy.backup_label, created_at_ms: legacy.created_at_ms, created_by: legacy.created_by, folder_count: BigInt(legacy.folders.length), file_count: BigInt(legacy.files.length) }, folders: legacy.folders, files: legacy.files, offset: 0n, next: [] as bigint[], revision: 0n };
+      return;
+    }
+    const signature = JSON.stringify(page.summary, (_key, v) => typeof v === "bigint" ? v.toString() : v);
+    if (page.summary.id !== id || page.offset !== cursor || (revision !== undefined && page.revision !== revision) || (summary !== undefined && summary !== signature)) throw new Error("Backup export changed or cursor mismatched");
+    revision = page.revision; summary = signature;
+    const count = BigInt(page.folders.length + page.files.length);
+    const next = page.next[0];
+    folders += BigInt(page.folders.length); files += BigInt(page.files.length);
+    if (count > 40n || folders > page.summary.folder_count || files > page.summary.file_count || (next !== undefined && (next !== cursor + count || count === 0n)) || (next === undefined && (folders !== page.summary.folder_count || files !== page.summary.file_count))) throw new Error("Invalid backup export continuation");
+    yield page;
+    if (next === undefined) return;
+    cursor = next;
+  }
+}
+
+const backupJson = (_key: string, value: unknown) => typeof value === "bigint" ? value.toString() : value;
+export async function exportLiveVaultBackupBlob(ctx: FeatureBackendContext, id: string): Promise<Blob> {
+  // JSONL avoids a second full-manifest stringify and keeps each encoded chunk bounded.
+  const chunks: BlobPart[] = [];
+  for await (const page of readLiveVaultBackupPages(ctx, id)) {
+    if (page.offset === 0n) chunks.push(JSON.stringify({ kind: "vault-backup", version: 1, ...page.summary }, backupJson) + "\n");
+    for (const folder of page.folders) chunks.push(JSON.stringify({ kind: "folder", row: folder }, backupJson) + "\n");
+    for (const file of page.files) chunks.push(JSON.stringify({ kind: "file", row: file }, backupJson) + "\n");
+  }
+  return new Blob(chunks, { type: "application/x-ndjson" });
 }
 export async function restoreLiveVaultBackup(ctx: FeatureBackendContext, id: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
@@ -766,11 +820,11 @@ export async function restoreLiveVaultBackupWithMedia(
   ctx: FeatureBackendContext,
   id: string,
 ): Promise<LiveVaultBackupRestoreReport> {
-  const backup = await getLiveVaultBackup(ctx, id);
   const restoredRows = Number(await restoreLiveVaultBackup(ctx, id));
   const { blobAssetUrl } = await import("../mediaStorage");
   const report: LiveVaultBackupRestoreReport = { restoredRows, grantsRepaired: 0, grantFailures: 0, missingBytes: [] };
-  for (const file of backup.files) {
+  for await (const page of readLiveVaultBackupPages(ctx, id)) {
+  for (const file of page.files) {
     const ref = file.blob_ref?.[0];
     if (!ref) continue;
     try {
@@ -779,6 +833,7 @@ export async function restoreLiveVaultBackupWithMedia(
     } catch {
       report.missingBytes.push(ref.path);
     }
+  }
   }
   return report;
 }

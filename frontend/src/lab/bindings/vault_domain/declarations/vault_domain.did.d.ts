@@ -18,6 +18,14 @@ export interface Backup {
   'created_by' : Principal,
   'created_at_ms' : bigint,
 }
+export interface BackupPage {
+  'files' : Array<VaultFile>,
+  'next' : [] | [bigint],
+  'offset' : bigint,
+  'folders' : Array<VaultFolder>,
+  'summary' : BackupSummary,
+  'revision' : bigint,
+}
 export interface BackupSummary {
   'id' : string,
   'backup_label' : string,
@@ -45,6 +53,11 @@ export interface Main {
   'create_backup' : ActorMethod<
     [string],
     { 'Ok' : Backup } |
+      { 'Err' : string }
+  >,
+  'create_backup_summary' : ActorMethod<
+    [string],
+    { 'Ok' : BackupSummary } |
       { 'Err' : string }
   >,
   'create_folder' : ActorMethod<
@@ -258,6 +271,11 @@ export interface Main {
   'read_account_removal_drain' : ActorMethod<
     [Request],
     { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
+  'read_backup_page' : ActorMethod<
+    [string, bigint, [] | [bigint]],
+    { 'Ok' : BackupPage } |
       { 'Err' : string }
   >,
   'read_club_media_references' : ActorMethod<

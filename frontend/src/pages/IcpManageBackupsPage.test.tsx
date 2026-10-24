@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ admin: true, list: vi.fn(), create: vi.fn(), get: vi.fn(), restore: vi.fn(), restoreMedia: vi.fn(), remove: vi.fn(), exportDomain: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock("@/hooks/useIsAppAdmin", () => ({ useIsAppAdmin: () => ({ isAppAdmin: m.admin, isLoading: false }) }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, h: { icp: (ctx: unknown) => unknown }) => h.icp({}) }));
-vi.mock("@/live/features/vault", () => ({ listLiveVaultBackups: m.list, createLiveVaultBackup: m.create, getLiveVaultBackup: m.get, restoreLiveVaultBackup: m.restore, restoreLiveVaultBackupWithMedia: m.restoreMedia, deleteLiveVaultBackup: m.remove }));
+vi.mock("@/live/features/vault", () => ({ listLiveVaultBackups: m.list, createLiveVaultBackup: m.create, exportLiveVaultBackupBlob: m.get, restoreLiveVaultBackup: m.restore, restoreLiveVaultBackupWithMedia: m.restoreMedia, deleteLiveVaultBackup: m.remove }));
 vi.mock("@/live/adminBackupExport", () => ({ BACKUP_DOMAINS: ["club_domain"], exportAdminDomain: (...args: unknown[]) => m.exportDomain(...args) }));
 vi.mock("sonner", () => ({ toast: { success: m.success, error: m.error, warning: m.error } }));
 import Page from "./IcpManageBackupsPage";
@@ -17,7 +17,7 @@ beforeEach(() => {
   vi.clearAllMocks(); m.admin = true;
   m.list.mockResolvedValue([{ id: "backup-1", backup_label: "Snapshot", created_at_ms: 1792195200000n, file_count: 3n, folder_count: 2n }]);
   m.create.mockResolvedValue(undefined); m.restore.mockResolvedValue({ restoredRows: 2 }); m.restoreMedia.mockResolvedValue({ restoredRows: 2, missingBytes: [], grantsRepaired: 1 }); m.remove.mockResolvedValue(undefined);
-  m.get.mockResolvedValue({ files: [{ size: 3n }], created_by: { toText: () => "admin-principal" } }); vi.stubGlobal("confirm", vi.fn(() => true));
+  m.get.mockResolvedValue(new Blob([JSON.stringify({ files: [{ size: "3" }], created_by: "admin-principal" })], { type: "application/x-ndjson" })); vi.stubGlobal("confirm", vi.fn(() => true));
 });
 afterEach(() => {
   vi.clearAllTimers();

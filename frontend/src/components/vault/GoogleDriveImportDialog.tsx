@@ -680,11 +680,11 @@ export function GoogleDriveImportDialog({
             </ResponsiveDialogTitle>
           </ResponsiveDialogHeader>
           <div className="py-6 space-y-3 text-center">
-            <p className="font-medium">Google Drive import isn't available for this vault yet</p>
+            <p className="font-medium">Direct Google Drive import isn't supported for this vault.</p>
             <p className="text-sm text-muted-foreground">
-              Drive import stays Supabase-only until the vault canister/blob store exists on
-              Internet Identity. Ask an admin to switch this vault's backend to Supabase, or
-              check back once ICP vault storage ships.
+              Download or export your files from Google Drive, then upload them from your device.
+              For Google Docs, Sheets or Slides, export a file format first.
+              You can also save a shortcut with Add Link; it does not copy the file into Vault.
             </p>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Close
