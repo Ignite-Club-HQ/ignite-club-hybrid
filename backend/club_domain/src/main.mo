@@ -17,6 +17,7 @@ import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Map "mo:core/Map";
+import EmailOutbox "../../shared/EmailOutbox";
 import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
@@ -200,6 +201,32 @@ persistent actor class Main(governorInit : Principal) = this {
   var teamInvites : [Types.TeamInvite];
   var teamInviteLinks : [Types.TeamInviteLink];
   var pendingInvites : [Types.PendingInvite];
+  var emailJobs : Map.Map<Text, EmailOutbox.Job>;
+  var emailWorkers : [Principal];
+  transient let emailOutbox = EmailOutbox.Queue(emailJobs);
+  public shared ({ caller }) func set_email_workers(workers : [Principal]) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or workers.size() > 10 or workers.any(func p = Principal.isAnonymous(p))) return #Err("Governor and valid workers required");
+    emailWorkers := workers; #Ok
+  };
+  public shared ({ caller }) func queue_pending_invite_email(id : Text, ciphertext : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let invite = pendingInvites.find(func i = i.id == id) ?? return #Err("Invite missing");
+      if (not canManageTeam(caller, invite.club_id, invite.team_id) or isTransferFenced(invite.club_id) or invite.status != "pending") return #Err("Invite manager required");
+      if (ciphertext.size() < 32) return #Err("Encrypted payload required");
+      emailOutbox.enqueue("invite:" # id, "pending_invite", id, ciphertext, nowMs())
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func claim_email_job() : async { #Ok : ?{ job : EmailOutbox.Job; to : Text; subject : Text; body : Text; token : Text }; #Err : Text } {
+    if (not emailWorkers.any(func p = p == caller)) return #Err("Email worker required");
+    let job = emailOutbox.claim(caller, func j = pendingInvites.any(func i = i.id == j.resource and i.status == "pending" and not isTransferFenced(i.club_id) and not removalReceiver.denied(i.invited_by))) ?? return #Ok(null);
+    #Ok(?{ job; to = ""; subject = ""; body = ""; token = "" })
+  };
+  public shared ({ caller }) func finish_email_job(id : Text, attempt : Nat, outcome : Text, provider_id : Text) : async { #Ok; #Err : Text } {
+    if (not emailWorkers.any(func p = p == caller)) return #Err("Email worker required");
+    emailOutbox.finish(caller, id, attempt, outcome, provider_id)
+  };
   // (code, invite_id) — short share-link codes, lazily created, stable once minted.
   var inviteShortCodes : [(Text, Text)];
   var teamCreationRequests : [Types.TeamCreationRequest];
