@@ -2381,3 +2381,35 @@ export async function getLivePlayHQConfigStatus(ctx: FeatureBackendContext) {
     updatedAt: r.updated_at_ms.length ? new Date(Number(r.updated_at_ms[0])).toISOString() : null,
   };
 }
+
+export async function createLiveEventWithSetup(ctx: FeatureBackendContext, input: Omit<LiveEventInput, 'startsAtMs' | 'endsAtMs'> & {
+  requestId: string; occurrences: Array<{ startsAtMs: number; endsAtMs: number }>;
+  duties: Array<{ name: string; assigned_to: string | null }>; dutyTeamId: string | null; reminderHours: number | null;
+}) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_event_with_setup({
+    request_id: input.requestId, club_id: input.clubId, team_id: candidOpt(input.teamId), title: input.title, description: input.description,
+    event_type: input.eventType, location: candidOpt(input.location), opponent: candidOpt(input.opponent), address: candidOpt(input.address),
+    mini_league_id: candidOpt(input.miniLeagueId), rsvp_audience: candidOpt(input.rsvpAudience), adults_only: input.adultsOnly ?? false,
+    restricted_to_roles: candidOpt(input.restrictedToRoles), target_team_ids: candidOpt(input.targetTeamIds),
+    occurrences: input.occurrences.map(d => ({ starts_at_ms: toNat64(d.startsAtMs), ends_at_ms: toNat64(d.endsAtMs) })),
+    duties: input.duties.map(d => ({ duty: d.name, account_id: candidOpt(d.assigned_to?.replace(/^principal:/, '')) })),
+    duty_team_id: candidOpt(input.dutyTeamId), reminder_hours: candidOpt(input.reminderHours),
+  }), 'Create complete event setup');
+}
+export async function sendLiveIndividualEventReminder(ctx: FeatureBackendContext, eventId: string, userId?: string, childId?: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.send_individual_event_reminder(eventId, candidOpt(userId?.replace(/^principal:/, '')), candidOpt(childId)), 'Queue RSVP reminder');
+}
+export async function readLiveEventCancellationAudience(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return Number(await unwrapCandid(actor.read_event_cancellation_audience(eventId), 'Verify cancellation audience'));
+}
+export async function notifyLiveEventAudience(ctx: FeatureBackendContext, eventId: string, kind: 'event_invite' | 'event_cancelled') {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.notify_event_audience(eventId, kind), 'Queue event notice');
+}
+export async function notifyLiveDutyCompletion(ctx: FeatureBackendContext, eventId: string, accountId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.notify_duty_completion(eventId, accountId.replace(/^principal:/, '')), 'Queue duty completion');
+}

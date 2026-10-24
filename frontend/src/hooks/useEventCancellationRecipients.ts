@@ -1,9 +1,13 @@
+import { withFeatureBackend } from '@/live/featureRouter';
+import { readLiveEventCancellationAudience } from '@/live/features/events';
+import { resolveAuthBackend } from '@/live/authBackendMode';
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 type EventCancellationRecipientScope = {
   open: boolean;
+  eventId?: string;
   teamId: string | null;
   clubId: string;
   miniLeagueId?: string | null;
@@ -11,6 +15,7 @@ type EventCancellationRecipientScope = {
 
 export function useEventCancellationRecipients({
   open,
+  eventId,
   teamId,
   clubId,
   miniLeagueId,
@@ -35,12 +40,13 @@ export function useEventCancellationRecipients({
       const isCurrent = () => requestIdRef.current === reqId;
 
       try {
-        if (isFeatureRoutedToIcp("membership")) {
-          // ICP cannot enumerate every push recipient, so never present the
-          // caller's own role grants as a complete recipient list.
-          if (!isCurrent()) return;
-          setMemberCount(null);
-          setRecipientLookupFailed(true);
+        if (resolveAuthBackend() === 'icp') {
+          if (!eventId) throw new Error('Missing event ID');
+          const count = await withFeatureBackend('events', {
+            supabase: async () => 0,
+            icp: ctx => readLiveEventCancellationAudience(ctx, eventId),
+          }, { eventId });
+          if (isCurrent()) setMemberCount(count);
           return;
         }
 
@@ -111,7 +117,7 @@ export function useEventCancellationRecipients({
         if (isCurrent()) setIsLoading(false);
       }
     }
-  }, [open, teamId, clubId, miniLeagueId]);
+  }, [open, eventId, teamId, clubId, miniLeagueId]);
 
   return { memberCount, isLoading, recipientLookupFailed };
 }
