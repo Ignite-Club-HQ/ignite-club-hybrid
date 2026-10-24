@@ -51,34 +51,6 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface VaultFileWithFolder {
-    folder_name?: string;
-    folder_path: Array<string>;
-    file: VaultFile;
-}
-export interface Receipt {
-    outstanding: bigint;
-    request: Request;
-    receiver: Principal;
-}
-export interface VaultFile {
-    id: string;
-    mini_league_id?: string;
-    club: string;
-    mime: string;
-    name: string;
-    size: bigint;
-    team?: string;
-    file_url: string;
-    created_at_ms: bigint;
-    blob_ref?: BlobRef;
-    deleted_by?: Principal;
-    folder_id: string;
-    competition_id?: string;
-    is_external_link: boolean;
-    deleted_at_ms?: bigint;
-    uploaded_by: Principal;
-}
 export interface MainInterface {
     begin_file_cleanup(id: string): Promise<{
         __kind__: "Ok";
@@ -411,6 +383,16 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_cleanup_page(after: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            next?: string;
+            items: Array<[string, CleanupRecord]>;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_club_media_references(club: string, offset: bigint, expected: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: Page;
@@ -433,6 +415,13 @@ export interface MainInterface {
             items: Array<VaultFileWithFolder>;
             revision: bigint;
         };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    reconcile_erased_file(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -487,6 +476,13 @@ export interface MainInterface {
     restore_file(id: string): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    resume_file_cleanup(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -576,10 +572,12 @@ export interface MainInterface {
         Err: string;
     }>;
 }
-export interface Page {
-    references: Array<Reference>;
+export interface BackupPage {
+    files: Array<VaultFile>;
     next?: bigint;
-    scanned: bigint;
+    offset: bigint;
+    folders: Array<VaultFolder>;
+    summary: BackupSummary;
     revision: bigint;
 }
 export interface BackupSummary {
@@ -590,14 +588,6 @@ export interface BackupSummary {
     file_count: bigint;
     folder_count: bigint;
 }
-export interface BackupPage {
-    files: Array<VaultFile>;
-    next?: bigint;
-    offset: bigint;
-    folders: Array<VaultFolder>;
-    summary: BackupSummary;
-    revision: bigint;
-}
 export interface Backup {
     id: string;
     files: Array<VaultFile>;
@@ -605,6 +595,60 @@ export interface Backup {
     folders: Array<VaultFolder>;
     created_by: Principal;
     created_at_ms: bigint;
+}
+export interface CleanupRecord {
+    club: string;
+    team?: string;
+    blob_ref: BlobRef;
+    state: Variant_pending_erased_complete;
+    competition?: string;
+}
+export interface PinnedVault {
+    root_id?: string;
+    root_scope?: string;
+    club: string;
+    updated_at_ms: bigint;
+    set_by: Principal;
+    enabled: boolean;
+    vault_folder_id?: string;
+    chat_id: string;
+    vault_file_id?: string;
+    chat_type: string;
+}
+export interface Request {
+    account_id: string;
+    inventory_digest: Uint8Array;
+    subjects: Array<Principal>;
+    generation: bigint;
+}
+export interface Receipt {
+    outstanding: bigint;
+    request: Request;
+    receiver: Principal;
+}
+export interface VaultFile {
+    id: string;
+    mini_league_id?: string;
+    club: string;
+    mime: string;
+    name: string;
+    size: bigint;
+    team?: string;
+    file_url: string;
+    created_at_ms: bigint;
+    blob_ref?: BlobRef;
+    deleted_by?: Principal;
+    folder_id: string;
+    competition_id?: string;
+    is_external_link: boolean;
+    deleted_at_ms?: bigint;
+    uploaded_by: Principal;
+}
+export interface Page {
+    references: Array<Reference>;
+    next?: bigint;
+    scanned: bigint;
+    revision: bigint;
 }
 export interface VaultFolder {
     id: string;
@@ -635,27 +679,19 @@ export interface Reference {
     store?: string;
     resource_id: string;
 }
-export interface PinnedVault {
-    root_id?: string;
-    root_scope?: string;
-    club: string;
-    updated_at_ms: bigint;
-    set_by: Principal;
-    enabled: boolean;
-    vault_folder_id?: string;
-    chat_id: string;
-    vault_file_id?: string;
-    chat_type: string;
+export interface VaultFileWithFolder {
+    folder_name?: string;
+    folder_path: Array<string>;
+    file: VaultFile;
 }
-export interface Request {
-    account_id: string;
-    inventory_digest: Uint8Array;
-    subjects: Array<Principal>;
-    generation: bigint;
+export enum Variant_pending_erased_complete {
+    pending = "pending",
+    erased = "erased",
+    complete = "complete"
 }
 export interface vault_domainInterface extends MainInterface {
 }
-import type { Backup as _Backup, BackupPage as _BackupPage, BackupSummary as _BackupSummary, BlobRef as _BlobRef, Page as _Page, PinnedVault as _PinnedVault, Receipt as _Receipt, Reference as _Reference, VaultFile as _VaultFile, VaultFileWithFolder as _VaultFileWithFolder, VaultFolder as _VaultFolder } from "./declarations/vault_domain.did";
+import type { Backup as _Backup, BackupPage as _BackupPage, BackupSummary as _BackupSummary, BlobRef as _BlobRef, CleanupRecord as _CleanupRecord, Page as _Page, PinnedVault as _PinnedVault, Receipt as _Receipt, Reference as _Reference, VaultFile as _VaultFile, VaultFileWithFolder as _VaultFileWithFolder, VaultFolder as _VaultFolder } from "./declarations/vault_domain.did";
 export class Vault_domain implements vault_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async begin_file_cleanup(arg0: string): Promise<{
@@ -1130,6 +1166,19 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.read_backup_page(arg0, arg1, to_candid_opt_n38(arg2));
         return from_candid_variant_n39(result);
     }
+    async read_cleanup_page(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            next?: string;
+            items: Array<[string, CleanupRecord]>;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_cleanup_page(arg0);
+        return from_candid_variant_n43(result);
+    }
     async read_club_media_references(arg0: string, arg1: bigint, arg2: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: Page;
@@ -1138,7 +1187,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_club_media_references(arg0, arg1, to_candid_opt_n38(arg2));
-        return from_candid_variant_n43(result);
+        return from_candid_variant_n50(result);
     }
     async read_group_opening_configuration(): Promise<Array<[string, string]>> {
         const result = await this.actor.read_group_opening_configuration();
@@ -1152,7 +1201,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_resource_club(arg0, arg1);
-        return from_candid_variant_n49(result);
+        return from_candid_variant_n56(result);
     }
     async read_vault_file_page(arg0: string, arg1: string | null, arg2: string | null, arg3: string | null, arg4: string | null, arg5: boolean, arg6: bigint, arg7: bigint | null): Promise<{
         __kind__: "Ok";
@@ -1166,7 +1215,17 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_vault_file_page(arg0, to_candid_opt_n17(arg1), to_candid_opt_n17(arg2), to_candid_opt_n17(arg3), to_candid_opt_n17(arg4), arg5, arg6, to_candid_opt_n38(arg7));
-        return from_candid_variant_n50(result);
+        return from_candid_variant_n57(result);
+    }
+    async reconcile_erased_file(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.reconcile_erased_file(arg0);
+        return from_candid_variant_n8(result);
     }
     async register_file(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: string, arg5: string, arg6: bigint, arg7: string, arg8: boolean, arg9: BlobRef | null, arg10: string | null, arg11: string | null): Promise<{
         __kind__: "Ok";
@@ -1175,7 +1234,7 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n17(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n52(arg9), to_candid_opt_n17(arg10), to_candid_opt_n17(arg11));
+        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n17(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n59(arg9), to_candid_opt_n17(arg10), to_candid_opt_n17(arg11));
         return from_candid_variant_n1(result);
     }
     async register_gallery_copy(arg0: string, arg1: string, arg2: string, arg3: bigint, arg4: string, arg5: BlobRef): Promise<{
@@ -1196,7 +1255,7 @@ export class Vault_domain implements vault_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n53(result);
+        return from_candid_variant_n60(result);
     }
     async rename_file(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -1231,7 +1290,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.restore_backup_page(arg0, arg1);
-        return from_candid_variant_n54(result);
+        return from_candid_variant_n61(result);
     }
     async restore_file(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1242,6 +1301,16 @@ export class Vault_domain implements vault_domainInterface {
     }> {
         const result = await this.actor.restore_file(arg0);
         return from_candid_variant_n1(result);
+    }
+    async resume_file_cleanup(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.resume_file_cleanup(arg0);
+        return from_candid_variant_n8(result);
     }
     async seal_account_removal(arg0: Request): Promise<{
         __kind__: "Ok";
@@ -1301,7 +1370,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_pinned_vault(arg0, arg1, arg2, to_candid_opt_n17(arg3), to_candid_opt_n17(arg4), to_candid_opt_n17(arg5), to_candid_opt_n17(arg6), arg7);
-        return from_candid_variant_n55(result);
+        return from_candid_variant_n62(result);
     }
     async set_transfer_fence(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -1351,7 +1420,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.trash_gallery_copy(arg0, arg1, arg2);
-        return from_candid_variant_n56(result);
+        return from_candid_variant_n63(result);
     }
     async update_folder(arg0: string, arg1: string, arg2: Array<string>, arg3: number, arg4: string | null, arg5: string | null): Promise<{
         __kind__: "Ok";
@@ -1370,14 +1439,17 @@ function from_candid_BackupPage_n40(value: _BackupPage): BackupPage {
 function from_candid_Backup_n10(value: _Backup): Backup {
     return from_candid_record_n11(value);
 }
-function from_candid_Page_n44(value: _Page): Page {
-    return from_candid_record_n45(value);
+function from_candid_CleanupRecord_n47(value: _CleanupRecord): CleanupRecord {
+    return from_candid_record_n48(value);
+}
+function from_candid_Page_n51(value: _Page): Page {
+    return from_candid_record_n52(value);
 }
 function from_candid_PinnedVault_n26(value: _PinnedVault): PinnedVault {
     return from_candid_record_n27(value);
 }
-function from_candid_Reference_n47(value: _Reference): Reference {
-    return from_candid_record_n48(value);
+function from_candid_Reference_n54(value: _Reference): Reference {
+    return from_candid_record_n55(value);
 }
 function from_candid_VaultFileWithFolder_n33(value: _VaultFileWithFolder): VaultFileWithFolder {
     return from_candid_record_n34(value);
@@ -1616,7 +1688,46 @@ function from_candid_record_n41(value: {
         revision: value.revision
     };
 }
-function from_candid_record_n45(value: {
+function from_candid_record_n44(value: {
+    next: [] | [string];
+    items: Array<[string, _CleanupRecord]>;
+}): {
+    next?: string;
+    items: Array<[string, CleanupRecord]>;
+} {
+    return {
+        next: record_opt_to_undefined(from_candid_opt_n4(value.next)),
+        items: from_candid_vec_n45(value.items)
+    };
+}
+function from_candid_record_n48(value: {
+    club: string;
+    team: [] | [string];
+    blob_ref: _BlobRef;
+    state: {
+        pending: null;
+    } | {
+        erased: null;
+    } | {
+        complete: null;
+    };
+    competition: [] | [string];
+}): {
+    club: string;
+    team?: string;
+    blob_ref: BlobRef;
+    state: Variant_pending_erased_complete;
+    competition?: string;
+} {
+    return {
+        club: value.club,
+        team: record_opt_to_undefined(from_candid_opt_n4(value.team)),
+        blob_ref: value.blob_ref,
+        state: from_candid_variant_n49(value.state),
+        competition: record_opt_to_undefined(from_candid_opt_n4(value.competition))
+    };
+}
+function from_candid_record_n52(value: {
     references: Array<_Reference>;
     next: [] | [bigint];
     scanned: bigint;
@@ -1628,13 +1739,13 @@ function from_candid_record_n45(value: {
     revision: bigint;
 } {
     return {
-        references: from_candid_vec_n46(value.references),
+        references: from_candid_vec_n53(value.references),
         next: record_opt_to_undefined(from_candid_opt_n42(value.next)),
         scanned: value.scanned,
         revision: value.revision
     };
 }
-function from_candid_record_n48(value: {
+function from_candid_record_n55(value: {
     url: string;
     path: [] | [string];
     content_hash: [] | [string];
@@ -1655,7 +1766,7 @@ function from_candid_record_n48(value: {
         resource_id: value.resource_id
     };
 }
-function from_candid_record_n51(value: {
+function from_candid_record_n58(value: {
     next: [] | [bigint];
     items: Array<_VaultFileWithFolder>;
     revision: bigint;
@@ -1669,6 +1780,12 @@ function from_candid_record_n51(value: {
         items: from_candid_vec_n32(value.items),
         revision: value.revision
     };
+}
+function from_candid_tuple_n46(value: [string, _CleanupRecord]): [string, CleanupRecord] {
+    return [
+        value[0],
+        from_candid_CleanupRecord_n47(value[1])
+    ];
 }
 function from_candid_variant_n1(value: {
     Ok: _VaultFile;
@@ -1956,6 +2073,40 @@ function from_candid_variant_n39(value: {
     } : value;
 }
 function from_candid_variant_n43(value: {
+    Ok: {
+        next: [] | [string];
+        items: Array<[string, _CleanupRecord]>;
+    };
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: {
+        next?: string;
+        items: Array<[string, CleanupRecord]>;
+    };
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_record_n44(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n49(value: {
+    pending: null;
+} | {
+    erased: null;
+} | {
+    complete: null;
+}): Variant_pending_erased_complete {
+    return "pending" in value ? Variant_pending_erased_complete.pending : "erased" in value ? Variant_pending_erased_complete.erased : "complete" in value ? Variant_pending_erased_complete.complete : value;
+}
+function from_candid_variant_n50(value: {
     Ok: _Page;
 } | {
     Err: string;
@@ -1968,13 +2119,13 @@ function from_candid_variant_n43(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_Page_n44(value.Ok)
+        Ok: from_candid_Page_n51(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n49(value: {
+function from_candid_variant_n56(value: {
     Ok: [] | [string];
 } | {
     Err: string;
@@ -1993,7 +2144,7 @@ function from_candid_variant_n49(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n50(value: {
+function from_candid_variant_n57(value: {
     Ok: {
         next: [] | [bigint];
         items: Array<_VaultFileWithFolder>;
@@ -2014,13 +2165,13 @@ function from_candid_variant_n50(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_record_n51(value.Ok)
+        Ok: from_candid_record_n58(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n53(value: {
+function from_candid_variant_n60(value: {
     ok: bigint;
 } | {
     err: string;
@@ -2039,7 +2190,7 @@ function from_candid_variant_n53(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n54(value: {
+function from_candid_variant_n61(value: {
     Ok: {
         skipped: bigint;
         next: bigint;
@@ -2068,7 +2219,7 @@ function from_candid_variant_n54(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n55(value: {
+function from_candid_variant_n62(value: {
     Ok: _PinnedVault;
 } | {
     Err: string;
@@ -2087,7 +2238,7 @@ function from_candid_variant_n55(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n56(value: {
+function from_candid_variant_n63(value: {
     Ok: boolean;
 } | {
     Err: string;
@@ -2153,8 +2304,11 @@ function from_candid_vec_n13(value: Array<_VaultFolder>): Array<VaultFolder> {
 function from_candid_vec_n32(value: Array<_VaultFileWithFolder>): Array<VaultFileWithFolder> {
     return value.map((x)=>from_candid_VaultFileWithFolder_n33(x));
 }
-function from_candid_vec_n46(value: Array<_Reference>): Array<Reference> {
-    return value.map((x)=>from_candid_Reference_n47(x));
+function from_candid_vec_n45(value: Array<[string, _CleanupRecord]>): Array<[string, CleanupRecord]> {
+    return value.map((x)=>from_candid_tuple_n46(x));
+}
+function from_candid_vec_n53(value: Array<_Reference>): Array<Reference> {
+    return value.map((x)=>from_candid_Reference_n54(x));
 }
 function to_candid_opt_n17(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
@@ -2162,7 +2316,7 @@ function to_candid_opt_n17(value: string | null): [] | [string] {
 function to_candid_opt_n38(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n52(value: BlobRef | null): [] | [_BlobRef] {
+function to_candid_opt_n59(value: BlobRef | null): [] | [_BlobRef] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {

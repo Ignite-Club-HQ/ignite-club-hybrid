@@ -151,6 +151,7 @@ export interface _SERVICE {
    */
   'cycles_balance' : ActorMethod<[], bigint>,
   'delete_blob' : ActorMethod<[string], Result>,
+  'delete_vault_blob' : ActorMethod<[Principal, string, string], Result>,
   'enable_retained_media_quota' : ActorMethod<[], Result>,
   'enable_shared_media_quota' : ActorMethod<[], Result>,
   'enable_stable_media_storage' : ActorMethod<[], Result>,

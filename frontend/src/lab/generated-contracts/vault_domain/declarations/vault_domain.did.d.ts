@@ -39,6 +39,15 @@ export interface BlobRef {
   'content_hash' : string,
   'canister' : string,
 }
+export interface CleanupRecord {
+  'club' : string,
+  'team' : [] | [string],
+  'blob_ref' : BlobRef,
+  'state' : { 'pending' : null } |
+    { 'erased' : null } |
+    { 'complete' : null },
+  'competition' : [] | [string],
+}
 export interface Main {
   'begin_file_cleanup' : ActorMethod<
     [string],
@@ -278,6 +287,16 @@ export interface Main {
     { 'Ok' : BackupPage } |
       { 'Err' : string }
   >,
+  'read_cleanup_page' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'next' : [] | [string],
+          'items' : Array<[string, CleanupRecord]>,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'read_club_media_references' : ActorMethod<
     [string, bigint, [] | [bigint]],
     { 'Ok' : Page } |
@@ -307,6 +326,11 @@ export interface Main {
           'revision' : bigint,
         }
       } |
+      { 'Err' : string }
+  >,
+  'reconcile_erased_file' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'register_file' : ActorMethod<
@@ -362,6 +386,11 @@ export interface Main {
   'restore_file' : ActorMethod<
     [string],
     { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
+  'resume_file_cleanup' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'seal_account_removal' : ActorMethod<
