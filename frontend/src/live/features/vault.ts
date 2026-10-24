@@ -362,7 +362,19 @@ async function readVaultPages(ctx: FeatureBackendContext, clubId: string, teamId
   let offset = 0n;
   let revision: [] | [bigint] = [];
   for (;;) {
-    const page = await unwrapCandid(actor.read_vault_file_page(clubId, candidOpt(teamId), candidOpt(leagueId), candidOpt(competitionId), candidOpt(folderId), trash, offset, revision), "Read Vault page");
+    let page;
+    try {
+      page = await unwrapCandid(actor.read_vault_file_page(clubId, candidOpt(teamId), candidOpt(leagueId), candidOpt(competitionId), candidOpt(folderId), trash, offset, revision), "Read Vault page");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Older deployed modules retain their existing authorized read paths.
+      // Never fall back on permission, timeout or partial-page failures.
+      if (offset !== 0n || !/has no (?:query |update |)method|method not found|IC0536|is not a function/i.test(message)) throw error;
+      if (competitionId) return unwrapCandid(actor.list_competition_files_with_folder(folderId ?? "", competitionId), "Read legacy competition Vault");
+      if (trash) return unwrapCandid(actor.list_trashed_files_with_folder(clubId), "Read legacy Vault trash");
+      if (folderId) return unwrapCandid(actor.list_files_with_folder(folderId), "Read legacy Vault folder");
+      return unwrapCandid(actor.list_club_files_with_folder(clubId, candidOpt(teamId), candidOpt(leagueId)), "Read legacy Vault files");
+    }
     items.push(...page.items);
     revision = [page.revision];
     const next = page.next[0];
