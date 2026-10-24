@@ -20,7 +20,7 @@ import { useNativeKeyboardBottomInset } from "@/hooks/useNativeKeyboardBottomIns
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import * as fixtureData from "@/lab/fixtureDataLayer";
+import { liveMessageRow } from "@/features/messaging/thread/liveMessageRow";
 import { markChatScopeNotificationsRead } from "@/lib/markChatScopeRead";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -88,7 +88,8 @@ import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEa
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { sendLiveMessage, updateLiveMessage, canLiveDmUser, isLiveDmAttachmentsDisabled, listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
+import { getLiveDirectConversation, sendLiveMessage, updateLiveMessage, canLiveDmUser, isLiveDmAttachmentsDisabled, listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
+import { useIcpConversationPresence } from "@/hooks/useIcpConversationPresence";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { Principal } from "@icp-sdk/core/principal";
 
@@ -127,8 +128,8 @@ interface DirectConversation {
   id: string;
   participant_1: string;
   participant_2: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 const getCachedDirectMessages = (conversationId: string): DirectMessage[] =>
@@ -378,9 +379,15 @@ export default function DirectMessagePage() {
 
   // Fetch conversation details
   const { data: conversation, isLoading: conversationLoading } = useQuery({
-    queryKey: ["dm-conversation", conversationId],
+    queryKey: ["dm-conversation", conversationId, user?.id, useIcpLab],
     queryFn: async () => {
-      if (useIcpLab && conversationId && user?.id) return fixtureData.getLocalLabDirectConversation(conversationId, user.id);
+      if (!conversationId) return null;
+      if (useIcpLab || resolveAuthBackend() === "icp") {
+        return withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("ICP conversation requires Internet Identity"); },
+          icp: ctx => getLiveDirectConversation(ctx, conversationId),
+        }, { shared: "person" });
+      }
 
       const { data, error } = await supabase
         .from("direct_conversations")
@@ -403,7 +410,9 @@ export default function DirectMessagePage() {
   const isIgniteSupportConversation = isIgniteSupportUser(otherUserId);
 
   // Live presence — true when the other user has the app open in any tab.
-  const isOtherUserOnline = useIsUserOnline(otherUserId);
+  const legacyOtherOnline = useIsUserOnline(otherUserId);
+  const icpPresence = useIcpConversationPresence(conversationId, { enabled: authReady, shared: true });
+  const isOtherUserOnline = useIcpLab ? !!otherUserId && icpPresence.has(otherUserId) : legacyOtherOnline;
 
   const { elementRef: composerRef, height: composerHeight } = useMeasuredElementHeight<HTMLDivElement>(
     [isIgniteSupportConversation, replyTo, editingMessage],
@@ -1201,15 +1210,7 @@ export default function DirectMessagePage() {
             replyToId || null,
           );
           void recordLiveMessageSent(ctx, conversationId!, user!.id).catch(() => { /* best-effort engagement counter */ });
-          data = {
-            id: (sent as any)?.id ?? createSendTempId(),
-            text,
-            image_url: imageUrl || null,
-            conversation_id: conversationId!,
-            author_id: user!.id,
-            reply_to_id: replyToId || null,
-            created_at: new Date().toISOString(),
-          };},
+          data = liveMessageRow(sent);},
       }, { conversationId: conversationId! });
       return data;
     },
@@ -1297,10 +1298,9 @@ export default function DirectMessagePage() {
       cacheDirectMessages(conversationId!, realMessages);
       
       // Unhide conversation if it was hidden (so it reappears for both users)
-      await supabase
-        .from("hidden_dm_conversations")
-        .delete()
-        .eq("conversation_id", conversationId!);
+      if (!useIcpLab && resolveAuthBackend() !== "icp" && conversationId) {
+        await supabase.from("hidden_dm_conversations").delete().eq("conversation_id", conversationId);
+      }
       
       // Invalidate other related queries
       queryClient.invalidateQueries({ queryKey: ["dm-conversations"] });

@@ -27,7 +27,9 @@ const supabaseMode = liveMocks.backend === "supabase";
 // ---------- profile cache mock ----------
 vi.mock("@/lib/profileCache", () => ({
   selectCachedProfilesByIds: async () => ({ data: [] }),
+  fetchProfilesWithCache: async () => new Map(),
 }));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "viewer" }, initialized: true }) }));
 
 // ---------- Supabase mock ----------
 type Row = {
@@ -82,7 +84,7 @@ vi.mock("@/live/featureRouter", () => ({
     liveMocks.backend === "icp" ? providers.icp(liveMocks.context) : providers.supabase(),
 }));
 vi.mock("@/live/features/messaging", () => ({
-  listLiveMessages: (...args: unknown[]) => liveMocks.listLiveMessages(...args),
+  listLiveLatestMessagesPage: async (...args: unknown[]) => ({ messages: await liveMocks.listLiveMessages(...args) }),
 }));
 
 import { useChatSharedMedia } from "./useChatSharedMedia";
@@ -309,7 +311,7 @@ describe.runIf(!supabaseMode)("useChatSharedMedia — ICP adapter", () => {
         url: "https://example.invalid",
       }),
     ]);
-    expect(liveMocks.listLiveMessages).toHaveBeenCalledWith(liveMocks.context, "team-1", null);
+    expect(liveMocks.listLiveMessages).toHaveBeenCalledWith(liveMocks.context, "team-1", null, 60);
     expect(liveMocks.supabaseTables).toEqual([]);
   });
 
@@ -337,6 +339,17 @@ describe.runIf(!supabaseMode)("useChatSharedMedia — ICP adapter", () => {
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toHaveLength(3);
+    expect(liveMocks.supabaseTables).toEqual([]);
+  });
+  it("includes deduplicated Vault file, folder and root tokens without Supabase", async () => {
+    const file = "11111111-1111-1111-1111-111111111111";
+    const folder = "22222222-2222-2222-2222-222222222222";
+    liveMocks.listLiveMessages.mockResolvedValue([{ id: "vault-message", created_at_ms: 1_700_000_000_000n, sender: { toText: () => "principal-author" }, body: `[vault:${file}] [vault:${file}] [vaultfolder:${folder}] [vaultroot:team:${folder}]`, attachment: [] }]);
+    const { result } = renderHook(() => useChatSharedMedia("dm", "dm-1", { limit: 10 }), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toHaveLength(3);
+    expect(result.current.data?.map(item => item.kind)).toEqual(["file", "file", "file"]);
+    expect(result.current.data?.[0].vaultFileId).toBe(file);
     expect(liveMocks.supabaseTables).toEqual([]);
   });
 });

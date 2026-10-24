@@ -1,10 +1,11 @@
 import { EVENT_TOKEN_PATTERN } from "@/lib/chatEventToken";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { selectCachedProfilesByIds, fetchProfilesWithCache } from "@/lib/profileCache";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveMessages } from "@/live/features/messaging";
+import { listLiveLatestMessagesPage } from "@/live/features/messaging";
+import { useAuth } from "@/hooks/useAuth";
 
 export type ChatSharedMediaType = "team" | "club" | "group" | "dm" | "broadcast";
 
@@ -70,8 +71,10 @@ function hostnameOf(url: string): string {
 export function useChatSharedMedia(
   chatType: ChatSharedMediaType,
   chatId: string | undefined,
-  options?: { limit?: number; enabled?: boolean }
+  options?: { limit?: number; enabled?: boolean; clubId?: string; teamId?: string; miniLeagueId?: string; competitionId?: string }
 ) {
+  const { user, initialized } = useAuth();
+  const icp = isFeatureRoutedToIcp("messaging");
   const rawLimit = options?.limit;
   // Defensive normalisation: fall back to the default for any non-positive,
   // non-finite or fractional value so callers can never trigger an unbounded
@@ -80,24 +83,32 @@ export function useChatSharedMedia(
     typeof rawLimit === "number" && Number.isFinite(rawLimit) && rawLimit > 0
       ? Math.floor(rawLimit)
       : DEFAULT_LIMIT;
-  const enabled = (options?.enabled ?? true) && !!chatId;
+  const enabled = (options?.enabled ?? true) && !!chatId && (!icp || (!!user && initialized));
 
 
-  return useQuery({
-    queryKey: ["chat-shared-media", chatType, chatId, limit],
+  const mediaQuery = useQuery({
+    queryKey: ["chat-shared-media", chatType, chatId, limit, user?.id, icp],
     queryFn: async (): Promise<SharedMediaItem[]> => {
       // ICP branch: conversation ids are the canister's native identifier
       // for every chat type here (club/team ids double as conversation ids
       // by the same convention the chat pages already use; group/dm ids are
-      // real conversation ids). There is no vault/file-token concept on the
-      // canister, so derived items are limited to attachment images and
-      // plain-text links — same derivation shape as the Supabase branch,
-      // minus what the canister genuinely has no equivalent for.
+      // real conversation ids). Vault tokens use the same parser as legacy
+      // messages, with destination-authorized metadata reads below.
       if (isFeatureRoutedToIcp("messaging") && chatId) {
         return withFeatureBackend("messaging", {
           supabase: async () => [],
           icp: async (ctx) => {
-            const messages = await listLiveMessages(ctx, chatId, null);
+            const page = await listLiveLatestMessagesPage(ctx, chatId, null, Math.min(100, Math.max(60, limit)));
+            const messages = [...page.messages];
+            // Full viewer scans a bounded recent window; previews use one page.
+            let cursor = page.next_sequence?.[0];
+            for (let i = 1; limit > 100 && cursor !== undefined && i < 6; i++) {
+              const older = await listLiveLatestMessagesPage(ctx, chatId, Number(cursor), 100);
+              messages.push(...older.messages);
+              const next = older.next_sequence?.[0];
+              if (next === cursor) break;
+              cursor = next;
+            }
             const items: SharedMediaItem[] = [];
             for (const m of messages) {
               const createdAt = new Date(Number(m.created_at_ms)).toISOString();
@@ -118,6 +129,16 @@ export function useChatSharedMedia(
                   image_url: attachment.url[0],
                 });
               }
+              for (const match of (m.body ?? "").matchAll(VAULT_FILE_RE)) {
+                items.push({ ...base, id: `${m.id}:vf:${match[1]}`, kind: "file", image_url: "", label: "Vault file", sublabel: "File", vaultFileId: match[1] });
+              }
+              for (const match of (m.body ?? "").matchAll(VAULT_FOLDER_RE)) {
+                items.push({ ...base, id: `${m.id}:vfd:${match[1]}`, kind: "file", image_url: "", label: "Folder", sublabel: "Folder", vaultFolderId: match[1] });
+              }
+              for (const match of (m.body ?? "").matchAll(VAULT_ROOT_RE)) {
+                const scope = match[1] as "club" | "team";
+                items.push({ ...base, id: `${m.id}:vr:${scope}:${match[2]}`, kind: "file", image_url: "", label: scope === "team" ? "Team vault" : "Club vault", vaultRootScope: scope, vaultRootId: match[2] });
+              }
               const seenUrls = new Set<string>();
               for (const match of (m.body ?? "").matchAll(URL_RE)) {
                 const url = match[0].replace(/[).,;!?]+$/, "");
@@ -135,8 +156,9 @@ export function useChatSharedMedia(
               }
             }
             items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-            return items.slice(0, limit);
-          }}, { conversationId: chatId });
+            const result = [...new Map(items.map(item => [item.id, item])).values()].slice(0, limit);
+            return result;
+          }}, chatType === "dm" || chatType === "broadcast" ? { shared: "person" } : options?.clubId ? { clubId: options.clubId } : chatType === "team" ? { teamId: chatId } : chatType === "club" ? { clubId: chatId } : { conversationId: chatId });
       }
 
       const { table, column } = TABLE_AND_FILTER[chatType];
@@ -310,4 +332,39 @@ export function useChatSharedMedia(
     enabled,
     staleTime: 60 * 1000,
   });
+  // Optional labels never hold the actual attachments behind directory/Vault reads.
+  const rows = mediaQuery.data ?? [];
+  const { data: enriched } = useQuery({
+    queryKey: ["chat-shared-media-labels", user?.id, chatType, chatId, limit, rows.map(row => `${row.id}:${row.image_url}:${row.url ?? ""}`).join(","), options?.clubId, options?.competitionId],
+    enabled: enabled && icp && rows.length > 0,
+    queryFn: async () => {
+      const [profiles, vault] = await Promise.all([
+        fetchProfilesWithCache([...new Set(rows.map(row => row.author_id))]).catch(() => new Map()),
+        import("@/live/features/vault"),
+      ]);
+      return Promise.all(rows.map(async row => {
+        const item = { ...row };
+        const profile = profiles.get(item.author_id);
+        item.author_name = profile?.display_name ?? null;
+        item.author_avatar = profile?.avatar_url ?? null;
+        const fileId = item.vaultFileId, folderId = item.vaultFolderId;
+        if (fileId || folderId) {
+          try {
+            const metadata = await withFeatureBackend("vault", {
+              supabase: async () => null,
+              icp: ctx => fileId ? vault.getLiveVaultFile(ctx, fileId) : folderId ? vault.getLiveVaultFolder(ctx, folderId, options?.competitionId) : Promise.resolve(null),
+            }, options?.clubId ? { clubId: options.clubId } : fileId ? { vaultFileId: fileId } : { vaultFolderId: folderId ?? "" });
+            if (metadata) item.label = metadata.name;
+          } catch { /* Navigation still requires destination authorization. */ }
+        }
+        return item;
+      }));
+    },
+    staleTime: 60_000,
+  });
+  const enrichedById = new Map(enriched?.map(item => [item.id, item]));
+  return { ...mediaQuery, data: icp && mediaQuery.data ? mediaQuery.data.map(item => {
+    const label = enrichedById.get(item.id);
+    return label ? { ...item, label: label.label ?? item.label, author_name: label.author_name, author_avatar: label.author_avatar } : item;
+  }) : mediaQuery.data };
 }

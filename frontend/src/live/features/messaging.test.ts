@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   send_message: vi.fn(),
   submit_content_report: vi.fn(),
   read_conversation_club: vi.fn(),
+  get_direct_conversation: vi.fn(),
+  get_message_window: vi.fn(),
+  list_conversation_online_users: vi.fn(),
 }));
 
 vi.mock("../domains", () => ({
@@ -22,6 +25,9 @@ vi.mock("../domains", () => ({
       send_message: mocks.send_message,
       submit_content_report: mocks.submit_content_report,
       read_conversation_club: mocks.read_conversation_club,
+      get_direct_conversation: mocks.get_direct_conversation,
+      get_message_window: mocks.get_message_window,
+      list_conversation_online_users: mocks.list_conversation_online_users,
     },
   })),
 }));
@@ -35,10 +41,37 @@ import {
   sendLiveMessage,
   submitLiveContentReport,
   isLiveConversationAbsent,
+  getLiveDirectConversation,
+  getLiveMessageWindow,
+  listLiveConversationOnlineUsers,
 } from "./messaging";
 
 const ctx = { target: {}, identity: {} } as never;
 const other = { toText: () => "aaaaa-aa" } as never;
+describe("exact private messaging reads", () => {
+  it("reads empty DM participants with the exact caller identity", async () => {
+    const self = { toText: () => "self" };
+    const peer = { toText: () => "peer" };
+    mocks.get_direct_conversation.mockResolvedValue({ Ok: { id: "dm-1", participants: [self, peer] } });
+    const context = { identity: { getPrincipal: () => self }, target: {} } as never;
+    expect(await getLiveDirectConversation(context, "dm-1")).toEqual({ id: "dm-1", participant_1: "self", participant_2: "peer" });
+    mocks.get_direct_conversation.mockResolvedValue({ Ok: { id: "dm-1", participants: [peer, peer] } });
+    await expect(getLiveDirectConversation(context, "dm-1")).rejects.toThrow("identity mismatch");
+  });
+  it("rejects a message window from a different conversation", async () => {
+    mocks.get_message_window.mockResolvedValue({ Ok: { messages: [{ id: "target", conversation_id: "foreign" }] } });
+    await expect(getLiveMessageWindow(ctx, "group-1", "target")).rejects.toThrow("identity mismatch");
+    mocks.get_message_window.mockResolvedValue({ Ok: { messages: [{ id: "target", conversation_id: "group-1" }] } });
+    expect((await getLiveMessageWindow(ctx, "group-1", "target")).messages).toHaveLength(1);
+  });
+  it("uses only the authorized conversation presence API and preserves refusals", async () => {
+    mocks.list_conversation_online_users.mockResolvedValue({ Ok: [other] });
+    expect(await listLiveConversationOnlineUsers(ctx, "group-1")).toEqual(["aaaaa-aa"]);
+    expect(mocks.list_conversation_online_users).toHaveBeenCalledWith("group-1");
+    mocks.list_conversation_online_users.mockResolvedValue({ Err: "Conversation access forbidden" });
+    await expect(listLiveConversationOnlineUsers(ctx, "group-1")).rejects.toThrow("access forbidden");
+  });
+});
 
 describe('conversation absence evidence', () => {
   it('accepts only a successful empty owner option', async () => {

@@ -4,6 +4,9 @@ import { sortChatMessagesChronologically } from "@/lib/chatMessageOrder";
 import { reconcileMessages } from "@/lib/chatMessageReconciliation";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
 import type { GroupChatSupabaseClient, GroupMessage, MessageReaction } from "@/features/messaging/thread/groupChatData";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { liveMessageRow } from "./liveMessageRow";
 
 interface UseGroupTargetWindowHydrationOptions {
   targetMessageId: string | null;
@@ -16,6 +19,8 @@ interface UseGroupTargetWindowHydrationOptions {
   setHasOlderMessages: Dispatch<SetStateAction<boolean>>;
   setJumpRenderNonce: Dispatch<SetStateAction<number | string | null>>;
   supabaseClient: GroupChatSupabaseClient;
+  clubId?: string | null;
+  userId?: string;
 }
 
 export const useGroupTargetWindowHydration = ({
@@ -29,6 +34,8 @@ export const useGroupTargetWindowHydration = ({
   setHasOlderMessages,
   setJumpRenderNonce,
   supabaseClient,
+  clubId,
+  userId,
 }: UseGroupTargetWindowHydrationOptions) => {
   // Notification deep-links must be target-anchored, not index-estimated. On
   // repeat taps in long Grounds-style histories, the target already exists in
@@ -41,6 +48,22 @@ export const useGroupTargetWindowHydration = ({
     let cancelled = false;
 
     const hydrateTargetWindow = async () => {
+      if (isFeatureRoutedToIcp("messaging")) {
+        const { getLiveMessageWindow } = await import("@/live/features/messaging");
+        const page = await withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("ICP message requires Internet Identity"); },
+          icp: ctx => getLiveMessageWindow(ctx, groupId, targetMessageId),
+        }, clubId ? { clubId } : { conversationId: groupId });
+        if (cancelled) return;
+        const rows = page.messages.map(m => ({ ...liveMessageRow(m), group_id: groupId }));
+        const merged = new Map((localMessagesRef.current ?? []).map(m => [m.id, m]));
+        for (const row of rows) merged.set(row.id, { ...merged.get(row.id), ...row });
+        const targetAlreadyRendered = (localMessagesRef.current ?? []).some(m => m.id === targetMessageId);
+        setLocalMessages((reconcileMessages(reconcileScope, sortChatMessagesChronologically([...merged.values()])) ?? []) as GroupMessage[]);
+        setHasOlderMessages(page.next_sequence.length > 0);
+        if (!targetAlreadyRendered) setJumpRenderNonce(targetJumpNonce ?? Date.now());
+        return;
+      }
       const { data: target, error } = await supabaseClient
         .from("group_messages")
         .select("id, text, image_url, created_at, edited_at, author_id, group_id, reply_to_id, is_system_message, forwarded_from_user_id, forwarded_at, forwarded_source_label")
@@ -132,7 +155,7 @@ export const useGroupTargetWindowHydration = ({
       if (!targetAlreadyRendered) setJumpRenderNonce(targetJumpNonce ?? Date.now());
     };
 
-    void hydrateTargetWindow();
+    void hydrateTargetWindow().catch(() => { /* The main thread query retains the retry/error state; never fall back to Supabase. */ });
 
     return () => {
       cancelled = true;
@@ -148,5 +171,7 @@ export const useGroupTargetWindowHydration = ({
     setHasOlderMessages,
     setJumpRenderNonce,
     supabaseClient,
+    clubId,
+    userId,
   ]);
 };

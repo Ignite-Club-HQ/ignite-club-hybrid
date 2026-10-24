@@ -234,6 +234,11 @@ export const idlFactory = ({ IDL }) => {
     'window_start_hours' : IDL.Nat32,
     'cooldown_days' : IDL.Nat32,
   });
+  const MessagePage = IDL.Record({
+    'messages' : IDL.Vec(Message),
+    'latest_sequence' : IDL.Nat64,
+    'next_sequence' : IDL.Opt(IDL.Nat64),
+  });
   const PollResults = IDL.Record({
     'votes' : IDL.Opt(IDL.Vec(PollVote)),
     'poll' : Poll,
@@ -244,11 +249,6 @@ export const idlFactory = ({ IDL }) => {
     'last_seen_ms' : IDL.Nat64,
     'user' : IDL.Principal,
     'platform' : IDL.Opt(IDL.Text),
-  });
-  const MessagePage = IDL.Record({
-    'messages' : IDL.Vec(Message),
-    'latest_sequence' : IDL.Nat64,
-    'next_sequence' : IDL.Opt(IDL.Nat64),
   });
   const TypingUser = IDL.Record({ 'name' : IDL.Text, 'user' : IDL.Principal });
   const ReactionSummary = IDL.Record({
@@ -533,6 +533,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'get_club_dm_settings' : IDL.Func([IDL.Text], [ClubDmSettings], ['query']),
+    'get_direct_conversation' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
+        [],
+      ),
     'get_group_join_policy' : IDL.Func(
         [IDL.Text],
         [
@@ -551,6 +556,11 @@ export const idlFactory = ({ IDL }) => {
     'get_group_metadata_multi' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(GroupMetadata), 'Err' : IDL.Text })],
+        [],
+      ),
+    'get_message_window' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : MessagePage, 'Err' : IDL.Text })],
         [],
       ),
     'get_mini_league_chat' : IDL.Func(
@@ -651,6 +661,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(ContentReport), 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'list_conversation_online_users' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        [],
       ),
     'list_deleted_groups' : IDL.Func(
         [],

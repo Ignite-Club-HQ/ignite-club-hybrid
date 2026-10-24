@@ -3912,6 +3912,52 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  // Private conversation reads: never expose the app-admin global presence list.
+  public shared ({ caller }) func get_direct_conversation(conversation_id : Text) : async { #Ok : Types.Conversation; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+      await admitAccount(caller);
+      await* requireChatAccess(caller, conversation_id);
+      if (not canAccessConversation(caller, conversation_id) or convFenced(conversation_id)) return #Err("Conversation access forbidden");
+      switch (conversations.find(func(c) = c.id == conversation_id and c.club_id == "dm" and c.participants.any(func(p) = p.equal(caller)))) {
+        case (?conversation) #Ok(conversation);
+        case null #Err("Direct conversation not found");
+      }
+    } finally { removalReceiver.leave(caller) };
+  };
+
+  public shared ({ caller }) func get_message_window(conversation_id : Text, message_id : Text) : async { #Ok : Types.MessagePage; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+      await admitAccount(caller);
+      await* requireChatAccess(caller, conversation_id);
+      if (not canReadTeamMessages(caller, conversation_id) or convFenced(conversation_id)) return #Err("Conversation access forbidden");
+      switch (messages.find(func(m) = m.conversation_id == conversation_id and m.id == message_id)) {
+        case null #Err("Message not found");
+        case (?target) {
+          let lower : Nat64 = if (target.sequence > 12) target.sequence - 12 else 0;
+          let rows = messages.filter(func(m) = m.conversation_id == conversation_id and m.sequence >= lower and m.sequence <= target.sequence + 24);
+          #Ok({ messages = rows; next_sequence = if (lower > 1) ?lower else null; latest_sequence = conversationLatestSequence(conversation_id) })
+        };
+      }
+    } finally { removalReceiver.leave(caller) };
+  };
+
+  public shared ({ caller }) func list_conversation_online_users(conversation_id : Text) : async { #Ok : [Principal]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+      await admitAccount(caller);
+      await* requireChatAccess(caller, conversation_id);
+      if (not canAccessConversation(caller, conversation_id) or convFenced(conversation_id)) return #Err("Conversation access forbidden");
+      let now = nowMs();
+      switch (conversations.find(func(c) = c.id == conversation_id)) {
+        case null #Err("Conversation not found");
+        case (?conversation) #Ok(conversation.participants.filter(func(p) =
+          not removalReceiver.denied(p) and presence.any(func(entry) = entry.user.equal(p) and entry.last_seen_ms + 150_000 >= now)));
+      }
+    } finally { removalReceiver.leave(caller) };
+  };
+
   // ===================== Typing indicators (ephemeral) =====================
 
   // TTL window: a typing ping older than this is treated as stale and

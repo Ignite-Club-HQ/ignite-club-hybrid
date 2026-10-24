@@ -302,11 +302,33 @@ async function teardown() {
  */
 export function useTrackPresence(userId: string | null | undefined) {
   useEffect(() => {
-    // Presence degrades to hidden when messaging is routed to ICP — there is
-    // no canister presence channel, so don't open the Supabase one.
-    if (!userId || isFeatureRoutedToIcp("messaging")) {
+    if (!userId) {
       teardown();
       return;
+    }
+    if (isFeatureRoutedToIcp("messaging")) {
+      void teardown();
+      let cancelled = false;
+      let pending = false;
+      const beat = async () => {
+        if (cancelled || pending || document.visibilityState !== "visible") return;
+        pending = true;
+        try {
+          const [{ withFeatureBackend }, { livePresenceHeartbeat }] = await Promise.all([
+            import("@/live/featureRouter"), import("@/live/features/messaging"),
+          ]);
+          if (!cancelled) await withFeatureBackend("messaging", {
+            supabase: async () => {}, icp: ctx => livePresenceHeartbeat(ctx, "web"),
+          }, { shared: "person" });
+        } catch { /* Optional presence never blocks navigation. */ }
+        finally { pending = false; }
+      };
+      void beat();
+      const timer = setInterval(beat, 120_000);
+      const visible = () => { if (document.visibilityState === "visible") void beat(); };
+      document.addEventListener("visibilitychange", visible);
+      window.addEventListener("online", visible);
+      return () => { cancelled = true; clearInterval(timer); document.removeEventListener("visibilitychange", visible); window.removeEventListener("online", visible); };
     }
     ensureChannel(userId).catch(() => {
       // Schedule a retry — ensureChannel itself doesn't, but the SUBSCRIBE
