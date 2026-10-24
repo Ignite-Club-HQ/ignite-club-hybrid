@@ -112,3 +112,4 @@
 - ICP photo resolution shares pending/completed object URLs by stored account and full target, retires results on sign-out, and retries failures without raw ciphertext fallback. Why: remounted chat rows must not repeat downloads/unlocks or inherit another account's photo.
 
 - Pitch chat cards/viewers share account-scoped team-authorized board reads; ICP viewer roster uses team membership, and team/club polls warm before message enrichment. Why: links must not query the shared default group or Supabase for ICP members, nor wait until cards mount.
+- Pitch-board player prefill uses account/backend-keyed team-scoped V2 position reads; self substitution reminders and preferences use the ICP queue, name-free pitch kinds and one-attempt writes. Broader staff alerts remain with the existing sub monitor. Why: ICP accounts have no Supabase roster/preference rows, and repeated pending-slot renders must not replay unknown writes or expose child names.
