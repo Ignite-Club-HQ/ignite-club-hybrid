@@ -36,6 +36,8 @@ describe("vault backup restore with media recovery", () => {
     m.restorePage.mockResolvedValue({ Ok: { next: 2n, restored: 2n, skipped: 0n, complete: true } });
     m.grantClub.mockResolvedValue({ Ok: null });
     m.fetch.mockResolvedValue({ ok: true });
+    // Legacy contract fixtures must carry the complete snapshot shape.
+    m.getBackup.mockImplementation(async () => ({ Ok: { id: "backup-1", backup_label: "Backup", created_at_ms: 1n, created_by: "owner", folders: [], files: [] } }));
   });
 
   it("restores rows, re-grants club media access and verifies bytes", async () => {
