@@ -160,7 +160,7 @@ describe.runIf(!supabaseMode)("Media engagement repository — ICP", () => {
   it("creates an ICP comment without writing to Supabase", async () => {
     const { client, calls } = scriptedClient({});
     await createMediaComment({ photoId: "photo-a", userId: "principal-a", text: "Hello", replyToId: "comment-parent" }, client);
-    expect(mediaMocks.addComment).toHaveBeenCalledWith(icpContext, "photo-a", "Hello", expect.any(Number));
+    expect(mediaMocks.addComment).toHaveBeenCalledWith(icpContext, "photo-a", "Hello", expect.any(Number), "comment-parent");
     expect(calls).toEqual([]);
   });
 

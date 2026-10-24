@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 
-const { mode, deleteLiveAsset, icpContext } = vi.hoisted(() => ({
+const { mode, removeLiveGalleryAsset, icpContext } = vi.hoisted(() => ({
   mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
-  deleteLiveAsset: vi.fn(),
+  removeLiveGalleryAsset: vi.fn(),
   icpContext: { identity: {}, target: {} },
 }));
 
@@ -11,7 +11,7 @@ vi.mock("@/live/featureRouter", () => ({
     mode === "icp" ? providers.icp(icpContext) : providers.supabase(),
 }));
 vi.mock("@/live/features/media", () => ({
-  deleteLiveAsset: (...args: unknown[]) => deleteLiveAsset(...args),
+  removeLiveGalleryAsset: (...args: unknown[]) => removeLiveGalleryAsset(...args),
 }));
 
 import { deleteMediaPhoto } from "./mediaPhotoDeletion";
@@ -218,7 +218,7 @@ describe.runIf(supabaseMode)("deleteMediaPhoto — fallback path (RPC not yet de
 describe.runIf(!supabaseMode)("deleteMediaPhoto — ICP adapter", () => {
   it("deletes the canister asset without issuing Supabase RPCs or table writes", async () => {
     const client = makeClient({});
-    deleteLiveAsset.mockResolvedValue(undefined);
+    removeLiveGalleryAsset.mockResolvedValue({ vault_updated: false });
 
     await expect(deleteMediaPhoto(client, { photoId: "asset-1", mode: "feed_and_vault" })).resolves.toEqual({
       photoId: "asset-1",
@@ -227,14 +227,14 @@ describe.runIf(!supabaseMode)("deleteMediaPhoto — ICP adapter", () => {
       vaultUpdated: false,
     });
 
-    expect(deleteLiveAsset).toHaveBeenCalledWith(icpContext, "asset-1");
+    expect(removeLiveGalleryAsset).toHaveBeenCalledWith(icpContext, "asset-1", "feed_and_vault");
     expect(client.rpc).not.toHaveBeenCalled();
     expect(client.from).not.toHaveBeenCalled();
   });
 
   it("applies feed-only deletion through the same canister asset boundary", async () => {
     const client = makeClient({});
-    deleteLiveAsset.mockResolvedValue(undefined);
+    removeLiveGalleryAsset.mockResolvedValue({ vault_updated: false });
 
     await expect(deleteMediaPhoto(client, { photoId: "asset-1", mode: "feed_only" })).resolves.toEqual({
       photoId: "asset-1",
@@ -243,7 +243,7 @@ describe.runIf(!supabaseMode)("deleteMediaPhoto — ICP adapter", () => {
       vaultUpdated: false,
     });
 
-    expect(deleteLiveAsset).toHaveBeenCalledWith(icpContext, "asset-1");
+    expect(removeLiveGalleryAsset).toHaveBeenCalledWith(icpContext, "asset-1", "feed_only");
     expect(client.rpc).not.toHaveBeenCalled();
     expect(client.from).not.toHaveBeenCalled();
   });
@@ -253,7 +253,7 @@ describe.runIf(!supabaseMode)("deleteMediaPhoto — ICP adapter", () => {
 
     await expect(deleteMediaPhoto(client, { photoId: "", mode: "feed_only" })).rejects.toThrow("photoId is required");
 
-    expect(deleteLiveAsset).not.toHaveBeenCalled();
+    expect(removeLiveGalleryAsset).not.toHaveBeenCalled();
     expect(client.rpc).not.toHaveBeenCalled();
     expect(client.from).not.toHaveBeenCalled();
   });
@@ -261,11 +261,11 @@ describe.runIf(!supabaseMode)("deleteMediaPhoto — ICP adapter", () => {
   it("propagates canister deletion failures without falling back to Supabase", async () => {
     const denied = new Error("asset deletion denied");
     const client = makeClient({});
-    deleteLiveAsset.mockRejectedValueOnce(denied);
+    removeLiveGalleryAsset.mockRejectedValueOnce(denied);
 
     await expect(deleteMediaPhoto(client, { photoId: "asset-2", mode: "feed_only" })).rejects.toBe(denied);
 
-    expect(deleteLiveAsset).toHaveBeenCalledWith(icpContext, "asset-2");
+    expect(removeLiveGalleryAsset).toHaveBeenCalledWith(icpContext, "asset-2", "feed_only");
     expect(client.rpc).not.toHaveBeenCalled();
     expect(client.from).not.toHaveBeenCalled();
   });
