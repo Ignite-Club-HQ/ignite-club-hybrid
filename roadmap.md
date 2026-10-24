@@ -1,3 +1,7 @@
+## Sent-message preview delay — 24 October 2026
+- [x] Found ICP previews wait for polling (30 seconds web / 120 seconds native) and full directory refreshes; acknowledged team/club/group sends now update existing exact-account inbox rows directly, retaining newer messages across stale responses and clearing marks with removed queries. Focused regression checks pending.
+- [ ] Signed-in phone send-to-inbox timing: unavailable Internet Identity session; no publication or canister changes.
+
 ## Chat threads after top-ups — 24 October 2026
 - [x] Owner screenshot at 01:38 UTC narrows incident to committee/coaches group chats: full metadata skeleton, not missing teams. Group metadata/messages now use the exact account-scoped inbox club or returned metadata owner, avoiding redundant all-group ownership discovery; cold links still discover and destination access remains mandatory. Metadata starts after auth restoration. Focused tests required; signed-in live failure cannot be reproduced here (preview redirects to /auth).
 - [x] Live read-only health confirms router 5.28T, G2 club 5.71T and messaging 5.91T; earlier fuel-only diagnosis was unproven. Repair team/club missing-conversation recovery: current canisters return access forbidden for absence, so require same-context authorized location evidence before one provisioning attempt. Existing/denied threads and uncertain mutations must not trigger replacement/replay.
