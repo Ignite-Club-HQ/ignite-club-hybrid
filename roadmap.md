@@ -1,3 +1,8 @@
+## Events and schedules ICP completion — 24 October 2026
+- [ ] Close authorized import/fixture enrichment, nearby/recent game and pitch-entry reads, schedule refresh/views/preferences and exported fixture links.
+- [ ] Close individual/bulk reminders, audience/cooldown parity, cancellation alerts and duty notifications; move complete recurring-event setup into one canister transaction.
+- [ ] Run focused dual-mode and real-canister checks; document protected upgrades and signed-in acceptance prerequisites without deploying.
+
 ## Messaging ICP completion — 24 October 2026
 - [x] Replace legacy DM metadata/send cleanup and group deep-link reads with exact authorized ICP APIs; acknowledged sends retain canister IDs/timestamps. Group Vault entry resolves the on-chain pin/root mirror before the authorized scope fallback.
 - [x] Enable ICP shared-media photos/file tokens/links with bounded latest pages and independent profile/Vault labels; competition-admin legacy entry opens the standard on-chain thread. Shared/person and owning-group heartbeats plus participant-only presence power online indicators without global enumeration.
