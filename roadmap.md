@@ -1,3 +1,8 @@
+## Gallery ICP completion — 24 October 2026
+- [ ] Add authorized threaded comments, gallery notifications and exact shared-photo opening with quiet ongoing refresh.
+- [ ] Restore scoped sharing permissions, staff moderation, gallery/Vault copy and deletion parity, and grouped chat-photo publishing.
+- [ ] Verify focused frontend/canister checks and record protected upgrade and signed-in acceptance prerequisites; do not deploy.
+
 ## Events and schedules ICP completion — 24 October 2026
 - [ ] Close authorized import/fixture enrichment, nearby/recent game and pitch-entry reads, schedule refresh/views/preferences and exported fixture links.
 - [ ] Close individual/bulk reminders, audience/cooldown parity, cancellation alerts and duty notifications; move complete recurring-event setup into one canister transaction.
