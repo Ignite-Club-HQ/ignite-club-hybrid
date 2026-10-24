@@ -738,6 +738,7 @@ persistent actor class Main(governorInit : Principal) = this {
     competitionOfficialEmailInvites := competitionOfficialEmailInvites.filter(func r = r.created_by != caller and r.accepted_by != ?caller);
     competitionMemberWelcomeJobs := competitionMemberWelcomeJobs.filter(func r = r.member != caller);
     personalCompetitionOwners := personalCompetitionOwners.filter(func r = r.1 != caller);
+    for((key,r) in Map.entries(fixtureReceipts).toArray().values())if(r.creator==caller){Map.remove(fixtureReceipts,Text.compare,key);Map.add(fixtureReceipts,Text.compare,"erased:" # r.match_id,{r with creator=Principal.anonymous()})};
     tokens := tokens.map(func r = if (r.issued_by == caller) ({ r with used = true; issued_by = Principal.anonymous() }) else r);
     broadcasts := broadcasts.map(func r = if (r.sender == caller) ({ r with sender = Principal.anonymous() }) else r);
     eoiSubmissions := eoiSubmissions.filter(func r = r.parent_user_id != ?caller);
@@ -748,6 +749,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if (receipt.sender == caller) {
         Map.remove(broadcastDeliveries, Text.compare, key);
         Map.add(broadcastDeliveries, Text.compare, "erased:" # receipt.broadcast_id, { receipt with sender = Principal.anonymous() });
+        switch(Map.get(broadcastPlans,Text.compare,key)){case (?plan){Map.remove(broadcastPlans,Text.compare,key);Map.add(broadcastPlans,Text.compare,"erased:" # receipt.broadcast_id,plan.map(func t = {t with officials=t.officials.filter(func p = p!=caller)}))};case null {}};
       }
     };
     #Ok(count)
@@ -2997,6 +2999,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
     if (old.equal(new)) return #err("old and new must differ");
     if (old.equal(governor)) return #err("Cannot rekey the governor");
+    for((_,r) in Map.entries(broadcastDeliveries))if(r.sender==old and r.unknown!=null)return #err("Resolve original broadcast before account rekey");
     let oldPrefix=old.toText() # "\u{1f}";let newPrefix=new.toText() # "\u{1f}";
     let fixtureUpdates=Map.entries(fixtureReceipts).toArray();
     for((key,r) in fixtureUpdates.values()) {
@@ -3073,6 +3076,7 @@ persistent actor class Main(governorInit : Principal) = this {
           let suffix = Text.stripStart(key, #text (old.toText() # "\u{1f}")) ?? key;
           Map.remove(broadcastDeliveries, Text.compare, key);
           Map.add(broadcastDeliveries, Text.compare, new.toText() # "\u{1f}" # suffix, { receipt with sender = new });
+          switch(Map.get(broadcastPlans,Text.compare,key)){case (?plan){Map.remove(broadcastPlans,Text.compare,key);Map.add(broadcastPlans,Text.compare,new.toText() # "\u{1f}" # suffix,plan)};case null {}};
         }
       };
       roles := newRoles;

@@ -4131,6 +4131,8 @@ persistent actor class Main(governorInit : Principal) = this {
     individualDutyReminderSent := individualDutyReminderSent.filter(func(id) = not inDoomed(id));
     gameSummaries := gameSummaries.filter(func(g) = not inDoomed(g.event_id) and not inDoomedTeam(g.team_id));
     gamePlayerStats := gamePlayerStats.filter(func(g) = not inDoomed(g.event_id) and not inDoomedTeam(g.team_id));
+    for((id,_) in Map.entries(gamePlayerDetails).toArray().values())if(inDoomed(id))Map.remove(gamePlayerDetails,Text.compare,id);
+    for((id,r) in Map.entries(fixtureMaterializations).toArray().values())if(r.event_ids.any(inDoomed))Map.remove(fixtureMaterializations,Text.compare,id);
     gameResults := gameResults.filter(func(g) = (switch (g.event_id) { case (?e) { not inDoomed(e) }; case null { true } }) and not inDoomedTeam(g.team_id));
     activeGames := activeGames.filter(func(g) = switch (g.team_id) { case (?t) { not inDoomedTeam(t) }; case null { true } });
     pitchBoardSettings := pitchBoardSettings.filter(func(s) = not inDoomedTeam(s.team_id));
@@ -4630,6 +4632,14 @@ persistent actor class Main(governorInit : Principal) = this {
     removed += pushReachability.size() - keepReach.size(); pushReachability := keepReach;
     let keepMini = miniLeagueRsvps.filter(func(r) = switch (r.subject) { case (#account(id)) id != me; case (#mini_league_player(_)) true });
     removed += miniLeagueRsvps.size() - keepMini.size(); miniLeagueRsvps := keepMini;
+    for((eventId,details) in Map.entries(gamePlayerDetails).toArray().values()) {
+      let erasedChildren=childGuardians.filter(func g = g.guardian_id==me).map(func g = g.child_id);
+      let eraseIndices=details.keys().toArray().filter(func i = details[i].user_id==?me or details[i].user_id==?("principal:" # me) or (switch(details[i].child_id){case (?id)erasedChildren.any(func c = c==id);case null false}));
+      if(eraseIndices.size()!=0){
+        var i=0;gamePlayerStats:=gamePlayerStats.map(func s {if(s.event_id==eventId){let erase=eraseIndices.any(func j = j==i);i+=1;if(erase){removed+=1;{s with user_id=null;fill_in_player_name=null}}else s}else s});
+        Map.add(gamePlayerDetails,Text.compare,eventId,details.map(func d {if(d.user_id==?me or d.user_id==?("principal:" # me) or (switch(d.child_id){case (?id)erasedChildren.any(func c = c==id);case null false})){d with user_id=null;child_id=null}else d}))
+      }
+    };
     #Ok(Nat32.fromNat(removed))
   
     } finally { removalReceiver.leave(caller) };
@@ -4681,9 +4691,13 @@ persistent actor class Main(governorInit : Principal) = this {
     conflicts += duties.filter(func(d) = d.account_id == newText).size();
     conflicts += roster.filter(func(r) = r.account_id == newText).size();
     conflicts += childGuardians.filter(func(c) = c.guardian_id == newText).size();
+    for((_,ds) in Map.entries(gamePlayerDetails))conflicts+=ds.filter(func d = d.user_id==?newText or d.user_id==?("principal:" # newText)).size();
+    for((_,r) in Map.entries(fixtureMaterializations))if(r.input.creator==new_principal)conflicts+=1;
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in events_domain");
 
     var changed = 0;
+    for((_,ds) in Map.entries(gamePlayerDetails))changed+=ds.filter(func d = d.user_id==?oldText or d.user_id==?("principal:" # oldText)).size();
+    for((_,r) in Map.entries(fixtureMaterializations))if(r.input.creator==old)changed+=1;
 
     let rolesOld = roles.filter(func(r) = r.user.equal(old)).size();
     changed += rolesOld;
@@ -4728,6 +4742,9 @@ persistent actor class Main(governorInit : Principal) = this {
     if (eventViewOldCount > 0) changed += eventViewOldCount;
 
     if (not dry_run) {
+      gamePlayerStats:=gamePlayerStats.map(func s = if(s.user_id==?oldText){s with user_id=?newText}else if(s.user_id==?("principal:" # oldText)){s with user_id=?("principal:" # newText)}else s);
+      for((id,ds) in Map.entries(gamePlayerDetails).toArray().values())Map.add(gamePlayerDetails,Text.compare,id,ds.map(func d = if(d.user_id==?oldText){d with user_id=?newText}else if(d.user_id==?("principal:" # oldText)){d with user_id=?("principal:" # newText)}else d));
+      for((id,r) in Map.entries(fixtureMaterializations).toArray().values())if(r.input.creator==old)Map.add(fixtureMaterializations,Text.compare,id,{r with input={r.input with creator=new_principal}});
       if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new_principal }) else r);
       if (eventsOld > 0) events := events.map(func(e) = if (e.creator.equal(old)) ({ e with creator = new_principal }) else e);
       if (assocOld > 0) associationEvents := associationEvents.map(func(a) = if (a.created_by.equal(old)) ({ a with created_by = new_principal }) else a);
