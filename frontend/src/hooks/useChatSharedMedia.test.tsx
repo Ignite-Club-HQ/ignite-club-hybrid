@@ -28,6 +28,7 @@ const supabaseMode = liveMocks.backend === "supabase";
 vi.mock("@/lib/profileCache", () => ({
   selectCachedProfilesByIds: async () => ({ data: [] }),
 }));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "viewer" }, initialized: true }) }));
 
 // ---------- Supabase mock ----------
 type Row = {
@@ -82,7 +83,7 @@ vi.mock("@/live/featureRouter", () => ({
     liveMocks.backend === "icp" ? providers.icp(liveMocks.context) : providers.supabase(),
 }));
 vi.mock("@/live/features/messaging", () => ({
-  listLiveMessages: (...args: unknown[]) => liveMocks.listLiveMessages(...args),
+  listLiveLatestMessagesPage: async (...args: unknown[]) => ({ messages: await liveMocks.listLiveMessages(...args) }),
 }));
 
 import { useChatSharedMedia } from "./useChatSharedMedia";
@@ -309,7 +310,7 @@ describe.runIf(!supabaseMode)("useChatSharedMedia — ICP adapter", () => {
         url: "https://example.invalid",
       }),
     ]);
-    expect(liveMocks.listLiveMessages).toHaveBeenCalledWith(liveMocks.context, "team-1", null);
+    expect(liveMocks.listLiveMessages).toHaveBeenCalledWith(liveMocks.context, "team-1", null, 60);
     expect(liveMocks.supabaseTables).toEqual([]);
   });
 
