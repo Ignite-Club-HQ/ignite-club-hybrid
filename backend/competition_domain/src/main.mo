@@ -1097,13 +1097,18 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     if (home_team == away_team or not valid(home_team) or not valid(away_team) or not optValid(venue, 256) or not optValid(pitch_number, 64) or not optValid(notes, 2000)) return #Err("Invalid match details");
     switch (division_id) { case (?d) { if (d.size() > 128) return #Err("Invalid division") }; case null {} };
+    let owner = switch (matches.find(func item = item.id == match_id)) {
+      case null return #Err("Match not found"); case (?item) item.competition_id;
+    };
+    await syncForCompetition(caller, owner);
+    if (removalReceiver.denied(caller) or matchFenced(match_id) or compFenced(owner)) return #Err("Match access changed");
     switch (matches.find(func(item) = item.id == match_id)) {
       case null { #Err("Match not found") };
       case (?current) {
         if (not canManageCompetition(caller, current.competition_id)) return #Err("Competition management forbidden");
         if (current.revision != expected_revision) return #Err("Match revision conflict");
-        let home_ok = entries.any(func(entry) = entry.competition_id == current.competition_id and entry.team_id == home_team);
-        let away_ok = entries.any(func(entry) = entry.competition_id == current.competition_id and entry.team_id == away_team);
+        let home_ok = entries.any(func(entry) = entry.competition_id == current.competition_id and entry.team_id == home_team and (entry.status == "accepted" or entry.status == "registered"));
+        let away_ok = entries.any(func(entry) = entry.competition_id == current.competition_id and entry.team_id == away_team and (entry.status == "accepted" or entry.status == "registered"));
         if (not home_ok or not away_ok) return #Err("Both teams must be registered");
         let updated : Types.Match = { current with home_team; away_team; division_id; scheduled_at_ms; venue; pitch_number; round_number; duration_minutes; arrival_minutes_before; notes; revision = current.revision + 1 };
         matches := matches.map(func(item) = if (item.id == match_id) updated else item);

@@ -136,7 +136,7 @@ function SupabaseEoiAdminPage() {
           const { listLiveSeasons, getLiveSeasonEoiConfig } = await import("@/live/features/club");
           return Promise.all((await listLiveSeasons(ctx, clubId)).map(async season => {
             const config = await getLiveSeasonEoiConfig(ctx, season.id);
-            const settings = config?.config_json ? JSON.parse(config.config_json) : {};
+            const settings = config[0] ? JSON.parse(config[0]) : {};
             return { id: season.id, name: season.name, eoi_enabled: settings.eoi_enabled === true, eoi_slug: settings.eoi_slug ?? null };
           }));
         },
