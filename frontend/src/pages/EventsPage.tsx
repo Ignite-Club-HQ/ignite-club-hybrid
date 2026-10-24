@@ -1,3 +1,5 @@
+import { getIcpScheduleView, setIcpScheduleView } from '@/lib/scheduleViewPreference';
+import { scheduleEventUrl } from '@/lib/scheduleEventUrl';
 import { readDiscoveredMiniLeagues } from "@/live/accountDiscovery";
 import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
 import { readContentInScope } from "@/live/contentRouting";
@@ -214,7 +216,14 @@ export default function EventsPage() {
   const [filter, setFilter] = useState<"all" | EventType>("all");
   // Initialize from profile preference or default to list
   const savedViewMode = (profile as any)?.events_view_mode as "list" | "calendar" | undefined;
+  const viewChangedRef = useRef(false);
   const [viewMode, setViewMode] = useState<"list" | "calendar">(savedViewMode || "list");
+  useEffect(() => {
+    if (!isIcpAuthBackend || !user) return;
+    let disposed = false;
+    void getIcpScheduleView().then(view => { if (!disposed && !viewChangedRef.current && view) setViewMode(view); }).catch(() => undefined);
+    return () => { disposed = true; };
+  }, [isIcpAuthBackend, user?.id]);
   // Default to today so events for the visually-highlighted date appear
   // immediately on entering calendar view (users were having to click today
   // to "wake up" the day summary even though it already looked selected).
@@ -261,7 +270,11 @@ export default function EventsPage() {
 
   // Persist view mode preference to profile
   const handleViewModeChange = async (newMode: "list" | "calendar") => {
+    viewChangedRef.current = true;
     setViewMode(newMode);
+    if (user && isIcpAuthBackend) {
+      await setIcpScheduleView(newMode).catch(() => toast({ title: "Schedule preference couldn't be saved", variant: "destructive" }));
+    }
     // View-mode preference persists to the Supabase profile only — in ICP
     // mode there is no profiles row for the II principal, so keep it local.
     if (user && !isIcpAuthBackend) {
@@ -960,7 +973,7 @@ export default function EventsPage() {
   const eventIds = events?.map(e => e.id) || [];
   // Event-view tracking is Supabase-only; skip it in ICP mode (the II
   // principal is not a UUID and would just error).
-  const skipViewTracking = useIcpLab || isIcpAuthBackend;
+  const skipViewTracking = useIcpLab;
   const { data: viewedEventIds } = useUserEventViews(skipViewTracking ? undefined : user?.id, skipViewTracking ? [] : eventIds);
 
   const handleClubChange = (value: string) => {
@@ -1063,12 +1076,12 @@ export default function EventsPage() {
   // Subscribe to server-side schedule refresh broadcasts for clubs the user
   // belongs to. Broadcasts are Supabase realtime — no canister equivalent yet,
   // so ICP mode skips the subscription and the admin broadcast action.
-  useScheduleBroadcastListener(isIcpAuthBackend ? undefined : userMemberships?.clubIds);
+  useScheduleBroadcastListener(userMemberships?.clubIds);
 
   // Long-press on the refresh button (admins only) sends a broadcast that
   // forces every connected member's schedule to re-fetch.
   const adminClubIds = userMemberships?.clubAdminClubIds ?? [];
-  const canBroadcast = !isIcpAuthBackend && adminClubIds.length > 0;
+  const canBroadcast = adminClubIds.length > 0;
   const broadcastTargetClubId = clubFilter && adminClubIds.includes(clubFilter)
     ? clubFilter
     : adminClubIds[0];
@@ -1412,7 +1425,7 @@ export default function EventsPage() {
                   postcode: e.postcode,
                   is_cancelled: e.is_cancelled,
                   updated_at: e.updated_at,
-                  url: `${window.location.origin}/events/${e.id}`,
+                  url: scheduleEventUrl(window.location.origin, e),
                 })),
                 "Ignite Schedule",
                 "ignite-schedule",
