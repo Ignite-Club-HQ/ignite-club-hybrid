@@ -98,6 +98,7 @@ import { usePitchBoardBenchToSub } from "./hooks/usePitchBoardBenchToSub";
 import { usePitchBoardPropSync } from "./hooks/usePitchBoardPropSync";
 import { usePitchBoardPersistence } from "./hooks/usePitchBoardPersistence";
 import { usePitchBoardPlayerBootstrap } from "./hooks/usePitchBoardPlayerBootstrap";
+import { usePitchPlayerDetails } from './hooks/usePitchPlayerDetails';
 import { usePitchBoardLifecycle } from "./hooks/usePitchBoardLifecycle";
 import { usePitchBoardDrawing } from "./hooks/usePitchBoardDrawing";
 import { usePitchBoardPlanRepair } from "./hooks/usePitchBoardPlanRepair";
@@ -831,6 +832,8 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
     if (!miniLeagueTeams || !player.teamSide) return undefined;
     return player.teamSide === "a" ? miniLeagueTeams.teamAColor : miniLeagueTeams.teamBColor;
   }, [miniLeagueTeams]);
+
+  usePitchPlayerDetails(teamPlayerPositions, mockMode, setPlayers);
 
   // Substitution feedback effects are isolated from the selection flow.
   const {
