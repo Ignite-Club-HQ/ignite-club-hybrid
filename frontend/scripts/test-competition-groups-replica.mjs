@@ -105,8 +105,8 @@ try {
   c.setPrincipal(manager);
   denied(await c.invite_team(competition, 'unknown'));
   denied(await c.update_competition_settings(competition, 'Revoked', [], 'open', 'private', 3, 1, 0));
-  denied(await c.set_match_result(fixture.id, 1, 0, 1n));
-  denied(await c.update_match_details(fixture.id, home, away, [], [], [], [], [], [], [], [], fixture.revision));
+  denied(await c.set_match_result(completed.id, 1, 0, 2n));
+  denied(await c.update_match_details(completed.id, home, away, [], [], [], [], [], [], [], [], 2n));
   denied(await c.queue_competition_broadcast('forged-operation', competition, [], 'Notice', 'Forged'));
   c.setPrincipal(governor);
   // Token is capability-only; EOI IDs never reveal personal data to strangers.
@@ -129,5 +129,5 @@ try {
   ok(await c.set_transfer_fence('host', true));
   c.setPrincipal(parent);
   denied(await c.update_eoi_submission(eoi, ['changed'], [], []));
-  console.log('PASS: real two-group foreign-team ownership, participant/private-vault access, stranger and revoked-parent denial, removed-admin mutations, EOI claim/replay/privacy, mixed-club suggestion refusal and fenced parent writes.');
+  console.log('PASS: real two-group ownership/private access, atomic division cleanup retaining completed results, stale-division refusal, queued broadcast deduplication, removed-admin mutations, EOI claim/replay/privacy and fenced writes.');
 } finally { await pic?.tearDown(); await server.stop(); }

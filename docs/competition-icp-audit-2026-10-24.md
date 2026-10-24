@@ -2,6 +2,14 @@
 
 ## Verdict and scope
 
+### Closure batch update
+
+Core repairs are implemented and locally exercised: fresh result/detail manager authorization; accepted/registered fixture eligibility; private broadcasts and date-scoped engagement reads; caller-authorized competition cards; club-section routing; pinned anonymous multi-group reads with conflict rejection; public EOI owner target carried with the loaded form; exact competition/event association reads; awaited player statistics; manual fixture details; atomic division moves preserving completed results; trusted per-club broadcasts with durable queue/audience receipts; ICP broadcast-thread polling; committee role vocabulary; and explicit account competition purge. Test harnesses now include navigation context.
+
+32 focused test files pass in each backend mode. Real disposable canisters exercise two-group participant/privacy/revocation/EOI/broadcast/division flows and exact-event/History privacy; guards and 17-contract drift pass. The browser reaches sign-in from `/competitions` without a page error, **not** a signed-in competition acceptance check. No mainnet deployment or live wiring validation occurred.
+
+**Still not gap-free:** EOI/official/welcome delivery needs durable on-chain jobs/receipts and a Supabase-independent external mail transport; season cloning/invitations/bulk rollover, welcome-message display, full child/position-minute report data, interrupted fixture creation/materialization, anonymous inventory freshness and ambiguous broadcast reconciliation remain. Full erasure/rekey coverage needs further authority and recovery testing. ICP EOI resend now refuses before touching Supabase or recording a false send; disabling the unsafe fallback does not implement the missing feature. The original audit findings below are historical evidence, not a claim that every listed issue remains unchanged.
+
 **Not gap-free.** Source tracing found reachable Supabase dependencies, missing competition/season workflows, routing/data defects and authorization defects. This audit changes no application behaviour and performs no deployment or mainnet mutation. It cannot establish which defects are present in currently deployed modules, or certify signed-in production behaviour.
 
 Three independent audits covered competition discovery/create/detail/settings/join/public pages; officials, invitations, EOI and seasons; fixtures/results/ladders/History/player reports; linked chat/gallery/Vault; competition-domain authorization and queue fan-out. A further narrow review checked competition-linked news and club competition discovery: the detail page exposes a recognized competition Vault link, but no competition-specific news route was identified, so no new competition-news defect is asserted. This is not a fresh all-news or all-Vault audit. Findings below use current source, not previous completion summaries.
