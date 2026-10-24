@@ -2871,7 +2871,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if(removalReceiver.denied(caller) or eventFenced(event_id)) return #Err("Report access changed");
       let details=Map.get(gamePlayerDetails,Text.compare,event_id)??[];
       var i=0;
-      #Ok(rows.map(func stat { let detail=if(i<details.size())?details[i] else null;i+=1;{stat;detail} }))
+      #Ok(rows.map(func stat { let detail=if(i < details.size())?details[i] else null;i+=1;{stat;detail} }))
     } finally {removalReceiver.leave(caller)}
   };
   public shared ({caller}) func read_event_honours(event_id : Text) : async {#Ok:{captains:[Types.MatchCaptainAssignment];goalkeepers:[Types.MatchGoalkeeperAssignment]};#Err:Text} {

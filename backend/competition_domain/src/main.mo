@@ -236,6 +236,14 @@ persistent actor class Main(governorInit : Principal) = this {
       if (job.kind == "eoi") eoiSubmissions := eoiSubmissions.map(func e = if (e.id == job.resource) ({ e with invite_sent_count = e.invite_sent_count + 1; invite_sent_at_ms = ?nowMs() }) else e);
     }; #Ok
   };
+  public shared ({caller}) func reconcile_email_job(id:Text,attempt:Nat,provider_id:Text):async{#Ok;#Err:Text} {
+    if(not emailWorkers.any(func p = p==caller))return #Err("Original email worker required");
+    emailOutbox.reconcile(caller,id,attempt,"sent",provider_id)
+  };
+  public shared ({caller}) func compact_email_jobs(cursor:?Text,limit:Nat):async{#Ok:{next_cursor:?Text;scanned:Nat};#Err:Text} {
+    if(not isGovernor(caller) or limit==0 or limit>200)return #Err("Governor and bounded page required");
+    #Ok(emailOutbox.compact(cursor,limit))
+  };
   var clubDomainCanister : ?Principal;
   var participantClubAuthorities : [Principal];
   var eventsDomainCanister : ?Principal;
@@ -721,6 +729,9 @@ persistent actor class Main(governorInit : Principal) = this {
     competitionJoinLinks := competitionJoinLinks.map(func r = if (r.created_by == caller) ({ r with revoked = true; created_by = Principal.anonymous() }) else r);
     roleLinks := roleLinks.map(func r = if (r.created_by == caller) ({ r with revoked = true; created_by = Principal.anonymous() }) else r);
     let removedInviteTokens = competitionOfficialEmailInvites.filter(func r = r.created_by == caller or r.accepted_by == ?caller).map(func r = r.token);
+    let removedMemberTokens=competitionMemberWelcomeJobs.filter(func r = r.member==caller).map(func r = r.token);
+    let removedEois=eoiSubmissions.filter(func r = r.parent_user_id==?caller).map(func r = r.id);
+    count+=emailOutbox.scrub(func j = removedInviteTokens.any(func t = t==j.resource) or removedMemberTokens.any(func t = t==j.resource) or removedEois.any(func id = id==j.resource));
     competitionWelcomeJobs := competitionWelcomeJobs.filter(func r = not removedInviteTokens.any(func token = token == r.token));
     competitionOfficialEmailInvites := competitionOfficialEmailInvites.filter(func r = r.created_by != caller and r.accepted_by != ?caller);
     competitionMemberWelcomeJobs := competitionMemberWelcomeJobs.filter(func r = r.member != caller);
@@ -2961,6 +2972,14 @@ persistent actor class Main(governorInit : Principal) = this {
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
     if (old.equal(new)) return #err("old and new must differ");
     if (old.equal(governor)) return #err("Cannot rekey the governor");
+    let oldPrefix=old.toText() # "\u{1f}";let newPrefix=new.toText() # "\u{1f}";
+    let fixtureUpdates=Map.entries(fixtureReceipts).toArray();
+    for((key,r) in fixtureUpdates.values()) {
+      if(r.creator==old) {
+        let destination=newPrefix # (Text.stripStart(key,#text oldPrefix)??key);
+        if(Map.get(fixtureReceipts,Text.compare,destination)!=null)return #err("Destination fixture operation conflict")
+      }
+    };
 
     var conflicts = 0;
     conflicts += roles.filter(func(item) = item.user.equal(new)).size();
@@ -2971,11 +2990,20 @@ persistent actor class Main(governorInit : Principal) = this {
     conflicts += broadcasts.filter(func(item) = item.sender.equal(new)).size();
     for ((_, receipt) in Map.entries(broadcastDeliveries)) if (receipt.sender == new) conflicts += 1;
     conflicts += playhqClaims.filter(func(item)=item.user==new).size();
+    conflicts+=personalCompetitionOwners.filter(func r = r.1==new).size();
+    conflicts+=roleLinks.filter(func r = r.created_by==new).size();
+    conflicts+=competitionOfficialEmailInvites.filter(func r = r.created_by==new or r.accepted_by==?new).size();
+    conflicts+=competitionMemberWelcomeJobs.filter(func r = r.member==new).size();
     if (bulkAccessPrincipals.any(func(p) = p.equal(new))) { conflicts += 1 };
 
     if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in competition_domain");
 
     var changed = 0;
+    let newOwners=personalCompetitionOwners.map(func r {if(r.1==old){changed+=1;(r.0,new)}else r});
+    let newRoleLinks=roleLinks.map(func r {if(r.created_by==old){changed+=1;{r with created_by=new}}else r});
+    let newOfficialInvites=competitionOfficialEmailInvites.map(func r {if(r.created_by==old or r.accepted_by==?old){changed+=1;{r with created_by=if(r.created_by==old)new else r.created_by;accepted_by=if(r.accepted_by==?old)?new else r.accepted_by}}else r});
+    let newMemberJobs=competitionMemberWelcomeJobs.map(func r {if(r.member==old){changed+=1;{r with member=new}}else r});
+    for((_,r) in fixtureUpdates.values())if(r.creator==old)changed+=1;
 
     let newRoles = roles.map(func(item : Types.RoleGrant) : Types.RoleGrant {
       if (item.user.equal(old)) { changed += 1; { item with user = new } } else item
@@ -3012,6 +3040,8 @@ persistent actor class Main(governorInit : Principal) = this {
     };
 
     if (not dry_run) {
+      personalCompetitionOwners:=newOwners;roleLinks:=newRoleLinks;competitionOfficialEmailInvites:=newOfficialInvites;competitionMemberWelcomeJobs:=newMemberJobs;
+      for((key,r) in fixtureUpdates.values())if(r.creator==old){Map.remove(fixtureReceipts,Text.compare,key);Map.add(fixtureReceipts,Text.compare,newPrefix # (Text.stripStart(key,#text oldPrefix)??key),{r with creator=new})};
       let updates = Map.entries(broadcastDeliveries).toArray();
       for ((key, receipt) in updates.values()) {
         if (receipt.sender == old) {

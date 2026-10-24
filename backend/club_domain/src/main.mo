@@ -231,6 +231,14 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not emailWorkers.any(func p = p == caller)) return #Err("Email worker required");
     emailOutbox.finish(caller, id, attempt, outcome, provider_id)
   };
+  public shared ({caller}) func reconcile_email_job(id:Text,attempt:Nat,provider_id:Text):async{#Ok;#Err:Text} {
+    if(not emailWorkers.any(func p = p==caller))return #Err("Original email worker required");
+    emailOutbox.reconcile(caller,id,attempt,"sent",provider_id)
+  };
+  public shared ({caller}) func compact_email_jobs(cursor:?Text,limit:Nat):async{#Ok:{next_cursor:?Text;scanned:Nat};#Err:Text} {
+    if(not isGovernor(caller) or limit==0 or limit>200)return #Err("Governor and bounded page required");
+    #Ok(emailOutbox.compact(cursor,limit))
+  };
   // (code, invite_id) — short share-link codes, lazily created, stable once minted.
   var inviteShortCodes : [(Text, Text)];
   var teamCreationRequests : [Types.TeamCreationRequest];
@@ -335,6 +343,13 @@ persistent actor class Main(governorInit : Principal) = this {
     let newText = Principal.toText(new);
     let oldTag = "principal:" # oldText;
     let newTag = "principal:" # newText;
+    let cloneUpdates=Map.entries(seasonCloneReceipts).toArray();
+    for((key,r) in cloneUpdates.values()) {
+      switch(Text.stripStart(key,#text(oldText # "\u{1f}"))) {case (?suffix) {
+        let existing=Map.get(seasonCloneReceipts,Text.compare,newText # "\u{1f}" # suffix);
+        if(existing!=null and existing!=?r)return #err("Season operation receipt conflict")
+      };case null {}}
+    };
 
     func pEq(p : Principal) : Bool { p.equal(old) };
     func tEq(t : Text) : Bool { t == oldText or t == oldTag };
@@ -489,6 +504,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (themeChanged) { changed += 1 };
 
     if (not dry_run) {
+      for((key,r) in cloneUpdates.values())switch(Text.stripStart(key,#text(oldText # "\u{1f}"))){case (?suffix){Map.remove(seasonCloneReceipts,Text.compare,key);Map.add(seasonCloneReceipts,Text.compare,newText # "\u{1f}" # suffix,r)};case null {}};
       bumpMembershipDiscovery();
       acl := { acl with roles = newRoles; guardians = newGuardians; exclusions = newExclusions; children = newChildren };
       bumpMembershipDiscovery();
@@ -2871,6 +2887,13 @@ persistent actor class Main(governorInit : Principal) = this {
 
   func eraseMembership(principals : [Principal], accountId : Text) : { #Ok; #Err : Text } {
     if (principals.any(func(p) = p.equal(governor))) return #Err("Governor account cannot be erased");
+    let erasedInvites=pendingInvites.filter(func i = principals.any(func p = p==i.invited_by or i.accepted_by==?p)).map(func i = i.id);
+    ignore emailOutbox.scrub(func j = erasedInvites.any(func id = id==j.resource));
+    for((key,r) in Map.entries(seasonCloneReceipts).toArray().values()) {
+      if(principals.any(func p = Text.startsWith(key,#text(p.toText() # "\u{1f}")))) {
+        Map.remove(seasonCloneReceipts,Text.compare,key);Map.add(seasonCloneReceipts,Text.compare,"erased:" # r.season_id,r)
+      }
+    };
     var exclusions = acl.exclusions;
     // Explicitly exclude every club, including family-derived membership.
     for (club in acl.clubs.values()) {
