@@ -1,0 +1,55 @@
+// Disposable production actors only; never sends email or touches mainnet.
+import assert from 'node:assert/strict';
+import { PocketIc, PocketIcServer } from '@dfinity/pic';
+import { Principal } from '@icp-sdk/core/principal';
+import { IDL } from '@icp-sdk/core/candid';
+import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
+import { idlFactory as compIdl } from '../src/lab/bindings/competition_domain/declarations/competition_domain.did.js';
+const p=n=>Principal.fromUint8Array(Uint8Array.from([n,1]));
+const governor=p(1),manager=p(2),worker=p(3),outsider=p(4);
+const ok=r=>{assert.ok('Ok' in r,r.Err);return r.Ok;};
+const denied=r=>assert.ok('Err' in r);
+const server=await PocketIcServer.start();let pic;
+try {
+ pic=await PocketIc.create(server.getUrl());
+ const setup=(idlFactory,wasm)=>pic.setupCanister({idlFactory,wasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])});
+ for(let group=0;group<2;group++) {
+  const C=await setup(clubIdl,process.env.CLUB_DOMAIN_WASM),K=await setup(compIdl,process.env.COMPETITION_DOMAIN_WASM);
+  const c=C.actor,k=K.actor;c.setPrincipal(governor);k.setPrincipal(governor);
+  ok(await c.create_club('club','Club','club',[],[]));
+  ok(await c.add_role_grant(manager,'club','club_admin',[]));
+  ok(await c.set_email_workers([worker]));ok(await k.set_email_workers([worker]));
+  ok(await k.set_club_domain_canister(C.canisterId));ok(await c.set_competition_authorities([K.canisterId]));
+  const team=ok(await c.create_shell_team_invite('club','Team',[],[]));
+  ok(await c.add_role_grant(manager,'club','coach',[team.id]));
+  const season=ok(await c.save_season({id:'source',club_id:'club',name:'Old',status:'archived',start_date:'',end_date:'',created_at_ms:0n,updated_at_ms:0n}));
+  ok(await c.add_season_team_assignment(season.id,team.id,'member-1'));
+  c.setPrincipal(outsider);denied(await c.duplicate_season_structure('op','source','New',true));
+  c.setPrincipal(manager);
+  const copy=ok(await c.duplicate_season_structure('op','source','New',true));
+  assert.equal(ok(await c.duplicate_season_structure('op','source','New',true)).id,copy.id);
+  denied(await c.duplicate_season_structure('op','source','Changed',true));
+  const copied=ok(await c.read_season_teams(copy.id));assert.equal(copied.length,1);assert.notEqual(copied[0].id,team.id);
+  denied(await c.carry_over_season_players('source',copy.id,['member-1','missing']));
+  assert.equal(ok(await c.list_season_team_assignment(copy.id)).length,0);
+  assert.equal(ok(await c.carry_over_season_players('source',copy.id,['member-1'])),1n);
+  assert.equal(ok(await c.carry_over_season_players('source',copy.id,['member-1'])),0n);
+  assert.equal(ok(await c.list_season_team_assignment(copy.id))[0].team_id,copied[0].id);
+  k.setPrincipal(governor);
+  const eoi=ok(await k.submit_public_eoi('club','source','Parent','parent@example.invalid',[],'Player',[],[],[],[],[],[],[],[],'app'));
+  k.setPrincipal(outsider);denied(await k.claim_email_job());
+  k.setPrincipal(worker);
+  const claim=ok(await k.claim_email_job())[0];assert.equal(claim.job.resource,eoi);
+  assert.deepEqual(ok(await k.claim_email_job()),[]);
+  denied(await k.finish_email_job(claim.job.id,99n,'sent','provider'));
+  ok(await k.finish_email_job(claim.job.id,claim.job.attempt,'sent','provider'));
+  ok(await k.finish_email_job(claim.job.id,claim.job.attempt,'sent','provider'));
+  k.setPrincipal(manager);assert.equal(ok(await k.resend_eoi_invite(eoi)).invite_sent_count,1);
+  k.setPrincipal(worker);const retry=ok(await k.claim_email_job())[0];
+  ok(await k.finish_email_job(retry.job.id,retry.job.attempt,'unknown',''));
+  k.setPrincipal(manager);denied(await k.resend_eoi_invite(eoi));
+  await pic.upgradeCanister({canisterId:K.canisterId,sender:governor,wasm:process.env.COMPETITION_DOMAIN_WASM,arg:IDL.encode([IDL.Principal],[governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+  k.setPrincipal(worker);assert.deepEqual(ok(await k.claim_email_job()),[]);
+ }
+ console.log('PASS: both-group season clone replay/authorization, atomic mapped rollover, worker-only single claims, exact sent receipts and unknown locks across upgrade.');
+} finally {if(pic)await pic.tearDown();await server.stop();}
