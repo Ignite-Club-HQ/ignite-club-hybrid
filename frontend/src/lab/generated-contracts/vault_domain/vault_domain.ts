@@ -101,6 +101,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    create_backup_summary(backup_label: string): Promise<{
+        __kind__: "Ok";
+        Ok: BackupSummary;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     create_folder(id: string, club: string, team: string | null, parent_id: string | null, name: string, restricted_roles: Array<string>, mini_league_id: string | null, competition_id: string | null, sort_order: number, description: string | null, color: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFolder;
@@ -397,6 +404,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_backup_page(id: string, offset: bigint, expected: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: BackupPage;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_club_media_references(club: string, offset: bigint, expected: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: Page;
@@ -576,6 +590,14 @@ export interface BackupSummary {
     file_count: bigint;
     folder_count: bigint;
 }
+export interface BackupPage {
+    files: Array<VaultFile>;
+    next?: bigint;
+    offset: bigint;
+    folders: Array<VaultFolder>;
+    summary: BackupSummary;
+    revision: bigint;
+}
 export interface Backup {
     id: string;
     files: Array<VaultFile>;
@@ -633,7 +655,7 @@ export interface Request {
 }
 export interface vault_domainInterface extends MainInterface {
 }
-import type { Backup as _Backup, BackupSummary as _BackupSummary, BlobRef as _BlobRef, Page as _Page, PinnedVault as _PinnedVault, Receipt as _Receipt, Reference as _Reference, VaultFile as _VaultFile, VaultFileWithFolder as _VaultFileWithFolder, VaultFolder as _VaultFolder } from "./declarations/vault_domain.did";
+import type { Backup as _Backup, BackupPage as _BackupPage, BackupSummary as _BackupSummary, BlobRef as _BlobRef, Page as _Page, PinnedVault as _PinnedVault, Receipt as _Receipt, Reference as _Reference, VaultFile as _VaultFile, VaultFileWithFolder as _VaultFileWithFolder, VaultFolder as _VaultFolder } from "./declarations/vault_domain.did";
 export class Vault_domain implements vault_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async begin_file_cleanup(arg0: string): Promise<{
@@ -666,6 +688,16 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.create_backup(arg0);
         return from_candid_variant_n9(result);
     }
+    async create_backup_summary(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: BackupSummary;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.create_backup_summary(arg0);
+        return from_candid_variant_n16(result);
+    }
     async create_folder(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string, arg5: Array<string>, arg6: string | null, arg7: string | null, arg8: number, arg9: string | null, arg10: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFolder;
@@ -673,8 +705,8 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.create_folder(arg0, arg1, to_candid_opt_n16(arg2), to_candid_opt_n16(arg3), arg4, arg5, to_candid_opt_n16(arg6), to_candid_opt_n16(arg7), arg8, to_candid_opt_n16(arg9), to_candid_opt_n16(arg10));
-        return from_candid_variant_n17(result);
+        const result = await this.actor.create_folder(arg0, arg1, to_candid_opt_n17(arg2), to_candid_opt_n17(arg3), arg4, arg5, to_candid_opt_n17(arg6), to_candid_opt_n17(arg7), arg8, to_candid_opt_n17(arg9), to_candid_opt_n17(arg10));
+        return from_candid_variant_n18(result);
     }
     async cycles_balance(): Promise<bigint> {
         const result = await this.actor.cycles_balance();
@@ -708,7 +740,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.delete_folder(arg0);
-        return from_candid_variant_n17(result);
+        return from_candid_variant_n18(result);
     }
     async export_club_snapshot(arg0: string): Promise<{
         __kind__: "Ok";
@@ -718,7 +750,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.export_club_snapshot(arg0);
-        return from_candid_variant_n18(result);
+        return from_candid_variant_n19(result);
     }
     async get_backup(arg0: string): Promise<{
         __kind__: "Ok";
@@ -738,7 +770,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_competition_folder(arg0);
-        return from_candid_variant_n19(result);
+        return from_candid_variant_n20(result);
     }
     async get_file(arg0: string): Promise<{
         __kind__: "Ok";
@@ -748,7 +780,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_file(arg0);
-        return from_candid_variant_n21(result);
+        return from_candid_variant_n22(result);
     }
     async get_folder(arg0: string): Promise<{
         __kind__: "Ok";
@@ -758,7 +790,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_folder(arg0);
-        return from_candid_variant_n19(result);
+        return from_candid_variant_n20(result);
     }
     async get_gallery_copy(arg0: string): Promise<{
         __kind__: "Ok";
@@ -768,7 +800,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_gallery_copy(arg0);
-        return from_candid_variant_n21(result);
+        return from_candid_variant_n22(result);
     }
     async get_pinned_vault(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -778,7 +810,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_pinned_vault(arg0, arg1);
-        return from_candid_variant_n23(result);
+        return from_candid_variant_n24(result);
     }
     async grant_role(arg0: Principal, arg1: string, arg2: string | null, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -787,7 +819,7 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n16(arg2), to_candid_opt_n16(arg3));
+        const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n17(arg2), to_candid_opt_n17(arg3));
         return from_candid_variant_n8(result);
     }
     async import_club_snapshot(arg0: string, arg1: Uint8Array): Promise<{
@@ -798,7 +830,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.import_club_snapshot(arg0, arg1);
-        return from_candid_variant_n27(result);
+        return from_candid_variant_n28(result);
     }
     async list_backups(): Promise<{
         __kind__: "Ok";
@@ -808,7 +840,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_backups();
-        return from_candid_variant_n28(result);
+        return from_candid_variant_n29(result);
     }
     async list_club_files(arg0: string, arg1: string | null, arg2: string | null): Promise<{
         __kind__: "Ok";
@@ -817,8 +849,8 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_club_files(arg0, to_candid_opt_n16(arg1), to_candid_opt_n16(arg2));
-        return from_candid_variant_n29(result);
+        const result = await this.actor.list_club_files(arg0, to_candid_opt_n17(arg1), to_candid_opt_n17(arg2));
+        return from_candid_variant_n30(result);
     }
     async list_club_files_with_folder(arg0: string, arg1: string | null, arg2: string | null): Promise<{
         __kind__: "Ok";
@@ -827,8 +859,8 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_club_files_with_folder(arg0, to_candid_opt_n16(arg1), to_candid_opt_n16(arg2));
-        return from_candid_variant_n30(result);
+        const result = await this.actor.list_club_files_with_folder(arg0, to_candid_opt_n17(arg1), to_candid_opt_n17(arg2));
+        return from_candid_variant_n31(result);
     }
     async list_competition_files_with_folder(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -838,7 +870,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_competition_files_with_folder(arg0, arg1);
-        return from_candid_variant_n30(result);
+        return from_candid_variant_n31(result);
     }
     async list_competition_folders(arg0: string): Promise<{
         __kind__: "Ok";
@@ -848,7 +880,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_competition_folders(arg0);
-        return from_candid_variant_n34(result);
+        return from_candid_variant_n35(result);
     }
     async list_files(arg0: string): Promise<{
         __kind__: "Ok";
@@ -858,7 +890,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_files(arg0);
-        return from_candid_variant_n29(result);
+        return from_candid_variant_n30(result);
     }
     async list_files_with_folder(arg0: string): Promise<{
         __kind__: "Ok";
@@ -868,7 +900,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_files_with_folder(arg0);
-        return from_candid_variant_n30(result);
+        return from_candid_variant_n31(result);
     }
     async list_folders(arg0: string, arg1: string | null, arg2: string | null): Promise<{
         __kind__: "Ok";
@@ -877,8 +909,8 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_folders(arg0, to_candid_opt_n16(arg1), to_candid_opt_n16(arg2));
-        return from_candid_variant_n34(result);
+        const result = await this.actor.list_folders(arg0, to_candid_opt_n17(arg1), to_candid_opt_n17(arg2));
+        return from_candid_variant_n35(result);
     }
     async list_trashed_files(arg0: string): Promise<{
         __kind__: "Ok";
@@ -888,7 +920,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_trashed_files(arg0);
-        return from_candid_variant_n29(result);
+        return from_candid_variant_n30(result);
     }
     async list_trashed_files_with_folder(arg0: string): Promise<{
         __kind__: "Ok";
@@ -898,7 +930,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_trashed_files_with_folder(arg0);
-        return from_candid_variant_n30(result);
+        return from_candid_variant_n31(result);
     }
     async memory_stats(): Promise<{
         memory_bytes: bigint;
@@ -925,7 +957,7 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.move_file_to_root(arg0, to_candid_opt_n16(arg1));
+        const result = await this.actor.move_file_to_root(arg0, to_candid_opt_n17(arg1));
         return from_candid_variant_n1(result);
     }
     async prepare_account_removal(arg0: Request): Promise<{
@@ -946,7 +978,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
-        return from_candid_variant_n27(result);
+        return from_candid_variant_n28(result);
     }
     async purge_my_data(): Promise<{
         __kind__: "Ok";
@@ -956,7 +988,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_my_data();
-        return from_candid_variant_n35(result);
+        return from_candid_variant_n36(result);
     }
     async read_account_get_backup(arg0: string): Promise<{
         __kind__: "Ok";
@@ -976,7 +1008,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_get_file(arg0);
-        return from_candid_variant_n21(result);
+        return from_candid_variant_n22(result);
     }
     async read_account_get_folder(arg0: string): Promise<{
         __kind__: "Ok";
@@ -986,7 +1018,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_get_folder(arg0);
-        return from_candid_variant_n19(result);
+        return from_candid_variant_n20(result);
     }
     async read_account_get_pinned_vault(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -996,7 +1028,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_get_pinned_vault(arg0, arg1);
-        return from_candid_variant_n23(result);
+        return from_candid_variant_n24(result);
     }
     async read_account_list_backups(): Promise<{
         __kind__: "Ok";
@@ -1006,7 +1038,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_backups();
-        return from_candid_variant_n28(result);
+        return from_candid_variant_n29(result);
     }
     async read_account_list_club_files(arg0: string, arg1: string | null, arg2: string | null): Promise<{
         __kind__: "Ok";
@@ -1015,8 +1047,8 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.read_account_list_club_files(arg0, to_candid_opt_n16(arg1), to_candid_opt_n16(arg2));
-        return from_candid_variant_n29(result);
+        const result = await this.actor.read_account_list_club_files(arg0, to_candid_opt_n17(arg1), to_candid_opt_n17(arg2));
+        return from_candid_variant_n30(result);
     }
     async read_account_list_club_files_with_folder(arg0: string, arg1: string | null, arg2: string | null): Promise<{
         __kind__: "Ok";
@@ -1025,8 +1057,8 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.read_account_list_club_files_with_folder(arg0, to_candid_opt_n16(arg1), to_candid_opt_n16(arg2));
-        return from_candid_variant_n30(result);
+        const result = await this.actor.read_account_list_club_files_with_folder(arg0, to_candid_opt_n17(arg1), to_candid_opt_n17(arg2));
+        return from_candid_variant_n31(result);
     }
     async read_account_list_files(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1036,7 +1068,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_files(arg0);
-        return from_candid_variant_n29(result);
+        return from_candid_variant_n30(result);
     }
     async read_account_list_files_with_folder(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1046,7 +1078,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_files_with_folder(arg0);
-        return from_candid_variant_n30(result);
+        return from_candid_variant_n31(result);
     }
     async read_account_list_folders(arg0: string, arg1: string | null, arg2: string | null): Promise<{
         __kind__: "Ok";
@@ -1055,8 +1087,8 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.read_account_list_folders(arg0, to_candid_opt_n16(arg1), to_candid_opt_n16(arg2));
-        return from_candid_variant_n34(result);
+        const result = await this.actor.read_account_list_folders(arg0, to_candid_opt_n17(arg1), to_candid_opt_n17(arg2));
+        return from_candid_variant_n35(result);
     }
     async read_account_list_trashed_files(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1066,7 +1098,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_trashed_files(arg0);
-        return from_candid_variant_n29(result);
+        return from_candid_variant_n30(result);
     }
     async read_account_list_trashed_files_with_folder(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1076,7 +1108,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_trashed_files_with_folder(arg0);
-        return from_candid_variant_n30(result);
+        return from_candid_variant_n31(result);
     }
     async read_account_removal_drain(arg0: Request): Promise<{
         __kind__: "Ok";
@@ -1086,7 +1118,17 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_removal_drain(arg0);
-        return from_candid_variant_n36(result);
+        return from_candid_variant_n37(result);
+    }
+    async read_backup_page(arg0: string, arg1: bigint, arg2: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: BackupPage;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_backup_page(arg0, arg1, to_candid_opt_n38(arg2));
+        return from_candid_variant_n39(result);
     }
     async read_club_media_references(arg0: string, arg1: bigint, arg2: bigint | null): Promise<{
         __kind__: "Ok";
@@ -1095,8 +1137,8 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.read_club_media_references(arg0, arg1, to_candid_opt_n37(arg2));
-        return from_candid_variant_n38(result);
+        const result = await this.actor.read_club_media_references(arg0, arg1, to_candid_opt_n38(arg2));
+        return from_candid_variant_n43(result);
     }
     async read_group_opening_configuration(): Promise<Array<[string, string]>> {
         const result = await this.actor.read_group_opening_configuration();
@@ -1110,7 +1152,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_resource_club(arg0, arg1);
-        return from_candid_variant_n45(result);
+        return from_candid_variant_n49(result);
     }
     async read_vault_file_page(arg0: string, arg1: string | null, arg2: string | null, arg3: string | null, arg4: string | null, arg5: boolean, arg6: bigint, arg7: bigint | null): Promise<{
         __kind__: "Ok";
@@ -1123,8 +1165,8 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.read_vault_file_page(arg0, to_candid_opt_n16(arg1), to_candid_opt_n16(arg2), to_candid_opt_n16(arg3), to_candid_opt_n16(arg4), arg5, arg6, to_candid_opt_n37(arg7));
-        return from_candid_variant_n46(result);
+        const result = await this.actor.read_vault_file_page(arg0, to_candid_opt_n17(arg1), to_candid_opt_n17(arg2), to_candid_opt_n17(arg3), to_candid_opt_n17(arg4), arg5, arg6, to_candid_opt_n38(arg7));
+        return from_candid_variant_n50(result);
     }
     async register_file(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: string, arg5: string, arg6: bigint, arg7: string, arg8: boolean, arg9: BlobRef | null, arg10: string | null, arg11: string | null): Promise<{
         __kind__: "Ok";
@@ -1133,7 +1175,7 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n16(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n48(arg9), to_candid_opt_n16(arg10), to_candid_opt_n16(arg11));
+        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n17(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n52(arg9), to_candid_opt_n17(arg10), to_candid_opt_n17(arg11));
         return from_candid_variant_n1(result);
     }
     async register_gallery_copy(arg0: string, arg1: string, arg2: string, arg3: bigint, arg4: string, arg5: BlobRef): Promise<{
@@ -1154,7 +1196,7 @@ export class Vault_domain implements vault_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n49(result);
+        return from_candid_variant_n53(result);
     }
     async rename_file(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -1174,7 +1216,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.restore_backup(arg0);
-        return from_candid_variant_n27(result);
+        return from_candid_variant_n28(result);
     }
     async restore_backup_page(arg0: string, arg1: bigint): Promise<{
         __kind__: "Ok";
@@ -1189,7 +1231,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.restore_backup_page(arg0, arg1);
-        return from_candid_variant_n50(result);
+        return from_candid_variant_n54(result);
     }
     async restore_file(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1209,7 +1251,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.seal_account_removal(arg0);
-        return from_candid_variant_n36(result);
+        return from_candid_variant_n37(result);
     }
     async set_club_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -1258,8 +1300,8 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_pinned_vault(arg0, arg1, arg2, to_candid_opt_n16(arg3), to_candid_opt_n16(arg4), to_candid_opt_n16(arg5), to_candid_opt_n16(arg6), arg7);
-        return from_candid_variant_n51(result);
+        const result = await this.actor.set_pinned_vault(arg0, arg1, arg2, to_candid_opt_n17(arg3), to_candid_opt_n17(arg4), to_candid_opt_n17(arg5), to_candid_opt_n17(arg6), arg7);
+        return from_candid_variant_n55(result);
     }
     async set_transfer_fence(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -1309,7 +1351,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.trash_gallery_copy(arg0, arg1, arg2);
-        return from_candid_variant_n52(result);
+        return from_candid_variant_n56(result);
     }
     async update_folder(arg0: string, arg1: string, arg2: Array<string>, arg3: number, arg4: string | null, arg5: string | null): Promise<{
         __kind__: "Ok";
@@ -1318,24 +1360,27 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_folder(arg0, arg1, arg2, arg3, to_candid_opt_n16(arg4), to_candid_opt_n16(arg5));
-        return from_candid_variant_n17(result);
+        const result = await this.actor.update_folder(arg0, arg1, arg2, arg3, to_candid_opt_n17(arg4), to_candid_opt_n17(arg5));
+        return from_candid_variant_n18(result);
     }
+}
+function from_candid_BackupPage_n40(value: _BackupPage): BackupPage {
+    return from_candid_record_n41(value);
 }
 function from_candid_Backup_n10(value: _Backup): Backup {
     return from_candid_record_n11(value);
 }
-function from_candid_Page_n39(value: _Page): Page {
-    return from_candid_record_n40(value);
+function from_candid_Page_n44(value: _Page): Page {
+    return from_candid_record_n45(value);
 }
-function from_candid_PinnedVault_n25(value: _PinnedVault): PinnedVault {
-    return from_candid_record_n26(value);
+function from_candid_PinnedVault_n26(value: _PinnedVault): PinnedVault {
+    return from_candid_record_n27(value);
 }
-function from_candid_Reference_n42(value: _Reference): Reference {
-    return from_candid_record_n43(value);
+function from_candid_Reference_n47(value: _Reference): Reference {
+    return from_candid_record_n48(value);
 }
-function from_candid_VaultFileWithFolder_n32(value: _VaultFileWithFolder): VaultFileWithFolder {
-    return from_candid_record_n33(value);
+function from_candid_VaultFileWithFolder_n33(value: _VaultFileWithFolder): VaultFileWithFolder {
+    return from_candid_record_n34(value);
 }
 function from_candid_VaultFile_n2(value: _VaultFile): VaultFile {
     return from_candid_record_n3(value);
@@ -1343,19 +1388,19 @@ function from_candid_VaultFile_n2(value: _VaultFile): VaultFile {
 function from_candid_VaultFolder_n14(value: _VaultFolder): VaultFolder {
     return from_candid_record_n15(value);
 }
-function from_candid_opt_n20(value: [] | [_VaultFolder]): VaultFolder | null {
+function from_candid_opt_n21(value: [] | [_VaultFolder]): VaultFolder | null {
     return value.length === 0 ? null : from_candid_VaultFolder_n14(value[0]);
 }
-function from_candid_opt_n22(value: [] | [_VaultFile]): VaultFile | null {
+function from_candid_opt_n23(value: [] | [_VaultFile]): VaultFile | null {
     return value.length === 0 ? null : from_candid_VaultFile_n2(value[0]);
 }
-function from_candid_opt_n24(value: [] | [_PinnedVault]): PinnedVault | null {
-    return value.length === 0 ? null : from_candid_PinnedVault_n25(value[0]);
+function from_candid_opt_n25(value: [] | [_PinnedVault]): PinnedVault | null {
+    return value.length === 0 ? null : from_candid_PinnedVault_n26(value[0]);
 }
 function from_candid_opt_n4(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n44(value: [] | [bigint]): bigint | null {
+function from_candid_opt_n42(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n5(value: [] | [_BlobRef]): BlobRef | null {
@@ -1442,7 +1487,7 @@ function from_candid_record_n15(value: {
         deleted_at_ms: record_opt_to_undefined(from_candid_opt_n7(value.deleted_at_ms))
     };
 }
-function from_candid_record_n26(value: {
+function from_candid_record_n27(value: {
     root_id: [] | [string];
     root_scope: [] | [string];
     club: string;
@@ -1532,7 +1577,7 @@ function from_candid_record_n3(value: {
         uploaded_by: value.uploaded_by
     };
 }
-function from_candid_record_n33(value: {
+function from_candid_record_n34(value: {
     folder_name: [] | [string];
     folder_path: Array<string>;
     file: _VaultFile;
@@ -1547,7 +1592,31 @@ function from_candid_record_n33(value: {
         file: from_candid_VaultFile_n2(value.file)
     };
 }
-function from_candid_record_n40(value: {
+function from_candid_record_n41(value: {
+    files: Array<_VaultFile>;
+    next: [] | [bigint];
+    offset: bigint;
+    folders: Array<_VaultFolder>;
+    summary: _BackupSummary;
+    revision: bigint;
+}): {
+    files: Array<VaultFile>;
+    next?: bigint;
+    offset: bigint;
+    folders: Array<VaultFolder>;
+    summary: BackupSummary;
+    revision: bigint;
+} {
+    return {
+        files: from_candid_vec_n12(value.files),
+        next: record_opt_to_undefined(from_candid_opt_n42(value.next)),
+        offset: value.offset,
+        folders: from_candid_vec_n13(value.folders),
+        summary: value.summary,
+        revision: value.revision
+    };
+}
+function from_candid_record_n45(value: {
     references: Array<_Reference>;
     next: [] | [bigint];
     scanned: bigint;
@@ -1559,13 +1628,13 @@ function from_candid_record_n40(value: {
     revision: bigint;
 } {
     return {
-        references: from_candid_vec_n41(value.references),
-        next: record_opt_to_undefined(from_candid_opt_n44(value.next)),
+        references: from_candid_vec_n46(value.references),
+        next: record_opt_to_undefined(from_candid_opt_n42(value.next)),
         scanned: value.scanned,
         revision: value.revision
     };
 }
-function from_candid_record_n43(value: {
+function from_candid_record_n48(value: {
     url: string;
     path: [] | [string];
     content_hash: [] | [string];
@@ -1586,7 +1655,7 @@ function from_candid_record_n43(value: {
         resource_id: value.resource_id
     };
 }
-function from_candid_record_n47(value: {
+function from_candid_record_n51(value: {
     next: [] | [bigint];
     items: Array<_VaultFileWithFolder>;
     revision: bigint;
@@ -1596,8 +1665,8 @@ function from_candid_record_n47(value: {
     revision: bigint;
 } {
     return {
-        next: record_opt_to_undefined(from_candid_opt_n44(value.next)),
-        items: from_candid_vec_n31(value.items),
+        next: record_opt_to_undefined(from_candid_opt_n42(value.next)),
+        items: from_candid_vec_n32(value.items),
         revision: value.revision
     };
 }
@@ -1620,7 +1689,26 @@ function from_candid_variant_n1(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n17(value: {
+function from_candid_variant_n16(value: {
+    Ok: _BackupSummary;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: BackupSummary;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n18(value: {
     Ok: _VaultFolder;
 } | {
     Err: string;
@@ -1639,7 +1727,7 @@ function from_candid_variant_n17(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n18(value: {
+function from_candid_variant_n19(value: {
     Ok: Uint8Array;
 } | {
     Err: string;
@@ -1658,7 +1746,7 @@ function from_candid_variant_n18(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n19(value: {
+function from_candid_variant_n20(value: {
     Ok: [] | [_VaultFolder];
 } | {
     Err: string;
@@ -1671,13 +1759,13 @@ function from_candid_variant_n19(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n20(value.Ok)
+        Ok: from_candid_opt_n21(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n21(value: {
+function from_candid_variant_n22(value: {
     Ok: [] | [_VaultFile];
 } | {
     Err: string;
@@ -1690,13 +1778,13 @@ function from_candid_variant_n21(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n22(value.Ok)
+        Ok: from_candid_opt_n23(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n23(value: {
+function from_candid_variant_n24(value: {
     Ok: [] | [_PinnedVault];
 } | {
     Err: string;
@@ -1709,13 +1797,13 @@ function from_candid_variant_n23(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n24(value.Ok)
+        Ok: from_candid_opt_n25(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n27(value: {
+function from_candid_variant_n28(value: {
     Ok: bigint;
 } | {
     Err: string;
@@ -1734,7 +1822,7 @@ function from_candid_variant_n27(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n28(value: {
+function from_candid_variant_n29(value: {
     Ok: Array<_BackupSummary>;
 } | {
     Err: string;
@@ -1753,7 +1841,7 @@ function from_candid_variant_n28(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n29(value: {
+function from_candid_variant_n30(value: {
     Ok: Array<_VaultFile>;
 } | {
     Err: string;
@@ -1772,7 +1860,7 @@ function from_candid_variant_n29(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n30(value: {
+function from_candid_variant_n31(value: {
     Ok: Array<_VaultFileWithFolder>;
 } | {
     Err: string;
@@ -1785,13 +1873,13 @@ function from_candid_variant_n30(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n31(value.Ok)
+        Ok: from_candid_vec_n32(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n34(value: {
+function from_candid_variant_n35(value: {
     Ok: Array<_VaultFolder>;
 } | {
     Err: string;
@@ -1810,7 +1898,7 @@ function from_candid_variant_n34(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n35(value: {
+function from_candid_variant_n36(value: {
     Ok: number;
 } | {
     Err: string;
@@ -1829,7 +1917,7 @@ function from_candid_variant_n35(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n36(value: {
+function from_candid_variant_n37(value: {
     Ok: _Receipt;
 } | {
     Err: string;
@@ -1848,7 +1936,26 @@ function from_candid_variant_n36(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n38(value: {
+function from_candid_variant_n39(value: {
+    Ok: _BackupPage;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: BackupPage;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_BackupPage_n40(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n43(value: {
     Ok: _Page;
 } | {
     Err: string;
@@ -1861,13 +1968,13 @@ function from_candid_variant_n38(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_Page_n39(value.Ok)
+        Ok: from_candid_Page_n44(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n45(value: {
+function from_candid_variant_n49(value: {
     Ok: [] | [string];
 } | {
     Err: string;
@@ -1886,7 +1993,7 @@ function from_candid_variant_n45(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n46(value: {
+function from_candid_variant_n50(value: {
     Ok: {
         next: [] | [bigint];
         items: Array<_VaultFileWithFolder>;
@@ -1907,13 +2014,13 @@ function from_candid_variant_n46(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_record_n47(value.Ok)
+        Ok: from_candid_record_n51(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n49(value: {
+function from_candid_variant_n53(value: {
     ok: bigint;
 } | {
     err: string;
@@ -1932,7 +2039,7 @@ function from_candid_variant_n49(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n50(value: {
+function from_candid_variant_n54(value: {
     Ok: {
         skipped: bigint;
         next: bigint;
@@ -1961,7 +2068,7 @@ function from_candid_variant_n50(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n51(value: {
+function from_candid_variant_n55(value: {
     Ok: _PinnedVault;
 } | {
     Err: string;
@@ -1974,13 +2081,13 @@ function from_candid_variant_n51(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_PinnedVault_n25(value.Ok)
+        Ok: from_candid_PinnedVault_n26(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n52(value: {
+function from_candid_variant_n56(value: {
     Ok: boolean;
 } | {
     Err: string;
@@ -2043,19 +2150,19 @@ function from_candid_vec_n12(value: Array<_VaultFile>): Array<VaultFile> {
 function from_candid_vec_n13(value: Array<_VaultFolder>): Array<VaultFolder> {
     return value.map((x)=>from_candid_VaultFolder_n14(x));
 }
-function from_candid_vec_n31(value: Array<_VaultFileWithFolder>): Array<VaultFileWithFolder> {
-    return value.map((x)=>from_candid_VaultFileWithFolder_n32(x));
+function from_candid_vec_n32(value: Array<_VaultFileWithFolder>): Array<VaultFileWithFolder> {
+    return value.map((x)=>from_candid_VaultFileWithFolder_n33(x));
 }
-function from_candid_vec_n41(value: Array<_Reference>): Array<Reference> {
-    return value.map((x)=>from_candid_Reference_n42(x));
+function from_candid_vec_n46(value: Array<_Reference>): Array<Reference> {
+    return value.map((x)=>from_candid_Reference_n47(x));
 }
-function to_candid_opt_n16(value: string | null): [] | [string] {
+function to_candid_opt_n17(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n37(value: bigint | null): [] | [bigint] {
+function to_candid_opt_n38(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n48(value: BlobRef | null): [] | [_BlobRef] {
+function to_candid_opt_n52(value: BlobRef | null): [] | [_BlobRef] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {
