@@ -83,7 +83,11 @@ try {
   assert.ok('Err' in await vault.actor.begin_file_upload({ ...journalFile, id: 'steal-path' }));
   assert.ok('Err' in await vault.actor.begin_file_upload({ ...journalFile, team: ['foreign-team'] }));
   assert.ok('Err' in await vault.actor.recover_file_upload(journalFile.id));
+  assert.equal(ok(await vault.actor.read_my_upload_intent(journalFile.id)).ready, false);
+  assert.deepEqual(ok(await vault.actor.read_my_upload_page('', '')).ids, ['journal-file']);
   vault.actor.setPrincipal(outsider);
+  assert.ok('Err' in await vault.actor.read_my_upload_intent(journalFile.id));
+  assert.deepEqual(ok(await vault.actor.read_my_upload_page('', '')).ids, []);
   assert.ok('Err' in await vault.actor.begin_file_upload(journalFile));
   vault.actor.setPrincipal(governor);
   const journalToken = ok(await store.actor.begin_upload(journalPath, 'application/pdf', 4n, 1));
@@ -168,7 +172,11 @@ try {
   ok(await club.actor.replace_acl(restoreAcl.acl_version, { ...restoreAcl.acl, roles: [...roles, { user: member, role: 'coach', club: ['club-a'], team: [] }] }));
   vault.actor.setPrincipal(member);
   ok(await register('restore-missing'));
+  ok(await folder('erased-parent', [], []));
+  ok(await folder('erased-empty-child', ['erased-parent'], []));
+  ok(await folder('shared-parent', [], []));
   vault.actor.setPrincipal(governor);
+  ok(await folder('other-owner-child', ['shared-parent'], []));
   const backup = ok(await vault.actor.create_backup('Large resumable local backup'));
   assert.ok(backup.files.length > 200);
   const boundedBackup = ok(await vault.actor.create_backup_summary('Bounded snapshot'));
@@ -192,6 +200,11 @@ try {
   assert.ok('Err' in await vault.actor.read_backup_page(boundedBackup.id, 40n, [exportRevision]));
   const scrubbed = ok(await vault.actor.read_account_get_backup(backup.id));
   assert.ok(!scrubbed.files.some(f => f.uploaded_by.toText() === member.toText()));
+  assert.ok(!scrubbed.folders.some(f => f.id === 'erased-parent' || f.id === 'erased-empty-child'));
+  assert.equal(scrubbed.folders.find(f => f.id === 'shared-parent').created_by.toText(), Principal.anonymous().toText());
+  assert.ok(scrubbed.folders.some(f => f.id === 'other-owner-child'));
+  assert.deepEqual(ok(await vault.actor.read_account_get_folder('erased-parent')), []);
+  assert.equal(ok(await vault.actor.read_account_get_folder('other-owner-child'))[0].parent_id[0], 'shared-parent');
   assert.deepEqual(ok(await vault.actor.read_account_get_file('restore-missing')), []);
   const restoreFirst = ok(await vault.actor.restore_backup_page(backup.id, 0n));
   assert.equal(restoreFirst.next, 40n);

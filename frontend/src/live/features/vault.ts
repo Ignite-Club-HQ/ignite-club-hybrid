@@ -6,6 +6,7 @@ import { decryptPiiText, encryptPiiValue, fetchPiiVetKeys } from "../piiVetKeys"
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
 import { scheduleVaultUploadRecovery } from "../vaultUploadRecovery";
 import { reconcileVaultUploadIntent } from "../vaultUploadIntentRecovery";
+import { writeVaultBackupChunks, type VaultBackupSink } from "../vaultBackupWriter";
 
 /**
  * Vault feature -> vault_domain canister (folder/file metadata) plus
@@ -811,14 +812,20 @@ export async function* readLiveVaultBackupPages(ctx: FeatureBackendContext, id: 
 }
 
 const backupJson = (_key: string, value: unknown) => typeof value === "bigint" ? value.toString() : value;
+export async function* readLiveVaultBackupChunks(ctx: FeatureBackendContext, id: string) {
+  for await (const page of readLiveVaultBackupPages(ctx, id)) {
+    if (page.offset === 0n) yield JSON.stringify({ kind: "vault-backup", version: 1, ...page.summary }, backupJson) + "\n";
+    for (const folder of page.folders) yield JSON.stringify({ kind: "folder", row: folder }, backupJson) + "\n";
+    for (const file of page.files) yield JSON.stringify({ kind: "file", row: file }, backupJson) + "\n";
+  }
+}
+export async function exportLiveVaultBackupToSink(ctx: FeatureBackendContext, id: string, sink: VaultBackupSink) {
+  return writeVaultBackupChunks(readLiveVaultBackupChunks(ctx, id), sink);
+}
 export async function exportLiveVaultBackupBlob(ctx: FeatureBackendContext, id: string): Promise<Blob> {
   // JSONL avoids a second full-manifest stringify and keeps each encoded chunk bounded.
   const chunks: BlobPart[] = [];
-  for await (const page of readLiveVaultBackupPages(ctx, id)) {
-    if (page.offset === 0n) chunks.push(JSON.stringify({ kind: "vault-backup", version: 1, ...page.summary }, backupJson) + "\n");
-    for (const folder of page.folders) chunks.push(JSON.stringify({ kind: "folder", row: folder }, backupJson) + "\n");
-    for (const file of page.files) chunks.push(JSON.stringify({ kind: "file", row: file }, backupJson) + "\n");
-  }
+  for await (const chunk of readLiveVaultBackupChunks(ctx, id)) chunks.push(chunk);
   return new Blob(chunks, { type: "application/x-ndjson" });
 }
 export async function restoreLiveVaultBackup(ctx: FeatureBackendContext, id: string) {

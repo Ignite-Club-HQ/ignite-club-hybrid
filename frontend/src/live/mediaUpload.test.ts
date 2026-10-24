@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   encryptPiiValue: vi.fn(),
   isClubMediaLockSupported: vi.fn(() => true),
   grantLiveClubPiiRead: vi.fn(),
+  grantLivePiiReadClub: vi.fn(),
   grantLivePiiReadCompetition: vi.fn(),
   registerLivePii: vi.fn(),
   sha256Hex: vi.fn(() => "hash"),
@@ -34,6 +35,7 @@ vi.mock("./piiVetKeys", () => ({
 }));
 vi.mock("./features/vault", () => ({
   grantLiveClubPiiRead: mocks.grantLiveClubPiiRead,
+  grantLivePiiReadClub: mocks.grantLivePiiReadClub,
   grantLivePiiReadCompetition: mocks.grantLivePiiReadCompetition,
   registerLivePii: mocks.registerLivePii,
 }));

@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { BACKUP_DOMAINS } from "@/live/adminBackupExport";
+import { chooseVaultBackupSink, type VaultBackupSink } from "@/live/vaultBackupWriter";
 
 type Summary = { id: string; label: string; createdAt: number; files: number; folders: number };
 
@@ -65,12 +66,15 @@ export default function IcpManageBackupsPage() {
     if (kind === "restore" && !confirm("Restore missing vault folders and files from this backup? Existing items are not overwritten.")) return;
     if (kind === "delete" && !confirm("Delete this backup permanently?")) return;
     setBusy(id + kind);
+    let sink: VaultBackupSink | null = null;
     try {
+      if (kind === "download") sink = await chooseVaultBackupSink(`vault-backup-${id}.jsonl`);
       await withFeatureBackend("vault", {
         supabase: async () => { throw new Error("Internet Identity connection required"); },
         icp: async (ctx) => {
           const v = await import("@/live/features/vault");
           if (kind === "download") {
+            if (sink) { await v.exportLiveVaultBackupToSink(ctx, id, sink); return; }
             const blob = await v.exportLiveVaultBackupBlob(ctx, id);
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -95,6 +99,8 @@ export default function IcpManageBackupsPage() {
         },
       }, { shared: "app" });
     } catch (e) {
+      if (sink) { try { await sink.abort(e); } catch { /* preserve original error */ } }
+      if (e instanceof DOMException && e.name === "AbortError") return;
       toast.error(e instanceof Error ? e.message : "Something went wrong");
     } finally {
       setBusy(null);
