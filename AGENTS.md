@@ -76,3 +76,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Lookup release upgrades only pinned identity plus every registered club source/original G1, with exact subnet/journal coverage; identity-owned enable and every private page recheck full revisions, registry/photo stores, lifecycle and caller through awaits. Complete Stage A fallback stays. Why: historical reports or partial source coverage cannot authorize discovery.
 
 - Media paging releases only via upgrade-media-paging.yml on the exact G1/G2 media_metadata canisters, finishing backfill before snapshot refresh. Why: never hide photos or touch photo stores.
+
+- ICP event setup commits exact occurrences, first-occurrence duties and reminders atomically under caller/request receipts; notification subjects come from configured club/league consensus authorities and queue relays retain unknown outcomes. Why: partial creates, stale mirrors and retries must not lose details, notify foreign users or resurrect a deleted request.

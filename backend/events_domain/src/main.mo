@@ -4022,7 +4022,6 @@ persistent actor class Main(governorInit : Principal) = this {
     duties := duties.filter(func(d) = not inDoomed(d.event_id));
     roster := roster.filter(func(r) = not inDoomed(r.event_id));
     recurrences := recurrences.filter(func(r) = not inDoomed(r.event_id));
-    eventSetupReceipts := eventSetupReceipts.filter(func((_, _, _, result)) = not result.event_ids.any(func(id) = inDoomed(id)));
     eventNoticeAttempts := eventNoticeAttempts.filter(func(a) = not inDoomed(a.event_id));
     eventAttendance := eventAttendance.filter(func(a) = not inDoomed(a.event_id));
     eventGuests := eventGuests.filter(func(g) = not inDoomed(g.event_id));

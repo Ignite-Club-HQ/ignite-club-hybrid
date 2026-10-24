@@ -517,3 +517,11 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 ## ICP chat participants panel — 24 October 2026
 - [x] Chat details "Participants" showed "No participants found" in ICP mode: the members query was disabled whenever the auth backend was ICP (Supabase has no Internet Identity rows). It now runs for signed-in ICP users and reads chat membership from the messaging canister (team/club id as conversation id), team roles from club_domain team role grants, club admins from list_club_admin_threads, and names/avatars from identity_access profiles. Typecheck, ICP guard check and 36 chat test files in both backend modes passed.
 - [ ] Signed-in Internet Identity acceptance of team/group/club participant lists pending.
+
+
+## Events and schedules ICP completion — 24 October 2026
+- [x] Implement scoped game/pitch entry, fixture import selection, linked fixture labels, schedule preferences/view tracking and cross-group refresh signals without Supabase reads in ICP mode.
+- [x] Implement authoritative individual/bulk reminders, invitation/cancellation audiences, duty notices and scheduled points/photo notices; preserve unknown queue outcomes and quiet background reads.
+- [x] Commit complete event setup atomically with exact dates, first-occurrence duties, reminder settings and stable request receipts; preserve Supabase atomic RPC.
+- [ ] Complete focused dual-mode, canister authorization/queue readback and migration verification.
+- [ ] Release acceptance: protected events_domain/club_domain/mini_league_domain upgrades for both groups, compatible app release and signed-in Internet Identity/native checks. No deployment requested; current live services do not yet expose these new APIs.

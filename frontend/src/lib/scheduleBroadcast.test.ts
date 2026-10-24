@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   getIdentity: vi.fn(), listTeam: vi.fn(), listClub: vi.fn(), fanOut: vi.fn(),
   insert: vi.fn(), fresh: vi.fn(), channel: vi.fn(), remove: vi.fn(), refreshes: vi.fn(),
 }));
+vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: (_feature: unknown, providers: { icp: (ctx: unknown) => unknown }) => providers.icp({ identity: mocks.identity, target: {} }) }));
+vi.mock('@/live/clubScope', () => ({ writeOnce: (scope: unknown) => scope }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
 vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => mocks.mode === "icp" }));
 vi.mock("@/live/internetIdentityAuth", () => ({ getCurrentInternetIdentity: mocks.getIdentity }));

@@ -52,6 +52,10 @@ vi.mock("@/live/loadBackendRouting", () => ({
   isFeatureRoutedToIcp: () => process.env.IGNITE_TEST_BACKEND_MODE === "icp",
 }));
 
+const audience = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: (_feature: unknown, providers: {icp: (ctx: unknown) => unknown}) => providers.icp({}) }));
+vi.mock('@/live/features/events', () => ({ readLiveEventCancellationAudience: audience.read }));
+vi.mock('@/live/authBackendMode', () => ({ resolveAuthBackend: () => process.env.IGNITE_TEST_BACKEND_MODE === 'icp' ? 'icp' : 'supabase' }));
 // ---- helpers ----------------------------------------------------------
 
 const baseProps = {
@@ -70,6 +74,8 @@ const setUserRoles = (data: unknown, error: any = null) => {
 
 beforeEach(() => {
   cleanup();
+  audience.read.mockReset();
+  audience.read.mockRejectedValue(new Error("Audience unavailable"));
   Object.keys(tableResponses).forEach((k) => delete tableResponses[k]);
   Object.keys(tableCalls).forEach((k) => delete tableCalls[k]);
 });
@@ -188,6 +194,13 @@ describe.runIf(!icpMode)("CancelEventConfirmDialog — fail-closed on recipient 
 });
 
 describe.runIf(icpMode)("CancelEventConfirmDialog ICP boundary", () => {
+  it('enables notifications after the event authority verifies three recipients', async () => {
+    audience.read.mockResolvedValue(3);
+    render(<CancelEventConfirmDialog {...baseProps} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText(/3 members will be notified/i)).toBeInTheDocument());
+    expect(screen.getByRole('checkbox')).not.toBeDisabled();
+    expect(audience.read).toHaveBeenCalledWith(expect.anything(), 'e1');
+  });
   it("keeps cancellation available but disables unverifiable push delivery", async () => {
     const onConfirm = vi.fn();
     render(<CancelEventConfirmDialog {...baseProps} onConfirm={onConfirm} />);

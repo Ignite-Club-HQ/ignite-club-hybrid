@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { ensureFreshSession } from "@/lib/ensureFreshSession";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { writeOnce } from "@/live/clubScope";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /**
@@ -69,7 +71,10 @@ export function subscribeToScheduleBroadcasts(
         ]);
         const identity = await getCurrentInternetIdentity();
         if (!identity || stopped) return;
-        const signals = await getLiveScheduleRefreshes({ identity, target: getActiveIcpTarget() }, clubIds);
+        const signals = await withFeatureBackend('notifications', {
+          supabase: async () => [],
+          icp: ctx => getLiveScheduleRefreshes(ctx, clubIds),
+        }, { memberGroups: true, merge: parts => parts.flat() });
         if (stopped) return;
         for (const signal of signals) {
           const team = signal.team[0] ?? null;
@@ -129,30 +134,16 @@ async function sendScheduleBroadcastIcp(
       ]);
     const identity = await getCurrentInternetIdentity();
     if (!identity) return { ok: false, error: "Internet Identity session required" };
-    const ctx = { identity, target: getActiveIcpTarget() };
-
-    const grants = teamId
-      ? await membership.listLiveTeamRoleGrants(ctx, teamId)
-      : await membership.listLiveRoleGrants(ctx, clubId);
-    const accountId = (g: { account_id?: string; user?: { toText: () => string } }) =>
-      (g.account_id ?? g.user?.toText() ?? "").replace(/^principal:/, "");
-    const userIds = [
-      ...new Set(
-        (grants as unknown as Array<{ account_id?: string; user?: { toText: () => string } }>)
-          .map(accountId)
-          .filter(Boolean),
-      ),
-    ];
-    if (userIds.length === 0) return { ok: true };
-
-    await notifications.fanOutLiveNotifications(ctx, {
-      userIds,
-      clubId,
-      kind: "schedule_refresh",
-      body: "The schedule has been updated.",
-      idempotencyKeyPrefix: `schedule-broadcast-${clubId}-${teamId ?? "club"}-${Date.now()}`,
-      relatedId: teamId,
-    });
+    await withFeatureBackend('notifications', {
+      supabase: async () => { throw new Error('ICP refresh cannot fall back'); },
+      icp: async ctx => {
+        const grants = teamId ? await membership.listLiveTeamRoleGrants(ctx, teamId) : await membership.listLiveRoleGrants(ctx, clubId);
+        const accountId = (g: { account_id?: string; user?: { toText: () => string } }) => (g.account_id ?? g.user?.toText() ?? '').replace(/^principal:/, '');
+        const userIds = [...new Set((grants as unknown as Array<{account_id?: string; user?: {toText: () => string}}>).map(accountId).filter(Boolean))];
+        if (userIds.length === 0) return;
+        await notifications.fanOutLiveNotifications(ctx, { userIds, clubId, kind: 'schedule_refresh', body: 'The schedule has been updated.', idempotencyKeyPrefix: `schedule-broadcast-${clubId}-${teamId ?? 'club'}-${Date.now()}`, relatedId: teamId });
+      },
+    }, writeOnce({ clubId }));
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
