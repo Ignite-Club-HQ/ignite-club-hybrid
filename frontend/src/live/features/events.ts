@@ -1986,7 +1986,7 @@ export async function syncLiveActiveGame(
         typeof p?.id === "string" && typeof p?.name === "string" && p.name.trim().length > 0,
     );
     if (named.length > 0 && input.teamId) {
-      const clubId = clubIdFromTeamId(input.teamId);
+      const clubId = input.sharedBoard?.clubId ?? clubIdFromTeamId(input.teamId);
       const refs = new Map<string, string>();
       await Promise.all(
         named.map(async (p) => {
@@ -2001,7 +2001,8 @@ export async function syncLiveActiveGame(
       );
       pitchStateJson = JSON.stringify({ ...doc, players: substituteNameRefs(players, refs) });
     }
-  } catch {
+  } catch (error) {
+    if (input.sharedBoard) throw error;
     // Non-JSON or unexpected shape: pass through untouched (legacy behavior).
   }
   return unwrapCandid(

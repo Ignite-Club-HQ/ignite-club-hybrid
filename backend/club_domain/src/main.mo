@@ -5383,7 +5383,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // rather than trying to admit a service principal as a human account.
   public shared ({ caller }) func relay_group_pitch_alert(users : [Text], club : Text, kind : Text, body : Text, key : Text, related : Text) : async { #Ok : Nat16; #Err : Text } {
     if (eventsDomainCanister != ?caller) return #Err("Events authority required");
-    if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
+    if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     if (users.size() == 0 or users.size() > 500 or body.size() > 128 or key.size() > 512 or not Text.startsWith(related, #text "event-group-")) return #Err("Invalid pitch alert");
     if (kind != "pitch_board_formation" and kind != "pitch_board_team_size" and kind != "pitch_board_substitution") return #Err("Invalid pitch kind");
     let id = notificationQueueCanister ?? return #Err("Notification queue not configured");
