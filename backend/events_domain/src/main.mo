@@ -4197,7 +4197,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let service : actor { relay_event_notice : shared ([Text], Text, Text, Text, Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(authority.toText());
     let timestamp = nowMs();
     eventNoticeAttempts := eventNoticeAttempts.concat([{ event_id = event.id; kind; users; key; created_at_ms = timestamp; status = "pending"; queued = (0 : Nat16) }]);
-    let body = if (kind == "event_reminder") "Please RSVP for the event" else if (kind == "event_invite") "You have been invited to an event" else if (kind == "event_cancelled") "An event has been cancelled" else "An event duty has been completed";
+    let body = if (kind == "event_reminder") "Please RSVP for the event" else if (kind == "event_invite") "You have been invited to an event" else if (kind == "event_cancelled") "An event has been cancelled" else if (kind == "duty_completed") "An event duty has been completed" else if (kind == "duty_reminder") "You have an event duty coming up" else if (kind == "photo_prompt_reminder") "Add your photos from the game to the team gallery" else "Please RSVP for the game to earn points";
     let result = try { await (with timeout = 10) service.relay_event_notice(users, event.club_id, kind, body, key, event.id) } catch (_) {
       eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) ({ a with status = "unknown" }) else a);
       return #Err("Notification outcome is unknown; it will not be sent again automatically")
@@ -4411,14 +4411,8 @@ persistent actor class Main(governorInit : Principal) = this {
         if (event.deleted or event.cancelled or event.starts_at_ms <= now) {
           pointsReminderSent := pointsReminderSent.concat([event.id]);
         } else if (now >= dueAt) {
-          var recipients : [Text] = [];
-          for (grant in roles.values()) {
-            let going = rsvps.any(func(r) = r.event_id == event.id and r.account_id == grant.user.toText() and r.state == "going");
-            if (grant.club_id == event.club_id and (grant.team_id == event.team_id or grant.team_id == null) and not going and recipients.size() < 500) {
-              let user = grant.user.toText();
-              if (not recipients.any(func(id) = id == user)) recipients := recipients.concat([user]);
-            };
-          };
+          let subjects = switch (await eventSubjects(event)) { case (#Err(_)) continue; case (#Ok(rows)) rows };
+          let recipients = EventAudience.users(EventAudience.unanswered(event, subjects, rsvps));
           switch (await fanOutScheduledNotice(event, recipients, "Please RSVP for \"" # event.title # "\" to earn your game points", "event-points-" # event.id)) {
             case (#Ok(_)) {
               if (not pointsReminderSent.any(func(id) = id == event.id)) pointsReminderSent := pointsReminderSent.concat([event.id]);
@@ -4446,58 +4440,30 @@ persistent actor class Main(governorInit : Principal) = this {
     };
   };
 
-  func fanOutScheduledNotice(event : Types.Event, recipients : [Text], body : Text, keyPrefix : Text) : async { #Ok : Nat16; #Err : Text } {
+  func fanOutScheduledNotice(event : Types.Event, recipients : [Text], _body : Text, keyPrefix : Text) : async { #Ok : Nat16; #Err : Text } {
     if (not removalReceiver.enter(event.creator)) return #Err("Event author fenced");
     try {
-    await admitAccount(event.creator);
-    if (recipients.size() == 0) return #Ok(0);
-    switch (notificationQueueCanister) {
-      case null { #Err("Notification queue not configured") };
-      case (?queueCanister) {
-        let queue : actor {
-          fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
-        } = actor (Principal.toText(queueCanister));
-        try {
-          await queue.fan_out(recipients, event.club_id, "event_reminder", body, keyPrefix, ?event.id)
-        } catch (_) { #Err("Scheduled reminder queue call failed") }
-      };
-    }
-    } finally { removalReceiver.leave(event.creator) };
+      await admitAccount(event.creator);
+      if (not (await freshEventManager(event.creator, event))) return #Err("Event author no longer authorized");
+      let kind = if (Text.startsWith(keyPrefix, #text "event-duty")) "duty_reminder" else "event_points_reminder";
+      let membership = switch (await currentEventMembership(event.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(m)) m };
+      let current = recipients.filter(func(id) = membership.roles.any(func(r) = r.user.toText() == id));
+      if (not (await freshEventManager(event.creator, event))) return #Err("Event authority changed");
+      await sendEventNotice(event, kind, current, keyPrefix)
+    } finally { removalReceiver.leave(event.creator) }
   };
 
   func fanOutDutyTeamReminder(event : Types.Event, team_id : Text) : async { #Ok : Nat16; #Err : Text } {
     if (not removalReceiver.enter(event.creator)) return #Err("Event author fenced");
     try {
-    await admitAccount(event.creator);
-    switch (notificationQueueCanister) {
-      case null { #Err("Notification queue not configured") };
-      case (?queueCanister) {
-        var recipients : [Text] = [];
-        for (grant in roles.values()) {
-          if (grant.club_id == event.club_id and grant.team_id == ?team_id and recipients.size() < 500) {
-            let accountId = grant.user.toText();
-            if (not recipients.any(func(id) = id == accountId)) recipients := recipients.concat([accountId]);
-          };
-        };
-        for (assignment in childTeamAssignments.values()) {
-          if (assignment.club_id == event.club_id and assignment.team_id == team_id) {
-            for (guardian in childGuardians.values()) {
-              if (guardian.child_id == assignment.child_id and recipients.size() < 500 and not recipients.any(func(id) = id == guardian.guardian_id)) {
-                recipients := recipients.concat([guardian.guardian_id]);
-              };
-            };
-          };
-        };
-        if (recipients.size() == 0) return #Ok(0);
-        let queue : actor {
-          fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
-        } = actor (Principal.toText(queueCanister));
-        try {
-          await queue.fan_out(recipients, event.club_id, "duty_reminder", "Your team is on duty for \"" # event.title # "\"", "event-duty-team-" # event.id, ?event.id)
-        } catch (_) { #Err("Duty reminder queue call failed") }
-      };
-    }
-    } finally { removalReceiver.leave(event.creator) };
+      await admitAccount(event.creator);
+      if (not (await freshEventManager(event.creator, event))) return #Err("Event author no longer authorized");
+      let membership = switch (await currentEventMembership(event.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(m)) m };
+      let scope : Types.Event = { event with team_id = ?team_id; target_team_ids = null; restricted_to_roles = null; rsvp_audience = null; adults_only = false };
+      let recipients = EventAudience.users(EventAudience.subjects(scope, membership));
+      if (not eventDutyTeams.any(func(a) = a.event_id == event.id and a.team_id == team_id) or not (await freshEventManager(event.creator, event))) return #Err("Duty team changed");
+      await sendEventNotice(event, "duty_reminder", recipients, "event-duty-team-" # event.id)
+    } finally { removalReceiver.leave(event.creator) }
   };
 
   func markReminderSent(event_id : Text) {
@@ -4509,7 +4475,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // members who RSVP'd going (or the whole team if nobody RSVP'd). The 6 h
   // window stops a first deploy from back-filling old games.
   func sweepPhotoPrompts() : async () {
-    let nq = switch (notificationQueueCanister) { case null return; case (?id) id };
+
     let now = nowMs();
     let minAge : Nat64 = 2 * 3_600_000;
     let maxAge : Nat64 = 6 * 3_600_000;
@@ -4519,27 +4485,14 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not removalReceiver.enter(event.creator)) continue;
         try {
         await admitAccount(event.creator);
-        photoPromptsSent := photoPromptsSent.concat([event.id]);
-        sentThisRun += 1;
-        var recipients : [Text] = [];
-        for (r in rsvps.values()) {
-          if (r.event_id == event.id and r.state == "going" and recipients.size() < 500 and recipients.find(func(x) = x == r.account_id) == null) recipients := recipients.concat([r.account_id]);
-        };
-        if (recipients.size() == 0) {
-          for (grant in roles.values()) {
-            if (grant.club_id == event.club_id and grant.team_id == event.team_id and recipients.size() < 500) {
-              let a = grant.user.toText();
-              if (recipients.find(func(x) = x == a) == null) recipients := recipients.concat([a]);
-            };
-          };
-        };
-        if (recipients.size() > 0) {
-          let queue : actor {
-            fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
-          } = actor (Principal.toText(nq));
-          try {
-            ignore await queue.fan_out(recipients, event.club_id, "photo_prompt_reminder", "Got photos from \"" # event.title # "\"? Add them to the team gallery.", "photo-prompt-" # event.id, ?event.id);
-          } catch (_) {};
+        if (not (await freshEventManager(event.creator, event))) continue;
+        let subjects = switch (await eventSubjects(event)) { case (#Err(_)) continue; case (#Ok(rows)) rows };
+        let eligible = subjects.filter(func(subject) = rsvps.any(func(r) = r.event_id == event.id and r.state == "going" and (switch (subject.child) { case null r.account_id == subject.user and r.child_id == null; case (?child) r.child_id == ?child })));
+        let recipients = EventAudience.users(if (eligible.size() > 0) eligible else subjects);
+        if (not (await freshEventManager(event.creator, event))) continue;
+        switch (await sendEventNotice(event, "photo_prompt_reminder", recipients, "photo-prompt-" # event.id)) {
+          case (#Ok(_)) { photoPromptsSent := photoPromptsSent.concat([event.id]); sentThisRun += 1 };
+          case (#Err(_)) {};
         };
         } finally { removalReceiver.leave(event.creator) };
       };
