@@ -110,15 +110,13 @@ export async function getLiveClubMediaBytes(
   clubId: string,
 ): Promise<ClubMediaBytes> {
   const out: ClubMediaBytes = { finalized: 0, pending: 0 };
-  for (const key of listBlobStoreKeys(target)) {
-    try {
-      const { actor } = await connectLiveBlobStore(target, identity, key);
-      const r = await actor.get_club_media_bytes(clubId);
-      out.finalized += Number(r.finalized);
-      out.pending += Number(r.pending);
-    } catch {
-      // Store not upgraded yet / unreachable — skip it.
-    }
+  const keys = listBlobStoreKeys(target);
+  if (!keys.length) throw new Error("Club storage cannot be measured: no store configured");
+  for (const key of keys) {
+    const { actor } = await connectLiveBlobStore(target, identity, key);
+    const r = await actor.get_club_media_bytes(clubId);
+    out.finalized += Number(r.finalized);
+    out.pending += Number(r.pending);
   }
   return out;
 }

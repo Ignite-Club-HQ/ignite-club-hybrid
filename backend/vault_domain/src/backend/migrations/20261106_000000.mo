@@ -1,0 +1,1 @@
+import Map "mo:core/Map"; module { public func migration(_ : {}) : { var nextGalleryFileSeq : Nat; var deletionIntents : Map.Map<Text, Text> } { { var nextGalleryFileSeq = 0; var deletionIntents = Map.empty<Text, Text>() } } }

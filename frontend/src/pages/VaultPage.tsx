@@ -545,7 +545,9 @@ function SupabaseVaultPage() {
             path.push({ id: folder.id, name: folder.name });
 
             let clubName = folder.clubs?.name || "Unknown Club";
-            if (folder.team_id && folder.teams) {
+            if (folder.competition_id) {
+          setCurrentView({ type: "competition", clubId: folder.club_id, clubName, competitionId: folder.competition_id, competitionName: "Competition", folderId: folder.id, folderName: folder.name });
+        } else if (folder.team_id && folder.teams) {
               const { data: club } = await supabase
                 .from("clubs")
                 .select("name")
@@ -569,7 +571,7 @@ function SupabaseVaultPage() {
             while (currentFolderId) {
               if (visited.has(currentFolderId) || visited.size >= 100) throw new Error("Invalid folder path");
               visited.add(currentFolderId);
-              const parentFolder = await getLiveVaultFolder(ctx, currentFolderId);
+              const parentFolder = await getLiveVaultFolder(ctx, currentFolderId, folder.competition_id?.[0] ?? null);
               if (!parentFolder) break;
               path.unshift({ id: parentFolder.id, name: parentFolder.name });
               currentFolderId = parentFolder.parent_id.length ? parentFolder.parent_id[0] : null;
@@ -590,6 +592,8 @@ function SupabaseVaultPage() {
                 name: folder.name,
                 club_id: folder.club,
                 team_id: teamId,
+                competition_id: folder.competition_id?.[0] ?? null,
+                mini_league_id: folder.mini_league_id?.[0] ?? null,
                 parent_id: folder.parent_id.length ? folder.parent_id[0] : null,
                 restricted_roles: folder.restricted_roles,
                 created_by: folder.created_by.toText(),
@@ -618,7 +622,9 @@ function SupabaseVaultPage() {
         const { folder, path, clubName } = result;
         setFolderPath(path);
 
-        if (folder.team_id && folder.teams) {
+        if (folder.competition_id) {
+          setCurrentView({ type: "competition", clubId: folder.club_id, clubName, competitionId: folder.competition_id, competitionName: "Competition", folderId: folder.id, folderName: folder.name });
+        } else if (folder.team_id && folder.teams) {
           setCurrentView({
             type: "team",
             clubId: folder.teams.club_id,

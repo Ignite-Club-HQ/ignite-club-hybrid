@@ -20,6 +20,9 @@ export type VaultStorageBreakdown = {
   photos: number;
   documents: number;
   total: number;
+  vaultTotal?: number;
+  pending?: number;
+  otherMedia?: number;
   byTeam: Array<{
     teamId: string | null;
     teamName: string;
@@ -140,7 +143,7 @@ export async function fetchVaultStorageSubscription(
     const gb = await withFeatureBackend("membership", {
       supabase: async () => 0,
       icp: (ctx) => getLiveClubStoragePurchasedGb(ctx, clubId),
-    }, { clubId }).catch(() => 0);
+    }, { clubId });
     return { storage_purchased_gb: gb, scheduled_storage_downgrade_gb: null, storage_downgrade_at: null };
   }
   const { data } = await client
@@ -176,7 +179,7 @@ export async function fetchVaultStorageBreakdown(
         const [files, teams, storeBytes] = await Promise.all([
           listLiveVaultClubFiles(ctx, clubId, null, null),
           listLiveTeams(ctx, clubId).catch(() => [] as any[]),
-          getLiveClubMediaBytes(ctx.target, ctx.identity, clubId).catch(() => ({ finalized: 0, pending: 0 })),
+          getLiveClubMediaBytes(ctx.target, ctx.identity, clubId),
         ]);
         const breakdown = calculateVaultStorageBreakdown({
           photos: [],
@@ -192,7 +195,7 @@ export async function fetchVaultStorageBreakdown(
           miniLeagues: [],
         });
         const storeTotal = storeBytes.finalized + storeBytes.pending;
-        return storeTotal > breakdown.total ? { ...breakdown, total: storeTotal } : breakdown;
+        return { ...breakdown, total: storeTotal, vaultTotal: breakdown.total, pending: storeBytes.pending, otherMedia: Math.max(0, storeBytes.finalized - breakdown.total) };
       },
     }, { clubId });
   }

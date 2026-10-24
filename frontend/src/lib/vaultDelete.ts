@@ -2,9 +2,7 @@ import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveVaultFile, permanentlyDeleteLiveVaultFile } from "@/live/features/vault";
-import { deleteBlobFromStore } from "@/live/blobStoreUpload";
-import { listBlobStoreKeys } from "@/live/mediaStorage";
+import { permanentlyDeleteLiveVaultFile } from "@/live/features/vault";
 
 /** Server-side batch bound for permanent-delete-photos. */
 export const VAULT_DELETE_CHUNK = 100;
@@ -52,21 +50,7 @@ async function permanentlyDeleteVaultFilesIcp(fileIds: string[]): Promise<VaultD
           throw new Error("unreachable: vault routing checked by the caller");
         },
         icp: async (ctx) => {
-          const file = await getLiveVaultFile(ctx, id).catch(() => null);
           await permanentlyDeleteLiveVaultFile(ctx, id);
-          const blobRef = file?.blob_ref?.[0];
-          if (!blobRef) return;
-          const storeKey = listBlobStoreKeys(ctx.target).find(
-            (key) => ctx.target.canisterIds[key] === blobRef.canister,
-          );
-          if (!storeKey) return;
-          try {
-            await deleteBlobFromStore(ctx.target, ctx.identity, storeKey, blobRef.path);
-          } catch (error) {
-            // Metadata row is already gone; a stale/missing blob must not
-            // surface as a deletion failure to the caller.
-            console.warn("[vaultDelete] blob store cleanup failed", error);
-          }
         },
       }, writeOnce({ vaultFileId: id }));
       filesDeleted += 1;
