@@ -560,6 +560,7 @@ function SupabasePublicEoiFormPage() {
 }
 
 // ---- ICP (anonymous) data path: club_domain public config + competition_domain submit.
+const publicEoiOwners = new Map<string, import("@/live/targetRegistry").IcpTargetConfig>();
 async function anonActors() {
   const [{ AnonymousIdentity }, domains, { getActiveIcpTarget }] = await Promise.all([
     import("@icp-sdk/core/agent"),
@@ -574,10 +575,16 @@ async function anonActors() {
 async function loadIcpPublicEoiConfig(clubSlug: string, seasonSlug: string): Promise<EoiConfig | null> {
   const { target, identity, domains } = await anonActors();
   const { unwrapCandid } = await import("@/live/features/candid");
-  const { actor } = await domains.connectLiveClubDomain(target, identity);
-  const res = (await unwrapCandid(actor.get_public_eoi_config(clubSlug, seasonSlug), "Load form")) as any;
-  const row = Array.isArray(res) ? res[0] : res;
+  const { readUniquePublicGroup } = await import("@/live/publicGroupReads");
+  const located = await readUniquePublicGroup(target, async scoped => {
+    const { actor } = await domains.connectLiveClubDomain(scoped, identity);
+    const res = await unwrapCandid(actor.get_public_eoi_config(clubSlug, seasonSlug), "Load form");
+    const row = res[0];
+    return row ? { row, target: scoped } : null;
+  });
+  const row = located?.row;
   if (!row) return null;
+  if (located) publicEoiOwners.set(`${row.club_id}:${row.season_id}`, located.target);
   const rawJson = Array.isArray(row.config_json) ? row.config_json[0] : row.config_json;
   let c: Record<string, any> = {};
   try { c = rawJson ? JSON.parse(rawJson) : {}; } catch { c = {}; }
@@ -614,7 +621,9 @@ async function submitIcpPublicEoi(f: {
 }) {
   const { target, identity, domains } = await anonActors();
   const { unwrapCandid } = await import("@/live/features/candid");
-  const { actor } = await domains.connectLiveCompetitionDomain(target, identity);
+  const owner = publicEoiOwners.get(`${f.club_id}:${f.season_id}`);
+  if (!owner) throw new Error("Reload the form before submitting");
+  const { actor } = await domains.connectLiveCompetitionDomain(owner, identity);
   const o = (v: string | null) => (v ? [v] : []) as [] | [string];
   await unwrapCandid(
     actor.submit_public_eoi(

@@ -5,6 +5,7 @@ import type { RoutingGatesSnapshot } from "./generalActivation";
 /** Public reads only. No membership session, router calls or write authority. */
 export function publicReadTargets(base: IcpTargetConfig, snapshot: RoutingGatesSnapshot | null = ROUTING_GATES_SNAPSHOT): IcpTargetConfig[] {
   if (!snapshot) return [base];
+  if (!base.canisterIds.shard_router) return [base];
   if (snapshot.host !== base.host || snapshot.routerCanisterId !== base.canisterIds.shard_router) {
     throw new Error("Public group inventory does not match this deployment");
   }
