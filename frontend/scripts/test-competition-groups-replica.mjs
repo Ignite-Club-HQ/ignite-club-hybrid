@@ -6,6 +6,7 @@ import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import { idlFactory as compIdl } from '../src/lab/bindings/competition_domain/declarations/competition_domain.did.js';
 import { idlFactory as vaultIdl } from '../src/lab/bindings/vault_domain/declarations/vault_domain.did.js';
+import { idlFactory as queueIdl } from '../src/lab/bindings/notification_queue/declarations/notification_queue.did.js';
 const governor = Principal.fromUint8Array(Uint8Array.from([1, 1]));
 const manager = Principal.fromUint8Array(Uint8Array.from([2, 1]));
 const parent = Principal.fromUint8Array(Uint8Array.from([3, 1]));
@@ -18,6 +19,7 @@ try {
   const setup = (idlFactory, name) => pic.setupCanister({ idlFactory, wasm: process.env[name], sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
   const A = await setup(clubIdl, 'CLUB_DOMAIN_WASM'), B = await setup(clubIdl, 'CLUB_DOMAIN_WASM');
   const C = await setup(compIdl, 'COMPETITION_DOMAIN_WASM'), V = await setup(vaultIdl, 'VAULT_DOMAIN_WASM');
+  const QA = await setup(queueIdl, 'NOTIFICATION_QUEUE_WASM'), QB = await setup(queueIdl, 'NOTIFICATION_QUEUE_WASM');
   const a = A.actor, b = B.actor, c = C.actor, v = V.actor;
   for (const actor of [a, b, c, v]) actor.setPrincipal(governor);
   ok(await a.create_club('host', 'Host FC', 'host', [], []));
@@ -30,6 +32,11 @@ try {
   ok(await b.set_competition_authorities([C.canisterId]));
   ok(await c.set_club_domain_canister(A.canisterId));
   ok(await c.set_participant_club_authorities([A.canisterId, B.canisterId]));
+  for (const [club, queue] of [[a, QA], [b, QB]]) {
+    queue.actor.setPrincipal(governor);
+    ok(await queue.actor.set_club_domain_canister(club === a ? A.canisterId : B.canisterId));
+    ok(await club.set_notification_queue_canister(queue.canisterId));
+  }
   ok(await c.set_vault_domain_canister(V.canisterId));
   ok(await v.set_club_domain_canister(A.canisterId));
   ok(await v.set_competition_domain_canister(C.canisterId));
@@ -52,6 +59,12 @@ try {
   c.setPrincipal(manager);
   const fixture = ok(await c.record_match(competition, home, away));
   const broadcast = ok(await c.send_competition_broadcast(competition, 'Notice', 'Match confirmed'));
+  assert.ok(ok(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Match notice')) > 0n);
+  const acknowledged = ok(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Match notice'));
+  assert.ok(acknowledged > 0n);
+  denied(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Changed payload'));
+  QB.actor.setPrincipal(parent);
+  assert.equal(ok(await QB.actor.list_inbox(parent.toText(), ['guest'], 100)).filter(n => n.kind === 'competition_broadcast').length, 1);
   c.setPrincipal(stranger);
   denied(await c.read_account_list_competition_broadcasts(competition));
   denied(await c.read_account_competition_engagement_summary([competition], 0n, 9999999999999n));

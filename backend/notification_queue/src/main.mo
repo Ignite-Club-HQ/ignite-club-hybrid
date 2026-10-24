@@ -62,7 +62,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   var items : [Types.Notification];
-  var competitionBroadcastReceipts : Map.Map<Text, { club : Text; related : Text; body : Text; users : [Text]; count : Nat16 }>;
+  var competitionBroadcastReceipts : Map.Map<Text, { club : Text; related : Text; body : Text; count : Nat16 }>;
   var leases : [Types.Lease];
   var governor : ?Principal;
 
@@ -602,7 +602,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let receiptKey = club # "\u{1f}" # key;
     switch (Map.get(competitionBroadcastReceipts, Text.compare, receiptKey)) {
       case (?r) {
-        if (r.club != club or r.related != related or r.body != body or r.users != users) return #Err("Broadcast receipt conflict");
+        if (r.club != club or r.related != related or r.body != body) return #Err("Broadcast receipt conflict");
         return #Ok(r.count)
       };
       case null {}
@@ -619,7 +619,7 @@ persistent actor class Main(governorInit : Principal) = this {
         count += 1
       }
     };
-    Map.add(competitionBroadcastReceipts, Text.compare, receiptKey, { club; related; body; users; count });
+    Map.add(competitionBroadcastReceipts, Text.compare, receiptKey, { club; related; body; count });
     #Ok(count)
   };
 

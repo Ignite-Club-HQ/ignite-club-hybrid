@@ -2801,6 +2801,7 @@ persistent actor class Main(governorInit : Principal) = this {
     conflicts += competitionJoinLinks.filter(func(item) = item.created_by.equal(new)).size();
     conflicts += eoiSubmissions.filter(func(item) = item.parent_user_id == ?new).size();
     conflicts += broadcasts.filter(func(item) = item.sender.equal(new)).size();
+    for ((_, receipt) in Map.entries(broadcastDeliveries)) if (receipt.sender == new) conflicts += 1;
     conflicts += playhqClaims.filter(func(item)=item.user==new).size();
     if (bulkAccessPrincipals.any(func(p) = p.equal(new))) { conflicts += 1 };
 
@@ -2842,6 +2843,15 @@ persistent actor class Main(governorInit : Principal) = this {
     };
 
     if (not dry_run) {
+      let updates = Map.entries(broadcastDeliveries).toArray();
+      for ((key, receipt) in updates.values()) {
+        if (receipt.sender == old) {
+          let suffix = Text.stripStart(key, #text (old.toText() # "\u{1f}")) ?? key;
+          Map.remove(broadcastDeliveries, Text.compare, key);
+          Map.add(broadcastDeliveries, Text.compare, new.toText() # "\u{1f}" # suffix, { receipt with sender = new });
+          changed += 1
+        }
+      };
       roles := newRoles;
       tokens := newTokens;
       competitionInvites := newCompetitionInvites;
