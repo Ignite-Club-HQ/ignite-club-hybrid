@@ -224,8 +224,8 @@ async function fetchReportExtrasIcp(
           if(gkSeconds>0 || stat.positions_played.some(isGoalkeeperPosition))bump(honours,key,"gkMatches");
         }
         const gr = result && result.length ? result[0] : null;
-        const homeScore = gr?.scores_hidden || gr?.home_score == null ? null : Number(gr.home_score);
-        const awayScore = gr?.scores_hidden || gr?.away_score == null ? null : Number(gr.away_score);
+        const homeScore = gr?.scores_hidden || gr?.home_score[0] == null ? null : Number(gr.home_score[0]);
+        const awayScore = gr?.scores_hidden || gr?.away_score[0] == null ? null : Number(gr.away_score[0]);
         const parseArray=(text:unknown):unknown[]=>{if(typeof text!=="string")return [];try{const row:unknown=JSON.parse(text);return Array.isArray(row)?row:[]}catch{return []}};
         const scorers:ReportScorer[]=gr?.scores_hidden?[]:parseArray(gr?.player_stats_json).flatMap(raw=>{
           if(!raw || typeof raw!=="object")return [];const r=raw as Record<string,unknown>;
