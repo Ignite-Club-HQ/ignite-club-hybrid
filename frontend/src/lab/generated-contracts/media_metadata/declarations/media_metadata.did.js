@@ -293,9 +293,24 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Asset, 'Err' : IDL.Text })],
         [],
       ),
+    'read_gallery_view_counts' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
+    'record_gallery_view' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'register_asset' : IDL.Func(

@@ -231,7 +231,21 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_gallery_view_counts(ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, bigint]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_group_opening_configuration(): Promise<Array<[string, string]>>;
+    record_gallery_view(asset_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     register_asset(club_id: string, kind: string, mime: string, checksum: string, storage_path: string, visibility: string, expires_at_ms: bigint): Promise<{
         __kind__: "Ok";
         Ok: Asset;
@@ -724,9 +738,29 @@ export class Media_metadata implements media_metadataInterface {
         const result = await this.actor.read_gallery_asset_for_service(arg0, arg1);
         return from_candid_variant_n10(result);
     }
+    async read_gallery_view_counts(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, bigint]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_gallery_view_counts(arg0);
+        return from_candid_variant_n47(result);
+    }
     async read_group_opening_configuration(): Promise<Array<[string, string]>> {
         const result = await this.actor.read_group_opening_configuration();
         return result;
+    }
+    async record_gallery_view(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.record_gallery_view(arg0);
+        return from_candid_variant_n28(result);
     }
     async register_asset(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: bigint): Promise<{
         __kind__: "Ok";
@@ -768,7 +802,7 @@ export class Media_metadata implements media_metadataInterface {
         Err: string;
     }> {
         const result = await this.actor.remove_gallery_asset(arg0, arg1);
-        return from_candid_variant_n47(result);
+        return from_candid_variant_n48(result);
     }
     async remove_reaction(arg0: string): Promise<{
         __kind__: "Ok";
@@ -788,7 +822,7 @@ export class Media_metadata implements media_metadataInterface {
         Err: string;
     }> {
         const result = await this.actor.save_gallery_chat_card(to_candid_opt_n6(arg0), arg1, arg2, to_candid_opt_n6(arg3), arg4, to_candid_opt_n6(arg5), to_candid_opt_n6(arg6), arg7, arg8, arg9, arg10);
-        return from_candid_variant_n48(result);
+        return from_candid_variant_n49(result);
     }
     async seal_account_removal(arg0: Request): Promise<{
         __kind__: "Ok";
@@ -817,7 +851,7 @@ export class Media_metadata implements media_metadataInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_blob_ref(arg0, to_candid_opt_n49(arg1));
+        const result = await this.actor.set_blob_ref(arg0, to_candid_opt_n50(arg1));
         return from_candid_variant_n10(result);
     }
     async set_gallery_authorities(arg0: Principal, arg1: Principal): Promise<{
@@ -1374,6 +1408,25 @@ function from_candid_variant_n40(value: {
     } : value;
 }
 function from_candid_variant_n47(value: {
+    Ok: Array<[string, bigint]>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<[string, bigint]>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n48(value: {
     Ok: {
         vault_updated: boolean;
     };
@@ -1396,7 +1449,7 @@ function from_candid_variant_n47(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n48(value: {
+function from_candid_variant_n49(value: {
     Ok: _GalleryChatCard;
 } | {
     Err: string;
@@ -1499,7 +1552,7 @@ function to_candid_opt_n31(value: Cursor | null): [] | [_Cursor] {
 function to_candid_opt_n39(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n49(value: BlobRef | null): [] | [_BlobRef] {
+function to_candid_opt_n50(value: BlobRef | null): [] | [_BlobRef] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_opt_n6(value: string | null): [] | [string] {

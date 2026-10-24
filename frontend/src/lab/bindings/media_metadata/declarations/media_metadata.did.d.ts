@@ -209,7 +209,17 @@ export interface Main {
     { 'Ok' : Asset } |
       { 'Err' : string }
   >,
+  'read_gallery_view_counts' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<[string, bigint]> } |
+      { 'Err' : string }
+  >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'record_gallery_view' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'register_asset' : ActorMethod<
     [string, string, string, string, string, string, bigint],
     { 'Ok' : Asset } |
