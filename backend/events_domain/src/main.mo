@@ -30,6 +30,8 @@ import OqlEvents "oqlEvents";
 import HistoryPrivacy "historyPrivacy";
 import PlayhqFeed "playhqFeed";
 import BoardSync "boardSync";
+import EventAudience "eventAudience";
+import EventSetup "eventSetup";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -188,6 +190,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // the last writeLogWindowMs() on every append so it stays bounded instead
   // of growing with total lifetime writes (migration 20261023_000000).
   var activeGameWriteLog : [(Text, Nat64)];
+  var eventSetupReceipts : [(Principal, Text, Blob, EventSetup.Result)];
+  var eventNoticeAttempts : [{ event_id : Text; kind : Text; users : [Text]; key : Text; created_at_ms : Nat64; status : Text; queued : Nat16 }];
+  var scheduleViewPreferences : Map.Map<Principal, Text>;
 
   // Bounded window for activeGameWriteLog (10 minutes) — trimmed on every
   // sync_active_game write so the log never grows with lifetime write count.
@@ -506,6 +511,69 @@ persistent actor class Main(governorInit : Principal) = this {
     events := events.concat([created]); #Ok(created)
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  public shared ({ caller }) func create_event_with_setup(input : EventSetup.Input) : async { #Ok : EventSetup.Result; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      if (not EventSetup.valid(input) or not valid(input.club_id) or not valid(input.title) or not valid(input.description) or not validEventType(input.event_type) or not validLocation(input.location) or not validLocation(input.address) or not validLocation(input.opponent) or not validOptId(input.mini_league_id) or not validRsvpAudience(input.rsvp_audience) or not validRsvpPolicyLists(input.restricted_to_roles, input.target_team_ids)) return #Err("Invalid event setup");
+      let authority = clubDomainCanister ?? return #Err("Club authority unavailable");
+      let club : actor {
+        read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)];
+        get_team : shared query (Text) -> async { #Ok : ?{ club_id : Text; is_active : Bool; archived : Bool; is_shell : Bool; deleted_at_ms : ?Nat64 }; #Err : Text };
+      } = actor(authority.toText());
+      let fresh = try { await (with timeout = 10) club.read_account_list_user_club_roles(caller, input.club_id) } catch (_) { return #Err("Club authority unavailable") };
+      if (not isGovernor(caller) and not fresh.any(func((role, team)) = (role == "club_admin" and team == null) or ((role == "coach" or role == "team_admin") and input.team_id != null and team == input.team_id))) return #Err("Club or team admin required");
+      let membership = switch (await currentEventMembership(input.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(m)) m };
+      for (duty in input.duties.values()) switch (duty.account_id) {
+        case null {};
+        case (?id) { if (not membership.roles.any(func(r) = r.user.toText() == id)) return #Err("Duty assignee is not a current club member") };
+      };
+      var teams : [Text] = input.target_team_ids ?? [];
+      switch (input.team_id) { case (?id) teams := teams.concat([id]); case null {} };
+      switch (input.duty_team_id) { case (?id) teams := teams.concat([id]); case null {} };
+      for (team in teams.values()) {
+        let found = try { await (with timeout = 10) club.get_team(team) } catch (_) { return #Err("Could not validate event team") };
+        switch (found) { case (#Ok(?t)) { if (t.club_id != input.club_id or not t.is_active or t.archived or t.is_shell or t.deleted_at_ms != null) return #Err("Invalid event team") }; case _ return #Err("Event team not found") };
+      };
+      // Revalidate authority and membership after all team awaits. The commit
+      // below contains no await, so no device can see a partially built series.
+      let finalRoles = try { await (with timeout = 10) club.read_account_list_user_club_roles(caller, input.club_id) } catch (_) { return #Err("Club authority unavailable") };
+      if (not isGovernor(caller) and not finalRoles.any(func((role, team)) = (role == "club_admin" and team == null) or ((role == "coach" or role == "team_admin") and input.team_id != null and team == input.team_id))) return #Err("Event permission changed");
+      if (clubDomainCanister != ?authority or isFenced(input.club_id) or removalReceiver.denied(caller)) return #Err("Event setup authority changed");
+      let payload = to_candid(input);
+      switch (eventSetupReceipts.find(func((user, key, _, _)) = user == caller and key == input.request_id)) {
+        case (?(_, _, previous, result)) { if (previous != payload) return #Err("Setup request conflicts with previous payload"); return #Ok(result) };
+        case null {};
+      };
+      let seriesId = if (input.occurrences.size() > 1) ?("ser-" # input.club_id # "-" # series.size().toText()) else null;
+      let base = events.size(); let timestamp = nowMs();
+      let created = Array.tabulate<Types.Event>(input.occurrences.size(), func(i) = {
+        id = "evt-" # input.club_id # "-" # (base + i).toText(); club_id = input.club_id; team_id = input.team_id;
+        title = input.title; description = input.description; event_type = input.event_type; location = input.location;
+        opponent = input.opponent; address = input.address; mini_league_id = input.mini_league_id;
+        cancelled = false; deleted = false; creator = caller; starts_at_ms = input.occurrences[i].starts_at_ms; ends_at_ms = input.occurrences[i].ends_at_ms;
+        series_id = seriesId; revision = 1; updated_at_ms = timestamp; rsvp_audience = input.rsvp_audience;
+        adults_only = input.adults_only; restricted_to_roles = input.restricted_to_roles; target_team_ids = input.target_team_ids
+      });
+      switch (seriesId) { case null {}; case (?id) {
+        let first = created[0]; let last = created[created.size() - 1];
+        series := series.concat([{ id; club_id = input.club_id; team_id = input.team_id; title = input.title; description = input.description; event_type = input.event_type; location = input.location; frequency = "weekly"; first_starts_at_ms = first.starts_at_ms; first_ends_at_ms = first.ends_at_ms; until_ms = last.starts_at_ms; creator = caller; revision = 1; deleted = false; rsvp_audience = input.rsvp_audience; adults_only = input.adults_only; restricted_to_roles = input.restricted_to_roles; target_team_ids = input.target_team_ids }])
+      } };
+      for (event in created.values()) {
+        for (duty in input.duties.values()) switch (duty.account_id) {
+          case (?account_id) duties := duties.concat([{ event_id = event.id; account_id; duty = duty.duty; completed = false }]);
+          case null openDuties := openDuties.concat([{ id = "open-" # event.id # "-" # openDuties.size().toText(); event_id = event.id; duty = duty.duty; claimed_by = null; created_at_ms = timestamp }]);
+        };
+        switch (input.duty_team_id) { case null {}; case (?team_id) eventDutyTeams := eventDutyTeams.concat([{ event_id = event.id; team_id }]) };
+        switch (input.reminder_hours) { case null {}; case (?hours_before) autoReminders := autoReminders.concat([{ event_id = event.id; hours_before; sent = false }]) };
+      };
+      events := events.concat(created);
+      let result : EventSetup.Result = { first_event_id = created[0].id; series_id = seriesId; event_ids = created.map(func(e) = e.id) };
+      eventSetupReceipts := eventSetupReceipts.concat([(caller, input.request_id, payload, result)]);
+      #Ok(result)
+    } finally { removalReceiver.leave(caller) }
   };
 
   // Association-scoped fan-out (Phase 3, F5): an association admin creates

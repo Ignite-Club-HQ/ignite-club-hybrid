@@ -5391,6 +5391,48 @@ persistent actor class Main(governorInit : Principal) = this {
     await (with timeout = 10) queue.fan_out(users, club, kind, body, key, ?related)
   };
 
+  // No names or emails: only this group's configured event authority may
+  // consume current membership relationships to authorize event notices.
+  public shared ({ caller }) func read_event_notification_membership(club : Text) : async { #Ok : {
+    roles : [{ user : Principal; role : Text; club_id : Text; team_id : ?Text }];
+    children : [{ id : Text; teams : [Text]; parent : ?Principal }];
+    guardians : [{ child_id : Text; user : Principal }]
+  }; #Err : Text } {
+    if (eventsDomainCanister != ?caller or isTransferFenced(club)) return #Err("Events authority required or club locked");
+    let eligible = func(user : Principal) : Bool {
+      not Principal.isAnonymous(user) and not removalReceiver.denied(user) and not isExcluded(user, club) and isMember(user, club)
+    };
+    let activeTeams = clubTeams.filter(func(t) = t.club_id == club and t.is_active and not t.archived and t.deleted_at_ms == null and not t.is_shell).map(func(t) = t.id);
+    let clubRoles = acl.roles.filter(func(r) = r.club == ?club and eligible(r.user));
+    let kids = acl.children.filter(func(c) = c.club_id == ?club).map(func(c) = {
+      id = c.id; teams = c.teams.filter(func(t) = activeTeams.any(func(id) = id == t));
+      parent = switch (c.parent) { case (?p) if (eligible(p)) ?p else null; case null null }
+    });
+    let links = acl.guardians.filter(func(g) = eligible(g.user) and kids.any(func(c) = c.id == g.child));
+    if (clubRoles.size() > 2000 or kids.size() > 2000 or links.size() > 4000) return #Err("Event membership inventory exceeds bound");
+    #Ok({ roles = clubRoles.map(func(r) = { user = r.user; role = r.role; club_id = club; team_id = r.team }); children = kids;
+      guardians = links.map(func(g) = { child_id = g.child; user = g.user }) })
+  };
+
+  public shared ({ caller }) func relay_event_notice(users : [Text], club : Text, kind : Text, body : Text, key : Text, event_id : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (eventsDomainCanister != ?caller) return #Err("Events authority required");
+    if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
+    if (users.size() == 0 or users.size() > 500 or body.size() > 512 or key.size() > 512 or not Text.startsWith(event_id, #text "evt-")) return #Err("Invalid event notice");
+    if (kind != "event_reminder" and kind != "event_invite" and kind != "event_cancelled" and kind != "duty_completed") return #Err("Invalid event notice kind");
+    // Check every recipient before any queue call, including through admission awaits.
+    var principals : [Principal] = [];
+    for (user in users.values()) {
+      let p = try { Principal.fromText(user) } catch (_) { return #Err("Invalid recipient") };
+      if (not removalReceiver.enter(p)) return #Err("Recipient fenced");
+      try { await admitAccount(p) } finally { removalReceiver.leave(p) };
+      principals := principals.concat([p]);
+    };
+    if (eventsDomainCanister != ?caller or isTransferFenced(club) or principals.any(func(p) = removalReceiver.denied(p) or isExcluded(p, club) or not isMember(p, club))) return #Err("Event recipient access changed");
+    let id = notificationQueueCanister ?? return #Err("Notification queue not configured");
+    let queue : actor { fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
+    await (with timeout = 10) queue.fan_out(users, club, kind, body, key, ?event_id)
+  };
+
   public shared ({ caller }) func set_messaging_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor only");
