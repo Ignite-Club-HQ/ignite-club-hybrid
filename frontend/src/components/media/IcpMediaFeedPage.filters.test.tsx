@@ -9,6 +9,9 @@ vi.mock('@tanstack/react-query', async (importOriginal) => ({
   ...await importOriginal<typeof import('@tanstack/react-query')>(),
   useQuery: (options: { queryKey: string[] }) => {
     state.reads(options.queryKey);
+    if (options.queryKey[0] === 'icp-gallery-linked-post') return { data: null };
+    if (options.queryKey[0] === 'icp-gallery-moderation') return { data: [] };
+    if (options.queryKey[0] === 'blocked-users') return { data: [] };
     return options.queryKey[0] === 'icp-principal' ? { data: 'member' } : {
       data: { posts: [], options: {
         clubs: [{ id: 'winter-cats', name: 'Winter Cats' }, { id: 'riverdogs', name: 'Riverdogs' }],
