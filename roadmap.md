@@ -1,4 +1,5 @@
 ## Chat threads after top-ups — 24 October 2026
+- [ ] Owner screenshot at 01:38 UTC narrows incident to any committee/coaches group chat: full header/thread skeleton, not missing team conversations. Investigate GroupChatPage metadata/ownership prerequisites and reproduce with a signed-in session if available; no fuel attribution.
 - [x] Live read-only health confirms router 5.28T, G2 club 5.71T and messaging 5.91T; earlier fuel-only diagnosis was unproven. Repair team/club missing-conversation recovery: current canisters return access forbidden for absence, so require same-context authorized location evidence before one provisioning attempt. Existing/denied threads and uncertain mutations must not trigger replacement/replay.
 - [ ] Signed-in failing-thread readback and live reciprocal wiring inspection: unavailable Internet Identity session and governor credentials; obtain affected club/thread and fresh error if it persists. No deployments or fuel purchases.
 
