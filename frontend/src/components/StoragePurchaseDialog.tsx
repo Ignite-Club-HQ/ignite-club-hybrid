@@ -210,6 +210,7 @@ export function StoragePurchaseDialog({
 
   const downgradeMutation = useMutation({
     mutationFn: async (newStorageGb: number) => {
+      if (isIcpMode) throw new Error("Storage grants are not recurring subscriptions");
       // Schedule downgrade for end of billing period (approximately 1 month from now)
       const downgradeDate = new Date();
       downgradeDate.setMonth(downgradeDate.getMonth() + 1);
@@ -243,6 +244,7 @@ export function StoragePurchaseDialog({
 
   const cancelDowngradeMutation = useMutation({
     mutationFn: async () => {
+      if (isIcpMode) throw new Error("Storage grants are not recurring subscriptions");
       const { error } = await supabase
         .from("club_subscriptions")
         .update({ 
@@ -532,7 +534,7 @@ export function StoragePurchaseDialog({
             <Separator className="my-1" />
 
             {/* Scheduled Downgrade Banner */}
-            {scheduledDowngradeGb != null && storageDowngradeAt && (
+            {!isIcpMode && scheduledDowngradeGb != null && storageDowngradeAt && (
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 space-y-2">
                 <div className="flex items-center gap-2 text-amber-600">
                   <Calendar className="h-3.5 w-3.5" />
@@ -559,7 +561,7 @@ export function StoragePurchaseDialog({
             )}
 
             {/* Downgrade Section */}
-            {purchasedStorageGb > 0 && scheduledDowngradeGb == null && (
+            {!isIcpMode && purchasedStorageGb > 0 && scheduledDowngradeGb == null && (
               <>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1.5 text-xs">
