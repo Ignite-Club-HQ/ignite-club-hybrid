@@ -10,6 +10,8 @@ import { toast } from "@/hooks/use-toast";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 import { cn } from "@/lib/utils";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 interface Msg {
   id: string;
@@ -24,6 +26,19 @@ interface Msg {
  * role holders. Access is enforced by RLS (club admins have none).
  */
 export default function CompetitionAdminChatPage() {
+  return resolveAuthBackend() === "icp" || isFeatureRoutedToIcp("messaging") ? <IcpCompetitionAdminEntry /> : <SupabaseCompetitionAdminChat />;
+}
+
+function IcpCompetitionAdminEntry() {
+  const { conversationId } = useParams<{ conversationId: string }>();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (conversationId) navigate(`/groups/${encodeURIComponent(conversationId)}`, { replace: true });
+  }, [conversationId, navigate]);
+  return null;
+}
+
+function SupabaseCompetitionAdminChat() {
   const { conversationId } = useParams<{ conversationId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();

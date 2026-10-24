@@ -65,6 +65,32 @@ export async function listLiveMessages(
   );
 }
 
+/** Exact caller-authorized DM identity, including empty conversations. */
+export async function getLiveDirectConversation(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const conversation = await unwrapCandid(actor.get_direct_conversation(conversationId), "Get direct conversation");
+  if (conversation.id !== conversationId || conversation.participants.length !== 2 ||
+      !conversation.participants.some(p => p.toText() === ctx.identity.getPrincipal().toText())) {
+    throw new Error("Direct conversation identity mismatch");
+  }
+  return { id: conversation.id, participant_1: conversation.participants[0].toText(), participant_2: conversation.participants[1].toText() };
+}
+
+export async function getLiveMessageWindow(ctx: FeatureBackendContext, conversationId: string, messageId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const page = await unwrapCandid(actor.get_message_window(conversationId, messageId), "Get message window");
+  if (!page.messages.some(m => m.id === messageId) || page.messages.some(m => m.conversation_id !== conversationId)) {
+    throw new Error("Message window identity mismatch");
+  }
+  return page;
+}
+
+export async function listLiveConversationOnlineUsers(ctx: FeatureBackendContext, conversationId: string): Promise<string[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const users = await unwrapCandid(actor.list_conversation_online_users(conversationId), "List conversation online users");
+  return users.map(p => p.toText());
+}
+
 export async function listLiveMessagesPage(
   ctx: FeatureBackendContext,
   conversationId: string,
