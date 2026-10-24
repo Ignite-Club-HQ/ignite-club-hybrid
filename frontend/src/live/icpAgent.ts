@@ -141,11 +141,64 @@ export async function createLiveActor<T>(
   const hit = perFactory.get(key);
   if (hit) return { actor: hit as T, canisterId };
   const actor = wrapUpdateCallsForPendingIndicator(
-    Actor.createActor<T>(idlFactoryForDomain, { agent, canisterId }),
+    wrapCallsForTimeResync(Actor.createActor<T>(idlFactoryForDomain, { agent, canisterId }), agent),
     idlFactoryForDomain,
   );
   perFactory.set(key, actor);
   return { actor, canisterId };
+}
+
+/** True when the replica rejected the call at ingress validation because the
+ * request's expiry fell outside its allowed window — the device's clock (or
+ * the agent's cached time offset) has drifted, typically after the phone
+ * slept. The call never executed, so one retry after re-syncing is safe for
+ * queries and updates alike. */
+export function isIngressExpiryError(error: unknown): boolean {
+  const m = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  return m.includes("invalid request expiry") || m.includes("ingress_expiry");
+}
+
+// One in-flight re-sync per agent: a burst of failing calls shares it instead
+// of stamping the replica with parallel time-sync reads.
+const agentTimeResync = new WeakMap<HttpAgent, Promise<void>>();
+
+function resyncAgentTime(agent: HttpAgent): Promise<void> {
+  const inFlight = agentTimeResync.get(agent);
+  if (inFlight) return inFlight;
+  const sync = agent.syncTime().finally(() => {
+    if (agentTimeResync.get(agent) === sync) agentTimeResync.delete(agent);
+  });
+  agentTimeResync.set(agent, sync);
+  return sync;
+}
+
+/**
+ * Wraps an actor's methods so a call rejected with "Invalid request expiry"
+ * re-syncs the agent's clock against the replica and retries exactly once.
+ * The agent syncs time at creation, but that offset goes stale when the
+ * device suspends; without this every call fails until the app is restarted.
+ */
+function wrapCallsForTimeResync<T>(actor: T, agent: HttpAgent): T {
+  const source = actor as Record<string, unknown>;
+  const wrapped: Record<string, unknown> = {};
+  for (const key of Object.keys(source)) {
+    const value = source[key];
+    if (typeof value !== "function") {
+      wrapped[key] = value;
+      continue;
+    }
+    const fn = value as (...callArgs: unknown[]) => Promise<unknown>;
+    wrapped[key] = async (...args: unknown[]) => {
+      try {
+        return await fn(...args);
+      } catch (error) {
+        if (!isIngressExpiryError(error)) throw error;
+        await resyncAgentTime(agent);
+        return fn(...args);
+      }
+    };
+  }
+  return wrapped as T;
 }
 const liveActorCache = new WeakMap<object, WeakMap<IDL.InterfaceFactory, Map<string, unknown>>>();
 
