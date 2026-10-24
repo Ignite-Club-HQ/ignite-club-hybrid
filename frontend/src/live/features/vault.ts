@@ -761,22 +761,12 @@ export async function restoreLiveVaultBackupWithMedia(
   const backup = await getLiveVaultBackup(ctx, id);
   const restoredRows = Number(await restoreLiveVaultBackup(ctx, id));
   const { blobAssetUrl } = await import("../mediaStorage");
-  const { clubIdFromMediaPath } = await import("../piiVetKeys");
   const report: LiveVaultBackupRestoreReport = { restoredRows, grantsRepaired: 0, grantFailures: 0, missingBytes: [] };
   for (const file of backup.files) {
     const ref = file.blob_ref?.[0];
     if (!ref) continue;
-    const clubId = clubIdFromMediaPath(ref.path);
-    if (clubId) {
-      try {
-        await grantLivePiiReadClub(ctx, ref.path, "blob", clubId);
-        report.grantsRepaired += 1;
-      } catch {
-        report.grantFailures += 1;
-      }
-    }
     try {
-      const res = await fetch(blobAssetUrl(ref.canister, ref.path), { method: "HEAD" });
+      const res = await fetch(blobAssetUrl(ref.canister, ref.path), { method: "GET", headers: { Range: "bytes=0-7" } });
       if (!res.ok) report.missingBytes.push(ref.path);
     } catch {
       report.missingBytes.push(ref.path);

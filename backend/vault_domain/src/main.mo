@@ -384,7 +384,7 @@ persistent actor class Main(governorInit : Principal) = this {
       description;
       color;
     };
-    folders := folders.concat([folder]);
+    folders := folders.concat([folder]); mediaEvidenceRevision += 1;
     #Ok(folder)
   
     } finally { removalReceiver.leave(caller) };
@@ -414,7 +414,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (folder.competition_id == null and not (await canAccessFolder(caller, folder))) return #Err("Folder access forbidden");
         if (folderFenced(id) or folders.find(func(f) = f.id == id) != ?folder) return #Err("Folder changed during authorization");
         let updated : Types.VaultFolder = { folder with name; restricted_roles; sort_order; description; color };
-        folders := folders.map(func(item) = if (item.id == id) { updated } else { item });
+        folders := folders.map(func(item) = if (item.id == id) { updated } else { item }); mediaEvidenceRevision += 1;
         #Ok(updated)
       };
     }
@@ -439,7 +439,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (folders.any(func(item) = item.parent_id == ?id and item.deleted_at_ms == null)) return #Err("Folder has subfolders");
         if (files.any(func(item) = item.folder_id == id and item.deleted_at_ms == null)) return #Err("Folder has files");
         let updated : Types.VaultFolder = { folder with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
-        folders := folders.map(func(item) = if (item.id == id) { updated } else { item });
+        folders := folders.map(func(item) = if (item.id == id) { updated } else { item }); mediaEvidenceRevision += 1;
         #Ok(updated)
       };
     }
@@ -505,6 +505,15 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  func competitionFolderVisible(caller : Principal, f : Types.VaultFolder, access : CompetitionVaultAccess) : Bool {
+    if (not access.is_member or f.club != access.club_id) return false;
+    var current = f; var visited : [Text] = [];
+    loop {
+      if (visited.size() >= 32 or visited.any(func id = id == current.id) or current.deleted_at_ms != null or current.club != f.club or current.competition_id != f.competition_id or (current.restricted_roles.size() > 0 and not access.can_manage)) return false;
+      visited := visited.concat([current.id]);
+      switch (current.parent_id) { case null return true; case (?id) current := folders.find(func p = p.id == id) ?? return false }
+    }
+  };
   public shared ({ caller }) func list_competition_folders(competition_id : Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
@@ -519,7 +528,7 @@ persistent actor class Main(governorInit : Principal) = this {
       folder.competition_id == ?competition_id and
       folder.club == access.club_id and
       folder.deleted_at_ms == null and
-      (folder.restricted_roles.size() == 0 or access.can_manage)
+      competitionFolderVisible(caller, folder, access)
     ))
   
     } finally { removalReceiver.leave(caller) };
@@ -542,7 +551,7 @@ persistent actor class Main(governorInit : Principal) = this {
           case null { #Err("Competition access unavailable") };
           case (?value) {
             if (value.club_id != folder.club or not value.is_member) return #Ok(null);
-            if (folder.restricted_roles.size() > 0 and not value.can_manage) return #Ok(null);
+            if (not competitionFolderVisible(caller, folder, value) or folders.find(func f = f.id == id) != ?folder) return #Ok(null);
             #Ok(?folder)
           };
         }
@@ -768,7 +777,7 @@ persistent actor class Main(governorInit : Principal) = this {
         case null { return #Err("Folder not found") };
         case (?folder) {
           if (folder.competition_id != ?competition_id or folder.club != access.club_id) return #Err("Competition folder scope mismatch");
-          if (folder.restricted_roles.size() > 0 and not access.can_manage) return #Err("Folder access forbidden");
+          if (not competitionFolderVisible(caller, folder, access)) return #Err("Folder access forbidden");
         };
       };
     };
@@ -1209,16 +1218,24 @@ persistent actor class Main(governorInit : Principal) = this {
     switch (backups.find(func(b : Types.Backup) : Bool = b.id == id)) {
       case null { #Err("Backup not found") };
       case (?backup) {
+        if (backup.folders.size() + backup.files.size() > 200) return #Err("Use bounded backup restore pages");
         var restored = 0;
-        let missingFolders = backup.folders.filter(func(f : Types.VaultFolder) : Bool =
-          not folders.any(func(item : Types.VaultFolder) : Bool = item.id == f.id) and f.deleted_at_ms == null and f.parent_id == null);
-        let missingFiles = backup.files.filter(func(f : Types.VaultFile) : Bool =
-          not files.any(func(item : Types.VaultFile) : Bool = item.id == f.id) and f.is_external_link and f.deleted_at_ms == null and deletionIntents.get(f.id) == null and (f.folder_id == "" or folders.any(func folder = folder.id == f.folder_id and folder.deleted_at_ms == null)));
-        restored += missingFolders.size();
-        restored += missingFiles.size();
-        folders := folders.concat(missingFolders);
-        mediaEvidenceRevision += 1;
-        files := files.concat(missingFiles);
+        for (f in backup.folders.values()) {
+          if (f.deleted_at_ms == null and not folders.any(func row = row.id == f.id) and
+            (f.parent_id == null or folders.any(func p = ?p.id == f.parent_id and p.deleted_at_ms == null and p.club == f.club and p.competition_id == f.competition_id))) {
+            if (not (await canWrite(caller, f.club, f.team, f.competition_id))) return #Err("Restore authority unavailable");
+            if (not folders.any(func row = row.id == f.id) and not isFenced(f.club)) { folders := folders.concat([f]); restored += 1; mediaEvidenceRevision += 1 }
+          }
+        };
+        for (f in backup.files.values()) {
+          if (f.deleted_at_ms == null and deletionIntents.get(f.id) == null and not files.any(func row = row.id == f.id)) {
+            let available = if (f.is_external_link) true else switch (f.blob_ref) { case (?ref) await verifyFileBytes(caller, ref, f.size); case null false };
+            if (available and (await canWrite(caller, f.club, f.team, f.competition_id)) and not files.any(func row = row.id == f.id) and deletionIntents.get(f.id) == null and not isFenced(f.club) and
+              (f.folder_id == "" or folders.any(func p = p.id == f.folder_id and p.deleted_at_ms == null and p.club == f.club and p.team == f.team and p.competition_id == f.competition_id and p.mini_league_id == f.mini_league_id))) {
+              files := files.concat([f]); restored += 1; mediaEvidenceRevision += 1
+            }
+          }
+        };
         #Ok(restored)
       };
     }
@@ -1364,7 +1381,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (files.find(func(f) = f.id == file.id) != ?file) return false;
     switch (folders.find(func(f) = f.id == file.folder_id)) {
       case null file.folder_id == "";
-      case (?folder) folder.club == file.club and folder.competition_id == file.competition_id and (await canAccessFolder(caller, folder))
+      case (?folder) folder.club == file.club and folder.team == file.team and folder.mini_league_id == file.mini_league_id and folder.competition_id == file.competition_id and (await canAccessFolder(caller, folder))
     }
   };
   func fileVisible(caller : Principal, file : Types.VaultFile, grants : [(Text, ?Text)]) : Bool {
@@ -1410,7 +1427,7 @@ persistent actor class Main(governorInit : Principal) = this {
             case (?a) {
               switch (folders.find(func x = x.id == f.folder_id)) {
                 case null f.folder_id == "";
-                case (?parent) folderVisible(caller, parent, if (a.can_manage) [("club_admin", null), ("committee_member", null), ("coach", null), ("team_admin", null)] else [])
+                case (?parent) competitionFolderVisible(caller, parent, a)
               }
             };
             case null fileVisible(caller, f, grants)
