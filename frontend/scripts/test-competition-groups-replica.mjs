@@ -38,6 +38,7 @@ try {
   denied(await c.register_team(competition, away, 'host')); // forged foreign ownership
   ok(await c.register_team(competition, home, 'host'));
   assert.equal(ok(await c.invite_team(competition, away)).club_id, 'guest');
+  denied(await c.record_match(competition, home, away));
   c.setPrincipal(stranger);
   denied(await c.respond_to_entry_invite(competition, away, true));
   denied(await c.list_matches(competition));
@@ -48,6 +49,15 @@ try {
   assert.equal(ok(await c.respond_to_entry_invite(competition, away, true)).club_id, 'guest');
   assert.deepEqual(ok(await c.read_competition_club(competition)), ['host']);
   assert.deepEqual(ok(await c.list_matches(competition)), []);
+  c.setPrincipal(manager);
+  const fixture = ok(await c.record_match(competition, home, away));
+  const broadcast = ok(await c.send_competition_broadcast(competition, 'Notice', 'Match confirmed'));
+  c.setPrincipal(stranger);
+  denied(await c.read_account_list_competition_broadcasts(competition));
+  denied(await c.read_account_competition_engagement_summary([competition], 0n, 9999999999999n));
+  c.setPrincipal(parent);
+  assert.equal(ok(await c.read_account_list_competition_broadcasts(competition))[0].id, broadcast.id);
+  assert.ok(ok(await c.read_my_competition_cards()).some(row => row.competition.id === competition));
   denied(await c.update_competition_settings(competition, 'Forged', [], 'open', 'private', 3, 1, 0));
   c.setPrincipal(governor);
   ok(await v.create_folder('cf', 'host', [], [], 'Competition docs', [], [], [competition], 0, [], []));
@@ -72,6 +82,9 @@ try {
   c.setPrincipal(manager);
   denied(await c.invite_team(competition, 'unknown'));
   denied(await c.update_competition_settings(competition, 'Revoked', [], 'open', 'private', 3, 1, 0));
+  denied(await c.set_match_result(fixture.id, 1, 0, 1n));
+  denied(await c.update_match_details(fixture.id, home, away, [], [], [], [], [], [], [], [], fixture.revision));
+  denied(await c.queue_competition_broadcast('forged-operation', competition, [], 'Notice', 'Forged'));
   c.setPrincipal(governor);
   // Token is capability-only; EOI IDs never reveal personal data to strangers.
   const eoi = ok(await c.submit_public_eoi('host', 'season', 'Parent', 'parent@example.invalid', [], 'Child', [], [], [], [], [3], [], [], [], 'app'));
