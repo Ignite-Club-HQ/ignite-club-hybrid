@@ -99,7 +99,7 @@ export function useChatSharedMedia(
           supabase: async () => [],
           icp: async (ctx) => {
             const page = await listLiveLatestMessagesPage(ctx, chatId, null, Math.min(100, Math.max(60, limit)));
-            const messages = page.messages;
+            const messages = [...page.messages];
             // Full viewer scans a bounded recent window; previews use one page.
             let cursor = page.next_sequence?.[0];
             for (let i = 1; limit > 100 && cursor !== undefined && i < 6; i++) {
@@ -335,7 +335,7 @@ export function useChatSharedMedia(
   // Optional labels never hold the actual attachments behind directory/Vault reads.
   const rows = mediaQuery.data ?? [];
   const { data: enriched } = useQuery({
-    queryKey: ["chat-shared-media-labels", user?.id, chatId, rows.map(row => row.id).join(","), options?.clubId, options?.competitionId],
+    queryKey: ["chat-shared-media-labels", user?.id, chatType, chatId, limit, rows.map(row => `${row.id}:${row.image_url}:${row.url ?? ""}`).join(","), options?.clubId, options?.competitionId],
     enabled: enabled && icp && rows.length > 0,
     queryFn: async () => {
       const [profiles, vault] = await Promise.all([
@@ -362,5 +362,9 @@ export function useChatSharedMedia(
     },
     staleTime: 60_000,
   });
-  return { ...mediaQuery, data: icp && enriched ? enriched : mediaQuery.data };
+  const enrichedById = new Map(enriched?.map(item => [item.id, item]));
+  return { ...mediaQuery, data: icp && mediaQuery.data ? mediaQuery.data.map(item => {
+    const label = enrichedById.get(item.id);
+    return label ? { ...item, label: label.label ?? item.label, author_name: label.author_name, author_avatar: label.author_avatar } : item;
+  }) : mediaQuery.data };
 }
