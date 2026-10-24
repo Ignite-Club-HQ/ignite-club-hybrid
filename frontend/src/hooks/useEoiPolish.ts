@@ -3,8 +3,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { resendLiveEoiInvite, bulkResendLiveEoiInvites } from "@/live/features/competitions";
-import { writeEoiInScope } from "@/live/competitionRouting";
 
 /** Resend the magic-link invite for a given EOI submission. */
 export function useResendEoiInvite() {
@@ -18,14 +16,8 @@ export function useResendEoiInvite() {
           });
           if (error) throw error;
         },
-        // The canister call is the bookkeeping half (invite_sent_at/count);
-        // actual email delivery still goes through the Supabase edge function
-        // below since there is no email fan-out on the canister.
-        icp: async (ctx) => {
-          await resendLiveEoiInvite(ctx, submissionId);
-          await supabase.functions.invoke("send-eoi-invite", {
-            body: { submission_id: submissionId },
-          });
+        icp: async () => {
+          throw new Error("Email reminders are not connected for Internet Identity yet; no email was sent.");
         },
       }, writeOnce({ eoiId: submissionId })),
     onSuccess: () => {
@@ -58,19 +50,8 @@ export function useBulkResendEoiInvites() {
           }
           return { ok, fail };
         },
-        // Canister call is the bookkeeping half; email delivery stays on Supabase.
-        icp: async (ctx) => {
-          for (const id of submissionIds) await writeEoiInScope(ctx, id, scoped => resendLiveEoiInvite(scoped, id));
-          let ok = 0;
-          let fail = 0;
-          for (const id of submissionIds) {
-            const { error } = await supabase.functions.invoke("send-eoi-invite", {
-              body: { submission_id: id },
-            });
-            if (error) fail++;
-            else ok++;
-          }
-          return { ok, fail };
+        icp: async () => {
+          throw new Error("Email reminders are not connected for Internet Identity yet; no email was sent.");
         },
       }, { shared: "person" }),
     onSuccess: ({ ok, fail }) => {
@@ -78,5 +59,6 @@ export function useBulkResendEoiInvites() {
       else toast.warning(`Sent ${ok}, failed ${fail}`);
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
     },
+    onError: () => toast.error("Could not send reminders"),
   });
 }

@@ -1322,7 +1322,7 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
-    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -2000,12 +2000,19 @@ export interface MainInterface {
      * / Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
      * / Any NEW stored principal / principal-text field added to this canister must be added here.
      */
-    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
         __kind__: "err";
         err: string;
+    }>;
+    relay_competition_broadcast(user: Principal, club: string, competition: string, team_ids: Array<string>, officials: Array<Principal>, body: string, key: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
     }>;
     relay_event_notice(users: Array<string>, club: string, kind: string, body: string, key: string, event_id: string): Promise<{
         __kind__: "Ok";
@@ -5813,6 +5820,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
         return from_candid_variant_n243(result);
+    }
+    async relay_competition_broadcast(arg0: Principal, arg1: string, arg2: string, arg3: Array<string>, arg4: Array<Principal>, arg5: string, arg6: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.relay_competition_broadcast(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+        return from_candid_variant_n289(result);
     }
     async relay_event_notice(arg0: Array<string>, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string): Promise<{
         __kind__: "Ok";

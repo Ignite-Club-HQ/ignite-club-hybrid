@@ -1234,7 +1234,7 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
-   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -1756,11 +1756,17 @@ type Main =
      });
    /// Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
    /// Any NEW stored principal / principal-text field added to this canister must be added here.
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
      });
+   relay_competition_broadcast: (user: principal, club: text, competition:
+    text, team_ids: vec text, officials: vec principal, body: text, key:
+    text) -> (variant {
+                Err: text;
+                Ok: nat16;
+              });
    relay_event_notice: (users: vec text, club: text, kind: text, body: 
     text, key: text, event_id: text) -> (variant {
                                            Err: text;

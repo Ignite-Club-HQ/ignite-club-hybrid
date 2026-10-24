@@ -1579,6 +1579,19 @@ export interface Main {
     { 'ok' : bigint } |
       { 'err' : string }
   >,
+  'relay_competition_broadcast' : ActorMethod<
+    [
+      Principal,
+      string,
+      string,
+      Array<string>,
+      Array<Principal>,
+      string,
+      string,
+    ],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'relay_event_notice' : ActorMethod<
     [Array<string>, string, string, string, string, string],
     { 'Ok' : number } |

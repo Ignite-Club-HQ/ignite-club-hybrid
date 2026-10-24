@@ -6,6 +6,7 @@ import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
 import { idlFactory as compIdl } from '../src/lab/bindings/competition_domain/declarations/competition_domain.did.js';
 import { idlFactory as vaultIdl } from '../src/lab/bindings/vault_domain/declarations/vault_domain.did.js';
+import { idlFactory as queueIdl } from '../src/lab/bindings/notification_queue/declarations/notification_queue.did.js';
 const governor = Principal.fromUint8Array(Uint8Array.from([1, 1]));
 const manager = Principal.fromUint8Array(Uint8Array.from([2, 1]));
 const parent = Principal.fromUint8Array(Uint8Array.from([3, 1]));
@@ -18,6 +19,7 @@ try {
   const setup = (idlFactory, name) => pic.setupCanister({ idlFactory, wasm: process.env[name], sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]) });
   const A = await setup(clubIdl, 'CLUB_DOMAIN_WASM'), B = await setup(clubIdl, 'CLUB_DOMAIN_WASM');
   const C = await setup(compIdl, 'COMPETITION_DOMAIN_WASM'), V = await setup(vaultIdl, 'VAULT_DOMAIN_WASM');
+  const QA = await setup(queueIdl, 'NOTIFICATION_QUEUE_WASM'), QB = await setup(queueIdl, 'NOTIFICATION_QUEUE_WASM');
   const a = A.actor, b = B.actor, c = C.actor, v = V.actor;
   for (const actor of [a, b, c, v]) actor.setPrincipal(governor);
   ok(await a.create_club('host', 'Host FC', 'host', [], []));
@@ -30,6 +32,11 @@ try {
   ok(await b.set_competition_authorities([C.canisterId]));
   ok(await c.set_club_domain_canister(A.canisterId));
   ok(await c.set_participant_club_authorities([A.canisterId, B.canisterId]));
+  for (const [club, queue] of [[a, QA], [b, QB]]) {
+    queue.actor.setPrincipal(governor);
+    ok(await queue.actor.set_club_domain_canister(club === a ? A.canisterId : B.canisterId));
+    ok(await club.set_notification_queue_canister(queue.canisterId));
+  }
   ok(await c.set_vault_domain_canister(V.canisterId));
   ok(await v.set_club_domain_canister(A.canisterId));
   ok(await v.set_competition_domain_canister(C.canisterId));
@@ -38,6 +45,7 @@ try {
   denied(await c.register_team(competition, away, 'host')); // forged foreign ownership
   ok(await c.register_team(competition, home, 'host'));
   assert.equal(ok(await c.invite_team(competition, away)).club_id, 'guest');
+  denied(await c.record_match(competition, home, away));
   c.setPrincipal(stranger);
   denied(await c.respond_to_entry_invite(competition, away, true));
   denied(await c.list_matches(competition));
@@ -48,6 +56,31 @@ try {
   assert.equal(ok(await c.respond_to_entry_invite(competition, away, true)).club_id, 'guest');
   assert.deepEqual(ok(await c.read_competition_club(competition)), ['host']);
   assert.deepEqual(ok(await c.list_matches(competition)), []);
+  c.setPrincipal(manager);
+  const fixture = ok(await c.record_match(competition, home, away));
+  c.setPrincipal(stranger);
+  denied(await c.move_team_division(competition, home, [], ['new-division'], true));
+  c.setPrincipal(manager);
+  ok(await c.assign_division(competition, home, ['old-division']));
+  ok(await c.update_match_details(fixture.id, home, away, ['old-division'], [], [], [], [], [], [], [], 1n));
+  const completed = ok(await c.record_match(competition, home, away));
+  ok(await c.set_match_result(completed.id, 2, 1, completed.revision));
+  assert.equal(ok(await c.move_team_division(competition, home, ['old-division'], ['new-division'], true)), 1n);
+  assert.ok(ok(await c.list_matches(competition)).some(m => m.id === completed.id && m.status === 'completed'));
+  denied(await c.move_team_division(competition, home, ['old-division'], ['other-division'], true));
+  const broadcast = ok(await c.send_competition_broadcast(competition, 'Notice', 'Match confirmed'));
+  assert.ok(ok(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Match notice')) > 0n);
+  const acknowledged = ok(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Match notice'));
+  assert.ok(acknowledged > 0n);
+  denied(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Changed payload'));
+  QB.actor.setPrincipal(parent);
+  assert.equal(ok(await QB.actor.list_inbox(parent.toText(), ['guest'], 100)).filter(n => n.kind === 'competition_broadcast').length, 1);
+  c.setPrincipal(stranger);
+  denied(await c.read_account_list_competition_broadcasts(competition));
+  denied(await c.read_account_competition_engagement_summary([competition], 0n, 9999999999999n));
+  c.setPrincipal(parent);
+  assert.ok(ok(await c.read_account_list_competition_broadcasts(competition)).some(row => row.id === broadcast.id));
+  assert.ok(ok(await c.read_my_competition_cards()).some(row => row.competition.id === competition));
   denied(await c.update_competition_settings(competition, 'Forged', [], 'open', 'private', 3, 1, 0));
   c.setPrincipal(governor);
   ok(await v.create_folder('cf', 'host', [], [], 'Competition docs', [], [], [competition], 0, [], []));
@@ -72,6 +105,9 @@ try {
   c.setPrincipal(manager);
   denied(await c.invite_team(competition, 'unknown'));
   denied(await c.update_competition_settings(competition, 'Revoked', [], 'open', 'private', 3, 1, 0));
+  denied(await c.set_match_result(completed.id, 1, 0, 2n));
+  denied(await c.update_match_details(completed.id, home, away, [], [], [], [], [], [], [], [], 2n));
+  denied(await c.queue_competition_broadcast('forged-operation', competition, [], 'Notice', 'Forged'));
   c.setPrincipal(governor);
   // Token is capability-only; EOI IDs never reveal personal data to strangers.
   const eoi = ok(await c.submit_public_eoi('host', 'season', 'Parent', 'parent@example.invalid', [], 'Child', [], [], [], [], [3], [], [], [], 'app'));
@@ -93,5 +129,5 @@ try {
   ok(await c.set_transfer_fence('host', true));
   c.setPrincipal(parent);
   denied(await c.update_eoi_submission(eoi, ['changed'], [], []));
-  console.log('PASS: real two-group foreign-team ownership, participant/private-vault access, stranger and revoked-parent denial, removed-admin mutations, EOI claim/replay/privacy, mixed-club suggestion refusal and fenced parent writes.');
+  console.log('PASS: real two-group ownership/private access, atomic division cleanup retaining completed results, stale-division refusal, queued broadcast deduplication, removed-admin mutations, EOI claim/replay/privacy and fenced writes.');
 } finally { await pic?.tearDown(); await server.stop(); }

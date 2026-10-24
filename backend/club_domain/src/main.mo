@@ -1251,11 +1251,11 @@ persistent actor class Main(governorInit : Principal) = this {
     if (team_ids.size() > 100 or officials.size() > 500 or body.size() > 4000 or key.size() > 512) return #Err("Invalid broadcast");
     if (team_ids.any(func t = liveTeamClub(t) != ?club)) return #Err("Foreign competition team");
     let audience = { club_id = club; competition_id = competition; team_ids; recipients = officials; can_publish = true };
-    let recipients = competitionNewsRecipients(audience).filter(func p = not Principal.isAnonymous(p) and not removalReceiver.denied(p) and not isExcluded(p, club));
+    let recipients = competitionNewsRecipients(audience).filter(func p = not Principal.isAnonymous(p) and not removalReceiver.denied(p) and not isExcluded(p, club)).sort(Principal.compare);
     if (recipients.size() > 500) return #Err("Broadcast audience exceeds bound");
     for (p in recipients.values()) { await admitAccount(p) };
     if (not trustedCompetition(caller) or isTransferFenced(club) or removalReceiver.denied(user) or team_ids.any(func t = liveTeamClub(t) != ?club)) return #Err("Broadcast authority changed");
-    let current = competitionNewsRecipients(audience).filter(func p = not Principal.isAnonymous(p) and not removalReceiver.denied(p) and not isExcluded(p, club));
+    let current = competitionNewsRecipients(audience).filter(func p = not Principal.isAnonymous(p) and not removalReceiver.denied(p) and not isExcluded(p, club)).sort(Principal.compare);
     if (current != recipients) return #Err("Broadcast audience changed");
     let queueId = notificationQueueCanister ?? return #Err("Notification queue unavailable");
     let queue : actor { enqueue_competition_broadcast : shared ([Text], Text, Text, Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(queueId.toText());

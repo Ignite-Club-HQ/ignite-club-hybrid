@@ -541,6 +541,11 @@ export interface Main {
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
   >,
+  'move_team_division' : ActorMethod<
+    [string, string, [] | [string], [] | [string], boolean],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'prepare_account_removal' : ActorMethod<
     [Request],
     { 'Ok' : null } |
@@ -548,6 +553,12 @@ export interface Main {
   >,
   'purge_club_snapshot' : ActorMethod<
     [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'purge_my_data' : ActorMethod<[], { 'Ok' : bigint } | { 'Err' : string }>,
+  'queue_competition_broadcast' : ActorMethod<
+    [string, string, Array<string>, string, string],
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,

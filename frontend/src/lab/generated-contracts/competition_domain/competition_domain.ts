@@ -699,6 +699,13 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
+    move_team_division(competition_id: string, team_id: string, expected_division: string | null, division_id: string | null, clear_fixtures: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     prepare_account_removal(request: Request): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -707,6 +714,20 @@ export interface MainInterface {
         Err: string;
     }>;
     purge_club_snapshot(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    queue_competition_broadcast(operation: string, competition: string, divisions: Array<string>, title: string, body: string): Promise<{
         __kind__: "Ok";
         Ok: bigint;
     } | {
@@ -2098,6 +2119,16 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.memory_stats();
         return result;
     }
+    async move_team_division(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.move_team_division(arg0, arg1, to_candid_opt_n10(arg2), to_candid_opt_n10(arg3), arg4);
+        return from_candid_variant_n70(result);
+    }
     async prepare_account_removal(arg0: Request): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -2116,6 +2147,26 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
+        return from_candid_variant_n70(result);
+    }
+    async purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_my_data();
+        return from_candid_variant_n70(result);
+    }
+    async queue_competition_broadcast(arg0: string, arg1: string, arg2: Array<string>, arg3: string, arg4: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.queue_competition_broadcast(arg0, arg1, arg2, arg3, arg4);
         return from_candid_variant_n70(result);
     }
     async read_account_can_invite_players_to_team(arg0: string): Promise<boolean> {

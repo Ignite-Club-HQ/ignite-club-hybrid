@@ -3,6 +3,7 @@ import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
 import Map "mo:core/Map";
 import Error "mo:core/Error";
+import Iter "mo:core/Iter";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -62,7 +63,8 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   var items : [Types.Notification];
-  var competitionBroadcastReceipts : Map.Map<Text, { club : Text; related : Text; body : Text; users : [Text]; count : Nat16 }>;
+  var competitionBroadcastReceipts : Map.Map<Text, { club : Text; related : Text; body : Text; count : Nat16 }>;
+  var competitionBroadcastAudiences : Map.Map<Text, [Text]>;
   var leases : [Types.Lease];
   var governor : ?Principal;
 
@@ -600,9 +602,12 @@ persistent actor class Main(governorInit : Principal) = this {
     if (clubDomainCanister != ?caller or isFenced(club)) return #Err("Trusted club relay required");
     if (users.size() > 500 or body.size() > 4000 or not valid(club) or not valid(related) or key.size() > 512) return #Err("Invalid broadcast scope");
     let receiptKey = club # "\u{1f}" # key;
+    let audience = users.sort(Text.compare);
+    if (audience.any(func user = not valid(user))) return #Err("Invalid broadcast recipient");
     switch (Map.get(competitionBroadcastReceipts, Text.compare, receiptKey)) {
       case (?r) {
-        if (r.club != club or r.related != related or r.body != body or r.users != users) return #Err("Broadcast receipt conflict");
+        if (r.club != club or r.related != related or r.body != body) return #Err("Broadcast receipt conflict");
+        if (Map.get(competitionBroadcastAudiences, Text.compare, receiptKey) != ?audience) return #Err("Broadcast audience receipt conflict");
         return #Ok(r.count)
       };
       case null {}
@@ -614,11 +619,13 @@ persistent actor class Main(governorInit : Principal) = this {
     for (user in users.values()) {
       let id = receiptKey # "-" # user;
       if (recipientAllowed(user, "competition_broadcast") and get(id) == null) {
-        items := items.concat([{ id; user; club; kind = "competition_broadcast"; body; idempotency_key = key; status = #Pending; attempts = 0; next_attempt_ms = 0; read = false; related_id = ?related; created_at_ms = stamp }]);
+        let item : Types.Notification = { id; user; club; kind = "competition_broadcast"; body; idempotency_key = key; status = #Pending; attempts = 0; next_attempt_ms = 0; read = false; related_id = ?related; created_at_ms = stamp };
+        items := items.concat([item]);
         count += 1
       }
     };
-    Map.add(competitionBroadcastReceipts, Text.compare, receiptKey, { club; related; body; users; count });
+    Map.add(competitionBroadcastReceipts, Text.compare, receiptKey, { club; related; body; count });
+    Map.add(competitionBroadcastAudiences, Text.compare, receiptKey, audience);
     #Ok(count)
   };
 
@@ -1676,9 +1683,20 @@ persistent actor class Main(governorInit : Principal) = this {
     conflicts += scheduled.filter(func(s : Types.ScheduledMessage) : Bool = s.author == newText).size();
     conflicts += digests.filter(func(d : Types.DigestItem) : Bool = d.mentions.any(func(m : Text) : Bool = m == newText)).size();
     conflicts += switch (push_settings) { case (?p) { if (p.updated_by == ?newText) { 1 } else { 0 } }; case null { 0 } };
+    for ((_, audience) in Map.entries(competitionBroadcastAudiences)) if (audience.any(func user = user == newText)) conflicts += 1;
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in notification_queue");
 
     var changed = 0;
+    let broadcastAudienceUpdates = Iter.toArray(Map.entries(competitionBroadcastAudiences)).map(func pair {
+      let (key, audience) = pair;
+      if (audience.any(func user = user == oldText)) changed += 1;
+      var canonical : [Text] = [];
+      for (user in audience.values()) {
+        let mapped = if (user == oldText) newText else user;
+        if (not canonical.any(func existing = existing == mapped)) canonical := canonical.concat([mapped]);
+      };
+      (key, canonical.sort(Text.compare))
+    });
 
     let newItems = items.map(func(n : Types.Notification) : Types.Notification {
       if (n.user == oldText) { changed += 1; { n with user = newText } } else { n }
@@ -1748,6 +1766,7 @@ persistent actor class Main(governorInit : Principal) = this {
       device_tokens := dedupedDeviceTokens;
       preferences := newPreferences;
       deviceVersions := newDeviceVersions;
+      for ((key, audience) in broadcastAudienceUpdates.values()) Map.add(competitionBroadcastAudiences, Text.compare, key, audience);
     };
 
     #ok(changed)

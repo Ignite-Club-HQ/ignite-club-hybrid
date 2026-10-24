@@ -27,6 +27,10 @@ try {
     ok(await club.actor.create_club(id, id, id, [], []));
     for (const user of [removed, retained]) ok(await club.actor.add_role_grant(user, id, 'player', []));
     ok(await queue.actor.set_club_domain_canister(club.canisterId));
+    queue.actor.setPrincipal(stranger);
+    assert.ok('Err' in await queue.actor.fan_out([retained.toText()], id, 'competition_broadcast', 'forged', 'forged', []));
+    assert.ok('Err' in await queue.actor.enqueue('forged', retained.toText(), id, 'competition_broadcast', 'forged', 'forged'));
+    queue.actor.setPrincipal(governor);
     ok(await queue.actor.set_messaging_domain_canister(messaging.canisterId));
     ok(await queue.actor.grant_worker(worker));
     ok(await messaging.actor.set_club_domain_canister(club.canisterId));

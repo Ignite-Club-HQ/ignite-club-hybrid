@@ -270,6 +270,12 @@ export async function assignLiveDivision(
   );
 }
 
+export async function moveLiveTeamDivision(ctx: FeatureBackendContext, competitionId: string, teamId: string,
+  expectedDivision: string | null, divisionId: string | null, clearFixtures: boolean) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return Number(await unwrapCandid(actor.move_team_division(competitionId, teamId, candidOpt(expectedDivision), candidOpt(divisionId), clearFixtures), "Move team division"));
+}
+
 /** Counterpart of the Supabase duplicate_season_structure RPC. */
 export async function duplicateLiveSeason(
   ctx: FeatureBackendContext,
@@ -878,7 +884,7 @@ export async function sendLiveCompetitionBroadcast(ctx: FeatureBackendContext, c
 
 export async function listLiveCompetitionBroadcasts(ctx: FeatureBackendContext, competitionId: string) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_competition_broadcasts(competitionId), "List broadcasts");
+  return unwrapCandid(actor.read_account_list_competition_broadcasts(competitionId), "List broadcasts");
 }
 
 /**

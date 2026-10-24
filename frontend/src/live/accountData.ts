@@ -93,7 +93,7 @@ export async function eraseMyIcpAccount(
       import('./accountDeletionInventory'), import('./domains'),
     ]);
     inventory = await openAccountDeletionInventory(target, identity,
-      ['club_domain', 'vault_domain', 'events_domain', 'messaging_domain']);
+      ['club_domain', 'vault_domain', 'events_domain', 'messaging_domain', 'competition_domain']);
     if (inventory.revision !== undefined) await client.prepareAccountDeletion(account.id, inventory.revision);
     // Revoke the independent club authorization source before erasing the
     // identity profile. Partial failure is surfaced and safe to retry.
@@ -112,6 +112,7 @@ export async function eraseMyIcpAccount(
       ["vault", "connectLiveVaultDomain", "vault_domain"],
       ["events", "connectLiveEventsDomain", "events_domain"],
       ["messaging", "connectLiveMessagingDomain", "messaging_domain"],
+      ["competitions", "connectLiveCompetitionDomain", "competition_domain"],
     ] as const) {
       for (const t of inventory.targetsFor(domain)) {
       await inventory.validate();

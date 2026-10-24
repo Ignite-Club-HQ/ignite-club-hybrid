@@ -4,13 +4,14 @@ import { eraseMyIcpAccount } from "./accountData";
 
 const mocks = vi.hoisted(() => ({
   whoami: vi.fn(), erase: vi.fn(), dispose: vi.fn(), revoke: vi.fn(),
-  purgeVault: vi.fn(), purgeEvents: vi.fn(), purgeMessaging: vi.fn(),
+  purgeVault: vi.fn(), purgeEvents: vi.fn(), purgeMessaging: vi.fn(), purgeCompetitions: vi.fn(),
 }));
 vi.mock("./domains", () => ({
   connectLiveClubDomain: async () => ({ actor: { erase_my_membership: mocks.revoke } }),
   connectLiveVaultDomain: async () => ({ actor: { purge_my_data: mocks.purgeVault } }),
   connectLiveEventsDomain: async () => ({ actor: { purge_my_data: mocks.purgeEvents } }),
   connectLiveMessagingDomain: async () => ({ actor: { purge_my_data: mocks.purgeMessaging } }),
+  connectLiveCompetitionDomain: async () => ({ actor: { purge_my_data: mocks.purgeCompetitions } }),
 }));
 vi.mock("./targetRegistry", () => ({ getActiveIcpTarget: () => ({ alias: "test" }) }));
 vi.mock("./identityAccess", () => ({
@@ -28,6 +29,7 @@ beforeEach(() => {
   mocks.purgeVault.mockResolvedValue({ Ok: 3 });
   mocks.purgeEvents.mockResolvedValue({ Ok: 5 });
   mocks.purgeMessaging.mockResolvedValue({ Ok: 7 });
+  mocks.purgeCompetitions.mockResolvedValue({ Ok: 2 });
 });
 describe("caller account erasure", () => {
   it("erases the account, revokes club access and purges personal content on every domain", async () => {
@@ -37,6 +39,7 @@ describe("caller account erasure", () => {
     expect(mocks.purgeVault).toHaveBeenCalledTimes(1);
     expect(mocks.purgeEvents).toHaveBeenCalledTimes(1);
     expect(mocks.purgeMessaging).toHaveBeenCalledTimes(1);
+    expect(mocks.purgeCompetitions).toHaveBeenCalledTimes(1);
     expect(result.note).toContain("permanently removed");
     expect(result.note).not.toContain("could not be completed");
     expect(mocks.dispose).toHaveBeenCalledTimes(1);

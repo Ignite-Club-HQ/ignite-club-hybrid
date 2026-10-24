@@ -643,6 +643,34 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     false
   };
+  public shared ({ caller }) func purge_my_data() : async { #Ok : Nat; #Err : Text } {
+    auth(caller);
+    if (isGovernor(caller)) return #Err("Governor erasure forbidden");
+    var count = roles.filter(func r = r.user == caller).size();
+    roles := roles.filter(func r = r.user != caller);
+    count += competitionInvites.filter(func r = r.invitee == caller or r.created_by == caller).size();
+    competitionInvites := competitionInvites.filter(func r = r.invitee != caller and r.created_by != caller);
+    competitionJoinLinks := competitionJoinLinks.map(func r = if (r.created_by == caller) ({ r with revoked = true; created_by = Principal.anonymous() }) else r);
+    roleLinks := roleLinks.map(func r = if (r.created_by == caller) ({ r with revoked = true; created_by = Principal.anonymous() }) else r);
+    let removedInviteTokens = competitionOfficialEmailInvites.filter(func r = r.created_by == caller or r.accepted_by == ?caller).map(func r = r.token);
+    competitionWelcomeJobs := competitionWelcomeJobs.filter(func r = not removedInviteTokens.any(func token = token == r.token));
+    competitionOfficialEmailInvites := competitionOfficialEmailInvites.filter(func r = r.created_by != caller and r.accepted_by != ?caller);
+    competitionMemberWelcomeJobs := competitionMemberWelcomeJobs.filter(func r = r.member != caller);
+    personalCompetitionOwners := personalCompetitionOwners.filter(func r = r.1 != caller);
+    tokens := tokens.map(func r = if (r.issued_by == caller) ({ r with used = true; issued_by = Principal.anonymous() }) else r);
+    broadcasts := broadcasts.map(func r = if (r.sender == caller) ({ r with sender = Principal.anonymous() }) else r);
+    eoiSubmissions := eoiSubmissions.filter(func r = r.parent_user_id != ?caller);
+    playhqClaims := playhqClaims.filter(func r = r.user != caller);
+    bulkAccessPrincipals := bulkAccessPrincipals.filter(func p = p != caller);
+    // Keep unknown-write evidence, but scrub identity and make it non-replayable.
+    for ((key, receipt) in Map.entries(broadcastDeliveries).toArray().values()) {
+      if (receipt.sender == caller) {
+        Map.remove(broadcastDeliveries, Text.compare, key);
+        Map.add(broadcastDeliveries, Text.compare, "erased:" # receipt.broadcast_id, { receipt with sender = Principal.anonymous() });
+      }
+    };
+    #Ok(count)
+  };
   public shared ({ caller }) func read_my_competition_cards() : async { #Ok : [{ competition : Types.Competition; entries : [Types.TeamEntry] }]; #Err : Text } {
     if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
     try {
@@ -655,7 +683,17 @@ persistent actor class Main(governorInit : Principal) = this {
         let invited = if (visible) false else await invitedManager(caller, item.id);
         if (removalReceiver.denied(caller)) return #Err("Account access changed");
         if ((visible or invited) and not compFenced(item.id) and competitions.any(func current = current == item)) {
-          rows := rows.concat([{ competition = item; entries = entries.filter(func e = e.competition_id == item.id) }]);
+          var scopedEntries : [Types.TeamEntry] = [];
+          if (canManageCompetition(caller, item.id)) {
+            scopedEntries := entries.filter(func e = e.competition_id == item.id);
+          } else {
+            for (entry in entries.filter(func e = e.competition_id == item.id).values()) {
+              let access = await teamAccess(caller, entry.team_id);
+              if (removalReceiver.denied(caller) or compFenced(item.id)) return #Err("Competition access changed");
+              if ((access.can_manage or (access.is_member and (entry.status == "accepted" or entry.status == "registered"))) and entries.any(func current = current == entry)) scopedEntries := scopedEntries.concat([entry]);
+            };
+          };
+          if (competitions.any(func current = current == item)) rows := rows.concat([{ competition = item; entries = scopedEntries }]);
         }
       };
       #Ok(rows)
@@ -874,6 +912,24 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  // One local commit: completed results are never cleared by a division move.
+  public shared ({ caller }) func move_team_division(competition_id : Text, team_id : Text, expected_division : ?Text, division_id : ?Text, clear_fixtures : Bool) : async { #Ok : Nat; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller); await syncForCompetition(caller, competition_id);
+      if (removalReceiver.denied(caller) or compFenced(competition_id) or not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+      switch (division_id) { case (?d) { if (d.size() == 0 or d.size() > 128) return #Err("Invalid division") }; case null {} };
+      let current = entries.find(func e = e.competition_id == competition_id and e.team_id == team_id) ?? return #Err("Team not registered");
+      if (current.division_id != expected_division) return #Err("Team division changed; refresh before moving");
+      if (current.division_id == division_id) return #Ok(0);
+      let affected = matches.filter(func m = clear_fixtures and m.competition_id == competition_id and m.status != "completed" and (m.home_team == team_id or m.away_team == team_id) and ((expected_division == null and division_id == null) or (m.division_id != null and (m.division_id == expected_division or m.division_id == division_id))));
+      if (affected.any(func m = matchFenced(m.id))) return #Err("Fixture temporarily locked");
+      entries := entries.map(func e = if (e == current) ({ e with division_id }) else e);
+      matches := matches.filter(func m = not affected.any(func removed = removed.id == m.id));
+      #Ok(affected.size())
+    } finally { removalReceiver.leave(caller) }
   };
 
   public shared ({ caller }) func issue_join_token(competition_id : Text, team_id : Text, expires_at_ms : Nat64) : async { #Ok : Types.JoinToken; #Err : Text } {
@@ -2705,6 +2761,9 @@ persistent actor class Main(governorInit : Principal) = this {
       if (removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller, competition)) return #Err("Competition manager required");
       if (operation.size() == 0 or operation.size() > 128 or divisions.size() > 100 or title.size() > 200 or body.size() == 0 or body.size() > 4000) return #Err("Invalid broadcast");
       let key = caller.toText() # "\u{1f}" # operation;
+      for ((otherKey, pending) in Map.entries(broadcastDeliveries)) {
+        if (otherKey != key and pending.sender == caller and pending.competition == competition and pending.unknown != null) return #Err("Previous broadcast outcome unresolved; no new send permitted");
+      };
       var receipt = switch (Map.get(broadcastDeliveries, Text.compare, key)) {
         case (?existing) {
           if (existing.sender != caller or existing.competition != competition or existing.divisions != divisions or existing.title != title or existing.body != body) return #Err("Broadcast operation conflict");
@@ -2718,7 +2777,7 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
       Map.add(broadcastDeliveries, Text.compare, key, receipt);
-      let selected = entries.filter(func e = e.competition_id == competition and (e.status == "accepted" or e.status == "registered") and (divisions.size() == 0 or (switch e.division_id { case null false; case (?d) divisions.any(func v = v == d) })));
+      let selected = entries.filter(func e = e.competition_id == competition and (e.status == "accepted" or e.status == "registered") and (divisions.size() == 0 or (switch (e.division_id) { case null false; case (?d) divisions.any(func v = v == d) })));
       if (selected.size() > 100) return #Err("Broadcast team inventory exceeds bound");
       var clubIds : [Text] = [];
       for (entry in selected.values()) if (not clubIds.any(func id = id == entry.club_id)) clubIds := clubIds.concat([entry.club_id]);
@@ -2746,11 +2805,16 @@ persistent actor class Main(governorInit : Principal) = this {
           await syncForCompetition(caller, competition);
           if (removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller, competition) or not selected.all(func e = entries.any(func current = current == e))) return #Err("Broadcast access changed");
           let officials = if (club == host) roles.filter(func r = r.competition_id == competition).map(func r = r.user) else [];
+          if (Map.get(broadcastDeliveries, Text.compare, key) != ?receipt) return #Err("Broadcast operation already active");
           receipt := { receipt with unknown = ?club }; Map.add(broadcastDeliveries, Text.compare, key, receipt);
           let service : actor { relay_competition_broadcast : shared (Principal, Text, Text, [Text], [Principal], Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
           let reply = try { await (with timeout = 10) service.relay_competition_broadcast(caller, club, competition, clubTeams, officials, body, receipt.broadcast_id) } catch (_) { return #Err("Broadcast outcome unresolved; retain original operation") };
           switch reply {
-            case (#Err(e)) { receipt := { receipt with unknown = null }; Map.add(broadcastDeliveries, Text.compare, key, receipt); return #Err(e) };
+            case (#Err(e)) {
+              receipt := { receipt with unknown = null };
+              Map.add(broadcastDeliveries, Text.compare, key, receipt);
+              return #Err("Broadcast not queued: " # e)
+            };
             case (#Ok(n)) { count += Nat16.toNat(n); receipt := { receipt with unknown = null; completed = receipt.completed.concat([(club, n)]) }; Map.add(broadcastDeliveries, Text.compare, key, receipt) }
           }
         }
@@ -2800,6 +2864,7 @@ persistent actor class Main(governorInit : Principal) = this {
     conflicts += competitionJoinLinks.filter(func(item) = item.created_by.equal(new)).size();
     conflicts += eoiSubmissions.filter(func(item) = item.parent_user_id == ?new).size();
     conflicts += broadcasts.filter(func(item) = item.sender.equal(new)).size();
+    for ((_, receipt) in Map.entries(broadcastDeliveries)) if (receipt.sender == new) conflicts += 1;
     conflicts += playhqClaims.filter(func(item)=item.user==new).size();
     if (bulkAccessPrincipals.any(func(p) = p.equal(new))) { conflicts += 1 };
 
@@ -2830,6 +2895,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let newBroadcasts = broadcasts.map(func(item : Types.Broadcast) : Types.Broadcast {
       if (item.sender.equal(old)) { changed += 1; { item with sender = new } } else item
     });
+    for ((_, receipt) in Map.entries(broadcastDeliveries)) if (receipt.sender == old) changed += 1;
     var newBulkAccessPrincipals = bulkAccessPrincipals;
     let newPlayhqClaims=playhqClaims.map(func(c):Types.PlayHQClaim {if(c.user==old){changed+=1;{c with user=new}}else c});
     if (bulkAccessPrincipals.any(func(p) = p.equal(old))) {
@@ -2841,6 +2907,14 @@ persistent actor class Main(governorInit : Principal) = this {
     };
 
     if (not dry_run) {
+      let updates = Map.entries(broadcastDeliveries).toArray();
+      for ((key, receipt) in updates.values()) {
+        if (receipt.sender == old) {
+          let suffix = Text.stripStart(key, #text (old.toText() # "\u{1f}")) ?? key;
+          Map.remove(broadcastDeliveries, Text.compare, key);
+          Map.add(broadcastDeliveries, Text.compare, new.toText() # "\u{1f}" # suffix, { receipt with sender = new });
+        }
+      };
       roles := newRoles;
       tokens := newTokens;
       competitionInvites := newCompetitionInvites;

@@ -83,6 +83,11 @@ export interface Main {
     [string, string, string, string, string, string],
     Result
   >,
+  'enqueue_competition_broadcast' : ActorMethod<
+    [Array<string>, string, string, string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'export_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : Uint8Array } |

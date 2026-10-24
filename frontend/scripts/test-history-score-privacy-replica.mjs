@@ -42,6 +42,9 @@ try {
  e.setPrincipal(governor);
  ok(await e.grant_role(manager,'coach','club',['team-1']));
  ok(await e.grant_role(member,'player','club',['team-1']));
+ e.setPrincipal(member);
+ assert.deepEqual(ok(await e.read_competition_events(cup.id)).map(row=>row.id),[eventId]);
+ assert.deepEqual(ok(await e.read_competition_events('unrelated-competition')),[]);
  e.setPrincipal(manager);
  const periods='[{"quarter":1,"home":23,"away":17}]';
  const players='[{"id":"player-1","name":"MVP","points":23,"secondsPlayed":120}]';
