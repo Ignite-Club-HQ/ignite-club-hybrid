@@ -2,6 +2,7 @@ import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { createLiveFixture } from "@/live/features/competitions";
+import {reserveFixtureIntent,clearFixtureIntent} from "./fixtureRecovery";
 
 export interface ManualMatchInput {
   competitionId: string;
@@ -75,13 +76,16 @@ export async function createManualMatch(row: ManualMatchRow, operation = crypto.
     },
     icp: async (ctx) => {
       try {
-        await createLiveFixture(ctx, operation, row.competition_id, {
+        const scope=[ctx.identity.getPrincipal().toText(),ctx.target.host,ctx.target.canisterIds.competition_domain,row.competition_id].join("|");
+        const intent=reserveFixtureIntent(window.localStorage,scope,row,()=>operation);
+        await createLiveFixture(ctx, intent.operation, row.competition_id, {
           homeTeamId: row.home_team_id, awayTeamId: row.away_team_id,
           divisionId: row.division_id, scheduledAtMs: new Date(row.scheduled_at),
           venue: row.venue, pitchNumber: row.pitch_number, roundNumber: row.round_number,
           durationMinutes: row.duration_minutes, arrivalMinutesBefore: row.arrival_minutes_before,
           notes: row.notes,
         });
+        clearFixtureIntent(window.localStorage,scope);
         return { error: null };
       } catch (e) {
         return { error: { message: e instanceof Error ? e.message : String(e) } };
