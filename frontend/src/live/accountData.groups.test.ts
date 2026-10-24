@@ -64,13 +64,13 @@ describe('account erasure across all registered groups', () => {
     await eraseMyIcpAccount(identity, target('shared'));
     expect(state.revoke).toHaveBeenCalledTimes(2); expect(state.purge).toHaveBeenCalledTimes(8);
   });
-  it('continues other purges and reports an incomplete domain', async () => {
+  it('continues other purges but retains identity when one group cleanup fails', async () => {
     state.purge.mockImplementation(async (domain, id) => {
       if (id === 'b-messaging_domain') return { Err: 'Busy' }; return { Ok: 1 };
     });
-    const result = await eraseMyIcpAccount(identity, target('shared'));
-    expect(state.purge).toHaveBeenCalledTimes(12); expect(state.erase).toHaveBeenCalledWith('own-account');
-    expect(result.note).toContain('messaging purge could not be completed');
+    await expect(eraseMyIcpAccount(identity, target('shared'))).rejects.toThrow('Account deletion is incomplete: messaging');
+    expect(state.purge).toHaveBeenCalledTimes(12); expect(state.erase).not.toHaveBeenCalled();
+    expect(state.dispose).toHaveBeenCalledTimes(1);
   });
   it('does not query group discovery while scaling is off', async () => {
     state.active = false;

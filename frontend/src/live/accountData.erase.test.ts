@@ -40,15 +40,22 @@ describe("caller account erasure", () => {
     expect(mocks.purgeEvents).toHaveBeenCalledTimes(1);
     expect(mocks.purgeMessaging).toHaveBeenCalledTimes(1);
     expect(mocks.purgeCompetitions).toHaveBeenCalledTimes(1);
-    expect(result.note).toContain("permanently removed");
-    expect(result.note).not.toContain("could not be completed");
+    expect(result.note).toContain("acknowledged cleanup");
     expect(mocks.dispose).toHaveBeenCalledTimes(1);
   });
-  it("still erases the identity but discloses a domain purge failure", async () => {
+  it("retains the identity when personal-content cleanup is refused", async () => {
     mocks.purgeMessaging.mockResolvedValue({ Err: "Canister busy" });
-    const result = await eraseMyIcpAccount(identity);
-    expect(mocks.erase).toHaveBeenCalledWith("own-account");
-    expect(result.note).toContain("messaging purge could not be completed");
+    await expect(eraseMyIcpAccount(identity)).rejects.toThrow("Account deletion is incomplete: messaging");
+    expect(mocks.erase).not.toHaveBeenCalled();
+    expect(mocks.purgeCompetitions).toHaveBeenCalledTimes(1);
+    expect(mocks.dispose).toHaveBeenCalledTimes(1);
+  });
+  it("retains the identity after an unknown cleanup outcome and permits confirmed retry", async () => {
+    mocks.purgeCompetitions.mockRejectedValueOnce(new Error("Reply lost"));
+    await expect(eraseMyIcpAccount(identity)).rejects.toThrow("Account deletion is incomplete: competitions");
+    expect(mocks.erase).not.toHaveBeenCalled();
+    await eraseMyIcpAccount(identity);
+    expect(mocks.erase).toHaveBeenCalledTimes(1);
   });
   it("propagates denied erasure and disposes the client", async () => {
     mocks.erase.mockRejectedValue(new Error("Governor account cannot be erased"));

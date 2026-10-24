@@ -75,8 +75,8 @@ export async function exportMyIcpAccountData(
  * club_domain revokes all linked principals' role access before identity
  * erasure. The caller's own vault files, chat messages and event records
  * are then purged on their domains (purge_my_data); shared club records and
- * parent-owned children remain. A domain that fails is disclosed in the
- * returned note and is safe to retry.
+ * parent-owned children remain. If any content purge fails, retain the
+ * identity and deletion reservation so cleanup can be retried before commit.
  */
 export async function eraseMyIcpAccount(
   identity: Identity,
@@ -106,7 +106,8 @@ export async function eraseMyIcpAccount(
       await inventory.validate();
     }
     // Purge the caller's own content on each domain before erasing the
-    // identity. Failures are collected and disclosed, never silently dropped.
+    // identity. Failures block identity commit so the caller remains available
+    // to retry cleanup; never turn an unsettled purge into successful erasure.
     const purgeFailures: string[] = [];
     for (const [label, connect, domain] of [
       ["vault", "connectLiveVaultDomain", "vault_domain"],
@@ -130,6 +131,12 @@ export async function eraseMyIcpAccount(
       }
     }
     await inventory.validate();
+    if (purgeFailures.length > 0) {
+      throw new Error(
+        `Account deletion is incomplete: ${purgeFailures.join(", ")} cleanup could not be confirmed. ` +
+        "Your sign-in identity has been retained so cleanup can be retried. Club access already removed stays removed.",
+      );
+    }
     if (inventory.revision !== undefined) {
       await client.commitAccountDeletion(account.id);
       await client.settleAccountDeletion(account.id);
@@ -137,11 +144,8 @@ export async function eraseMyIcpAccount(
     return {
       note:
         "Your identity_access account has been erased and club/team role access revoked. " +
-        (purgeFailures.length === 0 ? "Your vault files, chat messages and event records have been permanently removed. " : "Some personal content could not be removed. ") +
-        "Shared club records and parent-owned children are retained." +
-        (purgeFailures.length > 0
-          ? ` The ${purgeFailures.join(", ")} purge could not be completed — please contact support to finish removing that content.`
-          : ""),
+        "The personal-content services acknowledged cleanup. " +
+        "Shared club records and parent-owned children are retained; this does not certify historical notification or delivery-record anonymization.",
     };
   } finally {
     inventory?.dispose();
