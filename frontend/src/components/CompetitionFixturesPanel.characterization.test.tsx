@@ -124,7 +124,7 @@ function renderPanel({
       divisions={[]}
       entries={entries}
       source={source}
-    />,
+    />
     </MemoryRouter>
   );
 }

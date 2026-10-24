@@ -1682,9 +1682,20 @@ persistent actor class Main(governorInit : Principal) = this {
     conflicts += scheduled.filter(func(s : Types.ScheduledMessage) : Bool = s.author == newText).size();
     conflicts += digests.filter(func(d : Types.DigestItem) : Bool = d.mentions.any(func(m : Text) : Bool = m == newText)).size();
     conflicts += switch (push_settings) { case (?p) { if (p.updated_by == ?newText) { 1 } else { 0 } }; case null { 0 } };
+    for ((_, audience) in Map.entries(competitionBroadcastAudiences)) if (audience.any(func user = user == newText)) conflicts += 1;
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in notification_queue");
 
     var changed = 0;
+    let broadcastAudienceUpdates = Map.entries(competitionBroadcastAudiences).toArray().map(func pair {
+      let (key, audience) = pair;
+      if (audience.any(func user = user == oldText)) changed += 1;
+      var canonical : [Text] = [];
+      for (user in audience.values()) {
+        let mapped = if (user == oldText) newText else user;
+        if (not canonical.any(func existing = existing == mapped)) canonical := canonical.concat([mapped]);
+      };
+      (key, canonical.sort(Text.compare))
+    });
 
     let newItems = items.map(func(n : Types.Notification) : Types.Notification {
       if (n.user == oldText) { changed += 1; { n with user = newText } } else { n }
@@ -1754,6 +1765,7 @@ persistent actor class Main(governorInit : Principal) = this {
       device_tokens := dedupedDeviceTokens;
       preferences := newPreferences;
       deviceVersions := newDeviceVersions;
+      for ((key, audience) in broadcastAudienceUpdates.values()) Map.add(competitionBroadcastAudiences, Text.compare, key, audience);
     };
 
     #ok(changed)
