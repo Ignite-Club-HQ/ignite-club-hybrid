@@ -22,7 +22,7 @@ try {
   const team = { id: 'team-a', name: 'Local team', club_id: 'club-a', is_active: true, is_shell: false, archived: false, playhq_auto_create_events: false };
   for (const field of ['division','gender','age_group','description','logo_url','team_type','deleted_at_ms','shell_claim_token','shell_claimed_at_ms','shell_claimed_by','shell_contact_email','shell_contact_name','shell_invited_by','playhq_team_id','playhq_competition_id','folder_id']) team[field] = [];
   ok(await club.actor.save_team(team));
-  const acl = ok(await club.actor.get_acl());
+  const acl = ok(await club.actor.export_acl());
   const roles = [{user: governor,role:'club_admin',club:['club-a'],team:[]},{user:coach,role:'coach',club:['club-a'],team:['team-a']},{user:spectator,role:'member',club:['club-a'],team:['team-a']}];
   ok(await club.actor.replace_acl(acl.acl_version,{...acl.acl, roles}));
   ok(await events.actor.set_club_domain_canister(club.canisterId));
