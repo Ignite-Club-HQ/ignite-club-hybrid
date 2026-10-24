@@ -24,6 +24,7 @@ try {
   ok(await c.set_competition_authorities([K.canisterId]));ok(await k.set_club_domain_canister(C.canisterId));
   ok(await c.set_notification_queue_canister(Q.canisterId));ok(await q.set_club_domain_canister(C.canisterId));
   k.setPrincipal(manager);const competition=ok(await k.create_competition('club','Cup','2026')).id;
+  k.setPrincipal(gov);ok(await k.grant_role(manager,'competition_admin',competition,[]));ok(await k.grant_role(alias,'referee',competition,[]));ok(await k.grant_role(other,'referee',competition,[]));k.setPrincipal(manager);
   assert.ok(ok(await k.queue_competition_broadcast('op',competition,[],'Notice','Body'))>0n);
   q.setPrincipal(gov);const pending=ok(await q.claim(9999999999999n,100));assert.ok(pending.length>0);
   for(const a of [c,k,q])a.setPrincipal(manager);
