@@ -277,6 +277,13 @@ export interface MainInterface {
         Err: string;
     }>;
     can_invite_players_to_team(team_id: string): Promise<boolean>;
+    check_my_broadcast_erasure(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     claim_email_job(): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -779,6 +786,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    prepare_my_broadcast_erasure(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     purge_club_snapshot(club: string): Promise<{
         __kind__: "Ok";
         Ok: bigint;
@@ -1038,7 +1052,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -1582,6 +1596,16 @@ export class Competition_domain implements competition_domainInterface {
     async can_invite_players_to_team(arg0: string): Promise<boolean> {
         const result = await this.actor.can_invite_players_to_team(arg0);
         return result;
+    }
+    async check_my_broadcast_erasure(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.check_my_broadcast_erasure();
+        return from_candid_variant_n9(result);
     }
     async claim_email_job(): Promise<{
         __kind__: "Ok";
@@ -2290,6 +2314,16 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.prepare_account_removal(arg0);
+        return from_candid_variant_n9(result);
+    }
+    async prepare_my_broadcast_erasure(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.prepare_my_broadcast_erasure();
         return from_candid_variant_n9(result);
     }
     async purge_club_snapshot(arg0: string): Promise<{

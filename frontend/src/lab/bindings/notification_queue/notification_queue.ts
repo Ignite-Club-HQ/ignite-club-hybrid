@@ -238,7 +238,7 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
-    merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -252,7 +252,21 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    prepare_my_broadcast_erasure(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     purge_club_snapshot(club: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    purge_my_data(): Promise<{
         __kind__: "Ok";
         Ok: bigint;
     } | {
@@ -306,7 +320,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -314,6 +328,13 @@ export interface MainInterface {
         err: string;
     }>;
     remove_device_tokens(user: string, tokens: Array<string>): Promise<DeviceTokenCountResult>;
+    retire_competition_broadcast(club: string, key: string, audience: Array<string>, count: number): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     schedule_message(id: string, author: string, chat_type: ChatType, team_id: string | null, club_id: string | null, group_id: string | null, conversation_id: string | null, body: string, image_url: string | null, reply_to_id: string | null, scheduled_for_ms: bigint, recurrence: Recurrence, recurrence_until_ms: bigint | null): Promise<ScheduledResult>;
     seal_account_removal(request: Request): Promise<{
         __kind__: "Ok";
@@ -742,6 +763,16 @@ export class Notification_queue implements notification_queueInterface {
         const result = await this.actor.prepare_account_removal(arg0);
         return from_candid_variant_n27(result);
     }
+    async prepare_my_broadcast_erasure(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.prepare_my_broadcast_erasure();
+        return from_candid_variant_n27(result);
+    }
     async purge_club_snapshot(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: bigint;
@@ -750,6 +781,16 @@ export class Notification_queue implements notification_queueInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
+        return from_candid_variant_n54(result);
+    }
+    async purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_my_data();
         return from_candid_variant_n54(result);
     }
     async read_account_get_digest(arg0: DigestSource, arg1: string, arg2: bigint, arg3: number): Promise<DigestResults> {
@@ -851,6 +892,16 @@ export class Notification_queue implements notification_queueInterface {
     async remove_device_tokens(arg0: string, arg1: Array<string>): Promise<DeviceTokenCountResult> {
         const result = await this.actor.remove_device_tokens(arg0, arg1);
         return from_candid_DeviceTokenCountResult_n23(result);
+    }
+    async retire_competition_broadcast(arg0: string, arg1: string, arg2: Array<string>, arg3: number): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.retire_competition_broadcast(arg0, arg1, arg2, arg3);
+        return from_candid_variant_n27(result);
     }
     async schedule_message(arg0: string, arg1: string, arg2: ChatType, arg3: string | null, arg4: string | null, arg5: string | null, arg6: string | null, arg7: string, arg8: string | null, arg9: string | null, arg10: bigint, arg11: Recurrence, arg12: bigint | null): Promise<ScheduledResult> {
         const result = await this.actor.schedule_message(arg0, arg1, to_candid_ChatType_n71(arg2), to_candid_opt_n25(arg3), to_candid_opt_n25(arg4), to_candid_opt_n25(arg5), to_candid_opt_n25(arg6), arg7, to_candid_opt_n25(arg8), to_candid_opt_n25(arg9), arg10, to_candid_Recurrence_n73(arg11), to_candid_opt_n32(arg12));
