@@ -1971,6 +1971,7 @@ export async function syncLiveActiveGame(
     timerStateJson: string;
     pitchStateJson: string;
     boardSessionId: string;
+    sharedBoard?: { clubId: string; expected: bigint | null };
   },
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
@@ -2004,7 +2005,7 @@ export async function syncLiveActiveGame(
     // Non-JSON or unexpected shape: pass through untouched (legacy behavior).
   }
   return unwrapCandid(
-    actor.sync_active_game(
+    input.sharedBoard ? actor.sync_shared_board(input.sharedBoard.clubId, input.teamId ?? '', candidOpt(input.sharedBoard.expected), pitchStateJson, input.boardSessionId) : actor.sync_active_game(
       candidOpt(input.teamId),
       input.timerStateJson,
       pitchStateJson,
@@ -2012,6 +2013,23 @@ export async function syncLiveActiveGame(
     ),
     "Sync active game",
   );
+}
+
+export async function readLiveSharedBoard(ctx: FeatureBackendContext, clubId: string, teamId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const [row] = await unwrapCandid(actor.read_shared_board(clubId, teamId), 'Read shared pitch board');
+  if (!row) return null;
+  return { revision: row.updated_at_ms, pitch: JSON.parse(row.pitch_state_json) as Record<string, unknown> };
+}
+
+export async function writeLiveSharedBoard(ctx: FeatureBackendContext, clubId: string, teamId: string, expected: bigint | null, pitch: Record<string, unknown>, session: string) {
+  const row = await syncLiveActiveGame(ctx, { teamId, timerStateJson: '{}', pitchStateJson: JSON.stringify(pitch), boardSessionId: session, sharedBoard: { clubId, expected } });
+  return { revision: row.updated_at_ms, pitch };
+}
+
+export async function notifyLiveGroupPitch(ctx: FeatureBackendContext, groupId: string, action: string, detail: string, key: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.notify_group_pitch(groupId, action, detail, key), 'Notify match duty holders');
 }
 
 export async function deactivateLiveActiveGame(

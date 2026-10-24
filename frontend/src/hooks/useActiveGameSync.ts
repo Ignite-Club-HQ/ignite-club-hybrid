@@ -137,6 +137,9 @@ export function useActiveGameSync() {
 
   const syncToDatabase = useCallback(async () => {
     if (!user?.id) return;
+    // Shared ICP boards have one revision-CAS owner while mounted. Do not
+    // publish an older global localStorage snapshot from this legacy mirror.
+    if (resolveAuthBackend() === 'icp') return;
     // Skip DB sync when offline — local pitch state remains the source of truth,
     // and we'll resync on the next interval after connectivity returns.
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
