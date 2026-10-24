@@ -458,6 +458,18 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    restore_backup_page(id: string, offset: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            skipped: bigint;
+            next: bigint;
+            complete: boolean;
+            restored: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     restore_file(id: string): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -1164,6 +1176,21 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.restore_backup(arg0);
         return from_candid_variant_n27(result);
     }
+    async restore_backup_page(arg0: string, arg1: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            skipped: bigint;
+            next: bigint;
+            complete: boolean;
+            restored: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.restore_backup_page(arg0, arg1);
+        return from_candid_variant_n50(result);
+    }
     async restore_file(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -1232,7 +1259,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_pinned_vault(arg0, arg1, arg2, to_candid_opt_n16(arg3), to_candid_opt_n16(arg4), to_candid_opt_n16(arg5), to_candid_opt_n16(arg6), arg7);
-        return from_candid_variant_n50(result);
+        return from_candid_variant_n51(result);
     }
     async set_transfer_fence(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -1282,7 +1309,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.trash_gallery_copy(arg0, arg1, arg2);
-        return from_candid_variant_n51(result);
+        return from_candid_variant_n52(result);
     }
     async update_folder(arg0: string, arg1: string, arg2: Array<string>, arg3: number, arg4: string | null, arg5: string | null): Promise<{
         __kind__: "Ok";
@@ -1906,6 +1933,35 @@ function from_candid_variant_n49(value: {
     } : value;
 }
 function from_candid_variant_n50(value: {
+    Ok: {
+        skipped: bigint;
+        next: bigint;
+        complete: boolean;
+        restored: bigint;
+    };
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: {
+        skipped: bigint;
+        next: bigint;
+        complete: boolean;
+        restored: bigint;
+    };
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n51(value: {
     Ok: _PinnedVault;
 } | {
     Err: string;
@@ -1924,7 +1980,7 @@ function from_candid_variant_n50(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n51(value: {
+function from_candid_variant_n52(value: {
     Ok: boolean;
 } | {
     Err: string;

@@ -462,6 +462,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'restore_backup_page' : IDL.Func(
+        [IDL.Text, IDL.Nat],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'skipped' : IDL.Nat,
+              'next' : IDL.Nat,
+              'complete' : IDL.Bool,
+              'restored' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'restore_file' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
