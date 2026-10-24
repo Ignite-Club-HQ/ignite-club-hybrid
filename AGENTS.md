@@ -77,5 +77,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Media paging releases only via upgrade-media-paging.yml on the exact G1/G2 media_metadata canisters, finishing backfill before snapshot refresh. Why: never hide photos or touch photo stores.
 
 - ICP event setup atomically commits exact dates, first-occurrence duties and reminders under caller/request receipts; configured club/league consensus supplies audiences, relays retain unknown outcomes. Why: prevent partial saves, foreign notices and deleted-request resurrection.
-- Vault reads use current roles/ancestors; file pages pin revisions and pins consult messaging. Cleanup retains intents/tombstones; backup restore uses durable bounded cursors and forbids erased-ID revival. Restored II routing reads only on-chain. Why: avoid leaks, replay, resurrection and off-chain startup waits.
+- Vault uses current ancestor roles, revision pages and messaging-authorized pins. Cleanup/restore retain tombstones and cursors. Backup creation returns counts; immutable paged exports discard partial output; erasure scrubs snapshots/roles/pins/sources. Registration rechecks destinations after awaits; restored II routing stays on-chain. Why: prevent leaks, oversized replies, replay and resurrection.
 
