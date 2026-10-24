@@ -54,6 +54,7 @@ module {
     asset_id : Text;
     author : Principal;
     body : Text;
+    reply_to_id : ?Text;
     created_at_ms : Nat64;
     deleted : Bool;
   };

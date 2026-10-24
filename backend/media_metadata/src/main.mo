@@ -69,6 +69,10 @@ persistent actor class Main(governorInit : Principal) = this {
   var capabilities : [Types.Capability];
   var reactions : [Types.Reaction];
   var comments : [Types.Comment];
+  var galleryClubAuthority : ?Principal;
+  var galleryVaultAuthority : ?Principal;
+  var galleryNoticeAttempts : Map.Map<Text, Text>;
+  var hiddenGalleryAssets : Map.Map<Text, Bool>;
   var roles : [Types.RoleGrant];
   var bulkAccessPrincipals : [Principal];
   var galleryChatCards : [Types.GalleryChatCard];
@@ -440,7 +444,8 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Asset not found") };
       case (?i) {
         let asset = assets[i];
-        if (not asset.owner.equal(caller)) return #Err("Asset owner required");
+        if (not (await galleryManager(caller, asset))) return #Err("Asset owner or scoped staff required");
+        if (assetFenced(asset_id) or assets[i] != asset) return #Err("Asset changed during authorization");
         let updated : Types.Asset = { asset with deleted = true; retention_until_ms = 0 };
         mediaEvidenceRevision += 1;
         assets := Array.tabulate<Types.Asset>(assets.size(), func(position) {
@@ -478,7 +483,7 @@ persistent actor class Main(governorInit : Principal) = this {
     denyLegacyAccountQuery();
     if (caller.equal(Principal.anonymous())) return [];
     Array.filter<Types.Asset>(assets, func(a) {
-      not a.deleted and a.club_id == club_id and canView(caller, a)
+      not a.deleted and hiddenGalleryAssets.get(a.id) != ?true and a.club_id == club_id and canView(caller, a)
     })
   };
 
@@ -500,7 +505,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let gov = isGovernor(caller);
     let now = nowMs();
     AssetPaging.read(assetPageIndex, assets, club_id, mediaEvidenceRevision, cursor, limit,
-      func a = a.expires_at_ms > now and (a.owner.equal(caller) or gov or a.visibility == "public" or member))
+      func a = hiddenGalleryAssets.get(a.id) != ?true and a.expires_at_ms > now and (a.owner.equal(caller) or gov or a.visibility == "public" or member))
   };
 
   public query ({ caller }) func list_assets_page(club_id : Text, cursor : ?AssetPaging.Cursor, limit : Nat) : async AssetPaging.Result {
@@ -537,6 +542,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (reactions.size() >= MAX_REACTIONS) return #Err("Reaction limit reached");
         let reaction : Types.Reaction = { asset_id; user = caller; kind; created_at_ms };
         reactions := reactions.concat([reaction]);
+        ignore await galleryNotice(asset, caller, "photo_reaction", "reaction-" # asset_id # "-" # caller.toText() # "-" # created_at_ms.toText(), null);
         #Ok(reaction)
       };
     }
@@ -594,6 +600,7 @@ persistent actor class Main(governorInit : Principal) = this {
           deleted = false;
         };
         comments := comments.concat([comment]);
+        ignore await galleryNotice(asset, caller, "photo_comment", comment.id, null);
         #Ok(comment)
       };
     }
@@ -640,6 +647,88 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+
+  public shared ({ caller }) func set_gallery_authorities(club : Principal, vault : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or Principal.isAnonymous(club) or Principal.isAnonymous(vault)) return #Err("Governor and valid authorities required");
+    galleryClubAuthority := ?club; galleryVaultAuthority := ?vault; #Ok
+  };
+  func galleryManager(user : Principal, asset : Types.Asset) : async Bool {
+    if (removalReceiver.denied(user) or isFenced(asset.club_id)) return false;
+    if (asset.owner.equal(user) or isGovernor(user)) return true;
+    let id = galleryClubAuthority ?? return false;
+    let club : actor { read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)]; read_account_is_app_admin : shared (Principal) -> async Bool } = actor(id.toText());
+    let grants = await (with timeout = 10) club.read_account_list_user_club_roles(user, asset.club_id);
+    let allowed = grants.any(func (role, team) = role == "club_admin" or role == "committee" or (asset.team_id != null and team == asset.team_id and (role == "team_admin" or role == "coach")));
+    let admin = if (allowed) false else await (with timeout = 10) club.read_account_is_app_admin(user);
+    (allowed or admin) and galleryClubAuthority == ?id and not removalReceiver.denied(user) and not isFenced(asset.club_id)
+  };
+  func galleryNotice(asset : Types.Asset, user : Principal, kind : Text, key : Text, parent : ?Principal) : async Text {
+    if (galleryNoticeAttempts.get(key) != null) return galleryNoticeAttempts.get(key) ?? "unknown";
+    let id = galleryClubAuthority ?? return "not_configured";
+    if (removalReceiver.denied(user) or assetFenced(asset.id)) return "denied";
+    galleryNoticeAttempts.add(key, "unknown");
+    let club : actor { relay_gallery_notice : shared (Principal, Text, ?Text, Principal, ?Principal, Text, Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
+    try {
+      let result = await (with timeout = 10) club.relay_gallery_notice(user, asset.club_id, asset.team_id, asset.owner, parent, kind, key, asset.id);
+      let status = switch result { case (#Ok(_)) "queued"; case (#Err(_)) "refused" };
+      galleryNoticeAttempts.add(key, status); status
+    } catch (_) { "unknown" }
+  };
+  public shared ({ caller }) func announce_gallery_asset(asset_id : Text) : async { #Ok : Text; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      await admitAccount(caller);
+      let asset = assets.find(func a = a.id == asset_id and not a.deleted) ?? return #Err("Asset not found");
+      if (not asset.owner.equal(caller) or assetFenced(asset_id)) return #Err("Asset owner required");
+      #Ok(await galleryNotice(asset, caller, "photo_uploaded", "upload-" # (asset.album_id ?? asset.id), null))
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func add_comment_reply(asset_id : Text, body : Text, reply_to_id : ?Text) : async { #Ok : Types.Comment; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      let asset = assets.find(func a = a.id == asset_id and not a.deleted) ?? return #Err("Asset not found");
+      if (assetFenced(asset_id) or not canView(caller, asset)) return #Err("Asset access required");
+      if (not validCommentBody(body) or comments.size() >= MAX_COMMENTS) return #Err("Invalid comment or capacity reached");
+      var parent : ?Principal = null;
+      switch reply_to_id { case (?id) {
+        let row = comments.find(func c = c.id == id and c.asset_id == asset_id and not c.deleted) ?? return #Err("Reply parent not found in this asset");
+        parent := ?row.author;
+      }; case null {} };
+      let comment : Types.Comment = { id = "comment-" # asset_id # "-" # Nat.toText(comments.size() + 1); asset_id; author = caller; body; reply_to_id; created_at_ms = nowMs(); deleted = false };
+      comments := comments.concat([comment]);
+      ignore await galleryNotice(asset, caller, if (reply_to_id == null) "photo_comment" else "comment_reply", comment.id, parent);
+      #Ok(comment)
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func read_gallery_asset_for_service(user : Principal, asset_id : Text) : async { #Ok : Types.Asset; #Err : Text } {
+    if (galleryVaultAuthority != ?caller) return #Err("Vault authority required");
+    await admitAccount(user);
+    let asset = assets.find(func a = a.id == asset_id and not a.deleted) ?? return #Err("Asset not found");
+    if (not canView(user, asset) or assetFenced(asset_id) or galleryVaultAuthority != ?caller) return #Err("Asset access required");
+    #Ok(asset)
+  };
+  public shared ({ caller }) func remove_gallery_asset(asset_id : Text, mode : Text) : async { #Ok : { vault_updated : Bool }; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      await admitAccount(caller);
+      if (mode != "feed_only" and mode != "feed_and_vault") return #Err("Invalid deletion mode");
+      let asset = assets.find(func a = a.id == asset_id) ?? return #Err("Asset not found");
+      if (not (await galleryManager(caller, asset))) return #Err("Asset owner or scoped staff required");
+      var vault_updated = false;
+      if (mode == "feed_and_vault") {
+        let id = galleryVaultAuthority ?? return #Err("Vault authority not configured");
+        let vault : actor { trash_gallery_copy : shared (Principal, Text, Text) -> async { #Ok : Bool; #Err : Text } } = actor(id.toText());
+        switch (await (with timeout = 10) vault.trash_gallery_copy(caller, asset_id, asset.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(v)) vault_updated := v };
+        if (galleryVaultAuthority != ?id) return #Err("Vault authority changed");
+      };
+      if (assetFenced(asset_id) or removalReceiver.denied(caller) or assets.find(func a = a.id == asset_id) != ?asset) return #Err("Asset changed during deletion");
+      hiddenGalleryAssets.add(asset_id, true); mediaEvidenceRevision += 1;
+      if (mode == "feed_and_vault") assets := assets.map(func a = if (a.id == asset_id) { a with deleted = true } else a);
+      #Ok({ vault_updated })
+    } finally { removalReceiver.leave(caller) }
   };
 
   // ---------------- Gallery chat cards ----------------
@@ -916,7 +1005,7 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (caller.equal(Principal.anonymous())) return [];
     Array.filter<Types.Asset>(assets, func(a) {
-      not a.deleted and a.club_id == club_id and canView(caller, a)
+      not a.deleted and hiddenGalleryAssets.get(a.id) != ?true and a.club_id == club_id and canView(caller, a)
     })
   
     } finally { removalReceiver.leave(caller) };
