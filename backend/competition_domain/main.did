@@ -556,6 +556,10 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   purge_my_data: () -> (variant {
+                           Err: text;
+                           Ok: nat;
+                         });
    queue_competition_broadcast: (operation: text, competition: text,
     divisions: vec text, title: text, body: text) ->
     (variant {

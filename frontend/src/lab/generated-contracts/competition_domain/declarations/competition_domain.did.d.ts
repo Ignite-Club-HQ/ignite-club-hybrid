@@ -551,6 +551,7 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'purge_my_data' : ActorMethod<[], { 'Ok' : bigint } | { 'Err' : string }>,
   'queue_competition_broadcast' : ActorMethod<
     [string, string, Array<string>, string, string],
     { 'Ok' : bigint } |

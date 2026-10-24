@@ -713,6 +713,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     queue_competition_broadcast(operation: string, competition: string, divisions: Array<string>, title: string, body: string): Promise<{
         __kind__: "Ok";
         Ok: bigint;
@@ -2123,6 +2130,16 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
+        return from_candid_variant_n70(result);
+    }
+    async purge_my_data(): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_my_data();
         return from_candid_variant_n70(result);
     }
     async queue_competition_broadcast(arg0: string, arg1: string, arg2: Array<string>, arg3: string, arg4: string): Promise<{
