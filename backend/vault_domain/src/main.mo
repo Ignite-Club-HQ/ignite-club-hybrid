@@ -674,7 +674,7 @@ persistent actor class Main(governorInit : Principal) = this {
         case (?intent) { if (UploadJournal.sameDestination(intent.file, file)) return #Ok; return #Err("Upload identity already bound") };
         case null {}
       };
-      if (files.any(func f = f.id == file.id or (switch f.blob_ref { case (?r) r.canister == ref.canister and r.path == ref.path; case null false })) or uploadIntents.entries().any(func e = switch e.1.file.blob_ref { case (?r) r.canister == ref.canister and r.path == ref.path; case null false })) return #Err("Upload path already reserved");
+      if (files.any(func f = f.id == file.id or (switch (f.blob_ref) { case (?r) r.canister == ref.canister and r.path == ref.path; case null false })) or uploadIntents.entries().any(func e = switch (e.1.file.blob_ref) { case (?r) r.canister == ref.canister and r.path == ref.path; case null false })) return #Err("Upload path already reserved");
       if (uploadIntents.size() >= 10_000 or uploadIntents.entries().filter(func e = e.1.file.uploaded_by.equal(caller) and not files.any(func f = f.id == e.0)).toArray().size() >= 32) return #Err("Upload recovery capacity reached");
       uploadIntents.add(file.id, { file = { file with created_at_ms = nowMs() }; ready = false }); mediaEvidenceRevision += 1; #Ok
     } finally { removalReceiver.leave(caller) }
@@ -748,7 +748,7 @@ persistent actor class Main(governorInit : Principal) = this {
         let f = intent.file;
         if (not intent.ready or not f.uploaded_by.equal(caller) or f.club != club or f.team != team or f.folder_id != folder_id or f.competition_id != competition_id or f.mini_league_id != mini_league_id or f.blob_ref != blob_ref or f.file_url != file_url or f.name != name or f.mime != mime or f.size != size or is_external_link) return #Err("Upload intent mismatch or unresolved")
       }; case null {
-        switch blob_ref { case (?ref) if (uploadIntents.entries().any(func e = switch e.1.file.blob_ref { case (?r) r.canister == ref.canister and r.path == ref.path; case null false })) return #Err("Upload path reserved"); case null {} }
+        switch blob_ref { case (?ref) if (uploadIntents.entries().any(func e = switch (e.1.file.blob_ref) { case (?r) r.canister == ref.canister and r.path == ref.path; case null false })) return #Err("Upload path reserved"); case null {} }
       }
     };
     if (not valid(id) or folder_id.size() > 128 or not valid(club)) return #Err("Invalid file fields");
@@ -1545,7 +1545,7 @@ persistent actor class Main(governorInit : Principal) = this {
       deletionIntents.add(id, "erased-upload");
       // Unacknowledged byte/PII outcomes are never automatically deleted.
       if (intent.ready and not files.any(func f = f.id == id)) {
-        switch intent.file.blob_ref { case (?ref) cleanupRecords.add(id, { club = intent.file.club; team = intent.file.team; competition = intent.file.competition_id; blob_ref = ref; state = #erased }); case null {} }
+        switch (intent.file.blob_ref) { case (?ref) cleanupRecords.add(id, { club = intent.file.club; team = intent.file.team; competition = intent.file.competition_id; blob_ref = ref; state = #erased }); case null {} }
       };
       uploadIntents.add(id, { intent with file = { intent.file with name = "Erased upload"; folder_id = "" }; ready = false })
     };
