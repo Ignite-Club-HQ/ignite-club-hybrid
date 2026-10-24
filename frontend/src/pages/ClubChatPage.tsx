@@ -109,7 +109,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { assertReadNotAborted, withReadDeadline } from "@/live/readDeadline";
 import { readIcpThreadPage } from "@/features/messaging/thread/icpThreadRead";
 import { writeOnce } from "@/live/clubScope";
-import { ensureLiveClubConversations, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { ensureLiveClubConversations, isLiveConversationAbsent, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
@@ -593,6 +593,7 @@ export default function ClubChatPage() {
             const page = await readIcpThreadPage(
               () => withReadDeadline(listLiveLatestMessagesPage(ctx, clubId, null, MESSAGES_PER_PAGE), "Club messages", 20_000, signal),
               () => ensureLiveClubConversations(ctx, clubId),
+              () => isLiveConversationAbsent(ctx, clubId),
             );
             assertReadNotAborted(signal);
             const messages = await mapLiveClubRows(ctx, page.messages, ready => {

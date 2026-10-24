@@ -46,6 +46,13 @@ export async function ensureLiveClubConversations(
   return unwrapCandid(actor.ensure_club_conversations(clubId), "Ensure club conversations");
 }
 
+/** Absence evidence only; a refused/failed read must never authorize repair. */
+export async function isLiveConversationAbsent(ctx: FeatureBackendContext, conversationId: string): Promise<boolean> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const owner = await unwrapCandid(actor.read_conversation_club(conversationId), "Locate conversation");
+  return owner.length === 0;
+}
+
 export async function listLiveMessages(
   ctx: FeatureBackendContext,
   conversationId: string,
