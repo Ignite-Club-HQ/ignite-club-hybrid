@@ -19,7 +19,7 @@ export async function readReportPlayerStats(teamId: string, eventId?: string, ra
         const profiles = await listLiveProfilesByIds(ctx, stats.flatMap(s => s.user_id));
         const byId = new Map(profiles.map(p => [p.account_id,p]));
         const [result]=await getLiveGameResult(ctx,event.id);
-        stats.forEach((s,index)=>{const userId=s.user_id[0]??null;const profile=userId?byId.get(userId):undefined;rows.push({...s,id:`${event.id}-${index}`,user_id:userId,child_id:s.child_id,fill_in_player_name:s.fill_in_player_name[0]??null,jersey_number:s.jersey_number[0]??null,minutes_played:Number(s.minutes_played),substitutions_count:Number(s.substitutions_count),goals_scored:result?.scores_hidden?null:Number(s.goals_scored),position_minutes:s.position_minutes,profiles:profile?{display_name:profile.display_name,avatar_url:profile.avatar_url}:null})});
+        stats.forEach((s,index)=>{const userId=s.user_id[0]??null;const profile=userId?byId.get(userId):undefined;rows.push({...s,id:`${event.id}-${index}`,user_id:userId,child_id:s.child_id,fill_in_player_name:s.fill_in_player_name[0]??null,jersey_number:s.jersey_number[0]??null,minutes_played:Number(s.minutes_played),substitutions_count:Number(s.substitutions_count),goals_scored:result?.scores_hidden?null:Number(s.goals_scored),position_minutes:s.position_minutes,profiles:profile?{display_name:profile.display_name}:null})});
       }
       return rows;
     },

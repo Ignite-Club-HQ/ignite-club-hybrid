@@ -1800,7 +1800,7 @@ export async function listLiveDetailedGamePlayerStats(ctx: FeatureBackendContext
   const rows = await unwrapCandid(actor.read_detailed_game_player_stats(eventId), "Read detailed game player stats");
   const refs = rows.flatMap(row => row.stat.fill_in_player_name).filter(ref => ref.startsWith("fillin:"));
   const names = await resolveNameRefs(ctx,refs,"Read detailed game player stats");
-  return rows.map(row => ({...row.stat, fill_in_player_name: row.stat.fill_in_player_name.map(raw => raw.startsWith("fillin:") ? names.get(raw) ?? "Fill-in player" : raw), child_id: row.detail[0]?.child_id[0] ?? null, position_minutes: row.detail[0]?.position_seconds[0] == null ? null : Object.fromEntries(row.detail[0].position_seconds[0].map(([key,value]) => [key,Number(value)])) }));
+  return rows.map(row => {const positions=row.detail[0]?.position_seconds[0];return {...row.stat, fill_in_player_name: row.stat.fill_in_player_name.map(raw => raw.startsWith("fillin:") ? names.get(raw) ?? "Fill-in player" : raw), child_id: row.detail[0]?.child_id[0] ?? null, position_minutes: positions == null ? null : Object.fromEntries(positions.map(([key,value]) => [key,Number(value)])) }});
 }
 export async function readLiveEventHonours(ctx: FeatureBackendContext,eventId:string) {
   const { actor } = await connectLiveEventsDomain(ctx.target,ctx.identity);

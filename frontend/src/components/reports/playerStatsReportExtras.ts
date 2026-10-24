@@ -213,10 +213,10 @@ async function fetchReportExtrasIcp(
       for (const event of scopedEvents as any[]) {
         const [result,assignments,stats] = await Promise.all([getLiveGameResult(ctx,event.id),readLiveEventHonours(ctx,event.id),listLiveDetailedGamePlayerStats(ctx,event.id)]);
         const {listLiveProfilesByIds}=await import("@/live/features/identityAccessClient");
-        const accountIds=[...assignments.captains,...assignments.goalkeepers].flatMap(a=>"account" in a.player?[a.player.account]:[]);
+        const accountIds=[...assignments.captains,...assignments.goalkeepers].flatMap(a=>a.ref_kind==="account"?[a.ref_id]:[]);
         const profiles=await listLiveProfilesByIds(ctx,accountIds);
         const names=new Map(profiles.map(p=>[p.account_id,p.display_name]));
-        const nameFor=(a:(typeof assignments.captains)[number])=>"account" in a.player?names.get(a.player.account)??"Player":"Player";
+        const nameFor=(a:(typeof assignments.captains)[number])=>a.ref_kind==="account"?names.get(a.ref_id)??"Player":"Player";
         for(const stat of stats) {
           const key=playerKey(stat.user_id[0],stat.child_id);if(!key)continue;
           const gkSeconds=Object.entries(stat.position_minutes??{}).reduce((total,[position,seconds])=>total+(isGoalkeeperPosition(position)?seconds:0),0);
