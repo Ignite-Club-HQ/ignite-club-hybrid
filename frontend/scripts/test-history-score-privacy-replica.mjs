@@ -22,7 +22,7 @@ const compile=domain=>{
  execFileSync(join(homedir(),'.cache/mops/moc/1.16.1/moc'),[...sources,'--enhanced-migration','src/backend/migrations','-o',wasm,'src/main.mo'],{cwd,stdio:'inherit'});
  return wasm;
 };
-const eventsWasm=compile('events_domain'),competitionWasm=compile('competition_domain');
+ const eventsWasm=compile('events_domain'),competitionWasm=compile('competition_domain');
 const server=await PocketIcServer.start({binPath:join(homedir(),'.cache/mops/pocket-ic/15.0.0/pocket-ic')});
 let pic;
 try {
@@ -42,6 +42,9 @@ try {
  e.setPrincipal(governor);
  ok(await e.grant_role(manager,'coach','club',['team-1']));
  ok(await e.grant_role(member,'player','club',['team-1']));
+ e.setPrincipal(member);
+ assert.deepEqual(ok(await e.read_competition_events(cup.id)).map(row=>row.id),[eventId]);
+ assert.deepEqual(ok(await e.read_competition_events('unrelated-competition')),[]);
  e.setPrincipal(manager);
  const periods='[{"quarter":1,"home":23,"away":17}]';
  const players='[{"id":"player-1","name":"MVP","points":23,"secondsPlayed":120}]';
