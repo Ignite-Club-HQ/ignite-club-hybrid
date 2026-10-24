@@ -626,6 +626,29 @@ persistent actor class Main(governorInit : Principal) = this {
       };
       if (out.size() > 500) return #Err("League audience exceeds 500");
     };
+    // Local explicit league administration is authority; club role candidates
+    // must be refreshed through the club service before any staff subject is added.
+    let initialAdmins = admins;
+    var staff : [Principal] = [league.created_by];
+    for (a in initialAdmins.values()) if (a.mini_league_id == league_id and not staff.any(func(u) = u == a.user_id)) staff := staff.concat([a.user_id]);
+    for (r in roles.values()) if (r.club_id == club_id and (r.role == "league_admin" or r.role == "club_admin" or r.role == "coach") and not staff.any(func(u) = u == r.user)) staff := staff.concat([r.user]);
+    for (user in staff.values()) {
+      if (not removalReceiver.enter(user)) return #Err("League staff fenced");
+      try {
+        await admitAccount(user);
+        let explicit = user == league.created_by or initialAdmins.any(func(a) = a.mini_league_id == league_id and a.user_id == user);
+        let authority = clubDomainCanister ?? return #Err("Club authority unavailable");
+        let cd : actor { read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor(authority.toText());
+        let fresh = try { await (with timeout = 10) cd.read_account_list_user_club_roles(user, club_id) } catch (_) { return #Err("League staff unavailable") };
+        if (clubDomainCanister != ?authority) return #Err("Club authority changed");
+        if ((explicit or fresh.any(func((role, _)) = role == "club_admin" or role == "league_admin" or role == "coach")) and not removalReceiver.denied(user)) {
+          let subject = { user = user.toText(); child = null };
+          if (not out.any(func(s) = s == subject)) out := out.concat([subject]);
+        };
+      } finally { removalReceiver.leave(user) };
+      if (out.size() > 500) return #Err("League audience exceeds 500");
+    };
+    if (admins != initialAdmins) return #Err("League staff changed");
     if (eventsDomainCanister != ?caller or findLeague(league_id) != ?league or players.filter(func(p) = p.mini_league_id == league_id) != initialPlayers or guardians != initialGuardians or leagueFenced(league_id)) return #Err("League audience changed");
     #Ok(out)
   };

@@ -5427,7 +5427,7 @@ persistent actor class Main(governorInit : Principal) = this {
       try { await admitAccount(p) } finally { removalReceiver.leave(p) };
       principals := principals.concat([p]);
     };
-    if (eventsDomainCanister != ?caller or isTransferFenced(club) or principals.any(func(p) = removalReceiver.denied(p) or isExcluded(p, club) or not isMember(p, club))) return #Err("Event recipient access changed");
+    if (eventsDomainCanister != ?caller or isTransferFenced(club) or principals.any(func(p) = removalReceiver.denied(p) or isExcluded(p, club))) return #Err("Event recipient access changed");
     let id = notificationQueueCanister ?? return #Err("Notification queue not configured");
     let queue : actor { fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
     await (with timeout = 10) queue.fan_out(users, club, kind, body, key, ?event_id)
