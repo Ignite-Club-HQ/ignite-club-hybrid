@@ -1,0 +1,29 @@
+name: Deliver ICP email jobs
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: icp-email-delivery
+  cancel-in-progress: false
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    environment: icp-mainnet
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install frontend dependencies safely
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Deliver claimed jobs and record ICP receipts
+        run: node scripts/icp-email-delivery.mjs
+        env:
+          ICP_EMAIL_WORKER_SEED: ${{ secrets.ICP_EMAIL_WORKER_SEED }}
+          ICP_EMAIL_PRIVATE_KEY: ${{ secrets.ICP_EMAIL_PRIVATE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ICP_EMAIL_FROM: ${{ vars.ICP_EMAIL_FROM }}
+          ICP_EMAIL_APP_URL: ${{ vars.ICP_EMAIL_APP_URL }}
+          ICP_EMAIL_TARGETS_JSON: ${{ vars.ICP_EMAIL_TARGETS_JSON }}

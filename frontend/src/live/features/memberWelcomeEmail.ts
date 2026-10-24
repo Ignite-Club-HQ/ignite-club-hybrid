@@ -56,11 +56,6 @@ export async function maybeSendLiveMemberWelcomeEmail(
     if (!email || !email.includes("@")) return;
     const token = crypto.randomUUID();
     await registerLiveMemberWelcomeJob(ctx, competitionId, token, email);
-    const { supabase } = await import("@/integrations/supabase/client");
-    const { error } = await supabase.functions.invoke("send-welcome-email-icp", {
-      body: { memberWelcomeToken: token },
-    });
-    if (error) console.warn("[memberWelcomeEmail] delivery request failed:", error);
   } catch (error) {
     console.warn("[memberWelcomeEmail] skipped:", (error as Error)?.message);
   }

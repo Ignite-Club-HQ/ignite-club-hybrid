@@ -38,12 +38,10 @@ describe("maybeSendLiveMemberWelcomeEmail", () => {
     m.invoke.mockResolvedValue({ error: null });
   });
 
-  it("registers a job and requests delivery when enabled with a contact email", async () => {
+  it("registers an on-chain delivery job without Supabase when enabled", async () => {
     await maybeSendLiveMemberWelcomeEmail(ctx, "cmp-1");
     expect(m.registerJob).toHaveBeenCalledWith(ctx, "cmp-1", expect.any(String), "coach@example.com");
-    expect(m.invoke).toHaveBeenCalledWith("send-welcome-email-icp", {
-      body: { memberWelcomeToken: expect.any(String) },
-    });
+    expect(m.invoke).not.toHaveBeenCalled();
   });
 
   it("does nothing when the competition welcome email is disabled", async () => {

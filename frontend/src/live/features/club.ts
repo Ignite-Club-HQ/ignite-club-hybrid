@@ -1358,6 +1358,26 @@ export async function saveLiveSeason(ctx: FeatureBackendContext, season: LiveSea
   return unwrapCandid(actor.save_season(season), "Save season");
 }
 
+export async function duplicateLiveClubSeason(ctx: FeatureBackendContext, operation: string, source: string, name: string, copyStaff: boolean) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.duplicate_season_structure(operation, source, name, copyStaff), "Copy season structure");
+}
+
+export async function carryOverLiveSeasonPlayers(ctx: FeatureBackendContext, source: string, target: string, members: string[]) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return Number(await unwrapCandid(actor.carry_over_season_players(source, target, members), "Carry season players"));
+}
+
+export async function readLiveSeasonTeams(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.read_season_teams(seasonId), "Read season teams");
+}
+
+export async function assignReturningLiveSeasonPlayers(ctx: FeatureBackendContext, sourceId: string, targetId: string, placements: Array<{ member_id: string; team_id: string }>) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return Number(await unwrapCandid(actor.assign_returning_season_players(sourceId, targetId, placements), "Assign returning season players"));
+}
+
 // ---------------------------------------------------------------------------
 // Season analytics — canister counterpart of the Supabase
 // season_team_summary / season_player_stats RPCs. Read-only from the

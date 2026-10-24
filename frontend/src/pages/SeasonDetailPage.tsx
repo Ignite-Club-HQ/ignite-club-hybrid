@@ -120,14 +120,14 @@ function SupabaseSeasonDetailPage() {
           return data ?? [];
         },
         icp: async (ctx) => {
-          const all: any[] = await listLiveTeams(ctx, clubId!);
+          const { readLiveSeasonTeams } = await import("@/live/features/club");
+          const all = await readLiveSeasonTeams(ctx, seasonId ?? "");
           return all
-            .filter((t) => t.season_id === seasonId || (Array.isArray(t.season_id) && t.season_id[0] === seasonId))
             .map((t) => ({
               id: t.id,
               name: t.name,
-              level_age: t.level_age?.[0] || null,
-              lifecycle_status: t.lifecycle_status ?? (t.archived ? "archived" : "active"),
+              level_age: t.age_group[0] ?? null,
+              lifecycle_status: t.archived ? "archived" : "active",
             }));
         },
       }, { clubId: clubId! });
@@ -376,7 +376,7 @@ function SupabaseSeasonDetailPage() {
         <DraftTeamBuilder clubId={clubId} seasonId={seasonId} teams={teams} />
       )}
 
-      {isDraft && !isIcp && priorSeasons.length > 0 && teams.length > 0 && (
+      {isDraft && priorSeasons.length > 0 && teams.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -588,6 +588,7 @@ function SupabaseSeasonDetailPage() {
 
       {bulkRolloverOpen && clubId && seasonId && (
         <BulkRolloverDialog
+          clubId={clubId}
           open={bulkRolloverOpen}
           onOpenChange={setBulkRolloverOpen}
           targetSeasonId={seasonId}

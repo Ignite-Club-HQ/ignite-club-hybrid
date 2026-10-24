@@ -74,6 +74,7 @@ vi.mock("@/live/featureRouter", () => ({
 vi.mock("@/live/features/club", () => ({
   listLiveSeasonTeamAssignment: async () => [],
   listLiveTeams: async () => [],
+  readLiveSeasonTeams: async () => [],
 }));
 
 function installSupabaseFixtures() {

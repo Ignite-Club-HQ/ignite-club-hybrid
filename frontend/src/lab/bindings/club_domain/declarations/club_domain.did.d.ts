@@ -245,6 +245,17 @@ export interface InvitePayload {
   'body' : string,
 }
 export interface InviteStats { 'total' : bigint, 'accepted' : bigint }
+export interface Job {
+  'id' : string,
+  'resource' : string,
+  'ciphertext' : string,
+  'attempt' : bigint,
+  'kind' : string,
+  'provider_id' : string,
+  'created_at_ms' : bigint,
+  'state' : string,
+  'worker' : [] | [Principal],
+}
 export interface Link {
   'id' : string,
   'sort_order' : number,
@@ -344,6 +355,11 @@ export interface Main {
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
+  'assign_returning_season_players' : ActorMethod<
+    [string, string, Array<{ 'team_id' : string, 'member_id' : string }>],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'begin_identity_link' : ActorMethod<
     [Principal],
     { 'Ok' : Challenge } |
@@ -354,6 +370,7 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'can_accept_public_eoi' : ActorMethod<[string, string], boolean>,
   'cancel_media_quota' : ActorMethod<
     [string, string, string, bigint, bigint],
     Result
@@ -368,9 +385,29 @@ export interface Main {
    * / time so admin settings can show its balance too).
    */
   'canister_cycles' : ActorMethod<[Principal], bigint>,
+  'carry_over_season_players' : ActorMethod<
+    [string, string, Array<string>],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'check_team_name_unique' : ActorMethod<
     [string, string],
     { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'claim_email_job' : ActorMethod<
+    [],
+    {
+        'Ok' : [] | [
+          {
+            'to' : string,
+            'job' : Job,
+            'token' : string,
+            'subject' : string,
+            'body' : string,
+          }
+        ]
+      } |
       { 'Err' : string }
   >,
   'claim_shell_team' : ActorMethod<
@@ -523,6 +560,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'duplicate_season_structure' : ActorMethod<
+    [string, string, string, boolean],
+    { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
   'enrol_in_class' : ActorMethod<
     [string, string, string, string],
     { 'Ok' : ClassEnrolment } |
@@ -560,6 +602,11 @@ export interface Main {
   'find_pending_invite_by_email_hash' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [PendingInviteEmailHash] } |
+      { 'Err' : string }
+  >,
+  'finish_email_job' : ActorMethod<
+    [string, bigint, string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'free_usage_counters' : ActorMethod<
@@ -1108,6 +1155,11 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'queue_pending_invite_email' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'read_account_execute' : ActorMethod<[string], Result__2>,
   'read_account_find_pending_invite_by_email_hash' : ActorMethod<
     [string, string],
@@ -1527,6 +1579,11 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_season_teams' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
   'read_vault_erasure_scope' : ActorMethod<[string, [] | [string]], boolean>,
   'record_presence_heartbeat' : ActorMethod<
     [],
@@ -1912,6 +1969,11 @@ export interface Main {
   >,
   'set_competition_domain_canister' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_email_workers' : ActorMethod<
+    [Array<Principal>],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

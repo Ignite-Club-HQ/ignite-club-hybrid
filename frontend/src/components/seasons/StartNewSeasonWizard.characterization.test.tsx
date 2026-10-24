@@ -15,6 +15,7 @@ const backendMocks = vi.hoisted(() => ({
   mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   saveLiveSeason: vi.fn(),
   addLiveSeasonTeamAssignment: vi.fn().mockResolvedValue(undefined),
+  assignReturningLiveSeasonPlayers: vi.fn().mockResolvedValue(1),
   context: { identity: {}, target: {} },
 }));
 
@@ -28,6 +29,7 @@ vi.mock("@/live/featureRouter", () => ({
 vi.mock("@/live/features/club", () => ({
   saveLiveSeason: (...args: unknown[]) => backendMocks.saveLiveSeason(...args),
   addLiveSeasonTeamAssignment: (...args: unknown[]) => backendMocks.addLiveSeasonTeamAssignment(...args),
+  assignReturningLiveSeasonPlayers: (...args: unknown[]) => backendMocks.assignReturningLiveSeasonPlayers(...args),
 }));
 vi.mock("./ReturningMembersStep", () => ({
   ReturningMembersStep: ({ targetSeasonId, onChange, onAssignmentsChange }: any) => (
@@ -203,15 +205,15 @@ describe.runIf(backendMocks.mode === "icp")("StartNewSeasonWizard ICP club-seaso
     await screen.findByLabelText("Season name");
     fireEvent.change(screen.getByLabelText("Season name"), { target: { value: "2027 Season" } });
     const structureToggle = screen.getByRole("checkbox", { name: /Duplicate structure/ });
-    expect(structureToggle).toBeDisabled();
+    expect(structureToggle).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     await screen.findByText("Returning target season-new");
 
     fireEvent.click(screen.getByRole("button", { name: "Choose returning players" }));
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     await screen.findByText(/Invite into season-new/);
-    expect(backendMocks.addLiveSeasonTeamAssignment).toHaveBeenCalledExactlyOnceWith(
-      backendMocks.context, "season-new", "new-team-1", "player-1",
+    expect(backendMocks.assignReturningLiveSeasonPlayers).toHaveBeenCalledExactlyOnceWith(
+      backendMocks.context, "season-old", "season-new", [{ member_id: "player-1", team_id: "new-team-1" }],
     );
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     await screen.findByText("Review");

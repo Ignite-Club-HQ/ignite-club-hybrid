@@ -3,6 +3,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resendLiveEoiInvite } from "@/live/features/competitions";
+import { writeEoiInScope } from "@/live/competitionRouting";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 /** Resend the magic-link invite for a given EOI submission. */
 export function useResendEoiInvite() {
@@ -16,12 +19,10 @@ export function useResendEoiInvite() {
           });
           if (error) throw error;
         },
-        icp: async () => {
-          throw new Error("Email reminders are not connected for Internet Identity yet; no email was sent.");
-        },
+        icp: async ctx => { await resendLiveEoiInvite(ctx, submissionId); },
       }, writeOnce({ eoiId: submissionId })),
     onSuccess: () => {
-      toast.success("Invite resent");
+      toast.success(resolveAuthBackend() === "icp" ? "Invite email queued" : "Invite resent");
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
     },
     onError: (e: unknown) => {
@@ -50,12 +51,16 @@ export function useBulkResendEoiInvites() {
           }
           return { ok, fail };
         },
-        icp: async () => {
-          throw new Error("Email reminders are not connected for Internet Identity yet; no email was sent.");
+        icp: async ctx => {
+          let ok = 0, fail = 0;
+          for (const id of submissionIds) {
+            try { await writeEoiInScope(ctx, id, scoped => resendLiveEoiInvite(scoped, id)); ok++; } catch { fail++; }
+          }
+          return { ok, fail };
         },
       }, { shared: "person" }),
     onSuccess: ({ ok, fail }) => {
-      if (fail === 0) toast.success(`Sent ${ok} reminder${ok === 1 ? "" : "s"}`);
+      if (fail === 0) toast.success(`${resolveAuthBackend() === "icp" ? "Queued" : "Sent"} ${ok} reminder${ok === 1 ? "" : "s"}`);
       else toast.warning(`Sent ${ok}, failed ${fail}`);
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
     },

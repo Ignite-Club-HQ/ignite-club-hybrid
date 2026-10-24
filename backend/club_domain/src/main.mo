@@ -17,6 +17,7 @@ import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Map "mo:core/Map";
+import EmailOutbox "../../shared/EmailOutbox";
 import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
@@ -200,6 +201,34 @@ persistent actor class Main(governorInit : Principal) = this {
   var teamInvites : [Types.TeamInvite];
   var teamInviteLinks : [Types.TeamInviteLink];
   var pendingInvites : [Types.PendingInvite];
+  var emailJobs : Map.Map<Text, EmailOutbox.Job>;
+  var emailWorkers : [Principal];
+  transient let emailOutbox = EmailOutbox.Queue(emailJobs);
+  public shared ({ caller }) func set_email_workers(workers : [Principal]) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or workers.size() > 10 or workers.any(func p = Principal.isAnonymous(p))) return #Err("Governor and valid workers required");
+    emailWorkers := workers; #Ok
+  };
+  public shared ({ caller }) func queue_pending_invite_email(id : Text, ciphertext : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let invite = pendingInvites.find(func i = i.id == id) ?? return #Err("Invite missing");
+      if (not canManageTeam(caller, invite.club_id, invite.team_id) or isTransferFenced(invite.club_id) or invite.status != "pending") return #Err("Invite manager required");
+      if (ciphertext.size() < 32) return #Err("Encrypted payload required");
+      if (Map.entries(emailJobs).filter(func pair = nowMs() - pair.1.created_at_ms < 86_400_000).size() >= 100) return #Err("Daily invitation email limit reached");
+      emailOutbox.enqueue("invite:" # id, "pending_invite", id, ciphertext, nowMs())
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func claim_email_job() : async { #Ok : ?{ job : EmailOutbox.Job; to : Text; subject : Text; body : Text; token : Text }; #Err : Text } {
+    if (not emailWorkers.any(func p = p == caller)) return #Err("Email worker required");
+    let job = emailOutbox.claim(caller, func j = pendingInvites.any(func i = i.id == j.resource and i.status == "pending" and not isTransferFenced(i.club_id) and not removalReceiver.denied(i.invited_by) and not isExcluded(i.invited_by, i.club_id) and canManageTeam(i.invited_by, i.club_id, i.team_id))) ?? return #Ok(null);
+    let invite = pendingInvites.find(func i = i.id == job.resource) ?? return #Err("Invite missing");
+    #Ok(?{ job; to = invite.email; subject = "You're invited to Ignite"; body = invite.id; token = "" })
+  };
+  public shared ({ caller }) func finish_email_job(id : Text, attempt : Nat, outcome : Text, provider_id : Text) : async { #Ok; #Err : Text } {
+    if (not emailWorkers.any(func p = p == caller)) return #Err("Email worker required");
+    emailOutbox.finish(caller, id, attempt, outcome, provider_id)
+  };
   // (code, invite_id) — short share-link codes, lazily created, stable once minted.
   var inviteShortCodes : [(Text, Text)];
   var teamCreationRequests : [Types.TeamCreationRequest];
@@ -221,6 +250,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var memberPayments : [Types.MemberPayment];
   var teamSponsorAllocations : [Types.TeamSponsorAllocation];
   var seasons : [Types.Season];
+  var seasonCloneReceipts : Map.Map<Text, { source : Text; name : Text; copy_staff : Bool; season_id : Text }>;
+  var seasonTeamCopies : [(Text, Text, Text)];
   var seasonTeamSummaries : [Types.SeasonTeamSummary];
   var seasonPlayerStats : [Types.SeasonPlayerStat];
 
@@ -1919,6 +1950,105 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  public shared ({ caller }) func duplicate_season_structure(operation : Text, source_id : Text, name : Text, copy_staff : Bool) : async { #Ok : Types.Season; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let source = seasons.find(func s = s.id == source_id) ?? return #Err("Source season not found");
+      if (not isAdmin(caller, source.club_id) or isTransferFenced(source.club_id)) return #Err("Club admin required");
+      if (operation.size() == 0 or operation.size() > 128 or name.size() == 0 or name.size() > 200) return #Err("Invalid season request");
+      let key = caller.toText() # "\u{1f}" # operation;
+      switch (Map.get(seasonCloneReceipts, Text.compare, key)) {
+        case (?receipt) {
+          if (receipt.source != source_id or receipt.name != name or receipt.copy_staff != copy_staff) return #Err("Season operation conflict");
+          return #Ok(seasons.find(func s = s.id == receipt.season_id) ?? return #Err("Created season no longer exists"))
+        }; case null {};
+      };
+      let sourceAssignments = seasonTeamAssignments.filter(func a = a.season_id == source_id);
+      let priorCopies = seasonTeamCopies.filter(func pair = pair.0 == source_id);
+      let sourceTeams = teams.filter(func t = t.club_id == source.club_id and t.deleted_at_ms == null and not t.archived and
+        (if (priorCopies.size() > 0) priorCopies.any(func pair = pair.2 == t.id) else if (sourceAssignments.size() > 0) sourceAssignments.any(func a = a.team_id == t.id) else true));
+      if (sourceTeams.size() > 100) return #Err("Season team batch exceeds limit");
+      switch (teamCapacityError(source.club_id, sourceTeams.size())) { case (?error) return #Err(error); case null {} };
+      let id = "season-copy-" # source.club_id # "-" # Nat.toText(seasons.size() + 1) # "-" # Nat64.toText(nowNs());
+      let created : Types.Season = { source with id; name; status = "draft"; start_date = ""; end_date = ""; created_at_ms = nowMs(); updated_at_ms = nowMs() };
+      var copied : [Types.ClubTeam] = [];
+      var staff : [Types.RoleGrant] = [];
+      var mapping : [(Text, Text, Text)] = [];
+      for (team in sourceTeams.values()) {
+        let teamId = id # "-team-" # Nat.toText(copied.size());
+        copied := copied.concat([{ team with id = teamId; is_shell = false; shell_claim_token = null; shell_claimed_at_ms = null; shell_claimed_by = null; shell_contact_email = null; shell_contact_name = null; shell_invited_by = null; playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false }]);
+        mapping := mapping.concat([(id, team.id, teamId)]);
+        if (copy_staff) {
+          staff := staff.concat(acl.roles.filter(func r = r.club == ?source.club_id and r.team == ?team.id and (r.role == "coach" or r.role == "team_admin") and not removalReceiver.denied(r.user) and not isExcluded(r.user, source.club_id)).map(func r = ({ r with team = ?teamId })));
+        }
+      };
+      // All validation precedes the single local commit; no remote calls below.
+      seasons := seasons.concat([created]); teams := teams.concat(copied);
+      acl := { acl with teams = acl.teams.concat(copied.map(func t = ({ id = t.id; club = t.club_id }))); roles = acl.roles.concat(staff) };
+      seasonTeamCopies := seasonTeamCopies.concat(mapping);
+      Map.add(seasonCloneReceipts, Text.compare, key, { source = source_id; name; copy_staff; season_id = id });
+      bumpMembershipDiscovery();
+      #Ok(created)
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func carry_over_season_players(source_id : Text, target_id : Text, members : [Text]) : async { #Ok : Nat; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let source = seasons.find(func s = s.id == source_id) ?? return #Err("Source season not found");
+      let target = seasons.find(func s = s.id == target_id) ?? return #Err("Target season not found");
+      if (source.id == target.id or source.club_id != target.club_id or target.status != "draft" or not isAdmin(caller, target.club_id) or isTransferFenced(target.club_id)) return #Err("Same-club draft season and admin required");
+      if (members.size() > 500) return #Err("Rollover batch exceeds limit");
+      var additions : [Types.SeasonTeamAssignment] = [];
+      for (member in members.values()) {
+        if (additions.any(func a = a.member_id == member)) return #Err("Duplicate member");
+        let previous = seasonTeamAssignments.find(func a = a.season_id == source_id and a.member_id == member) ?? return #Err("Source member missing");
+        let destination = switch (seasonTeamCopies.find(func pair = pair.0 == target_id and pair.1 == previous.team_id)) { case (?pair) pair.2; case null previous.team_id };
+        if (not teams.any(func t = t.id == destination and t.club_id == target.club_id and t.deleted_at_ms == null and not t.archived)) return #Err("Destination team unavailable");
+        additions := additions.concat([{ previous with season_id = target_id; team_id = destination; added_at_ms = nowMs() }]);
+      };
+      let missing = additions.filter(func a = not seasonTeamAssignments.any(func current = current.season_id == target_id and current.member_id == a.member_id));
+      if (additions.any(func a = seasonTeamAssignments.any(func current = current.season_id == target_id and current.member_id == a.member_id and current.team_id != a.team_id))) return #Err("Target player already assigned differently");
+      seasonTeamAssignments := seasonTeamAssignments.concat(missing);
+      #Ok(missing.size())
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func read_season_teams(season_id : Text) : async { #Ok : [Types.ClubTeam]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let season = seasons.find(func s = s.id == season_id) ?? return #Err("Season missing");
+      if (not isMember(caller, season.club_id) or isTransferFenced(season.club_id)) return #Err("Club membership required");
+      let copies = seasonTeamCopies.filter(func pair = pair.0 == season_id);
+      #Ok(teams.filter(func t = t.club_id == season.club_id and t.deleted_at_ms == null and not t.archived and (copies.size() == 0 or copies.any(func pair = pair.2 == t.id))))
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func assign_returning_season_players(source_id : Text, target_id : Text, placements : [{ member_id : Text; team_id : Text }]) : async { #Ok : Nat; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let source = seasons.find(func s = s.id == source_id) ?? return #Err("Source season missing");
+      let target = seasons.find(func s = s.id == target_id) ?? return #Err("Target season missing");
+      if (source.id == target.id or source.club_id != target.club_id or target.status != "draft" or not isAdmin(caller, target.club_id) or isTransferFenced(target.club_id) or removalReceiver.denied(caller)) return #Err("Same-club draft and admin required");
+      if (placements.size() > 500) return #Err("Rollover batch exceeds limit");
+      var additions : [Types.SeasonTeamAssignment] = [];
+      let copies = seasonTeamCopies.filter(func p = p.0 == target_id);
+      for (placement in placements.values()) {
+        if (additions.any(func a = a.member_id == placement.member_id)) return #Err("Duplicate member");
+        if (not seasonTeamAssignments.any(func a = a.season_id == source_id and a.member_id == placement.member_id)) return #Err("Source member missing");
+        if (not teams.any(func t = t.id == placement.team_id and t.club_id == target.club_id and not t.archived and t.deleted_at_ms == null) or (copies.size() > 0 and not copies.any(func p = p.2 == placement.team_id))) return #Err("Destination team unavailable");
+        if (seasonTeamAssignments.any(func a = a.season_id == target_id and a.member_id == placement.member_id and a.team_id != placement.team_id)) return #Err("Target player assigned differently");
+        additions := additions.concat([{ season_id = target_id; member_id = placement.member_id; team_id = placement.team_id; added_at_ms = nowMs() }]);
+      };
+      let missing = additions.filter(func a = not seasonTeamAssignments.any(func row = row.season_id == target_id and row.member_id == a.member_id));
+      seasonTeamAssignments := seasonTeamAssignments.concat(missing); #Ok(missing.size())
+    } finally { removalReceiver.leave(caller) }
+  };
+
   // ---- Season expression-of-interest (EOI) config: a free-form JSON blob
   // per season (form schema / open-close dates for the public EOI page). ----
 
@@ -1970,6 +2100,11 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
     }
+  };
+
+  public shared func can_accept_public_eoi(club_id : Text, season_id : Text) : async Bool {
+    not isTransferFenced(club_id) and profiles.any(func p = p.id == club_id and p.deleted_at_ms == null) and
+    seasons.any(func s = s.id == season_id and s.club_id == club_id and s.status == "active") and eoiLookup(eoiPublicKey(season_id)) != null
   };
 
   public shared ({ caller }) func set_season_public_eoi_config(season_id : Text, slug : ?Text, public_json : Text) : async { #Ok; #Err : Text } {
@@ -3825,6 +3960,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     if (isExcluded(caller, club_id)) return #Err("Forbidden");
     if (kind != "team" and kind != "club" and kind != "guardian") return #Err("Invalid invite kind");
+    if (not validPendingInviteRole(kind, team_id, role)) return #Err("Invalid invitation role or scope");
     if (email == "" or email.size() > 320) return #Err("Invalid email");
     if (kind == "guardian") {
       switch (child_id) {
@@ -3849,6 +3985,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { if (not isAdmin(caller, club_id)) return #Err("Club admin required") };
     };
     let token = "pinv-" # (await randomHex(16));
+    if (removalReceiver.denied(caller)) return #Err("Invite authorization changed");
     if (kind == "guardian") {
       if (not canManageTeam(caller, club_id, team_id)) return #Err("Invite authorization changed");
       switch (child_id) {
@@ -4000,6 +4137,8 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Invite not found") };
       case (?invite) {
         if (isTransferFenced(invite.club_id)) return #Err("Club is temporarily locked for a transfer");
+        if (not validPendingInviteRole(invite.kind, invite.team_id, invite.role)) return #Err("Invalid invitation role or scope");
+        if (isExcluded(invite.invited_by, invite.club_id) or removalReceiver.denied(invite.invited_by) or not canManageTeam(invite.invited_by, invite.club_id, invite.team_id)) return #Err("Invite authorization changed");
         if (invite.status == "accepted") return #Err("Invite already accepted");
         if (invite.status == "revoked") return #Err("Invite revoked");
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
@@ -4067,6 +4206,13 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  func validPendingInviteRole(kind : Text, team : ?Text, role : ?Text) : Bool {
+    if (kind == "guardian") return role == null or role == ?"parent";
+    let value = role ?? return false;
+    if (kind == "team") return team != null and (value == "player" or value == "parent" or value == "coach" or value == "team_admin");
+    kind == "club" and team == null and (value == "club_admin" or value == "member" or value == "player" or value == "parent")
   };
 
   // ---- Guardian link/unlink + admin-assisted child/parent linking ----

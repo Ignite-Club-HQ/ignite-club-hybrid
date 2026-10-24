@@ -19,6 +19,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from,
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "admin-1" } }) }));
 vi.mock("@/lib/inviteEmailDedupe", () => ({ lookupInvitableUserByEmail: mocks.lookup }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
+vi.mock("@/live/features/club", () => ({ createLivePendingInvite: vi.fn(), getLiveClubBranding: async () => ({ name: "Club", logo_url: [], contact_email: [] }), readLiveSeasonTeams: async () => [] }));
 vi.mock("@/live/featureRouter", () => ({
   withFeatureBackend: (_feature: unknown, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
     mocks.mode === "icp" ? providers.icp({}) : providers.supabase(),
@@ -175,9 +176,9 @@ describe.runIf(mocks.mode === "icp")("SeasonInviteStep ICP boundary", () => {
     vi.clearAllMocks();
   });
 
-  it("explains the unsupported email-invite path without reading Supabase", async () => {
+  it("opens the invitation form without reading Supabase", async () => {
     renderStep();
-    expect(await screen.findByRole("status")).toHaveTextContent(/not available in ICP yet/i);
+    expect(await screen.findByPlaceholderText("Name")).toBeInTheDocument();
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.invoke).not.toHaveBeenCalled();
   });

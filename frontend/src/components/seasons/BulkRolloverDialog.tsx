@@ -18,6 +18,7 @@ import { Loader2, Users, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveSeasonTeamAssignment, addLiveSeasonTeamAssignment } from "@/live/features/club";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface Props {
   open: boolean;
@@ -25,6 +26,7 @@ interface Props {
   sourceSeasonId: string;
   targetSeasonId: string;
   onComplete?: () => void;
+  clubId?: string;
 }
 
 interface ReturningPlayer {
@@ -40,6 +42,7 @@ export function BulkRolloverDialog({
   sourceSeasonId,
   targetSeasonId,
   onComplete,
+  clubId,
 }: Props) {
   const qc = useQueryClient();
   const [teamChoices, setTeamChoices] = useState<Record<string, boolean>>({});
@@ -47,6 +50,17 @@ export function BulkRolloverDialog({
   const { data: players = [], isLoading } = useQuery({
     queryKey: ["bulk-rollover-players", sourceSeasonId],
     queryFn: async (): Promise<ReturningPlayer[]> => {
+      if (resolveAuthBackend() === "icp") {
+        if (!clubId) throw new Error("Season club required");
+        return withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async ctx => {
+            const { listLiveTeams } = await import("@/live/features/club");
+            const [assignments, teams] = await Promise.all([listLiveSeasonTeamAssignment(ctx, sourceSeasonId), listLiveTeams(ctx, clubId)]);
+            return assignments.map(a => ({ club_player_id: a.member_id, display_name: "Member", previous_team_id: a.team_id, previous_team_name: teams.find(t => t.id === a.team_id)?.name ?? "Team" }));
+          },
+        }, { clubId });
+      }
       const { data, error } = await supabase.rpc("get_returning_players", {
         _source_season_id: sourceSeasonId,
       });
@@ -105,22 +119,11 @@ export function BulkRolloverDialog({
         // current team assignment on the source season over to the same
         // team id on the target season (teams are club-wide, not re-created
         // per season, so the team id stays valid).
-        icp: async (ctx) => {
-          const assignments = (await listLiveSeasonTeamAssignment(ctx, sourceSeasonId)) as Array<{
-            member_id: string;
-            team_id: string;
-          }>;
-          const teamIdByMember = new Map(assignments.map((a) => [a.member_id, a.team_id]));
-          let count = 0;
-          for (const playerId of selectedPlayerIds) {
-            const teamId = teamIdByMember.get(playerId);
-            if (!teamId) continue;
-            await addLiveSeasonTeamAssignment(ctx, targetSeasonId, teamId, playerId);
-            count += 1;
-          }
-          return count;
+        icp: async ctx => {
+          const { carryOverLiveSeasonPlayers } = await import("@/live/features/club");
+          return carryOverLiveSeasonPlayers(ctx, sourceSeasonId, targetSeasonId, selectedPlayerIds);
         },
-      }, writeOnce({ seasonId: sourceSeasonId }));
+      }, writeOnce(clubId ? { clubId } : { seasonId: sourceSeasonId }));
     },
     onSuccess: (count) => {
       toast.success(

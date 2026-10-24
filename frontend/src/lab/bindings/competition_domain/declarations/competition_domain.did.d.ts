@@ -146,6 +146,17 @@ export interface EoiTeamSuggestion {
   'submission_ids' : Array<string>,
   'age_group' : string,
 }
+export interface Job {
+  'id' : string,
+  'resource' : string,
+  'ciphertext' : string,
+  'attempt' : bigint,
+  'kind' : string,
+  'provider_id' : string,
+  'created_at_ms' : bigint,
+  'state' : string,
+  'worker' : [] | [Principal],
+}
 export interface JoinLinkPreview {
   'competition_status' : string,
   'name' : string,
@@ -211,6 +222,21 @@ export interface Main {
       { 'Err' : string }
   >,
   'can_invite_players_to_team' : ActorMethod<[string], boolean>,
+  'claim_email_job' : ActorMethod<
+    [],
+    {
+        'Ok' : [] | [
+          {
+            'to' : string,
+            'job' : Job,
+            'token' : string,
+            'subject' : string,
+            'body' : string,
+          }
+        ]
+      } |
+      { 'Err' : string }
+  >,
   'claim_eoi_by_token' : ActorMethod<
     [string],
     { 'Ok' : EoiSubmission } |
@@ -303,6 +329,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
+  'finish_email_job' : ActorMethod<
+    [string, bigint, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'get_chat_settings' : ActorMethod<
     [string],
     { 'Ok' : ChatSettings } |
@@ -562,6 +593,11 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'queue_official_invite_email' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'read_account_can_invite_players_to_team' : ActorMethod<[string], boolean>,
   'read_account_competition_engagement_summary' : ActorMethod<
     [Array<string>, bigint, bigint],
@@ -803,6 +839,11 @@ export interface Main {
   'set_division_hide_ladder' : ActorMethod<
     [string, string, boolean],
     { 'Ok' : DivisionSetting } |
+      { 'Err' : string }
+  >,
+  'set_email_workers' : ActorMethod<
+    [Array<Principal>],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_events_domain_canister' : ActorMethod<

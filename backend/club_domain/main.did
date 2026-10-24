@@ -535,6 +535,14 @@ type Main =
                                   Err: text;
                                   Ok: ClubTeam;
                                 });
+   assign_returning_season_players: (source_id: text, target_id: text,
+    placements: vec record {
+                      member_id: text;
+                      team_id: text;
+                    }) -> (variant {
+                             Err: text;
+                             Ok: nat;
+                           });
    begin_identity_link: (target: principal) ->
     (variant {
        Err: text;
@@ -545,6 +553,7 @@ type Main =
                          Err: text;
                          Ok: nat;
                        });
+   can_accept_public_eoi: (club_id: text, season_id: text) -> (bool);
    cancel_media_quota: (token: text, club_id: text, category: text, bytes:
     nat, cycle: nat) -> (Result);
    cancel_retained_media: (token: text, club: text, path: text, bytes:
@@ -553,11 +562,28 @@ type Main =
    /// (the frontend asset canister adds club_domain as a controller at deploy
    /// time so admin settings can show its balance too).
    canister_cycles: (canister_id: principal) -> (nat);
+   carry_over_season_players: (source_id: text, target_id: text, members:
+    vec text) -> (variant {
+                    Err: text;
+                    Ok: nat;
+                  });
    check_team_name_unique: (club_id: text, name: text) ->
     (variant {
        Err: text;
        Ok: bool;
      }) query;
+   claim_email_job: () ->
+    (variant {
+       Err: text;
+       Ok:
+        opt record {
+              body: text;
+              job: Job;
+              subject: text;
+              to: text;
+              token: text;
+            };
+     });
    claim_shell_team: (token: text) -> (variant {
                                          Err: text;
                                          Ok: ClubTeam;
@@ -694,6 +720,11 @@ type Main =
                                                  Err: text;
                                                  Ok;
                                                });
+   duplicate_season_structure: (operation: text, source_id: text, name: 
+    text, copy_staff: bool) -> (variant {
+                                  Err: text;
+                                  Ok: Season;
+                                });
    enrol_in_class: (club_id: text, term_id: text, class_id: text, member_id:
     text) -> (variant {
                 Err: text;
@@ -740,6 +771,11 @@ type Main =
        Err: text;
        Ok: opt PendingInviteEmailHash;
      }) query;
+   finish_email_job: (id: text, attempt: nat, outcome: text, provider_id:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    free_usage_counters: (club_id: text) ->
     (variant {
        Err: text;
@@ -1286,6 +1322,11 @@ type Main =
                                      Err: text;
                                      Ok: nat32;
                                    });
+   queue_pending_invite_email: (id: text, ciphertext: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    read_account_execute: (input: text) -> (Result__2);
    read_account_find_pending_invite_by_email_hash: (club_id: text, hash:
     text) -> (variant {
@@ -1717,6 +1758,11 @@ type Main =
                                       Err: text;
                                       Ok: opt text;
                                     }) query;
+   read_season_teams: (season_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubTeam;
+     });
    read_vault_erasure_scope: (club: text, team: opt text) -> (bool) query;
    record_presence_heartbeat: () -> (variant {
                                        Err: text;
@@ -2067,6 +2113,10 @@ type Main =
        Err: text;
        Ok;
      });
+   set_email_workers: (workers: vec principal) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    set_events_domain_canister: (id: principal) -> (variant {
                                                      Err: text;
                                                      Ok;
@@ -2272,6 +2322,18 @@ type Link =
    draft: Draft;
    id: text;
    sort_order: nat32;
+ };
+type Job = 
+ record {
+   attempt: nat;
+   ciphertext: text;
+   created_at_ms: nat64;
+   id: text;
+   kind: text;
+   provider_id: text;
+   resource: text;
+   state: text;
+   worker: opt principal;
  };
 type InviteStats = 
  record {
