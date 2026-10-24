@@ -1331,7 +1331,15 @@ persistent actor class Main(governorInit : Principal) = this {
       for (i in Nat.range(offset, end)) {
         let f = files[i];
         if (f.club == club and f.competition_id == competition and (team == null or f.team == team or f.team == null) and (league == null or f.mini_league_id == league) and (folder == null or folder == ?f.folder_id) and (f.deleted_at_ms != null) == trash) {
-          let permission = switch access { case (?a) { isGovernor(caller) or folderVisible(caller, folders.find(func x = x.id == f.folder_id) ?? { id = ""; club; team = null; parent_id = null; name = ""; restricted_roles = []; created_by = caller; created_at_ms = 0; deleted_at_ms = null; deleted_by = null; mini_league_id = null; competition_id = competition; sort_order = 0; description = null; color = null }, if (a.can_manage) [("club_admin", null), ("committee_member", null), ("coach", null), ("team_admin", null)] else []) }; case null fileVisible(caller, f, grants) };
+          let permission = switch access {
+            case (?a) {
+              switch (folders.find(func x = x.id == f.folder_id)) {
+                case null f.folder_id == "";
+                case (?parent) folderVisible(caller, parent, if (a.can_manage) [("club_admin", null), ("committee_member", null), ("coach", null), ("team_admin", null)] else [])
+              }
+            };
+            case null fileVisible(caller, f, grants)
+          };
           if (permission) items := items.concat([withFolderJoin(f)])
         }
       };
