@@ -815,6 +815,11 @@ type Main =
      }) query;
    my_children: () -> (vec Child) query;
    my_rsvps: () -> (vec Rsvp) query;
+   notify_group_pitch: (group_id: text, action: text, detail: text, key:
+    text) -> (variant {
+                Err: text;
+                Ok: nat16;
+              });
    playhqTransform: (record {
                        context: blob;
                        response: HttpRequestResult;
@@ -1138,6 +1143,11 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_shared_board: (club: text, team: text) ->
+    (variant {
+       Err: text;
+       Ok: opt ActiveGame;
+     });
    record_event_view: (event_id: text) -> (variant {
                                              Err: text;
                                              Ok;
@@ -1432,6 +1442,11 @@ type Main =
                                           Err: text;
                                           Ok: EventGroup;
                                         });
+   sync_shared_board: (club: text, team: text, expected: opt nat64, pitch:
+    text, session: text) -> (variant {
+                               Err: text;
+                               Ok: ActiveGame;
+                             });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;
