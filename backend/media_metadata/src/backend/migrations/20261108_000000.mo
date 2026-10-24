@@ -1,3 +1,4 @@
+import Array "mo:core/Array";
 import Map "mo:core/Map";
 module {
   type OldComment = { id : Text; asset_id : Text; author : Principal; body : Text; created_at_ms : Nat64; deleted : Bool };

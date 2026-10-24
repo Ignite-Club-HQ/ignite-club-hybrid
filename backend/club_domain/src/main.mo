@@ -5397,7 +5397,7 @@ persistent actor class Main(governorInit : Principal) = this {
       };
       for (child in acl.children.values()) {
         if (child.club_id == ?club and (switch team { case (?t) child.teams.any(func id = id == t); case null true })) {
-          switch child.parent { case (?p) add(p); case null {} };
+          switch (child.parent) { case (?p) add(p); case null {} };
           for (g in acl.guardians.values()) if (g.child == child.id) add(g.user)
         }
       }

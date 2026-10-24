@@ -596,6 +596,7 @@ persistent actor class Main(governorInit : Principal) = this {
           asset_id;
           author = caller;
           body;
+          reply_to_id = null;
           created_at_ms;
           deleted = false;
         };

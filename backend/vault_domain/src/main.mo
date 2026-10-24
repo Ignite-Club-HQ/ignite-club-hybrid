@@ -555,7 +555,7 @@ persistent actor class Main(governorInit : Principal) = this {
       switch allowance { case (#Ok(s)) { if (not s.premium) return #Err("Scoped Pro required") }; case (#Err(e)) return #Err(e) };
       if (club_domain_canister != ?clubId or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery copy access changed");
       if (not validLong(name, 160) or not validLong(file_url, 2048) or not validBlobRef(blob_ref) or size > 10_485_760 or not Text.startsWith(blob_ref.path, #text ("clubs/" # a.club_id # "/vault/"))) return #Err("Invalid private gallery copy");
-      if (switch a.blob_ref { case (?ref) ref.path == blob_ref.path and ref.canister == blob_ref.canister; case null false }) return #Err("Vault copy requires separate encrypted bytes");
+      if (switch (a.blob_ref) { case (?ref) ref.path == blob_ref.path and ref.canister == blob_ref.canister; case null false }) return #Err("Vault copy requires separate encrypted bytes");
       // Recheck source access after every external authorization await.
       let current = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(row)) row };
       if (current != a or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery source changed");
