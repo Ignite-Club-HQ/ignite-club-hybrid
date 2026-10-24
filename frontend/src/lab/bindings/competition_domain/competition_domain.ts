@@ -699,6 +699,13 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
+    move_team_division(competition_id: string, team_id: string, expected_division: string | null, division_id: string | null, clear_fixtures: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     prepare_account_removal(request: Request): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -2111,6 +2118,16 @@ export class Competition_domain implements competition_domainInterface {
     }> {
         const result = await this.actor.memory_stats();
         return result;
+    }
+    async move_team_division(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.move_team_division(arg0, arg1, to_candid_opt_n10(arg2), to_candid_opt_n10(arg3), arg4);
+        return from_candid_variant_n70(result);
     }
     async prepare_account_removal(arg0: Request): Promise<{
         __kind__: "Ok";

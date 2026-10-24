@@ -541,6 +541,11 @@ export interface Main {
     [],
     { 'memory_bytes' : bigint, 'stable_bytes' : bigint, 'heap_bytes' : bigint }
   >,
+  'move_team_division' : ActorMethod<
+    [string, string, [] | [string], [] | [string], boolean],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'prepare_account_removal' : ActorMethod<
     [Request],
     { 'Ok' : null } |

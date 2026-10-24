@@ -548,6 +548,12 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
+   move_team_division: (competition_id: text, team_id: text,
+    expected_division: opt text, division_id: opt text, clear_fixtures:
+    bool) -> (variant {
+                Err: text;
+                Ok: nat;
+              });
    prepare_account_removal: (request: Request) -> (variant {
                                                      Err: text;
                                                      Ok;
