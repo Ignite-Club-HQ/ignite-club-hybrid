@@ -2815,6 +2815,25 @@ persistent actor class Main(governorInit : Principal) = this {
     await protectedPlayerStats(caller,event_id)
   };
 
+  // Exact association, never titles/timestamps or all entered-team training.
+  public shared ({ caller }) func read_competition_events(competition_id : Text) : async { #Ok : [Types.Event]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let ids = competitionEventOperations.filter(func o = o.competition_id == competition_id).flatMap(func o = o.event_ids)
+        .concat(competitionMatchLinks.filter(func l = l.competition_id == competition_id).map(func l = l.event_id));
+      if (ids.size() > 500) return #Err("Competition event inventory requires paging");
+      var visible : [Types.Event] = [];
+      for (event in events.filter(func e = not e.deleted and ids.any(func id = id == e.id)).values()) {
+        await syncRolesFromClubDomain(caller, event.club_id);
+        let allowed = await* canViewMatch(caller, event);
+        if (removalReceiver.denied(caller)) return #Err("Account access changed");
+        if (allowed and not eventFenced(event.id) and events.any(func e = e == event)) visible := visible.concat([event]);
+      };
+      #Ok(visible)
+    } finally { removalReceiver.leave(caller) }
+  };
+
   // ---- Workstream D: cross-sport game result (upsert by event_id) ----
   public shared ({ caller }) func save_game_result(
     team_id : Text,
