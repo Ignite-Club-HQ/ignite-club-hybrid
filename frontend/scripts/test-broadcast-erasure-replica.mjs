@@ -26,6 +26,9 @@ try {
   k.setPrincipal(manager);const competition=ok(await k.create_competition('club','Cup','2026')).id;
   k.setPrincipal(gov);ok(await k.grant_role(manager,'competition_admin',competition,[]));ok(await k.grant_role(alias,'referee',competition,[]));ok(await k.grant_role(other,'referee',competition,[]));k.setPrincipal(manager);
   assert.ok(ok(await k.queue_competition_broadcast('op',competition,[],'Notice','Body'))>0n);
+  // Exact live queue/relay proof is retained until retirement, including count.
+  q.setPrincipal(C.canisterId);const proof=ok(await q.read_competition_broadcast_receipt('club',`bc-${competition}-1`))[0];assert.ok(proof);
+  q.setPrincipal(other);denied(await q.retire_competition_broadcast('club',`bc-${competition}-1`,proof.audience,proof.count));
   q.setPrincipal(gov);const pending=ok(await q.claim(9999999999999n,100));assert.ok(pending.length>0);
   for(const a of [c,k,q])a.setPrincipal(manager);
   ok(await k.prepare_my_broadcast_erasure());ok(await c.prepare_my_broadcast_erasure());ok(await q.prepare_my_broadcast_erasure());
@@ -33,6 +36,9 @@ try {
   q.setPrincipal(gov);for(const n of pending)ok(await q.acknowledge(n.id,n.idempotency_key));
   c.setPrincipal(manager);ok(await c.purge_my_broadcast_data());ok(await c.purge_my_broadcast_data());
   q.setPrincipal(manager);ok(await q.purge_my_data());ok(await q.purge_my_data());
+  q.setPrincipal(alias);assert.equal(ok(await q.list_inbox(alias.toText(),[],100)).length,0);
+  q.setPrincipal(C.canisterId);denied(await q.enqueue_competition_broadcast(proof.audience,'club',competition,'Body',`bc-${competition}-1`));
+  q.setPrincipal(manager);
   q.setPrincipal(other);const inbox=ok(await q.list_inbox(other.toText(),[],100));assert.ok(inbox.length>0);assert.ok(inbox.every(n=>n.user===other.toText()));
   k.setPrincipal(manager);ok(await k.purge_my_data());denied(await k.queue_competition_broadcast('op',competition,[],'Notice','Body'));
   k.setPrincipal(alias);denied(await k.queue_competition_broadcast('new-op',competition,[],'Notice','Body'));
