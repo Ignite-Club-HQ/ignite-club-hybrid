@@ -160,4 +160,12 @@ describe("manual match workflow", () => {
     expect(mocks.recordLiveMatch).toHaveBeenCalledWith(icpContext, "competition-icp", "home-1", "away-1");
     expect(mocks.from).not.toHaveBeenCalled();
   });
+  it.runIf(!supabaseMode)("does not acknowledge a fixture whose detail synchronization failed", async () => {
+    mocks.recordLiveMatch.mockResolvedValueOnce({ id: "match-saved", revision: 1n });
+    mocks.updateLiveMatchDetails.mockRejectedValueOnce(new Error("Event synchronization unresolved"));
+    const row = buildManualMatchRow({ competitionId: "c", homeTeamId: "h", awayTeamId: "a", divisionId: "d", scheduledAt: "2026-10-25T12:00:00Z", venue: "Oval", pitch: "2", round: "3", duration: "60", arrival: "20", notes: "Final" });
+    expect(await createManualMatch(row)).toEqual({ error: { message: "Event synchronization unresolved" } });
+    expect(mocks.updateLiveMatchDetails).toHaveBeenCalledWith(icpContext, "match-saved", expect.objectContaining({ divisionId: "d", pitchNumber: "2", roundNumber: 3, durationMinutes: 60, arrivalMinutesBefore: 20, notes: "Final" }));
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
 });
