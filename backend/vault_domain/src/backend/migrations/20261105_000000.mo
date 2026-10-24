@@ -1,0 +1,1 @@
+import Map "mo:core/Map"; module { public func migration(_ : {}) : { var galleryMediaAuthority : ?Principal; var gallerySourceFiles : Map.Map<Text, Text> } { { var galleryMediaAuthority = null; var gallerySourceFiles = Map.empty<Text, Text>() } } }
