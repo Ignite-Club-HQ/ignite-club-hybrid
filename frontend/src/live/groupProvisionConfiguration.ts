@@ -37,6 +37,9 @@ export function groupConfigurationPlan(p: Provision, globals: ConfigurationGloba
     link(domain, 'set_club_domain_canister', 'club_domain');
   }
   for (const domain of ['messaging_domain', 'club_domain', 'events_domain'] as const) link(domain, 'set_notification_queue_canister', 'notification_queue');
+  operations.push({ domain: 'media_metadata', method: 'set_gallery_authorities', args: [principal(p.canisters.club_domain), principal(p.canisters.vault_domain)] });
+  link('club_domain', 'set_gallery_media_authority', 'media_metadata');
+  link('vault_domain', 'set_gallery_media_authority', 'media_metadata');
   link('notification_queue', 'set_messaging_domain_canister', 'messaging_domain');
   operations.push({ domain: 'notification_queue', method: 'set_identity_access_canister', args: [identity] });
   operations.push({ domain: 'notification_queue', method: 'grant_worker', args: [worker] });

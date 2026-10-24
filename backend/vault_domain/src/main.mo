@@ -538,6 +538,8 @@ persistent actor class Main(governorInit : Principal) = this {
     await admitAccount(caller);
     let a = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(a)) a };
     if (not a.owner.equal(caller) and not (await canWrite(caller, a.club_id, a.team_id, null))) return #Err("Gallery owner or scoped staff required");
+    let current = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(row)) row };
+    if (current != a or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery access changed");
     #Ok(switch (gallerySourceFiles.get(source)) { case (?id) files.find(func f = f.id == id); case null null })
   };
   public shared ({ caller }) func register_gallery_copy(source : Text, name : Text, file_url : Text, size : Nat64, mime : Text, blob_ref : Types.BlobRef) : async { #Ok : Types.VaultFile; #Err : Text } {
@@ -556,6 +558,10 @@ persistent actor class Main(governorInit : Principal) = this {
       if (club_domain_canister != ?clubId or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery copy access changed");
       if (not validLong(name, 160) or not validLong(file_url, 2048) or not validBlobRef(blob_ref) or size > 10_485_760 or not Text.startsWith(blob_ref.path, #text ("clubs/" # a.club_id # "/vault/"))) return #Err("Invalid private gallery copy");
       if (switch (a.blob_ref) { case (?ref) ref.path == blob_ref.path and ref.canister == blob_ref.canister; case null false }) return #Err("Vault copy requires separate encrypted bytes");
+      let original = a.blob_ref ?? return #Err("Gallery source has no configured store");
+      if (blob_ref.canister != original.canister) return #Err("Gallery copy store mismatch");
+      let store : actor { get_content_hash : shared query (Text) -> async ?Text } = actor(original.canister);
+      if (await (with timeout = 10) store.get_content_hash(blob_ref.path) != ?blob_ref.content_hash) return #Err("Private copy not acknowledged by source store");
       // Recheck source access after every external authorization await.
       let current = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(row)) row };
       if (current != a or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery source changed");

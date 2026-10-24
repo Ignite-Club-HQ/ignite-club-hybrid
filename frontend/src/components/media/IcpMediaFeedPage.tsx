@@ -744,7 +744,7 @@ export function IcpMediaFeedPage() {
         if (link.cardId && !post.assets.some(a => galleryCardQuery.data?.photo_ids.includes(a.id))) return false;
         if (link.eventId && post.eventId !== link.eventId) return false;
         if (competitionId && post.competitionId !== competitionId) return false;
-        if (post.assets.some(a => a.id === link.photoId)) return true;
+
         if (effectiveClubId !== "all" && post.clubId !== effectiveClubId) return false;
         if (selectedTeamId === "all") return true;
         if (selectedTeamId.startsWith("ml:")) return post.miniLeagueId === selectedTeamId.slice(3);
@@ -975,6 +975,7 @@ export function IcpMediaFeedPage() {
           competitions={options.competitions}
           defaultClubId={selectedClubId !== "all" ? selectedClubId : undefined}
           defaultCompetitionId={competitionId ?? undefined}
+          defaultEventId={link.eventId ?? undefined}
         />
       )}
 

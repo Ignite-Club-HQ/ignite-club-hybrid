@@ -665,7 +665,8 @@ persistent actor class Main(governorInit : Principal) = this {
     let admin = if (allowed) false else await (with timeout = 10) club.read_account_is_app_admin(user);
     (allowed or admin) and galleryClubAuthority == ?id and not removalReceiver.denied(user) and not isFenced(asset.club_id)
   };
-  func galleryNotice(asset : Types.Asset, user : Principal, kind : Text, key : Text, parent : ?Principal) : async Text {
+  func galleryNotice(asset : Types.Asset, user : Principal, kind : Text, rawKey : Text, parent : ?Principal) : async Text {
+    let key = asset.club_id # ":" # rawKey;
     if (galleryNoticeAttempts.get(key) != null) return galleryNoticeAttempts.get(key) ?? "unknown";
     let id = galleryClubAuthority ?? return "not_configured";
     if (removalReceiver.denied(user) or assetFenced(asset.id)) return "denied";

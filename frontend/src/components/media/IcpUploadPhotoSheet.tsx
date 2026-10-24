@@ -51,6 +51,7 @@ interface IcpUploadPhotoSheetProps {
   competitions: IcpUploadNamedOption[];
   defaultClubId?: string;
   defaultCompetitionId?: string;
+  defaultEventId?: string;
 }
 
 const preparedFiles = new WeakMap<File, Promise<{ file: File | Blob }>>();
@@ -77,6 +78,7 @@ export function IcpUploadPhotoSheet({
   competitions,
   defaultClubId,
   defaultCompetitionId,
+  defaultEventId,
   onPendingChange,
 }: IcpUploadPhotoSheetProps) {
   const { activeClubFilter } = useClubTheme();
@@ -240,7 +242,7 @@ export function IcpUploadPhotoSheet({
                 teamId: teamId || null,
                 miniLeagueId: miniLeagueId || null,
                 competitionId: competitionId || null,
-                eventId: null,
+                eventId: defaultEventId ?? null,
                 caption: trimmedCaption,
                 albumId,
               });
