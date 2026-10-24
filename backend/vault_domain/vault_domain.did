@@ -379,6 +379,10 @@ type Main =
                                   Err: text;
                                   Ok: VaultFile;
                                 });
+   resume_file_cleanup: (id: text) -> (variant {
+                                         Err: text;
+                                         Ok;
+                                       });
    seal_account_removal: (request: Request) ->
     (variant {
        Err: text;
