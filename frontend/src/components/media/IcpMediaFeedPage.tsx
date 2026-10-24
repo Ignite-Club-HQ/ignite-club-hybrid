@@ -267,6 +267,7 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
     team_id: [] | [string];
     mini_league_id: [] | [string];
     competition_id: [] | [string];
+    event_id?: [] | [string];
     caption: [] | [string];
     album_id: [] | [string];
     blob_ref: [] | [unknown];
@@ -711,17 +712,36 @@ export function IcpMediaFeedPage() {
         competitionId: asset.competition_id[0] ?? null, competitionName: null, eventId: asset.event_id[0] ?? null,
         caption: asset.caption[0] ?? null, createdAtMs: Number(asset.created_at_ms), reactions: [], comments: [] } satisfies LiveMediaPost;
     } }, { photoId: link.photoId ?? undefined }) });
+  const galleryCardQuery = useQuery({ queryKey: ['icp-gallery-card', principal, link.cardId], enabled: !!principal && !!link.cardId,
+    queryFn: () => withFeatureBackend('media', { supabase: async () => null,
+      icp: ctx => getLiveGalleryChatCard(ctx, link.cardId ?? '') }, { galleryCardId: link.cardId ?? undefined }) });
+  const cardPhotoQuery = useQuery({ queryKey: ['icp-gallery-card-assets', principal, link.cardId], enabled: !!principal && !!galleryCardQuery.data,
+    queryFn: async () => {
+      const card = galleryCardQuery.data; if (!card) return [];
+      return withFeatureBackend('media', { supabase: async () => [], icp: async ctx => {
+        const rows = await Promise.all(card.photo_ids.slice(0, 200).map(id => getLiveAsset(ctx, id)));
+        return rows.flatMap(asset => { if (!asset) return []; const source = liveAssetSource(asset);
+          return [{ id: asset.album_id[0] ?? asset.id, representativeAssetId: asset.id, assets: [{ id: asset.id, url: LOADING_PHOTO_URL,
+            sourceUrl: source.kind === 'icp-blob' ? source.url : null, loading: true, isVideo: asset.mime.startsWith('video/') }], ownerId: asset.owner.toText(),
+            ownerName: 'Member', ownerAvatarUrl: null, clubId: asset.club_id, clubName: '', teamId: asset.team_id[0] ?? null, teamName: null,
+            miniLeagueId: asset.mini_league_id[0] ?? null, miniLeagueName: null, competitionId: asset.competition_id[0] ?? null, competitionName: null,
+            eventId: asset.event_id[0] ?? null, caption: asset.caption[0] ?? null, createdAtMs: Number(asset.created_at_ms), reactions: [], comments: [] } satisfies LiveMediaPost]; });
+      } }, { clubId: card.club_id });
+    } });
   const allFeedPosts = useMemo(() => {
     const loaded = feedQuery.data?.posts ?? [];
     const linked = linkedFeedAsset.data;
-    return linked && !loaded.some(p => p.assets.some(a => a.id === link.photoId)) ? [linked, ...loaded] : loaded;
-  }, [feedQuery.data?.posts, linkedFeedAsset.data, link.photoId]);
+    const known = new Set(loaded.flatMap(p => p.assets.map(a => a.id)));
+    const extra = (cardPhotoQuery.data ?? []).filter(p => !known.has(p.representativeAssetId));
+    return [...(linked && !known.has(link.photoId ?? '') ? [linked] : []), ...extra, ...loaded];
+  }, [feedQuery.data?.posts, linkedFeedAsset.data, link.photoId, cardPhotoQuery.data]);
   const resolvedUrls = useResolvedAssetUrls(allFeedPosts);
   const posts = useMemo(() => {
     const all = allFeedPosts;
     return all
       .filter((post) => {
         if (isBlocked(post.ownerId)) return false;
+        if (link.cardId && !post.assets.some(a => galleryCardQuery.data?.photo_ids.includes(a.id))) return false;
         if (link.eventId && post.eventId !== link.eventId) return false;
         if (competitionId && post.competitionId !== competitionId) return false;
         if (post.assets.some(a => a.id === link.photoId)) return true;
@@ -739,7 +759,7 @@ export function IcpMediaFeedPage() {
           resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id], loading: false } : a,
         ),
       }));
-  }, [allFeedPosts, link.photoId, effectiveClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url, isBlocked, link.eventId]);
+  }, [allFeedPosts, link.photoId, effectiveClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url, isBlocked, link.eventId, link.cardId, galleryCardQuery.data]);
 
   // Read comments from the freshest feed copy, not the snapshot taken when
   // the sheet opened, and keep just-sent comments until the canister has them.
@@ -779,10 +799,11 @@ export function IcpMediaFeedPage() {
 
   const handledLink = useRef<string | null>(null);
   useEffect(() => {
-    if (!link.photoId || handledLink.current === link.photoId) return;
+    if (!link.photoId) { handledLink.current = null; return; }
+    if (handledLink.current === `${link.photoId}:${link.comments}`) return;
     const index = flatPhotos.findIndex(photo => photo.id === link.photoId);
     if (index < 0) return;
-    handledLink.current = link.photoId;
+    handledLink.current = `${link.photoId}:${link.comments}`;
     if (link.comments) setCommentPost(flatPhotos[index].post); else setLightboxIndex(index);
   }, [link.photoId, link.comments, flatPhotos]);
   const startLongPress = (post: LiveMediaPost) => {
