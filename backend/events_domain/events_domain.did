@@ -61,6 +61,12 @@ type RoleGrant =
    team_id: opt text;
    user: principal;
  };
+type Result__1 = 
+ record {
+   event_ids: vec text;
+   first_event_id: text;
+   series_id: opt text;
+ };
 type Result = 
  record {
    hasMore: bool;
@@ -321,6 +327,11 @@ type Main =
     (variant {
        Err: text;
        Ok: EventGroup;
+     });
+   create_event_with_setup: (input: Input) ->
+    (variant {
+       Err: text;
+       Ok: Result__1;
      });
    create_open_duty: (event_id: text, duty: text) ->
     (variant {
@@ -610,6 +621,7 @@ type Main =
      }) query;
    get_rsvp_created_at: (event_id: text, account_id: text) ->
     (opt nat64) query;
+   get_schedule_view: () -> (opt text);
    get_training_default: (club_id: text, team_id: text, child_id:
     opt text) -> (variant {
                     Err: text;
@@ -815,6 +827,16 @@ type Main =
      }) query;
    my_children: () -> (vec Child) query;
    my_rsvps: () -> (vec Rsvp) query;
+   notify_duty_completion: (event_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat16;
+     });
+   notify_event_audience: (event_id: text, kind: text) ->
+    (variant {
+       Err: text;
+       Ok: nat16;
+     });
    notify_group_pitch: (group_id: text, action: text, detail: text, key:
     text) -> (variant {
                 Err: text;
@@ -1127,6 +1149,11 @@ type Main =
        Err: text;
        Ok: Receipt;
      });
+   read_event_cancellation_audience: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
    /// Location-only lookup for group routing: which club owns this event, if
    /// it lives in this canister. Viewers only; returns null when not held here.
    read_event_club: (event_id: text) ->
@@ -1279,6 +1306,11 @@ type Main =
                                                 Err: text;
                                                 Ok: nat16;
                                               });
+   send_individual_event_reminder: (event_id: text, account_id: opt text,
+    child_id: opt text) -> (variant {
+                              Err: text;
+                              Ok: nat16;
+                            });
    set_attendance: (event_id: text, account_id: text, present: bool, note:
     text) -> (variant {
                 Err: text;
@@ -1406,6 +1438,10 @@ type Main =
        Err: text;
        Ok: Rsvp;
      });
+   set_schedule_view: (view: text) -> (variant {
+                                         Err: text;
+                                         Ok;
+                                       });
    set_series_cancelled: (series_id: text, cancelled: bool, from_ms:
     nat64) -> (variant {
                  Err: text;
@@ -1518,6 +1554,33 @@ type LineupEntry =
    member: text;
    slot: text;
    team_id: opt text;
+ };
+type Input = 
+ record {
+   address: opt text;
+   adults_only: bool;
+   club_id: text;
+   description: text;
+   duties: vec record {
+                 account_id: opt text;
+                 duty: text;
+               };
+   duty_team_id: opt text;
+   event_type: text;
+   location: opt text;
+   mini_league_id: opt text;
+   occurrences: vec record {
+                      ends_at_ms: nat64;
+                      starts_at_ms: nat64;
+                    };
+   opponent: opt text;
+   reminder_hours: opt nat16;
+   request_id: text;
+   restricted_to_roles: opt vec text;
+   rsvp_audience: opt text;
+   target_team_ids: opt vec text;
+   team_id: opt text;
+   title: text;
  };
 type HttpRequestResult = 
  record {

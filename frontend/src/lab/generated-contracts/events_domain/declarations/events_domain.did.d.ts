@@ -259,6 +259,26 @@ export interface HttpRequestResult {
   'body' : Uint8Array,
   'headers' : Array<HttpHeader>,
 }
+export interface Input {
+  'request_id' : string,
+  'title' : string,
+  'mini_league_id' : [] | [string],
+  'target_team_ids' : [] | [Array<string>],
+  'adults_only' : boolean,
+  'reminder_hours' : [] | [number],
+  'team_id' : [] | [string],
+  'description' : string,
+  'occurrences' : Array<{ 'starts_at_ms' : bigint, 'ends_at_ms' : bigint }>,
+  'address' : [] | [string],
+  'restricted_to_roles' : [] | [Array<string>],
+  'duties' : Array<{ 'account_id' : [] | [string], 'duty' : string }>,
+  'rsvp_audience' : [] | [string],
+  'club_id' : string,
+  'location' : [] | [string],
+  'event_type' : string,
+  'opponent' : [] | [string],
+  'duty_team_id' : [] | [string],
+}
 export interface LineupEntry {
   'member' : string,
   'slot' : string,
@@ -410,6 +430,11 @@ export interface Main {
       [] | [string],
     ],
     { 'Ok' : EventGroup } |
+      { 'Err' : string }
+  >,
+  'create_event_with_setup' : ActorMethod<
+    [Input],
+    { 'Ok' : Result__1 } |
       { 'Err' : string }
   >,
   'create_open_duty' : ActorMethod<
@@ -717,6 +742,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_rsvp_created_at' : ActorMethod<[string, string], [] | [bigint]>,
+  'get_schedule_view' : ActorMethod<[], [] | [string]>,
   'get_training_default' : ActorMethod<
     [string, string, [] | [string]],
     { 'Ok' : [] | [string] } |
@@ -924,6 +950,16 @@ export interface Main {
   >,
   'my_children' : ActorMethod<[], Array<Child>>,
   'my_rsvps' : ActorMethod<[], Array<Rsvp>>,
+  'notify_duty_completion' : ActorMethod<
+    [string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'notify_event_audience' : ActorMethod<
+    [string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'notify_group_pitch' : ActorMethod<
     [string, string, string, string],
     { 'Ok' : number } |
@@ -1247,6 +1283,11 @@ export interface Main {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'read_event_cancellation_audience' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   /**
    * / Location-only lookup for group routing: which club owns this event, if
    * / it lives in this canister. Viewers only; returns null when not held here.
@@ -1424,6 +1465,11 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'send_individual_event_reminder' : ActorMethod<
+    [string, [] | [string], [] | [string]],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'set_attendance' : ActorMethod<
     [string, string, boolean, string],
     { 'Ok' : Attendance } |
@@ -1558,6 +1604,11 @@ export interface Main {
   'set_rsvp_note' : ActorMethod<
     [string, string, string],
     { 'Ok' : Rsvp } |
+      { 'Err' : string }
+  >,
+  'set_schedule_view' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_series_cancelled' : ActorMethod<
@@ -1803,6 +1854,11 @@ export interface Request {
   'generation' : bigint,
 }
 export interface Result { 'hasMore' : boolean, 'rows' : Array<Row> }
+export interface Result__1 {
+  'event_ids' : Array<string>,
+  'series_id' : [] | [string],
+  'first_event_id' : string,
+}
 export interface RoleGrant {
   'role' : string,
   'user' : Principal,

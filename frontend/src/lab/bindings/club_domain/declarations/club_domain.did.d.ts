@@ -1437,6 +1437,30 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'read_event_notification_membership' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'guardians' : Array<{ 'user' : Principal, 'child_id' : string }>,
+          'children' : Array<
+            {
+              'id' : string,
+              'teams' : Array<string>,
+              'parent' : [] | [Principal],
+            }
+          >,
+          'roles' : Array<
+            {
+              'role' : string,
+              'user' : Principal,
+              'team_id' : [] | [string],
+              'club_id' : string,
+            }
+          >,
+        }
+      } |
+      { 'Err' : string }
+  >,
   /**
    * / Bounded consensus configuration evidence; never changes or grants access.
    */
@@ -1553,6 +1577,16 @@ export interface Main {
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
       { 'err' : string }
+  >,
+  'relay_event_notice' : ActorMethod<
+    [Array<string>, string, string, string, string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'relay_group_pitch_alert' : ActorMethod<
+    [Array<string>, string, string, string, string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
   >,
   'remove_member' : ActorMethod<
     [string, Principal],
