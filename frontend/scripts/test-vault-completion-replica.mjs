@@ -113,9 +113,9 @@ try {
   let restoreReceipt = restoreFirst;
   while (!restoreReceipt.complete) restoreReceipt = ok(await vault.actor.restore_backup_page(backup.id, restoreReceipt.next));
   assert.ok(restoreReceipt.next > 200n);
-  assert.equal(restoreReceipt.restored, 1n);
-  assert.equal(ok(await vault.actor.read_account_get_file('restore-missing'))[0].id, 'restore-missing');
+  assert.equal(restoreReceipt.restored, 0n);
+  assert.deepEqual(ok(await vault.actor.read_account_get_file('restore-missing')), []);
   assert.deepEqual(ok(await vault.actor.restore_backup_page(backup.id, restoreReceipt.next)), restoreReceipt);
   assert.equal(ok(await vault.actor.read_account_get_file('new-file'))[0].id, 'new-file');
-  console.log('PASS: outsider/direct-query denial, live ancestor restrictions/revocation, 205-file paging, stale revision refusal, forged internal-file refusal, authorized pins/outsider denial, actual byte-size evidence/idempotency, interrupted cleanup retention/tombstone, populated upgrade readback.');
+  console.log('PASS: outsider/direct-query denial, live ancestor restrictions/revocation, 205-file paging, stale revision refusal, forged internal-file refusal, authorized pins/outsider denial, actual byte-size evidence/idempotency, interrupted cleanup retention/tombstone, >200 backup progress/replay/future-cursor denial/upgrade resume, erased-file resurrection denial, populated upgrade readback.');
 } finally { await pic?.tearDown(); await server.stop(); }

@@ -1335,6 +1335,11 @@ persistent actor class Main(governorInit : Principal) = this {
   // records are erased they are undecryptable by anyone.
   public shared ({ caller }) func purge_my_data() : async { #Ok : Nat32; #Err : Text } {
     auth(caller);
+    // Metadata erasure must never be undone by another administrator's backup.
+    // Physical-byte cleanup remains separately reconciled, not guessed here.
+    for (f in files.values()) {
+      if (f.uploaded_by.equal(caller)) deletionIntents.add(f.id, "erased:" # (f.blob_ref.map(func ref = ref.content_hash) ?? "external"));
+    };
     var removed : Nat = 0;
     let keepFiles = files.filter(func(f : Types.VaultFile) : Bool = not f.uploaded_by.equal(caller));
     mediaEvidenceRevision += 1;
