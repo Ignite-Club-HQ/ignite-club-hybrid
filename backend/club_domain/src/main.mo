@@ -2603,7 +2603,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // right before cutover; any write that slipped through aborts the move.
   func isTransferFenced(club : Text) : Bool = frozenClubs.any(func(e) = e.0 == club);
 
+  type SeasonCloneReceipt = { source : Text; name : Text; copy_staff : Bool; season_id : Text };
+  type CompetitionRecovery = { seasons : [Types.Season]; copies : [(Text, Text, Text)]; assignments : [Types.SeasonTeamAssignment]; clones : [(Text, SeasonCloneReceipt)]; invites : [Types.PendingInvite]; mail : [(Text, EmailOutbox.Job)]; relays : [(Text, BroadcastRelay.Receipt)] };
   type ClubSnapshot = {
+    competition_recovery : ?CompetitionRecovery;
     profiles : [Types.ClubProfile]; settings : [Types.ClubSettings]; teams : [Types.ClubTeam];
     sponsors : [Types.ClubSponsor]; listing : Types.Listing; roles : [Types.RoleGrant];
     acl_teams : [Types.Team]; member : Bool; exclusions : [Types.Exclusion]; children : [Types.Child]; guardians : [Types.Guardian];
@@ -2616,11 +2619,16 @@ persistent actor class Main(governorInit : Principal) = this {
   func inTeams(ids : [Text], team : ?Text) : Bool = switch (team) { case (?t) ids.any(func(i) = i == t); case null false };
   func clubChild(club : Text, ids : [Text], c : Types.Child) : Bool = c.club_id == ?club or c.teams.any(func(t) = ids.any(func(i) = i == t));
 
+  func competitionRecovery(club : Text) : CompetitionRecovery {
+    let owns = func(id : Text) : Bool = seasons.any(func x = x.id == id and x.club_id == club);
+    { seasons = seasons.filter(func x = x.club_id == club); copies = seasonTeamCopies.filter(func x = owns(x.0)); assignments = seasonTeamAssignments.filter(func x = owns(x.season_id)); clones = Map.entries(seasonCloneReceipts).filter(func pair = owns(pair.1.season_id)).toArray(); invites = pendingInvites.filter(func i = i.club_id == club); mail = Map.entries(emailJobs).filter(func pair = pendingInvites.any(func i = i.club_id == club and i.id == pair.1.resource)).toArray(); relays = Map.entries(broadcastRelayReceipts).filter(func pair = pair.1.club == club).toArray() }
+  };
   func clubSnapshot(club : Text) : ClubSnapshot {
     let ids = clubTeamIds(club);
     let kids = acl.children.filter(func(c) = clubChild(club, ids, c));
     let news = newsPosts.filter(func(n) = n.club_id == club);
     {
+      competition_recovery = ?competitionRecovery(club);
       profiles = profiles.filter(func(p) = p.id == club);
       settings = settings.filter(func(x) = x.club_id == club);
       teams = teams.filter(func(t) = t.club_id == club);
@@ -2646,6 +2654,14 @@ persistent actor class Main(governorInit : Principal) = this {
   // Removes the club-owned scope. Children/guardians are family records kept
   // on the source, matching permanent club deletion.
   func dropClubScope(club : Text) {
+    let recovery = competitionRecovery(club);
+    seasons := seasons.filter(func x = x.club_id != club);
+    seasonTeamCopies := seasonTeamCopies.filter(func x = not recovery.seasons.any(func r = r.id == x.0));
+    seasonTeamAssignments := seasonTeamAssignments.filter(func x = not recovery.seasons.any(func r = r.id == x.season_id));
+    pendingInvites := pendingInvites.filter(func i = i.club_id != club);
+    for ((key, _) in recovery.clones.values()) Map.remove(seasonCloneReceipts, Text.compare, key);
+    for ((key, _) in recovery.mail.values()) Map.remove(emailJobs, Text.compare, key);
+    for ((key, _) in recovery.relays.values()) Map.remove(broadcastRelayReceipts, Text.compare, key);
     let ids = clubTeamIds(club);
     let newsIds = newsPosts.filter(func(n) = n.club_id == club).map(func(n) = n.id);
     bumpMembershipDiscovery();
@@ -2681,6 +2697,14 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not isTransferFenced(club)) return #Err("Club must be fenced before import");
     let decoded : ?ClubSnapshot = from_candid (snapshot);
     let snap = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
+    if (removalReceiver.snapshotDenied(snapshot)) return #Err("Snapshot references fenced account");
+    let existing = competitionRecovery(club);
+    if (snap.competition_recovery == null and (existing.seasons.size() > 0 or existing.mail.size() > 0 or existing.relays.size() > 0)) return #Err("Legacy snapshot omits competition recovery");
+    let recovery : CompetitionRecovery = snap.competition_recovery ?? ({ seasons = []; copies = []; assignments = []; clones = []; invites = []; mail = []; relays = [] });
+    let owns = func(id : Text) : Bool = recovery.seasons.any(func x = x.id == id and x.club_id == club);
+    if (recovery.seasons.any(func x = x.club_id != club) or recovery.copies.any(func x = not owns(x.0) or not snap.teams.any(func t = t.id == x.1) or not snap.teams.any(func t = t.id == x.2)) or recovery.assignments.any(func x = not owns(x.season_id) or not snap.teams.any(func t = t.id == x.team_id)) or recovery.clones.any(func pair = not owns(pair.1.source) or not owns(pair.1.season_id)) or recovery.invites.any(func i = i.club_id != club) or recovery.mail.any(func pair = pair.0 != pair.1.id or not recovery.invites.any(func i = i.id == pair.1.resource)) or recovery.relays.any(func pair = pair.1.club != club or pair.0 != club # "\u{1f}" # pair.1.key)) return #Err("Foreign competition recovery records");
+    if (recovery.mail.any(func pair = pair.1.state == "processing" or pair.1.state == "unknown") or existing.mail.any(func pair = pair.1.state == "processing" or pair.1.state == "unknown") or recovery.relays.any(func pair = pair.1.count == null) or existing.relays.any(func pair = pair.1.count == null)) return #Err("Unresolved deliveries must stay at original authority");
+    if (recovery.seasons.any(func r = seasons.any(func old = old.id == r.id and old.club_id != club)) or recovery.invites.any(func r = pendingInvites.any(func old = old.id == r.id and old.club_id != club)) or recovery.clones.any(func pair = Map.get(seasonCloneReceipts, Text.compare, pair.0) != null and not existing.clones.any(func old = old.0 == pair.0)) or recovery.mail.any(func pair = Map.get(emailJobs, Text.compare, pair.0) != null and not existing.mail.any(func old = old.0 == pair.0)) or recovery.relays.any(func pair = Map.get(broadcastRelayReceipts, Text.compare, pair.0) != null and not existing.relays.any(func old = old.0 == pair.0))) return #Err("Competition recovery key collision");
     if (snap.profiles.size() > 1 or snap.profiles.any(func(p) = p.id != club)) return #Err("Snapshot club mismatch");
     let ids = snap.teams.map(func(t) = t.id);
     let newsIds = snap.news.map(func(n) = n.id);
@@ -2719,6 +2743,10 @@ persistent actor class Main(governorInit : Principal) = this {
     roleRequests := roleRequests.concat(snap.role_requests);
     teamInvites := teamInvites.concat(snap.team_invites);
     teamInviteLinks := teamInviteLinks.concat(snap.team_invite_links);
+    seasons := seasons.concat(recovery.seasons); seasonTeamCopies := seasonTeamCopies.concat(recovery.copies); seasonTeamAssignments := seasonTeamAssignments.concat(recovery.assignments); pendingInvites := pendingInvites.concat(recovery.invites);
+    for ((key, r) in recovery.clones.values()) Map.add(seasonCloneReceipts, Text.compare, key, r);
+    for ((key, r) in recovery.mail.values()) Map.add(emailJobs, Text.compare, key, r);
+    for ((key, r) in recovery.relays.values()) Map.add(broadcastRelayReceipts, Text.compare, key, r);
     #Ok
   };
 
@@ -2726,6 +2754,8 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isTransferFenced(club)) return #Err("Club must be fenced before purge");
+    let recovery = competitionRecovery(club);
+    if (recovery.mail.any(func pair = pair.1.state == "processing" or pair.1.state == "unknown") or recovery.relays.any(func pair = pair.1.count == null)) return #Err("Unresolved delivery evidence must be retained");
     let before = profiles.size() + teams.size() + newsPosts.size();
     dropClubScope(club);
     #Ok(before - (profiles.size() + teams.size() + newsPosts.size()))
