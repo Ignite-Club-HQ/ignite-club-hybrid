@@ -764,6 +764,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'canister_cycles' : IDL.Func([IDL.Principal], [IDL.Nat], []),
+    'carry_over_season_players' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
     'check_team_name_unique' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
@@ -944,6 +949,11 @@ export const idlFactory = ({ IDL }) => {
     'disable_membership_directory_source' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'duplicate_season_structure' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
         [],
       ),
     'enrol_in_class' : IDL.Func(

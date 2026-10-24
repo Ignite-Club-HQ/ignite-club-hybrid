@@ -391,6 +391,13 @@ export interface MainInterface {
      * / time so admin settings can show its balance too).
      */
     canister_cycles(canister_id: Principal): Promise<bigint>;
+    carry_over_season_players(source_id: string, target_id: string, members: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     check_team_name_unique(club_id: string, name: string): Promise<{
         __kind__: "Ok";
         Ok: boolean;
@@ -593,6 +600,13 @@ export interface MainInterface {
     disable_membership_directory_source(): Promise<{
         __kind__: "Ok";
         Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    duplicate_season_structure(operation: string, source_id: string, name: string, copy_staff: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: Season;
     } | {
         __kind__: "Err";
         Err: string;
@@ -3460,6 +3474,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.canister_cycles(arg0);
         return result;
     }
+    async carry_over_season_players(arg0: string, arg1: string, arg2: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.carry_over_season_players(arg0, arg1, arg2);
+        return from_candid_variant_n37(result);
+    }
     async check_team_name_unique(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
         Ok: boolean;
@@ -3758,6 +3782,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.disable_membership_directory_source();
         return from_candid_variant_n17(result);
+    }
+    async duplicate_season_structure(arg0: string, arg1: string, arg2: string, arg3: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: Season;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.duplicate_season_structure(arg0, arg1, arg2, arg3);
+        return from_candid_variant_n32(result);
     }
     async enrol_in_class(arg0: string, arg1: string, arg2: string, arg3: string): Promise<{
         __kind__: "Ok";

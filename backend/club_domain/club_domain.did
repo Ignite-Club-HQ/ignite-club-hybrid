@@ -553,6 +553,11 @@ type Main =
    /// (the frontend asset canister adds club_domain as a controller at deploy
    /// time so admin settings can show its balance too).
    canister_cycles: (canister_id: principal) -> (nat);
+   carry_over_season_players: (source_id: text, target_id: text, members:
+    vec text) -> (variant {
+                    Err: text;
+                    Ok: nat;
+                  });
    check_team_name_unique: (club_id: text, name: text) ->
     (variant {
        Err: text;
@@ -694,6 +699,11 @@ type Main =
                                                  Err: text;
                                                  Ok;
                                                });
+   duplicate_season_structure: (operation: text, source_id: text, name: 
+    text, copy_staff: bool) -> (variant {
+                                  Err: text;
+                                  Ok: Season;
+                                });
    enrol_in_class: (club_id: text, term_id: text, class_id: text, member_id:
     text) -> (variant {
                 Err: text;

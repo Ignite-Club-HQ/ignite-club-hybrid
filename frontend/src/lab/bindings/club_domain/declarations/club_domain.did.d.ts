@@ -368,6 +368,11 @@ export interface Main {
    * / time so admin settings can show its balance too).
    */
   'canister_cycles' : ActorMethod<[Principal], bigint>,
+  'carry_over_season_players' : ActorMethod<
+    [string, string, Array<string>],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'check_team_name_unique' : ActorMethod<
     [string, string],
     { 'Ok' : boolean } |
@@ -521,6 +526,11 @@ export interface Main {
   'disable_membership_directory_source' : ActorMethod<
     [],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'duplicate_season_structure' : ActorMethod<
+    [string, string, string, boolean],
+    { 'Ok' : Season } |
       { 'Err' : string }
   >,
   'enrol_in_class' : ActorMethod<
