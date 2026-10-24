@@ -1283,6 +1283,11 @@ export interface Main {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'read_competition_events' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Event> } |
+      { 'Err' : string }
+  >,
   'read_event_cancellation_audience' : ActorMethod<
     [string],
     { 'Ok' : number } |
