@@ -189,13 +189,8 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
             return (data as number) ?? 0;
           },
           icp: async (ctx) => {
-            const { addLiveSeasonTeamAssignment } = await import("@/live/features/club");
-            let n = 0;
-            for (const a of placed) {
-              await addLiveSeasonTeamAssignment(ctx, targetId, a.team_id as string, a.club_player_id);
-              n += 1;
-            }
-            return n;
+            const { assignReturningLiveSeasonPlayers } = await import("@/live/features/club");
+            return assignReturningLiveSeasonPlayers(ctx, currentSeason.id, targetId, placed.map(a => ({ member_id: a.club_player_id, team_id: a.team_id ?? "" })));
           },
       }, writeOnce({ clubId }));
     },

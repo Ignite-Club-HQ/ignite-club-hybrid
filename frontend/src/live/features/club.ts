@@ -1373,6 +1373,11 @@ export async function readLiveSeasonTeams(ctx: FeatureBackendContext, seasonId: 
   return unwrapCandid(actor.read_season_teams(seasonId), "Read season teams");
 }
 
+export async function assignReturningLiveSeasonPlayers(ctx: FeatureBackendContext, sourceId: string, targetId: string, placements: Array<{ member_id: string; team_id: string }>) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return Number(await unwrapCandid(actor.assign_returning_season_players(sourceId, targetId, placements), "Assign returning season players"));
+}
+
 // ---------------------------------------------------------------------------
 // Season analytics — canister counterpart of the Supabase
 // season_team_summary / season_player_stats RPCs. Read-only from the

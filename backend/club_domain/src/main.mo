@@ -2026,6 +2026,28 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) }
   };
 
+  public shared ({ caller }) func assign_returning_season_players(source_id : Text, target_id : Text, placements : [{ member_id : Text; team_id : Text }]) : async { #Ok : Nat; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let source = seasons.find(func s = s.id == source_id) ?? return #Err("Source season missing");
+      let target = seasons.find(func s = s.id == target_id) ?? return #Err("Target season missing");
+      if (source.id == target.id or source.club_id != target.club_id or target.status != "draft" or not isAdmin(caller, target.club_id) or isTransferFenced(target.club_id) or removalReceiver.denied(caller)) return #Err("Same-club draft and admin required");
+      if (placements.size() > 500) return #Err("Rollover batch exceeds limit");
+      var additions : [Types.SeasonTeamAssignment] = [];
+      let copies = seasonTeamCopies.filter(func p = p.0 == target_id);
+      for (placement in placements.values()) {
+        if (additions.any(func a = a.member_id == placement.member_id)) return #Err("Duplicate member");
+        if (not seasonTeamAssignments.any(func a = a.season_id == source_id and a.member_id == placement.member_id)) return #Err("Source member missing");
+        if (not teams.any(func t = t.id == placement.team_id and t.club_id == target.club_id and not t.archived and t.deleted_at_ms == null) or (copies.size() > 0 and not copies.any(func p = p.2 == placement.team_id))) return #Err("Destination team unavailable");
+        if (seasonTeamAssignments.any(func a = a.season_id == target_id and a.member_id == placement.member_id and a.team_id != placement.team_id)) return #Err("Target player assigned differently");
+        additions := additions.concat([{ season_id = target_id; member_id = placement.member_id; team_id = placement.team_id; added_at_ms = nowMs() }]);
+      };
+      let missing = additions.filter(func a = not seasonTeamAssignments.any(func row = row.season_id == target_id and row.member_id == a.member_id));
+      seasonTeamAssignments := seasonTeamAssignments.concat(missing); #Ok(missing.size())
+    } finally { removalReceiver.leave(caller) }
+  };
+
   // ---- Season expression-of-interest (EOI) config: a free-form JSON blob
   // per season (form schema / open-close dates for the public EOI page). ----
 

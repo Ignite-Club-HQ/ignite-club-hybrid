@@ -31,10 +31,12 @@ try {
   denied(await c.duplicate_season_structure('op','source','Changed',true));
   const copied=ok(await c.read_season_teams(copy.id));assert.equal(copied.length,1);assert.notEqual(copied[0].id,team.id);
   denied(await c.carry_over_season_players('source',copy.id,['member-1','missing']));
+  denied(await c.assign_returning_season_players('source',copy.id,[{member_id:'member-1',team_id:copied[0].id},{member_id:'missing',team_id:copied[0].id}]));
   assert.equal(ok(await c.list_season_team_assignment(copy.id)).length,0);
   assert.equal(ok(await c.carry_over_season_players('source',copy.id,['member-1'])),1n);
   assert.equal(ok(await c.carry_over_season_players('source',copy.id,['member-1'])),0n);
   assert.equal(ok(await c.list_season_team_assignment(copy.id))[0].team_id,copied[0].id);
+  assert.equal(ok(await c.assign_returning_season_players('source',copy.id,[{member_id:'member-1',team_id:copied[0].id}])),0n);
   c.setPrincipal(governor);
   ok(await c.add_role_grant(outsider,'club','coach',[team.id]));
   c.setPrincipal(outsider);
