@@ -663,6 +663,9 @@ persistent actor class Main(governorInit : Principal) = this {
       if (not file.uploaded_by.equal(caller) or file.is_external_link or file.deleted_at_ms != null or file.deleted_by != null) return #Err("Invalid upload subject");
       if (not valid(file.id) or not valid(file.club) or file.folder_id.size() > 128 or not validLong(file.name, 160) or not validLong(file.mime, 128) or file.size > 10_485_760) return #Err("Invalid upload fields");
       let ref = file.blob_ref ?? return #Err("Upload provenance required");
+      switch file.team { case (?id) { if (not valid(id) or not ref.path.startsWith(#text ("clubs/" # file.club # "/vault/teams/" # id # "/"))) return #Err("Team upload path mismatch") }; case null { if (ref.path.startsWith(#text ("clubs/" # file.club # "/vault/teams/"))) return #Err("Unscoped team path") } };
+      switch file.competition_id { case (?id) if (not valid(id) or file.team != null or file.mini_league_id != null) return #Err("Invalid competition scope"); case null {} };
+      switch file.mini_league_id { case (?id) if (not valid(id)) return #Err("Invalid league scope"); case null {} };
       if (not validBlobRef(ref) or not vaultStores.any(func s = s.toText() == ref.canister) or not ref.path.startsWith(#text ("clubs/" # file.club # "/vault/")) or file.file_url != "https://" # ref.canister # ".raw.icp0.io/" # ref.path) return #Err("Original private store required");
       if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Scoped staff required");
       var destination : ?Types.VaultFolder = null;
@@ -800,6 +803,10 @@ persistent actor class Main(governorInit : Principal) = this {
     switch blob_ref { case (?ref) {
       if (blobCleanupPending(ref)) return #Err("File path cleanup pending")
     }; case null {} };
+    switch (uploadIntents.get(id)) {
+      case (?intent) if (not intent.ready or not intent.file.uploaded_by.equal(caller) or intent.file.blob_ref != blob_ref or intent.file.folder_id != folder_id) return #Err("Upload changed during registration");
+      case null { switch blob_ref { case (?ref) if (uploadIntents.entries().any(func e = switch (e.1.file.blob_ref) { case (?r) r.canister == ref.canister and r.path == ref.path; case null false })) return #Err("Upload path reserved during registration"); case null {} } }
+    };
     // No await after this check: a removed/restricted destination cannot admit a late upload.
     if (removalReceiver.denied(caller) or isFenced(club) or deletionIntents.get(id) != null or files.any(func f = f.id == id)) return #Err("Registration scope changed");
     switch destination {
