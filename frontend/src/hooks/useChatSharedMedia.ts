@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveMessages } from "@/live/features/messaging";
+import { listLiveLatestMessagesPage } from "@/live/features/messaging";
+import { useAuth } from "@/hooks/useAuth";
 
 export type ChatSharedMediaType = "team" | "club" | "group" | "dm" | "broadcast";
 
@@ -70,8 +71,10 @@ function hostnameOf(url: string): string {
 export function useChatSharedMedia(
   chatType: ChatSharedMediaType,
   chatId: string | undefined,
-  options?: { limit?: number; enabled?: boolean }
+  options?: { limit?: number; enabled?: boolean; clubId?: string; teamId?: string; miniLeagueId?: string; competitionId?: string }
 ) {
+  const { user, initialized } = useAuth();
+  const icp = isFeatureRoutedToIcp("messaging");
   const rawLimit = options?.limit;
   // Defensive normalisation: fall back to the default for any non-positive,
   // non-finite or fractional value so callers can never trigger an unbounded
@@ -80,11 +83,11 @@ export function useChatSharedMedia(
     typeof rawLimit === "number" && Number.isFinite(rawLimit) && rawLimit > 0
       ? Math.floor(rawLimit)
       : DEFAULT_LIMIT;
-  const enabled = (options?.enabled ?? true) && !!chatId;
+  const enabled = (options?.enabled ?? true) && !!chatId && (!icp || (!!user && initialized));
 
 
   return useQuery({
-    queryKey: ["chat-shared-media", chatType, chatId, limit],
+    queryKey: ["chat-shared-media", chatType, chatId, limit, user?.id, icp],
     queryFn: async (): Promise<SharedMediaItem[]> => {
       // ICP branch: conversation ids are the canister's native identifier
       // for every chat type here (club/team ids double as conversation ids
@@ -97,7 +100,8 @@ export function useChatSharedMedia(
         return withFeatureBackend("messaging", {
           supabase: async () => [],
           icp: async (ctx) => {
-            const messages = await listLiveMessages(ctx, chatId, null);
+            const page = await listLiveLatestMessagesPage(ctx, chatId, null, Math.min(100, Math.max(60, limit)));
+            const messages = page.messages;
             const items: SharedMediaItem[] = [];
             for (const m of messages) {
               const createdAt = new Date(Number(m.created_at_ms)).toISOString();
@@ -118,6 +122,16 @@ export function useChatSharedMedia(
                   image_url: attachment.url[0],
                 });
               }
+              for (const match of (m.body ?? "").matchAll(VAULT_FILE_RE)) {
+                items.push({ ...base, id: `${m.id}:vf:${match[1]}`, kind: "file", image_url: "", label: "Vault file", sublabel: "File", vaultFileId: match[1] });
+              }
+              for (const match of (m.body ?? "").matchAll(VAULT_FOLDER_RE)) {
+                items.push({ ...base, id: `${m.id}:vfd:${match[1]}`, kind: "file", image_url: "", label: "Folder", sublabel: "Folder", vaultFolderId: match[1] });
+              }
+              for (const match of (m.body ?? "").matchAll(VAULT_ROOT_RE)) {
+                const scope = match[1] as "club" | "team";
+                items.push({ ...base, id: `${m.id}:vr:${scope}:${match[2]}`, kind: "file", image_url: "", label: scope === "team" ? "Team vault" : "Club vault", vaultRootScope: scope, vaultRootId: match[2] });
+              }
               const seenUrls = new Set<string>();
               for (const match of (m.body ?? "").matchAll(URL_RE)) {
                 const url = match[0].replace(/[).,;!?]+$/, "");
@@ -135,8 +149,8 @@ export function useChatSharedMedia(
               }
             }
             items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-            return items.slice(0, limit);
-          }}, { conversationId: chatId });
+            return [...new Map(items.map(item => [item.id, item])).values()].slice(0, limit);
+          }}, chatType === "dm" || chatType === "broadcast" ? { shared: "person" } : options?.clubId ? { clubId: options.clubId } : chatType === "team" ? { teamId: chatId } : chatType === "club" ? { clubId: chatId } : { conversationId: chatId });
       }
 
       const { table, column } = TABLE_AND_FILTER[chatType];
