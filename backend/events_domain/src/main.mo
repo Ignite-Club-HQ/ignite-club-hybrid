@@ -1492,8 +1492,6 @@ persistent actor class Main(governorInit : Principal) = this {
     let created = records.map(func(r : Types.AttendanceInput) : Types.EventAttendance {
       { event_id; subject_id = r.subject_id; subject_kind = r.subject_kind; status = r.status; marked_by = caller; marked_at_ms = now; notes = r.notes }
     });
-    eventSetupReceipts := eventSetupReceipts.filter(func((_, _, _, result)) = not result.event_ids.any(func(id) = inDoomed(id)));
-    eventNoticeAttempts := eventNoticeAttempts.filter(func(a) = not inDoomed(a.event_id));
     eventAttendance := eventAttendance.filter(func(item) = not (item.event_id == event_id and created.any(func(c) = c.subject_id == item.subject_id and c.subject_kind == item.subject_kind)));
     eventAttendance := eventAttendance.concat(created);
     #Ok(created)
@@ -4024,6 +4022,8 @@ persistent actor class Main(governorInit : Principal) = this {
     duties := duties.filter(func(d) = not inDoomed(d.event_id));
     roster := roster.filter(func(r) = not inDoomed(r.event_id));
     recurrences := recurrences.filter(func(r) = not inDoomed(r.event_id));
+    eventSetupReceipts := eventSetupReceipts.filter(func((_, _, _, result)) = not result.event_ids.any(func(id) = inDoomed(id)));
+    eventNoticeAttempts := eventNoticeAttempts.filter(func(a) = not inDoomed(a.event_id));
     eventAttendance := eventAttendance.filter(func(a) = not inDoomed(a.event_id));
     eventGuests := eventGuests.filter(func(g) = not inDoomed(g.event_id));
     coachNotes := coachNotes.filter(func(n) = not inDoomed(n.event_id));
@@ -4462,7 +4462,7 @@ persistent actor class Main(governorInit : Principal) = this {
         } catch (_) { #Err("Scheduled reminder queue call failed") }
       };
     }
-    } finally { removalReceiver.leave(manager) };
+    } finally { removalReceiver.leave(event.creator) };
   };
 
   func fanOutDutyTeamReminder(event : Types.Event, team_id : Text) : async { #Ok : Nat16; #Err : Text } {
@@ -4497,7 +4497,7 @@ persistent actor class Main(governorInit : Principal) = this {
         } catch (_) { #Err("Duty reminder queue call failed") }
       };
     }
-    } finally { removalReceiver.leave(manager) };
+    } finally { removalReceiver.leave(event.creator) };
   };
 
   func markReminderSent(event_id : Text) {
@@ -4541,7 +4541,7 @@ persistent actor class Main(governorInit : Principal) = this {
             ignore await queue.fan_out(recipients, event.club_id, "photo_prompt_reminder", "Got photos from \"" # event.title # "\"? Add them to the team gallery.", "photo-prompt-" # event.id, ?event.id);
           } catch (_) {};
         };
-        } finally { removalReceiver.leave(manager) };
+        } finally { removalReceiver.leave(event.creator) };
       };
     };
     if (photoPromptsSent.size() > 5000) photoPromptsSent := photoPromptsSent.sliceToArray(photoPromptsSent.size() - 5000, photoPromptsSent.size());
