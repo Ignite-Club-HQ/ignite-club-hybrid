@@ -1658,7 +1658,8 @@ persistent actor class Main(governorInit : Principal) = this {
       let remaining = b.files.filter(func f = not f.uploaded_by.equal(caller));
       { b with files = remaining; folders = ErasureFolders.scrub(caller, b.folders, remaining) }
     });
-    let keepFolders = ErasureFolders.scrub(caller, folders, files);
+    let pendingDestinations = uploadIntents.entries().filter(func e = not e.1.file.uploaded_by.equal(caller) and deletionIntents.get(e.0) == null).map(func e = e.1.file).toArray();
+    let keepFolders = ErasureFolders.scrub(caller, folders, files.concat(pendingDestinations));
     removed += folders.size() - keepFolders.size(); folders := keepFolders;
     let keepRoles = roles.filter(func r = not r.user.equal(caller));
     removed += roles.size() - keepRoles.size(); roles := keepRoles;
