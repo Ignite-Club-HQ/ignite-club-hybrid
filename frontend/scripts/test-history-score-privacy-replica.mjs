@@ -84,9 +84,9 @@ try {
  restored.actor.setPrincipal(governor);ok(await restored.actor.set_transfer_fence('club',true));ok(await restored.actor.import_club_snapshot('club',saved));
  assert.deepEqual(ok(await restored.actor.export_club_snapshot('club')),saved);
  ok(await restored.actor.set_transfer_fence('club',false));
+ ok(await restored.actor.set_competition_domain_canister(competition.canisterId));
  assert.equal(ok(await restored.actor.read_detailed_game_player_stats(eventId))[0].detail[0].child_id[0],'child-1');
  assert.deepEqual(ok(await restored.actor.read_detailed_game_player_stats(eventId))[0].detail[0].position_seconds[0],[['GK',120]]);
- ok(await restored.actor.set_competition_domain_canister(competition.canisterId));
  restored.actor.setPrincipal(competition.canisterId);
  assert.deepEqual(ok(await restored.actor.materialize_competition_fixture(revisionInput,4n)),revisionEvents);
  assert.ok('Err' in await restored.actor.materialize_competition_fixture({...revisionInput,title:'Changed'},4n));
