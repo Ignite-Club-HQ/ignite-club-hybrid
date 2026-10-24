@@ -1,5 +1,5 @@
 ## Sent-message preview delay — 24 October 2026
-- [x] Found ICP previews wait for polling (30 seconds web / 120 seconds native) and full directory refreshes; acknowledged team/club/group sends now update existing exact-account inbox rows directly, retaining newer messages across stale responses and clearing marks with removed queries. Focused regression checks pending.
+- [x] Found ICP previews wait for polling (30 seconds web / 120 seconds native) and full directory refreshes; acknowledged team/club/group sends now update existing exact-account inbox rows directly, retaining newer messages across stale responses and clearing marks with removed queries. All 38 focused checks pass in both ICP and Supabase modes; ICP guard passes and preview build OK.
 - [ ] Signed-in phone send-to-inbox timing: unavailable Internet Identity session; no publication or canister changes.
 
 ## Chat threads after top-ups — 24 October 2026
