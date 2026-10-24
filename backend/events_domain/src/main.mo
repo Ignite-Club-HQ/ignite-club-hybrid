@@ -29,6 +29,7 @@ import Oql "../../shared/Oql";
 import OqlEvents "oqlEvents";
 import HistoryPrivacy "historyPrivacy";
 import PlayhqFeed "playhqFeed";
+import BoardSync "boardSync";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -3040,6 +3041,87 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   // ---- Workstream D: active game mirror (server-side push notification driver) ----
+  // Fresh consensus roles/membership from the owning club; no browser role
+  // flags or stale local role mirror can authorize shared-board writes.
+  func boardAccess(caller : Principal, club : Text, team : Text, edit : Bool) : async Bool {
+    if (Principal.isAnonymous(caller) or isFenced(club)) return false;
+    let cid = clubDomainCanister ?? return false;
+    let cd : actor {
+      get_team : shared query (Text) -> async { #Ok : ?{ id : Text; club_id : Text; deleted_at_ms : ?Nat64 }; #Err : Text };
+      read_has_club_membership : shared (Principal, Text) -> async Bool;
+      read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)];
+    } = actor (cid.toText());
+    try {
+      let owned = await (with timeout = 10) cd.get_team(team);
+      switch (owned) { case (#Ok(?t)) { if (t.club_id != club or t.deleted_at_ms != null) return false }; case _ return false };
+      if (not (await (with timeout = 10) cd.read_has_club_membership(caller, club))) return false;
+      if (not edit) return not isFenced(club) and not removalReceiver.denied(caller);
+      let fresh = await (with timeout = 10) cd.read_account_list_user_club_roles(caller, club);
+      not isFenced(club) and not removalReceiver.denied(caller) and
+        fresh.any(func((role, scope)) = (role == "club_admin" and scope == null) or
+          ((role == "coach" or role == "team_admin") and (scope == ?team or scope == null)))
+    } catch (_) { false }
+  };
+
+  public shared ({ caller }) func read_shared_board(club : Text, team : Text) : async { #Ok : ?Types.ActiveGame; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+      await admitAccount(caller);
+      if (not (await boardAccess(caller, club, team, false))) return #Err("Forbidden");
+      if (isFenced(club) or removalReceiver.denied(caller)) return #Err("Forbidden");
+      #Ok(activeGames.find(func(row) = row.team_id == ?team))
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func sync_shared_board(club : Text, team : Text, expected : ?Nat64, pitch : Text, session : Text) : async { #Ok : Types.ActiveGame; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+      await admitAccount(caller);
+      if (pitch.size() > 262144 or session.size() > 128 or team.size() > 128 or club.size() > 128) return #Err("Board state too large");
+      if (not (await boardAccess(caller, club, team, true))) return #Err("Forbidden");
+      if (isFenced(club) or removalReceiver.denied(caller)) return #Err("Forbidden");
+      let current = activeGames.find(func(row) = row.team_id == ?team);
+      if (not BoardSync.matches(current, expected)) return #Err("State revision conflict");
+      let row : Types.ActiveGame = {
+        id = switch (current) { case (?r) r.id; case null "board-" # team };
+        user_id = caller; team_id = ?team;
+        // Timer events own the clock; snapshot writes never erase it.
+        timer_state_json = switch (current) { case (?r) r.timer_state_json; case null "{}" };
+        pitch_state_json = pitch; board_session_id = session; is_active = true;
+        updated_at_ms = BoardSync.nextRevision(current, nowMs());
+      };
+      activeGames := activeGames.filter(func(r) = r.team_id != ?team).concat([row]);
+      #Ok(row)
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  // Match duties are the event_groups shown by MatchDutiesDialog, not the
+  // mini-league's session setup duty/player IDs. Resolve recipients here.
+  public shared ({ caller }) func notify_group_pitch(group_id : Text, action : Text, detail : Text, key : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+      await admitAccount(caller);
+      if (key.size() == 0 or key.size() > 128 or detail.size() > 32) return #Err("Invalid pitch alert");
+      if (action != "formation" and action != "team_size" and action != "substitution") return #Err("Invalid pitch alert");
+      // Only numeric formation/size details may cross into notification text.
+      if (not detail.chars().all(func(c) = (c >= '0' and c <= '9') or c == '-')) return #Err("Invalid pitch detail");
+      let group = eventGroups.find(func(g) = g.id == group_id) ?? return #Err("Group not found");
+      let event = events.find(func(e) = e.id == group.event_id) ?? return #Err("Event not found");
+      if (not (await* canViewMatch(caller, event))) return #Err("Forbidden");
+      let current = eventGroups.find(func(g) = g.id == group_id) ?? return #Err("Group not found");
+      let latest = events.find(func(e) = e.id == current.event_id) ?? return #Err("Event not found");
+      if (removalReceiver.denied(caller) or groupFenced(group_id) or latest.deleted or latest.revision != event.revision or current.event_id != event.id or not canEditGroupState(caller, current)) return #Err("Forbidden");
+      let recipients = BoardSync.dutyRecipients(eventGroupDuties, group_id);
+      if (recipients.size() == 0) return #Ok(0);
+      let queueId = notificationQueueCanister ?? return #Err("Notification queue not configured");
+      let queue : actor { fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text } } = actor (queueId.toText());
+      let body = if (action == "formation") "Formation changed to " # detail
+        else if (action == "team_size") "Team size changed to " # detail # " players"
+        else "A planned substitution is due";
+      await (with timeout = 10) queue.fan_out(recipients, latest.club_id, "pitch_board_" # action, body, "pitch-" # group_id # "-" # key, ?("event-group-" # group_id))
+    } finally { removalReceiver.leave(caller) }
+  };
+
   // Shared-session model (mirrors Supabase active_games): one active row per
   // team; a null team scopes the row to the caller alone.
   public shared ({ caller }) func sync_active_game(
@@ -3059,7 +3141,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let existing = activeGames.find(matches);
     let value : Types.ActiveGame = {
       id = switch (existing) { case (?e) e.id; case null "ag-" # Principal.toText(caller) # "-" # Nat.toText(activeGames.size()) };
-      user_id = caller; team_id; timer_state_json; pitch_state_json; board_session_id; is_active = true; updated_at_ms = nowMs();
+      user_id = caller; team_id; timer_state_json; pitch_state_json; board_session_id; is_active = true; updated_at_ms = BoardSync.nextRevision(existing, nowMs());
     };
     activeGames := activeGames.filter(func(item) = not matches(item)).concat([value]);
     let logTeam = switch (team_id) { case (?t) t; case null "" };
