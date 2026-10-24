@@ -61,10 +61,8 @@ export function renameVaultFolder(
   return withFeatureBackend("vault", {
     supabase: () => updateName("vault_folders", folderId, newName, client),
     icp: async (ctx) => {
-      // Provisional mapping: restricted_roles are not tracked by this
-      // Supabase-side rename call, so the canister folder's role list is
-      // reset to empty here — verify against the live canister post-deploy.
-      await updateLiveVaultFolder(ctx, folderId, newName, []);
+      // A rename must preserve the folder's access restrictions.
+      await updateLiveVaultFolder(ctx, folderId, newName);
     },
   }, writeOnce({ vaultFolderId: folderId }));
 }
@@ -145,7 +143,7 @@ export async function createVaultFolder(
       // Provisional mapping: mini-league views pass a placeholder club id
       // (the canister scopes by mini_league_id) — verify the club/team id
       // mapping against the live canister post-deploy.
-      const clubId = options.view.type === "club" || options.view.type === "team" || options.view.type === "competition"
+      const clubId = options.view.type !== "root"
         ? options.view.clubId
         : "";
       const teamId = options.view.type === "team" ? options.view.teamId : null;
@@ -205,7 +203,7 @@ export async function createVaultLinkFile(
       // Provisional mapping: mini-league views pass a placeholder club id
       // (the canister scopes by mini_league_id) — verify against the live
       // canister post-deploy, matching createVaultFolder's convention above.
-      const clubId = options.view.type === "club" || options.view.type === "team" || options.view.type === "competition"
+      const clubId = options.view.type !== "root"
         ? options.view.clubId
         : "";
       const teamId = options.view.type === "team" ? options.view.teamId : null;

@@ -517,7 +517,7 @@ export async function updateLiveVaultFolder(
   ctx: FeatureBackendContext,
   folderId: string,
   name: string,
-  restrictedRoles: string[],
+  restrictedRoles?: string[],
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   // update_folder overwrites sort_order/description/color wholesale, so
@@ -530,7 +530,7 @@ export async function updateLiveVaultFolder(
     actor.update_folder(
       folderId,
       name,
-      restrictedRoles,
+      restrictedRoles ?? existing.restricted_roles,
       existing.sort_order,
       existing.description,
       existing.color,
