@@ -74,7 +74,7 @@ export default function PlayerStatsReportView({
         const aggregated = new Map<string, PlayerStat>();
 
         data.forEach((stat: any) => {
-          const key = stat.user_id || stat.fill_in_player_name || stat.id;
+          const key = playerKey(stat.user_id, stat.child_id) || (stat.fill_in_player_name ? `f:${stat.fill_in_player_name}` : `r:${stat.id}`);
           const existing = aggregated.get(key);
 
           if (existing) {
