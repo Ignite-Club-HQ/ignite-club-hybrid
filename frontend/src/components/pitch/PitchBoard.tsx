@@ -96,6 +96,8 @@ import { usePitchBoardSubSelection } from "./hooks/usePitchBoardSubSelection";
 import { usePitchBoardManualSub } from "./hooks/usePitchBoardManualSub";
 import { usePitchBoardBenchToSub } from "./hooks/usePitchBoardBenchToSub";
 import { usePitchBoardPropSync } from "./hooks/usePitchBoardPropSync";
+import { useIcpSharedPitchBoard } from './hooks/useIcpSharedPitchBoard';
+import { usePitchBoardFormationNotifications } from './hooks/usePitchBoardFormationNotifications';
 import { usePitchBoardPersistence } from "./hooks/usePitchBoardPersistence";
 import { usePitchBoardPlayerBootstrap } from "./hooks/usePitchBoardPlayerBootstrap";
 import { usePitchPlayerDetails } from './hooks/usePitchPlayerDetails';
@@ -1114,6 +1116,22 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
 
   // handleLineupSkip now lives in usePitchBoardLineup (declared at top).
 
+  useIcpSharedPitchBoard({
+    teamId, userId: user?.id, enabled: icp && !authLoading && hasInitialized, readOnly,
+    apply: snapshot => {
+      const state = snapshot as unknown as import('./types').PitchBoardState;
+      if (Array.isArray(state.players)) setPlayers(state.players);
+      if (state.teamSize) setTeamSize(state.teamSize);
+      if (typeof state.selectedFormation === 'number') setSelectedFormation(state.selectedFormation);
+      if (state.ballPosition) setBallPosition(state.ballPosition);
+      if (Array.isArray(state.autoSubPlan)) setAutoSubPlan(state.autoSubPlan);
+      if (typeof state.autoSubActive === 'boolean') setAutoSubActive(state.autoSubActive);
+      if (typeof state.autoSubPaused === 'boolean') setAutoSubPaused(state.autoSubPaused);
+      if (Array.isArray(state.goals)) setGoals(state.goals);
+      if ('linkedEventId' in state) setLinkedEventId(state.linkedEventId ?? null);
+    },
+  });
+
   // Step 9c — persistence (localStorage debounced save + active_games auto-sub mirror)
   usePitchBoardPersistence({
     hasInitialized,
@@ -1223,6 +1241,11 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
     setPortraitSheetOpen,
   });
 
+  const notifyIcpFormationChange = usePitchBoardFormationNotifications({
+    userId: user?.id, teamId, readOnly, linkedEventId,
+    isGameFinished: () => gameTimerRef.current?.isGameFinished() ?? false,
+  });
+
   // Send push notification to team coaches/admins and Subs Manager assignees when formation or team size changes
   const notifyFormationOrSizeChange = useCallback(async (
     changeType: 'formation' | 'team_size', 
@@ -1235,51 +1258,8 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
     // Notify whenever formation changes (during setup or active game), skip only for read-only or finished games
     if (!user?.id || readOnly || gameTimerRef.current?.isGameFinished()) return;
 
-    // ICP: team role grants (club_domain) stand in for user_roles/duties;
-    // event-group (mini-league) match duties have no canister equivalent yet,
-    // so only regular team boards notify under ICP.
-    if (resolveAuthBackend() === "icp") {
-      if (teamId.startsWith("event-group-")) return;
-      try {
-        await withFeatureBackend("membership", {
-          supabase: async () => {},
-          icp: async (ctx) => {
-            const grants = await listLiveTeamRoleGrants(ctx, teamId);
-            const recipientIds = new Set<string>([user.id]);
-            (grants as Array<{ role: string; account_id: string }>).forEach((grant) => {
-              if ((grant.role === "coach" || grant.role === "team_admin") && grant.account_id) {
-                recipientIds.add(grant.account_id);
-              }
-            });
-            const changeParts: string[] = [];
-            if (changeDetails) {
-              const benchExits = changeDetails.benchMoves.filter(m => m.direction === "to-bench");
-              const pitchEntries = changeDetails.benchMoves.filter(m => m.direction === "to-pitch");
-              if (benchExits.length > 0) changeParts.push(`📤 Off: ${benchExits.map(m => m.player.name).join(", ")}`);
-              if (pitchEntries.length > 0) changeParts.push(`📥 On: ${pitchEntries.map(m => `${m.player.name} (${m.position || ""})`).join(", ")}`);
-              if (changeDetails.positionSwaps.length > 0) {
-                changeParts.push(`🔄 Moved: ${changeDetails.positionSwaps.map(s => `${s.player.name} ${s.fromPosition}→${s.toPosition}`).join(", ")}`);
-              }
-            }
-            const baseSummary = changeType === 'formation'
-              ? `Formation changed to ${detail}`
-              : `Team size changed to ${detail} players`;
-            const notificationMessage = changeParts.length > 0
-              ? `${baseSummary} — ${changeParts.join(" • ")}`
-              : baseSummary;
-            await fanOutLiveNotifications(ctx, {
-              userIds: Array.from(recipientIds),
-              clubId: teamId,
-              kind: "formation_change",
-              body: notificationMessage,
-              idempotencyKeyPrefix: `formation-${teamId}-${Date.now()}`,
-              relatedId: teamId,
-            });
-          },
-        }, writeOnce({ teamId: teamId! }));
-      } catch (error) {
-        console.error("Failed to send ICP formation change notification:", error);
-      }
+    if (resolveAuthBackend() === 'icp') {
+      await notifyIcpFormationChange(changeType, detail);
       return;
     }
     try {
@@ -1379,7 +1359,7 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
     } catch (e) {
       console.error("Failed to send formation change notification:", e);
     }
-  }, [user?.id, teamId, teamName, readOnly, linkedEventId]);
+  }, [user?.id, teamId, teamName, readOnly, linkedEventId, notifyIcpFormationChange]);
 
   // applyFormationChange now lives in usePitchBoardLineup (declared at top).
 
