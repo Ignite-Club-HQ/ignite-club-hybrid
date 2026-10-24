@@ -112,18 +112,28 @@ try {
   assert.ok('Err' in await vault.actor.resume_file_cleanup(savedAgain.id));
   assert.equal((await store.actor.get_content_hash(path))[0], replacement.content_hash);
   // Metadata erasure retains an exact, governor-readable cleanup receipt across upgrades.
+  const erasureAcl = ok(await club.actor.export_acl());
+  ok(await club.actor.replace_acl(erasureAcl.acl_version, { ...erasureAcl.acl, roles: [...roles, { user: committee, role: 'coach', club: ['club-a'], team: [] }] }));
+  store.actor.setPrincipal(committee);
+  vault.actor.setPrincipal(committee);
   const erasedPath = 'clubs/club-a/vault/erase-proof';
   const erasedUpload = ok(await store.actor.begin_upload(erasedPath, 'application/pdf', 4n, 1));
   ok(await store.actor.put_chunk(erasedUpload, 0, payload));
   const erasedBytes = ok(await store.actor.finalize_upload(erasedUpload));
   const erasedRef = { canister: ref.canister, path: erasedPath, content_hash: erasedBytes.content_hash };
   ok(await vault.actor.register_file('erase-proof', '', 'club-a', [], 'private.pdf', `https://${ref.canister}.raw.icp0.io/${erasedPath}`, 4n, 'application/pdf', false, [erasedRef], [], []));
-  // Governor cannot purge itself here without losing the fixture; use a separately authorized staff uploader.
-  const erasureAcl = ok(await club.actor.export_acl());
-  ok(await club.actor.replace_acl(erasureAcl.acl_version, { ...erasureAcl.acl, roles: [...roles, { user: committee, role: 'coach', club: ['club-a'], team: [] }] }));
-  vault.actor.setPrincipal(committee);
-  ok(await register('committee-link'));
+  ok(await vault.actor.purge_my_data());
+  assert.ok('Err' in await vault.actor.read_cleanup_page(''));
   vault.actor.setPrincipal(governor);
+  store.actor.setPrincipal(governor);
+  await pic.upgradeCanister({ canisterId: vault.canisterId, wasm: resolve(root, 'backend/vault_domain/.mops/.build/vault_domain.wasm'), sender: governor, arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  const retainedErasure = ok(await vault.actor.read_cleanup_page('')).items.find(([id]) => id === 'erase-proof');
+  assert.equal(retainedErasure[1].blob_ref.path, erasedPath);
+  assert.ok('erased' in retainedErasure[1].state);
+  ok(await vault.actor.reconcile_erased_file('erase-proof'));
+  ok(await vault.actor.reconcile_erased_file('erase-proof'));
+  assert.deepEqual(await store.actor.get_content_hash(erasedPath), []);
+  assert.deepEqual(ok(await vault.actor.read_account_get_file('erase-proof')), []);
   const restoreAcl = ok(await club.actor.export_acl());
   ok(await club.actor.replace_acl(restoreAcl.acl_version, { ...restoreAcl.acl, roles: [...roles, { user: member, role: 'coach', club: ['club-a'], team: [] }] }));
   vault.actor.setPrincipal(member);
@@ -166,5 +176,5 @@ try {
   assert.deepEqual(ok(await vault.actor.read_account_get_file('restore-missing')), []);
   assert.deepEqual(ok(await vault.actor.restore_backup_page(backup.id, restoreReceipt.next)), restoreReceipt);
   assert.equal(ok(await vault.actor.read_account_get_file('new-file'))[0].id, 'new-file');
-  console.log('PASS: outsider/direct-query denial, live ancestor restrictions/revocation, 205-file paging, stale revision refusal, forged internal-file refusal, authorized pins/outsider denial, actual byte-size evidence/idempotency, interrupted cleanup retention/tombstone, >200 backup progress/replay/future-cursor denial/upgrade resume, erased-file resurrection denial, populated upgrade readback.');
+  console.log('PASS: authorized cleanup resumes after upgrade/lost acknowledgement; unknown uploads and replacement hashes preserved; pending reference registration denied; erased provenance survives upgrade and governor-only exact cleanup is idempotent; outsider/direct-query denial, ancestor restrictions, 205-file paging, authorized pins, bounded backups and erased-file resurrection denial.');
 } finally { await pic?.tearDown(); await server.stop(); }
