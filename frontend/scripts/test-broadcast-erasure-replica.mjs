@@ -14,7 +14,7 @@ const server=await PocketIcServer.start();let pic;
 try {
   pic=await PocketIc.create(server.getUrl());
   const identity=await pic.setupCanister({idlFactory:()=>IDL.Service({}),wasm:process.env.BROADCAST_IDENTITY_WASM,sender:gov,controllers:[gov],arg:IDL.encode([IDL.Principal,IDL.Principal],[manager,alias])});
-  const setup=(idlFactory,wasm)=>pic.setupCanister({idlFactory,wasm,sender:gov,controllers:[gov],arg:IDL.encode([IDL.Principal],[gov]),environmentVariables:[{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()}]});
+  const setup=(idlFactory,wasm)=>pic.setupCanister({idlFactory,wasm,sender:gov,controllers:[gov],arg:IDL.encode([IDL.Principal],[gov]),environmentVariables:[{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()},{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'}]});
   const C=await setup(clubIdl,process.env.CLUB_DOMAIN_WASM),K=await setup(compIdl,process.env.COMPETITION_DOMAIN_WASM),Q=await setup(queueIdl,process.env.NOTIFICATION_QUEUE_WASM);
   const c=C.actor,k=K.actor,q=Q.actor;
   for(const a of [c,k,q])a.setPrincipal(gov);
