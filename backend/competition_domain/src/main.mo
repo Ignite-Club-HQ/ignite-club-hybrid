@@ -2705,6 +2705,9 @@ persistent actor class Main(governorInit : Principal) = this {
       if (removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller, competition)) return #Err("Competition manager required");
       if (operation.size() == 0 or operation.size() > 128 or divisions.size() > 100 or title.size() > 200 or body.size() == 0 or body.size() > 4000) return #Err("Invalid broadcast");
       let key = caller.toText() # "\u{1f}" # operation;
+      for ((otherKey, pending) in Map.entries(broadcastDeliveries)) {
+        if (otherKey != key and pending.sender == caller and pending.competition == competition and pending.unknown != null) return #Err("Previous broadcast outcome unresolved; no new send permitted");
+      };
       var receipt = switch (Map.get(broadcastDeliveries, Text.compare, key)) {
         case (?existing) {
           if (existing.sender != caller or existing.competition != competition or existing.divisions != divisions or existing.title != title or existing.body != body) return #Err("Broadcast operation conflict");
@@ -2832,6 +2835,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let newBroadcasts = broadcasts.map(func(item : Types.Broadcast) : Types.Broadcast {
       if (item.sender.equal(old)) { changed += 1; { item with sender = new } } else item
     });
+    for ((_, receipt) in Map.entries(broadcastDeliveries)) if (receipt.sender == old) changed += 1;
     var newBulkAccessPrincipals = bulkAccessPrincipals;
     let newPlayhqClaims=playhqClaims.map(func(c):Types.PlayHQClaim {if(c.user==old){changed+=1;{c with user=new}}else c});
     if (bulkAccessPrincipals.any(func(p) = p.equal(old))) {
@@ -2849,7 +2853,6 @@ persistent actor class Main(governorInit : Principal) = this {
           let suffix = Text.stripStart(key, #text (old.toText() # "\u{1f}")) ?? key;
           Map.remove(broadcastDeliveries, Text.compare, key);
           Map.add(broadcastDeliveries, Text.compare, new.toText() # "\u{1f}" # suffix, { receipt with sender = new });
-          changed += 1
         }
       };
       roles := newRoles;
