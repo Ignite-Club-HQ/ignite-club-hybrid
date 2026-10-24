@@ -658,6 +658,15 @@ export interface Main {
     { 'Ok' : boolean } |
       { 'Err' : string }
   >,
+  'read_my_competition_cards' : ActorMethod<
+    [],
+    {
+        'Ok' : Array<
+          { 'entries' : Array<TeamEntry>, 'competition' : Competition }
+        >
+      } |
+      { 'Err' : string }
+  >,
   'read_playhq_stats' : ActorMethod<
     [string],
     {
