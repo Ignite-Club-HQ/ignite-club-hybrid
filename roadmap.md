@@ -1,3 +1,9 @@
+## File Vault ICP audit — 24 October 2026
+- [x] Two independent app/canister audits traced Vault flows and documented concrete remaining gaps in docs/vault-icp-audit-2026-10-24.md; Vault is not fully closed.
+- [x] Repair rename restrictions, mini-league write scope, routed move destinations/retry, truthful ICP image-delete acknowledgements and decrypted export thumbnails/raw-image fallback; withhold unsupported moves and recurring grant reductions. Focused checks: 241 ICP plus nine new regression checks, 275 Supabase; ICP guards and preview pass.
+- [x] Record remaining implementation findings: authoritative legacy reads/restricted ancestors/chat pins, bounded paging, atomic destination scope, durable upload/delete cleanup, private chat mirrors, collision-safe gallery IDs, availability-aware restore/retention, competition deep links and truthful scoped storage accounting. These are not claimed repaired; Google Drive import/sync also remains missing in ICP.
+- [ ] Signed-in Vault acceptance and release: unavailable II session; compatible app release and future exact protected canister upgrades require separate authorization. No deployment performed.
+
 ## Gallery ICP completion — 24 October 2026
 - [x] Add authorized threaded comments, canister-derived gallery notices, exact photo/comment/event/card links, quiet foreground refresh and authorized on-chain photo view counts.
 - [x] Restore exact club/team sharing allowances, scoped staff moderation, separate encrypted/deduplicated source-bound Vault copies, consistent hidden-gallery reads, both deletion choices and owned-asset receipt-based team cards; grouped chat-photo publishing preserves album IDs.

@@ -10,7 +10,9 @@ import {
   ResponsiveDialogFooter,
 } from "@/components/ui/responsive-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { isIcpSession, icpGetTeam, icpGetClubName, icpListTeams, icpListClubs } from "@/lib/icpClubTeamLookup";
+import { isIcpSession, icpListTeams } from "@/lib/icpClubTeamLookup";
+import { fetchVaultMoveFolders } from "@/features/vault/vaultMoveRepository";
+import { useAuth } from "@/hooks/useAuth";
 
 interface MoveFileDialogProps {
   open: boolean;
@@ -34,43 +36,31 @@ export function MoveFileDialog({
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const { user } = useAuth();
+  const icp = isIcpSession();
 
   // Fetch all folders for this team/club
-  const { data: folders, isLoading: isLoadingFolders } = useQuery({
-    queryKey: ["vault-folders-for-move", teamId, clubId],
-    queryFn: async () => {
-      let query = supabase
-        .from("vault_folders")
-        .select("id, name, parent_id, team_id")
-        .order("name");
-
-      if (teamId) {
-        query = query.eq("team_id", teamId);
-      } else if (clubId) {
-        // At club level, show all folders in the club (including team folders)
-        query = query.eq("club_id", clubId);
-      }
-
-      const { data } = await query;
-      return data || [];
-    },
-    enabled: open && (!!teamId || !!clubId),
+  const { data: folders, isLoading: isLoadingFolders, error: foldersError, refetch: retryFolders } = useQuery({
+    queryKey: ["vault-folders-for-move", icp ? "icp" : "supabase", user?.id, teamId, clubId],
+    queryFn: () => fetchVaultMoveFolders(clubId ?? null, teamId ?? null),
+    enabled: open && !!user?.id && (!!teamId || !!clubId),
   });
 
   // At club level, also fetch teams as virtual folder destinations
   const { data: teams, isLoading: isLoadingTeams } = useQuery({
-    queryKey: ["vault-teams-for-move", clubId],
+    queryKey: ["vault-teams-for-move", icp ? "icp" : "supabase", user?.id, clubId],
     queryFn: async () => {
-      if (isIcpSession()) return await icpListTeams(clubId!);
+      if (!clubId) return [];
+      if (isIcpSession()) return await icpListTeams(clubId);
       const { data } = await supabase
         .from("teams")
         .select("id, name")
-        .eq("club_id", clubId!)
+        .eq("club_id", clubId)
         .is("deleted_at", null)
         .order("name");
       return data || [];
     },
-    enabled: open && !!clubId && !teamId, // Only when viewing at club level
+    enabled: open && !!user?.id && !!clubId && !teamId && !icp,
   });
 
   const isLoading = isLoadingFolders || isLoadingTeams;
@@ -93,7 +83,7 @@ export function MoveFileDialog({
       if (!folderMap.has(parentId)) {
         folderMap.set(parentId, []);
       }
-      folderMap.get(parentId)!.push(folder);
+      folderMap.get(parentId)?.push(folder);
     });
 
     return { folderMap, rootFolders: folderMap.get(null) || [] };
@@ -113,7 +103,7 @@ export function MoveFileDialog({
 
   const handleMove = () => {
     if (file) {
-      onMove(file.id, selectedFolderId, selectedTeamId);
+      onMove(file.id, selectedFolderId, icp ? undefined : selectedTeamId);
     }
   };
 
@@ -188,7 +178,8 @@ export function MoveFileDialog({
 
   // Determine if move button should be disabled
   const isMoveDisabled = () => {
-    if (isMoving) return true;
+    if (isMoving || isLoading || foldersError) return true;
+    if (icp && !selectedFolderId && file?.team_id) return true;
     
     // If a team is selected, check if file is already in that team at root
     if (selectedTeamId) {
@@ -216,14 +207,16 @@ export function MoveFileDialog({
             Select a destination folder or team
           </p>
 
-          {isLoading ? (
+          {foldersError ? (
+            <div className="py-4 text-center"><p className="text-sm text-destructive">Could not load folders</p><Button variant="outline" onClick={() => void retryFolders()}>Try again</Button></div>
+          ) : isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <div className="max-h-[300px] overflow-y-auto space-y-1 border rounded-lg p-2">
               {/* Root option (no folder, club level) */}
-              <div
+              {(!icp || !file?.team_id) && <div
                 className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
                   isRootSelected
                     ? "bg-primary text-primary-foreground"
@@ -242,7 +235,7 @@ export function MoveFileDialog({
                 {isCurrentlyAtRoot && (
                   <span className="text-xs opacity-70 ml-auto">(current)</span>
                 )}
-              </div>
+              </div>}
 
               {/* Teams as destinations (only at club level) */}
               {teams && teams.length > 0 && (

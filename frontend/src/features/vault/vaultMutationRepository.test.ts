@@ -491,7 +491,7 @@ describe.runIf(!supabaseMode)("Vault mutation repository — ICP", () => {
     await softDeleteVaultItem("file-a", "principal-a", new Date(), fake.client);
     await restoreVaultItem("file-a", fake.client);
     await deleteVaultFolder("folder-a", fake.client);
-    expect(vaultMocks.updateFolder).toHaveBeenCalledWith(icpContext, "folder-a", "Policies", []);
+    expect(vaultMocks.updateFolder).toHaveBeenCalledWith(icpContext, "folder-a", "Policies");
     expect(vaultMocks.renameFile).toHaveBeenCalledWith(icpContext, "file-a", "Rules.pdf");
     expect(vaultMocks.moveFile).toHaveBeenCalledWith(icpContext, "file-a", "folder-b");
     expect(vaultMocks.trashFile).toHaveBeenCalledWith(icpContext, "file-a");
@@ -584,7 +584,7 @@ describe.runIf(!supabaseMode)("Vault mutation repository — ICP", () => {
         miniLeagueId: "league-a",
         miniLeagueName: "League A",
       },
-      clubId: "",
+      clubId: "club-a",
       teamId: null,
       miniLeagueId: "league-a",
       competitionId: null,
