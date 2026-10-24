@@ -64,7 +64,7 @@ try {
   ok(await c.assign_division(competition, home, ['old-division']));
   ok(await c.update_match_details(fixture.id, home, away, ['old-division'], [], [], [], [], [], [], [], 1n));
   const completed = ok(await c.record_match(competition, home, away));
-  ok(await c.set_match_result(completed.id, 2, 1, 'completed', completed.revision));
+  ok(await c.set_match_result(completed.id, 2, 1, completed.revision));
   assert.equal(ok(await c.move_team_division(competition, home, ['old-division'], ['new-division'], true)), 1n);
   assert.ok(ok(await c.list_matches(competition)).some(m => m.id === completed.id && m.status === 'completed'));
   denied(await c.move_team_division(competition, home, ['old-division'], ['other-division'], true));

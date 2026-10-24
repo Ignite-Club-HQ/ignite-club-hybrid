@@ -21,7 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import { registerLiveCompetitionTeam, isLiveCompetitionAdmin, assignLiveDivision } from "@/live/features/competitions";
+import { registerLiveCompetitionTeam, isLiveCompetitionAdmin } from "@/live/features/competitions";
 import { ensureLiveCompetitionAdminThread } from "@/live/features/messaging";
 import { createLiveShellTeamInvite } from "@/live/features/membership";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -969,7 +969,7 @@ function TeamsByDivision({
           supabase: async () => [],
           icp: async ctx => (await import("@/live/features/competitions")).listLiveCompetitionMatches(ctx, competitionId),
         }, { competitionId });
-        const affected = rows.filter(m => (m.home_team_id === entry.team_id || m.away_team_id === entry.team_id) &&
+        const affected = rows.filter(m => (m.home_team === entry.team_id || m.away_team === entry.team_id) &&
           (divFilter.length === 0 || (m.division_id[0] != null && divFilter.includes(m.division_id[0]))));
         if (!affected.length) await doAssignDivision(entry.id, divisionId, false, entry.team_id, divFilter);
         else {

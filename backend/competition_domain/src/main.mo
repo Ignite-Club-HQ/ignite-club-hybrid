@@ -924,7 +924,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let current = entries.find(func e = e.competition_id == competition_id and e.team_id == team_id) ?? return #Err("Team not registered");
       if (current.division_id != expected_division) return #Err("Team division changed; refresh before moving");
       if (current.division_id == division_id) return #Ok(0);
-      let affected = matches.filter(func m = clear_fixtures and m.competition_id == competition_id and m.status != "completed" and (m.home_team_id == team_id or m.away_team_id == team_id) and ((expected_division == null and division_id == null) or (m.division_id != null and (m.division_id == expected_division or m.division_id == division_id))));
+      let affected = matches.filter(func m = clear_fixtures and m.competition_id == competition_id and m.status != "completed" and (m.home_team == team_id or m.away_team == team_id) and ((expected_division == null and division_id == null) or (m.division_id != null and (m.division_id == expected_division or m.division_id == division_id))));
       if (affected.any(func m = matchFenced(m.id))) return #Err("Fixture temporarily locked");
       entries := entries.map(func e = if (e == current) ({ e with division_id }) else e);
       matches := matches.filter(func m = not affected.any(func removed = removed.id == m.id));

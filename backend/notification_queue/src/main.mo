@@ -63,6 +63,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
   var items : [Types.Notification];
   var competitionBroadcastReceipts : Map.Map<Text, { club : Text; related : Text; body : Text; count : Nat16 }>;
+  var competitionBroadcastAudiences : Map.Map<Text, [Text]>;
   var leases : [Types.Lease];
   var governor : ?Principal;
 
@@ -600,9 +601,12 @@ persistent actor class Main(governorInit : Principal) = this {
     if (clubDomainCanister != ?caller or isFenced(club)) return #Err("Trusted club relay required");
     if (users.size() > 500 or body.size() > 4000 or not valid(club) or not valid(related) or key.size() > 512) return #Err("Invalid broadcast scope");
     let receiptKey = club # "\u{1f}" # key;
+    let audience = users.sort(Text.compare);
+    if (audience.any(func user = not valid(user))) return #Err("Invalid broadcast recipient");
     switch (Map.get(competitionBroadcastReceipts, Text.compare, receiptKey)) {
       case (?r) {
         if (r.club != club or r.related != related or r.body != body) return #Err("Broadcast receipt conflict");
+        if (Map.get(competitionBroadcastAudiences, Text.compare, receiptKey) != ?audience) return #Err("Broadcast audience receipt conflict");
         return #Ok(r.count)
       };
       case null {}
@@ -620,6 +624,7 @@ persistent actor class Main(governorInit : Principal) = this {
       }
     };
     Map.add(competitionBroadcastReceipts, Text.compare, receiptKey, { club; related; body; count });
+    Map.add(competitionBroadcastAudiences, Text.compare, receiptKey, audience);
     #Ok(count)
   };
 
