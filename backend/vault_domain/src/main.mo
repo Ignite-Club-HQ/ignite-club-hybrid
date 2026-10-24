@@ -680,10 +680,12 @@ persistent actor class Main(governorInit : Principal) = this {
       case null {};
     };
     switch (blob_ref) { case (?ref) { if (not validBlobRef(ref)) return #Err("Invalid blob ref") }; case null {} };
+    var destination : ?Types.VaultFolder = null;
     if (folder_id != "") {
       switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
         case null { return #Err("Folder not found") };
         case (?folder) {
+          destination := ?folder;
           if (folder.club != club) return #Err("Folder belongs to another club");
           if (folder.competition_id != competition_id or folder.team != team or folder.mini_league_id != mini_league_id) return #Err("Folder belongs to another vault scope");
           if (competition_id == null and not (await canAccessFolder(caller, folder))) return #Err("Folder access forbidden");
@@ -704,6 +706,12 @@ persistent actor class Main(governorInit : Principal) = this {
       if (not (await verifyFileBytes(caller, ref, size))) return #Err("File byte evidence unavailable or mismatched");
       if (not (await canWrite(caller, club, team, competition_id)) or files.any(func f = f.id == id) or mediaEvidenceRevision != registrationRevision or deletionIntents.get(id) != null or isFenced(club)) return #Err("Registration scope changed");
     } else if (blob_ref != null or size != 0 or not Text.startsWith(file_url, #text "https://")) return #Err("Invalid external link");
+    // No await after this check: a removed/restricted destination cannot admit a late upload.
+    if (removalReceiver.denied(caller) or isFenced(club) or deletionIntents.get(id) != null or files.any(func f = f.id == id)) return #Err("Registration scope changed");
+    switch destination {
+      case (?folder) { if (folder.deleted_at_ms != null or folders.find(func f = f.id == folder_id) != ?folder) return #Err("Registration destination changed") };
+      case null { if (folder_id != "") return #Err("Registration destination unavailable") }
+    };
     let file : Types.VaultFile = {
       id; folder_id; club; team; name; file_url; size; mime;
       uploaded_by = caller;

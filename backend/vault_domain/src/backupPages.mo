@@ -1,5 +1,6 @@
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
+import Runtime "mo:core/Runtime";
 import Types "types";
 
 module {
@@ -8,6 +9,7 @@ module {
   };
   public func page(b : Types.Backup, offset : Nat, revision : Nat) : Types.BackupPage {
     let total = b.folders.size() + b.files.size();
+    if (offset > total) Runtime.trap("Invalid backup cursor");
     let end = Nat.min(total, offset + 40);
     let folderStart = Nat.min(offset, b.folders.size());
     let folderEnd = Nat.min(end, b.folders.size());
