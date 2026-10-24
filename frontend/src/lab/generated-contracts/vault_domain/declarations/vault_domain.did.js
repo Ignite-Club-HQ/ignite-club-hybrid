@@ -125,6 +125,7 @@ export const idlFactory = ({ IDL }) => {
     'scanned' : IDL.Nat,
     'revision' : IDL.Nat,
   });
+  const Intent = IDL.Record({ 'file' : VaultFile, 'ready' : IDL.Bool });
   const Main = IDL.Service({
     'acknowledge_file_upload' : IDL.Func(
         [IDL.Text],
@@ -446,6 +447,11 @@ export const idlFactory = ({ IDL }) => {
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
+    'read_my_upload_intent' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Intent, 'Err' : IDL.Text })],
         [],
       ),
     'read_my_upload_page' : IDL.Func(

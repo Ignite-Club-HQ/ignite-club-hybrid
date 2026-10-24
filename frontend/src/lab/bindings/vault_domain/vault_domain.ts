@@ -415,6 +415,13 @@ export interface MainInterface {
         Err: string;
     }>;
     read_group_opening_configuration(): Promise<Array<[string, string]>>;
+    read_my_upload_intent(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Intent;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_my_upload_page(club: string, after: string): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -688,6 +695,10 @@ export interface Page {
     scanned: bigint;
     revision: bigint;
 }
+export interface Intent {
+    file: VaultFile;
+    ready: boolean;
+}
 export interface VaultFolder {
     id: string;
     mini_league_id?: string;
@@ -729,7 +740,7 @@ export enum Variant_pending_erased_complete {
 }
 export interface vault_domainInterface extends MainInterface {
 }
-import type { Backup as _Backup, BackupPage as _BackupPage, BackupSummary as _BackupSummary, BlobRef as _BlobRef, CleanupRecord as _CleanupRecord, Page as _Page, PinnedVault as _PinnedVault, Receipt as _Receipt, Reference as _Reference, VaultFile as _VaultFile, VaultFileWithFolder as _VaultFileWithFolder, VaultFolder as _VaultFolder } from "./declarations/vault_domain.did";
+import type { Backup as _Backup, BackupPage as _BackupPage, BackupSummary as _BackupSummary, BlobRef as _BlobRef, CleanupRecord as _CleanupRecord, Intent as _Intent, Page as _Page, PinnedVault as _PinnedVault, Receipt as _Receipt, Reference as _Reference, VaultFile as _VaultFile, VaultFileWithFolder as _VaultFileWithFolder, VaultFolder as _VaultFolder } from "./declarations/vault_domain.did";
 export class Vault_domain implements vault_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async acknowledge_file_upload(arg0: string): Promise<{
@@ -1251,6 +1262,16 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.read_group_opening_configuration();
         return result;
     }
+    async read_my_upload_intent(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Intent;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_my_upload_intent(arg0);
+        return from_candid_variant_n58(result);
+    }
     async read_my_upload_page(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -1262,7 +1283,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_my_upload_page(arg0, arg1);
-        return from_candid_variant_n58(result);
+        return from_candid_variant_n61(result);
     }
     async read_resource_club(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -1272,7 +1293,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_resource_club(arg0, arg1);
-        return from_candid_variant_n60(result);
+        return from_candid_variant_n63(result);
     }
     async read_vault_file_page(arg0: string, arg1: string | null, arg2: string | null, arg3: string | null, arg4: string | null, arg5: boolean, arg6: bigint, arg7: bigint | null): Promise<{
         __kind__: "Ok";
@@ -1286,7 +1307,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_vault_file_page(arg0, to_candid_opt_n19(arg1), to_candid_opt_n19(arg2), to_candid_opt_n19(arg3), to_candid_opt_n19(arg4), arg5, arg6, to_candid_opt_n40(arg7));
-        return from_candid_variant_n61(result);
+        return from_candid_variant_n64(result);
     }
     async reconcile_erased_file(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1315,7 +1336,7 @@ export class Vault_domain implements vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n19(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n63(arg9), to_candid_opt_n19(arg10), to_candid_opt_n19(arg11));
+        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n19(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n66(arg9), to_candid_opt_n19(arg10), to_candid_opt_n19(arg11));
         return from_candid_variant_n2(result);
     }
     async register_gallery_copy(arg0: string, arg1: string, arg2: string, arg3: bigint, arg4: string, arg5: BlobRef): Promise<{
@@ -1336,7 +1357,7 @@ export class Vault_domain implements vault_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n64(result);
+        return from_candid_variant_n67(result);
     }
     async rename_file(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -1371,7 +1392,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.restore_backup_page(arg0, arg1);
-        return from_candid_variant_n65(result);
+        return from_candid_variant_n68(result);
     }
     async restore_file(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1451,7 +1472,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_pinned_vault(arg0, arg1, arg2, to_candid_opt_n19(arg3), to_candid_opt_n19(arg4), to_candid_opt_n19(arg5), to_candid_opt_n19(arg6), arg7);
-        return from_candid_variant_n66(result);
+        return from_candid_variant_n69(result);
     }
     async set_transfer_fence(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -1511,7 +1532,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.trash_gallery_copy(arg0, arg1, arg2);
-        return from_candid_variant_n67(result);
+        return from_candid_variant_n70(result);
     }
     async update_folder(arg0: string, arg1: string, arg2: Array<string>, arg3: number, arg4: string | null, arg5: string | null): Promise<{
         __kind__: "Ok";
@@ -1532,6 +1553,9 @@ function from_candid_Backup_n12(value: _Backup): Backup {
 }
 function from_candid_CleanupRecord_n49(value: _CleanupRecord): CleanupRecord {
     return from_candid_record_n50(value);
+}
+function from_candid_Intent_n59(value: _Intent): Intent {
+    return from_candid_record_n60(value);
 }
 function from_candid_Page_n53(value: _Page): Page {
     return from_candid_record_n54(value);
@@ -1857,7 +1881,19 @@ function from_candid_record_n57(value: {
         resource_id: value.resource_id
     };
 }
-function from_candid_record_n59(value: {
+function from_candid_record_n60(value: {
+    file: _VaultFile;
+    ready: boolean;
+}): {
+    file: VaultFile;
+    ready: boolean;
+} {
+    return {
+        file: from_candid_VaultFile_n3(value.file),
+        ready: value.ready
+    };
+}
+function from_candid_record_n62(value: {
     ids: Array<string>;
     next: [] | [string];
 }): {
@@ -1869,7 +1905,7 @@ function from_candid_record_n59(value: {
         next: record_opt_to_undefined(from_candid_opt_n5(value.next))
     };
 }
-function from_candid_record_n62(value: {
+function from_candid_record_n65(value: {
     next: [] | [bigint];
     items: Array<_VaultFileWithFolder>;
     revision: bigint;
@@ -2267,6 +2303,25 @@ function from_candid_variant_n52(value: {
     } : value;
 }
 function from_candid_variant_n58(value: {
+    Ok: _Intent;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Intent;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_Intent_n59(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n61(value: {
     Ok: {
         ids: Array<string>;
         next: [] | [string];
@@ -2285,13 +2340,13 @@ function from_candid_variant_n58(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_record_n59(value.Ok)
+        Ok: from_candid_record_n62(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n60(value: {
+function from_candid_variant_n63(value: {
     Ok: [] | [string];
 } | {
     Err: string;
@@ -2310,7 +2365,7 @@ function from_candid_variant_n60(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n61(value: {
+function from_candid_variant_n64(value: {
     Ok: {
         next: [] | [bigint];
         items: Array<_VaultFileWithFolder>;
@@ -2331,13 +2386,13 @@ function from_candid_variant_n61(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_record_n62(value.Ok)
+        Ok: from_candid_record_n65(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n64(value: {
+function from_candid_variant_n67(value: {
     ok: bigint;
 } | {
     err: string;
@@ -2356,7 +2411,7 @@ function from_candid_variant_n64(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n65(value: {
+function from_candid_variant_n68(value: {
     Ok: {
         skipped: bigint;
         next: bigint;
@@ -2385,7 +2440,7 @@ function from_candid_variant_n65(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n66(value: {
+function from_candid_variant_n69(value: {
     Ok: _PinnedVault;
 } | {
     Err: string;
@@ -2404,7 +2459,7 @@ function from_candid_variant_n66(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n67(value: {
+function from_candid_variant_n70(value: {
     Ok: boolean;
 } | {
     Err: string;
@@ -2447,7 +2502,7 @@ function to_candid_opt_n19(value: string | null): [] | [string] {
 function to_candid_opt_n40(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n63(value: BlobRef | null): [] | [_BlobRef] {
+function to_candid_opt_n66(value: BlobRef | null): [] | [_BlobRef] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n10(value: {
