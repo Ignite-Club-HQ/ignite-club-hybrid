@@ -3104,7 +3104,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if (key.size() == 0 or key.size() > 128 or detail.size() > 32) return #Err("Invalid pitch alert");
       if (action != "formation" and action != "team_size" and action != "substitution") return #Err("Invalid pitch alert");
       // Only numeric formation/size details may cross into notification text.
-      if (not detail.chars().all(func(c) = (c >= '0' and c <= '9') or c == '-')) return #Err("Invalid pitch detail");
+      for (c in detail.chars()) { if (not ((c >= '0' and c <= '9') or c == '-')) return #Err("Invalid pitch detail") };
       let group = eventGroups.find(func(g) = g.id == group_id) ?? return #Err("Group not found");
       let event = events.find(func(e) = e.id == group.event_id) ?? return #Err("Event not found");
       if (not (await* canViewMatch(caller, event))) return #Err("Forbidden");
