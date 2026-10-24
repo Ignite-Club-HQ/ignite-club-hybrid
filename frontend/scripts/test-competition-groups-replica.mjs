@@ -137,8 +137,7 @@ try {
   c.setPrincipal(stranger);
   denied(await c.claim_eoi_by_token(row.claim_token));
   c.setPrincipal(governor);
-  ok(await c.submit_public_eoi('guest', 'season', 'Other', 'other@example.invalid', [], 'Other child', [], [], [], [], [3], [], [], [], 'app'));
-  denied(await c.suggest_eoi_teams('season')); // no mixed-club candidate IDs
+  denied(await c.submit_public_eoi('guest', 'season', 'Other', 'other@example.invalid', [], 'Other child', [], [], [], [], [3], [], [], [], 'app')); // wrong EOI authority refuses foreign club
   ok(await c.set_transfer_fence('host', true));
   c.setPrincipal(parent);
   denied(await c.update_eoi_submission(eoi, ['changed'], [], []));
