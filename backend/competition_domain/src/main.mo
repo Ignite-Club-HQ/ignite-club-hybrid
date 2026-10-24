@@ -241,7 +241,7 @@ persistent actor class Main(governorInit : Principal) = this {
     emailOutbox.reconcile(caller,id,attempt,"sent",provider_id)
   };
   public shared ({caller}) func compact_email_jobs(cursor:?Text,limit:Nat):async{#Ok:{next_cursor:?Text;scanned:Nat};#Err:Text} {
-    if(not isGovernor(caller) or limit==0 or limit>200)return #Err("Governor and bounded page required");
+    if(not isGovernor(caller) or limit==0 or limit > 200)return #Err("Governor and bounded page required");
     #Ok(emailOutbox.compact(cursor,limit))
   };
   var clubDomainCanister : ?Principal;
@@ -1309,6 +1309,16 @@ persistent actor class Main(governorInit : Principal) = this {
       let game : Types.Match = { id; competition_id=input.competition_id; home_team=input.home_team; away_team=input.away_team; division_id=input.division_id; scheduled_at_ms=input.scheduled_at_ms; venue=input.venue; pitch_number=input.pitch_number; round_number=input.round_number; duration_minutes=input.duration_minutes; arrival_minutes_before=input.arrival_minutes_before; notes=input.notes; home_score=0; away_score=0; status="scheduled"; revision=1 };
       matches := matches.concat([game]); Map.add(fixtureReceipts,Text.compare,key,{creator=caller;input;match_id=id}); #Ok(game)
     } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({caller}) func read_fixture_operation(operation:Text):async{#Ok:?FixtureOperations.Receipt;#Err:Text} {
+    if(not removalReceiver.enter(caller))return #Err("Account unavailable");
+    try {
+      auth(caller);await admitAccount(caller);
+      let r=Map.get(fixtureReceipts,Text.compare,caller.toText() # "\u{1f}" # operation)??return #Ok(null);
+      await syncForCompetition(caller,r.input.competition_id);
+      if(removalReceiver.denied(caller) or compFenced(r.input.competition_id) or not canManageCompetition(caller,r.input.competition_id))return #Err("Fixture manager required");
+      #Ok(?r)
+    }finally{removalReceiver.leave(caller)}
   };
 
   public query ({ caller }) func list_competitions(club_id : Text) : async { #Ok : [Types.Competition]; #Err : Text } {

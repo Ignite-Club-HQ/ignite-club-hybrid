@@ -236,7 +236,7 @@ persistent actor class Main(governorInit : Principal) = this {
     emailOutbox.reconcile(caller,id,attempt,"sent",provider_id)
   };
   public shared ({caller}) func compact_email_jobs(cursor:?Text,limit:Nat):async{#Ok:{next_cursor:?Text;scanned:Nat};#Err:Text} {
-    if(not isGovernor(caller) or limit==0 or limit>200)return #Err("Governor and bounded page required");
+    if(not isGovernor(caller) or limit==0 or limit > 200)return #Err("Governor and bounded page required");
     #Ok(emailOutbox.compact(cursor,limit))
   };
   // (code, invite_id) — short share-link codes, lazily created, stable once minted.
@@ -1313,7 +1313,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (current != recipients) return #Err("Broadcast audience changed");
     let queueId = notificationQueueCanister ?? return #Err("Notification queue unavailable");
     let queue : actor { enqueue_competition_broadcast : shared ([Text], Text, Text, Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(queueId.toText());
-    let receipt:BroadcastRelay.Receipt={authority=caller;queue=queueId;user;club;competition;teams=team_ids;officials;body;key;audience=recipients.map(func p = p.toText());count=null};
+    let receipt:BroadcastRelay.Receipt={authority=caller;queue=queueId;user;club;competition;teams=team_ids;officials;body;key;audience=recipients.map(func p = p.toText()).sort(Text.compare);count=null};
     Map.add(broadcastRelayReceipts,Text.compare,receiptKey,receipt);
     let result=try{await (with timeout = 10) queue.enqueue_competition_broadcast(receipt.audience,club,competition,body,key)}catch(_){return #Err("Relay outcome unresolved; retain receipt")};
     switch(result){case(#Ok(n)){Map.add(broadcastRelayReceipts,Text.compare,receiptKey,{receipt with count=?n});#Ok(n)};case(#Err(e))#Err(e)}
