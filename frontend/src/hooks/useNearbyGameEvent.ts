@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from '@/live/authBackendMode';
+import { nearestGame, readIcpGameEvents } from '@/lib/gameEventReads';
 
 // Time window: 2 hours before to 3 hours after the event start time
 const WINDOW_BEFORE_MS = 120 * 60 * 1000; // 2 hours before
@@ -65,6 +67,13 @@ async function findActiveGameEventForTeam(teamId: string): Promise<string | null
  * Returns the event ID if found, null otherwise.
  */
 export async function findNearbyGameEvent(teamId: string): Promise<string | null> {
+  if (resolveAuthBackend() === 'icp') {
+    const events = await readIcpGameEvents(teamId);
+    const { readSharedPitchBoard } = await import('@/lib/sharedPitchBoard');
+    const board = await readSharedPitchBoard(teamId);
+    const linked = typeof board?.pitch.linkedEventId === 'string' ? board.pitch.linkedEventId : null;
+    return nearestGame(events, Date.now(), linked);
+  }
   // First, check if there's an active game for this team
   const activeGameEventId = await findActiveGameEventForTeam(teamId);
   if (activeGameEventId) {
