@@ -83,6 +83,17 @@ try {
  const restored=await pic.setupCanister({idlFactory:eventsIdl,wasm:eventsWasm,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor])});
  restored.actor.setPrincipal(governor);ok(await restored.actor.set_transfer_fence('club',true));ok(await restored.actor.import_club_snapshot('club',saved));
  assert.deepEqual(ok(await restored.actor.export_club_snapshot('club')),saved);
+ ok(await restored.actor.set_transfer_fence('club',false));
+ assert.equal(ok(await restored.actor.read_detailed_game_player_stats(eventId))[0].detail[0].child_id[0],'child-1');
+ assert.deepEqual(ok(await restored.actor.read_detailed_game_player_stats(eventId))[0].detail[0].position_seconds[0],[['GK',120]]);
+ ok(await restored.actor.set_competition_domain_canister(competition.canisterId));
+ restored.actor.setPrincipal(competition.canisterId);
+ assert.deepEqual(ok(await restored.actor.materialize_competition_fixture(revisionInput,4n)),revisionEvents);
+ assert.ok('Err' in await restored.actor.materialize_competition_fixture({...revisionInput,title:'Changed'},4n));
+ assert.ok('Err' in await restored.actor.materialize_competition_fixture(revisionInput,3n));
+ restored.actor.setPrincipal(manager);ok(await restored.actor.purge_my_data());
+ restored.actor.setPrincipal(competition.canisterId);
+ assert.ok('Err' in await restored.actor.materialize_competition_fixture(revisionInput,4n));
  ok(await e.set_transfer_fence('club',false));
  c.setPrincipal(member); assert.ok('Err' in await c.read_history_score_access(cup.id,'team-1',1n,manager,false));
  c.setPrincipal(manager); ok(await c.set_score_privacy(cup.id,[],[false]));

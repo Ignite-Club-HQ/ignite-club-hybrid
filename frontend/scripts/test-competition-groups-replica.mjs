@@ -125,6 +125,28 @@ try {
   denied(await c.update_match_details(completed.id, home, away, [], [], [], [], [], [], [], [], 2n));
   denied(await c.queue_competition_broadcast('forged-operation', competition, [], 'Notice', 'Forged'));
   c.setPrincipal(governor);
+  // Fresh destination must retain operations, not merely visible match rows.
+  ok(await c.set_transfer_fence('host', true));
+  const snapshot = ok(await c.export_club_snapshot('host'));
+  const restored = await setup(compIdl, 'COMPETITION_DOMAIN_WASM');
+  restored.actor.setPrincipal(governor);
+  ok(await restored.actor.set_transfer_fence('host',true));
+  ok(await restored.actor.import_club_snapshot('host',snapshot));
+  assert.deepEqual(ok(await restored.actor.export_club_snapshot('host')),snapshot);
+  ok(await restored.actor.import_club_snapshot('host',snapshot));
+  ok(await restored.actor.set_club_domain_canister(A.canisterId));
+  ok(await restored.actor.set_participant_club_authorities([A.canisterId,B.canisterId]));
+  ok(await a.set_competition_authorities([C.canisterId,restored.canisterId]));
+  ok(await b.set_competition_authorities([C.canisterId,restored.canisterId]));
+  ok(await restored.actor.set_transfer_fence('host',false));
+  restored.actor.setPrincipal(manager);
+  assert.equal(ok(await restored.actor.create_fixture('fixture-operation',input)).id,atomic.id);
+  denied(await restored.actor.create_fixture('fixture-operation',{...input,notes:['Changed']}));
+  assert.equal(ok(await restored.actor.queue_competition_broadcast('broadcast-operation',competition,[],'Cup','Match notice')),acknowledged);
+  assert.equal(ok(await QB.actor.list_inbox(parent.toText(),['guest'],100)).filter(n=>n.kind==='competition_broadcast').length,1);
+  ok(await restored.actor.purge_my_data());
+  assert.deepEqual(ok(await restored.actor.read_fixture_operation('fixture-operation')),[]);
+  ok(await c.set_transfer_fence('host',false));
   // Token is capability-only; EOI IDs never reveal personal data to strangers.
   const eoi = ok(await c.submit_public_eoi('host', 'season', 'Parent', 'parent@example.invalid', [], 'Child', [], [], [], [], [3], [], [], [], 'app'));
   const row = ok(await c.list_eoi_submissions('host', []))[0];
