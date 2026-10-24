@@ -16,7 +16,7 @@ import { writeOnce } from "@/live/clubScope";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { deleteLiveAsset } from "@/live/features/media";
+import { removeLiveGalleryAsset } from "@/live/features/media";
 
 export type MediaDeletionMode = "feed_only" | "feed_and_vault";
 
@@ -58,12 +58,8 @@ export async function deleteMediaPhoto(
   return withFeatureBackend("media", {
     supabase: () => deleteMediaPhotoSupabase(supabase, { photoId, mode, callerId }),
     icp: async (ctx) => {
-      // Provisional mapping — photo id = asset id; verify against deployed
-      // canister. The canister only models a single "delete the asset"
-      // operation, so both deletion modes map to the same call; Vault
-      // mirroring has no canister-side counterpart yet.
-      await deleteLiveAsset(ctx, photoId);
-      return { photoId, mode, vaultFileId: null, vaultUpdated: false };
+      const result = await removeLiveGalleryAsset(ctx, photoId, mode);
+      return { photoId, mode, vaultFileId: null, vaultUpdated: result.vault_updated };
     },
   }, writeOnce({ photoId }));
 }

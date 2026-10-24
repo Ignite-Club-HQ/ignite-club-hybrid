@@ -164,7 +164,7 @@ function IcpPublishChatPhotosPage() {
   const clubId = data?.clubId ?? null;
   const remaining = useMemo(() => images.filter((c) => !done.has(c.image_url)), [images, done]);
 
-  const handlePublishOne = async (img: IcpChatImage) => {
+  const handlePublishOne = async (img: IcpChatImage, albumId?: string) => {
     const identity = await getCurrentInternetIdentity();
     if (!identity || !teamId) return;
     setPublishing((s) => new Set(s).add(img.image_url));
@@ -174,10 +174,13 @@ function IcpPublishChatPhotosPage() {
         uploaderId: identity.getPrincipal().toText(),
         teamId,
         clubId,
+        albumId,
       });
       setDone((s) => new Set(s).add(img.image_url));
+      return true;
     } catch (err: any) {
       toast.error(err?.message || "Could not publish");
+      return false;
     } finally {
       setPublishing((s) => {
         const next = new Set(s);
@@ -189,14 +192,12 @@ function IcpPublishChatPhotosPage() {
 
   const handlePublishAll = async () => {
     if (!remaining.length) return;
-    // No ICP counterpart to the Supabase create_photo_album RPC yet, so a
-    // batch publishes as separate gallery assets rather than one grouped card.
+    const albumId = crypto.randomUUID();
     let ok = 0;
     let failed = 0;
     for (const img of remaining) {
       try {
-        await handlePublishOne(img);
-        ok++;
+        if (await handlePublishOne(img, albumId)) ok++; else failed++;
       } catch {
         failed++;
       }

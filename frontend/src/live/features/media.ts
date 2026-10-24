@@ -194,10 +194,11 @@ export async function addLiveComment(
   assetId: string,
   body: string,
   createdAtMs: number | Date,
+  replyToId?: string | null,
 ) {
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.add_comment(assetId, body, toNat64(createdAtMs)),
+    actor.add_comment_reply(assetId, body, candidOpt(replyToId)),
     "Add comment",
   );
 }
@@ -236,3 +237,13 @@ export async function listLiveGalleryChatCards(
 // Publish a chat image to the club media gallery (MessageActionSheet)
 // ---------------------------------------------------------------------------
 
+
+/** Feed-only hides metadata without deleting the Vault copy or source bytes. */
+export async function removeLiveGalleryAsset(ctx: FeatureBackendContext, assetId: string, mode: 'feed_only' | 'feed_and_vault') {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_gallery_asset(assetId, mode), 'Remove gallery photo');
+}
+export async function announceLiveGalleryAsset(ctx: FeatureBackendContext, assetId: string) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return unwrapCandid(actor.announce_gallery_asset(assetId), 'Queue gallery notification');
+}
