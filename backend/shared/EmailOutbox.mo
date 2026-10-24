@@ -25,7 +25,7 @@ module {
       let job = Map.get(jobs, Text.compare, id) ?? return #Err("Email job missing");
       if (job.worker != ?worker or job.attempt != attempt) return #Err("Email claim mismatch");
       if (outcome != "sent" and outcome != "failed" and outcome != "unknown") return #Err("Invalid email outcome");
-      if (provider.size() > 256) return #Err("Invalid provider receipt");
+      if (provider.size() > 256 or (outcome == "sent" and provider.size() == 0)) return #Err("Invalid provider receipt");
       if (job.state == outcome and job.provider_id == provider) return #Ok;
       if (job.state != "processing") return #Err("Email outcome already retained");
       Map.add(jobs, Text.compare, id, { job with state = outcome; provider_id = provider }); #Ok

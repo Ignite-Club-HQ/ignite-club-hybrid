@@ -680,8 +680,8 @@ export async function trimLiveCompetitionRounds(
 /**
  * EOI (expression-of-interest) submissions — competition_domain's
  * eoiSubmissions entity, counterpart of the Supabase eoi_submissions table
- * and its RPCs. Resend/bulk-resend email delivery stays on Supabase; only
- * the bookkeeping (invite_sent_at/count) lives here.
+ * and its RPCs. Email requests and delivery receipts stay on ICP;
+ * only the provider transport is external.
  */
 
 export async function listLiveEoiSubmissions(

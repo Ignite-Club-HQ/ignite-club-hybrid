@@ -61,7 +61,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
   const [archiveCurrent, setArchiveCurrent] = useState(true);
   const [seasonName, setSeasonName] = useState("");
   const [duplicateStructure, setDuplicateStructure] = useState(!isIcp);
-  const [cloneOperation] = useState(() => crypto.randomUUID());
+  const [cloneOperation, setCloneOperation] = useState(() => crypto.randomUUID());
   const [copyStaff, setCopyStaff] = useState(true);
   const [createdSeasonId, setCreatedSeasonId] = useState<string | null>(null);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(new Set());
@@ -74,6 +74,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
     setArchiveCurrent(true);
     setSeasonName("");
     setDuplicateStructure(!isIcp);
+    setCloneOperation(crypto.randomUUID());
     setCopyStaff(true);
     setCreatedSeasonId(null);
     setSelectedPlayerIds(new Set());

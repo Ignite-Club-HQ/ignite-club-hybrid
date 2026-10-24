@@ -193,8 +193,8 @@ persistent actor class Main(governorInit : Principal) = this {
     let claimed = emailOutbox.claim(caller, func job {
       if (job.kind == "eoi") return eoiSubmissions.any(func e = e.id == job.resource and e.status != "withdrawn" and e.parent_user_id == null and not isFenced(e.club_id));
       if (job.kind == "official") return competitionOfficialEmailInvites.any(func i = i.token == job.resource and not i.revoked and i.accepted_by == null and i.expires_at_ms > nowMs() and not compFenced(i.competition_id));
-      if (job.kind == "official_welcome") return competitionOfficialEmailInvites.any(func i = i.token == job.resource and not i.revoked and i.accepted_by != null and not compFenced(i.competition_id));
-      if (job.kind == "member_welcome") return competitionMemberWelcomeJobs.any(func j = j.token == job.resource and not removalReceiver.denied(j.member) and not compFenced(j.competition_id));
+      if (job.kind == "official_welcome") return competitionOfficialEmailInvites.any(func i = i.token == job.resource and not i.revoked and i.accepted_by != null and not compFenced(i.competition_id) and competitionWelcomeSettings.any(func s = s.competition_id == i.competition_id and s.enabled));
+      if (job.kind == "member_welcome") return competitionMemberWelcomeJobs.any(func j = j.token == job.resource and not removalReceiver.denied(j.member) and not compFenced(j.competition_id) and competitionWelcomeSettings.any(func s = s.competition_id == j.competition_id and s.enabled));
       false
     });
     let job = claimed ?? return #Ok(null);
@@ -215,11 +215,12 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func finish_email_job(id : Text, attempt : Nat, outcome : Text, provider_id : Text) : async { #Ok; #Err : Text } {
     if (not emailWorkers.any(func p = p == caller)) return #Err("Email worker required");
+    let before = Map.get(emailJobs, Text.compare, id) ?? return #Err("Email job missing");
     let reply = emailOutbox.finish(caller, id, attempt, outcome, provider_id);
     switch reply { case (#Err(e)) return #Err(e); case (#Ok) {} };
-    if (outcome == "sent") {
+    if (outcome == "sent" and before.state == "processing") {
       let job = Map.get(emailJobs, Text.compare, id) ?? return #Err("Email job missing");
-      if (job.kind == "eoi") eoiSubmissions := eoiSubmissions.map(func e = if (e.id == job.resource and e.invite_sent_at_ms != ?job.created_at_ms) ({ e with invite_sent_count = e.invite_sent_count + 1; invite_sent_at_ms = ?job.created_at_ms }) else e);
+      if (job.kind == "eoi") eoiSubmissions := eoiSubmissions.map(func e = if (e.id == job.resource) ({ e with invite_sent_count = e.invite_sent_count + 1; invite_sent_at_ms = ?nowMs() }) else e);
     }; #Ok
   };
   var clubDomainCanister : ?Principal;
@@ -1800,8 +1801,8 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not enabled) return #Err("Welcome email is not enabled for this competition");
         if (to.size() < 5 or to.size() > 254 or not Text.contains(to, #char '@')) return #Err("Invalid recipient address");
         if (competitionWelcomeJobs.any(func(job) = job.token == token)) return #Err("Welcome email already registered");
+        switch (emailOutbox.enqueue("welcome:" # token, "official_welcome", token, "", nowMs())) { case (#Err(e)) return #Err(e); case (#Ok) {} };
         competitionWelcomeJobs := competitionWelcomeJobs.concat([{ token; competition_id = invite.competition_id; to; created_at_ms = nowMs() }]);
-        ignore emailOutbox.enqueue("welcome:" # token, "official_welcome", token, "", nowMs());
         #Ok
       };
     }
@@ -1867,8 +1868,8 @@ persistent actor class Main(governorInit : Principal) = this {
         if (token.size() < 16 or token.size() > 128) return #Err("Invalid token");
         if (competitionMemberWelcomeJobs.any(func(job) = job.token == token) or competitionWelcomeJobs.any(func(job) = job.token == token)) return #Err("Token already used");
         if (competitionMemberWelcomeJobs.any(func(job) = job.competition_id == competition_id and job.member.equal(caller))) return #Err("Welcome email already registered");
+        switch (emailOutbox.enqueue("welcome:" # token, "member_welcome", token, "", nowMs())) { case (#Err(e)) return #Err(e); case (#Ok) {} };
         competitionMemberWelcomeJobs := competitionMemberWelcomeJobs.concat([{ token; competition_id; member = caller; to; created_at_ms = nowMs() }]);
-        ignore emailOutbox.enqueue("welcome:" # token, "member_welcome", token, "", nowMs());
         #Ok
       };
     }
@@ -2367,9 +2368,7 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
-  // Bookkeeping-only: tracks invite_sent_count / invite_sent_at_ms. Actual
-  // email delivery stays Supabase (send-eoi-invite edge function) by design
-  // — this just mirrors the counters for ICP-routed admin UIs.
+  // Requests queue only; sent counters advance solely after worker receipts.
   public shared ({ caller }) func resend_eoi_invite(id : Text) : async { #Ok : Types.EoiSubmission; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
@@ -2404,9 +2403,10 @@ persistent actor class Main(governorInit : Principal) = this {
         case null { fail += 1 };
         case (?current) {
           if (isFenced(current.club_id) or not canManageClub(caller, current.club_id)) { fail += 1 } else {
-            let updated : Types.EoiSubmission = { current with invite_sent_count = current.invite_sent_count + 1; invite_sent_at_ms = ?nowMs(); updated_at_ms = nowMs(); revision = current.revision + 1 };
-            eoiSubmissions := eoiSubmissions.map(func(item) = if (item.id == id) updated else item);
-            ok += 1;
+            let pending = Map.entries(emailJobs).any(func pair = pair.1.kind == "eoi" and pair.1.resource == id and (pair.1.state == "pending" or pair.1.state == "processing" or pair.1.state == "unknown"));
+            if (pending) { fail += 1 } else {
+              switch (emailOutbox.enqueue("eoi:" # id # ":" # Nat16.toText(current.invite_sent_count + 1), "eoi", id, "", nowMs())) { case (#Err(_)) fail += 1; case (#Ok) ok += 1 }
+            };
           };
         };
       };
