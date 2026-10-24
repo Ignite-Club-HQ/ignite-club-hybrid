@@ -1,4 +1,5 @@
 ## Pitch-board ICP completion — 24 October 2026
+- [ ] Close remaining ICP cross-device board/timer synchronization and mini-league match-duty notifications; add focused authorization/concurrency regressions and verify both modes.
 - [x] Player-position/jersey prefill uses account/backend-keyed team-scoped ICP V2 reads; late metadata updates preserve pitch placement/game time. Removed the unused Supabase notification helper, wired ICP-only pending-slot self reminders with name-free preference-aware kinds, one-attempt writes and on-chain preferences; existing Supabase and broader staff-monitor behaviour retained.
 - [x] Six focused files pass in both modes (ICP 30, Supabase 32; mode-specific skips), ICP guards and preview build pass; public browser reaches /auth with no runtime errors. No publication or canister changes.
 - [ ] Signed-in pitch/player/reminder readback: no Internet Identity session available; actual phone behaviour remains unverified.
