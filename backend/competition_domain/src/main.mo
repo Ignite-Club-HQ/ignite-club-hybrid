@@ -631,6 +631,17 @@ persistent actor class Main(governorInit : Principal) = this {
     for (e in invitations.values()) { if ((await teamAccess(user, e.team_id)).can_manage) return true };
     false
   };
+  func privateParticipant(user : Principal, id : Text) : async Bool {
+    if (canManageCompetition(user, id) or roles.any(func r = r.competition_id == id and r.user.equal(user))) return true;
+    let accepted = entries.filter(func e = e.competition_id == id and (e.status == "accepted" or e.status == "registered"));
+    if (accepted.size() > 500) return false;
+    for (entry in accepted.values()) {
+      let access = await teamAccess(user, entry.team_id);
+      if (removalReceiver.denied(user) or compFenced(id)) return false;
+      if (access.is_member and entries.any(func current = current == entry)) return true;
+    };
+    false
+  };
   public shared ({ caller }) func read_resource_club(kind : Text, id : Text) : async { #Ok : ?Text; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
@@ -2284,18 +2295,21 @@ persistent actor class Main(governorInit : Principal) = this {
   // underlying rows (NEEDS-CANISTER: scheduled_at_ms exists but matches
   // outside the window are intentionally still counted for now, matching
   // the existing CompetitionPanel Supabase behaviour of using all rows).
-  public query ({ caller }) func competition_engagement_summary(competition_ids : [Text], since_ms : Int, until_ms : Int) : async { #Ok : [Types.CompetitionEngagementSummary]; #Err : Text } {
-    denyLegacyAccountQuery();
+  public shared ({ caller }) func competition_engagement_summary(competition_ids : [Text], since_ms : Int, until_ms : Int) : async { #Ok : [Types.CompetitionEngagementSummary]; #Err : Text } {
     auth(caller);
-    ignore since_ms;
-    ignore until_ms;
+    await admitAccount(caller);
+    if (competition_ids.size() > 100 or since_ms > until_ms) return #Err("Invalid summary scope");
+    for (id in competition_ids.values()) {
+      await syncForCompetition(caller, id);
+      if (removalReceiver.denied(caller) or compFenced(id) or not canManageCompetition(caller, id)) return #Err("Competition manager required");
+    };
+    if (competition_ids.any(func id = compFenced(id) or not canManageCompetition(caller, id))) return #Err("Competition access changed");
     #Ok(competition_ids.map(func(cid : Text) : Types.CompetitionEngagementSummary {
       let compEntries = entries.filter(func(item) = item.competition_id == cid and (item.status == "accepted" or item.status == "registered"));
-      let compMatches = matches.filter(func(item) = item.competition_id == cid);
+      let compMatches = matches.filter(func item = item.competition_id == cid and (switch item.scheduled_at_ms { case null false; case (?time) Nat64.toNat(time) >= since_ms and Nat64.toNat(time) <= until_ms }));
       let completed = compMatches.filter(func(item) = item.status == "completed");
-      // broadcasts always reports 0 — competition_broadcasts stays in
-      // Supabase by design (send-competition-broadcast edge function).
-      { competition_id = cid; active_teams = compEntries.size(); total_matches = compMatches.size(); results_entered = completed.size(); broadcasts = 0 }
+      let count = broadcasts.filter(func item = item.competition_id == cid and Nat64.toNat(item.created_at_ms) >= since_ms and Nat64.toNat(item.created_at_ms) <= until_ms).size();
+      { competition_id = cid; active_teams = compEntries.size(); total_matches = compMatches.size(); results_entered = completed.size(); broadcasts = count }
     }))
   };
 
@@ -2689,7 +2703,7 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     await admitAccount(caller);
     await syncForCompetition(caller, competition_id);
-    let permitted = await participantVisible(caller, competition_id);
+    let permitted = await privateParticipant(caller, competition_id);
     if (not permitted or removalReceiver.denied(caller) or compFenced(competition_id)) return #Err("Competition access forbidden");
     #Ok(broadcasts.filter(func(item) = item.competition_id == competition_id).reverse())
   };
@@ -2941,15 +2955,18 @@ persistent actor class Main(governorInit : Principal) = this {
 
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
-    ignore since_ms;
-    ignore until_ms;
+    if (competition_ids.size() > 100 or since_ms > until_ms) return #Err("Invalid summary scope");
+    for (id in competition_ids.values()) {
+      await syncForCompetition(caller, id);
+      if (removalReceiver.denied(caller) or compFenced(id) or not canManageCompetition(caller, id)) return #Err("Competition manager required");
+    };
+    if (competition_ids.any(func id = compFenced(id) or not canManageCompetition(caller, id))) return #Err("Competition access changed");
     #Ok(competition_ids.map(func(cid : Text) : Types.CompetitionEngagementSummary {
       let compEntries = entries.filter(func(item) = item.competition_id == cid and (item.status == "accepted" or item.status == "registered"));
-      let compMatches = matches.filter(func(item) = item.competition_id == cid);
+      let compMatches = matches.filter(func item = item.competition_id == cid and (switch item.scheduled_at_ms { case null false; case (?time) Nat64.toNat(time) >= since_ms and Nat64.toNat(time) <= until_ms }));
       let completed = compMatches.filter(func(item) = item.status == "completed");
-      // broadcasts always reports 0 — competition_broadcasts stays in
-      // Supabase by design (send-competition-broadcast edge function).
-      { competition_id = cid; active_teams = compEntries.size(); total_matches = compMatches.size(); results_entered = completed.size(); broadcasts = 0 }
+      let count = broadcasts.filter(func item = item.competition_id == cid and Nat64.toNat(item.created_at_ms) >= since_ms and Nat64.toNat(item.created_at_ms) <= until_ms).size();
+      { competition_id = cid; active_teams = compEntries.size(); total_matches = compMatches.size(); results_entered = completed.size(); broadcasts = count }
     }))
   
     } finally { removalReceiver.leave(caller) };
@@ -2973,7 +2990,7 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
     await syncForCompetition(caller, competition_id);
-    let permitted = await participantVisible(caller, competition_id);
+    let permitted = await privateParticipant(caller, competition_id);
     if (not permitted or removalReceiver.denied(caller) or compFenced(competition_id)) return #Err("Competition access forbidden");
     #Ok(broadcasts.filter(func(item) = item.competition_id == competition_id).reverse())
   
