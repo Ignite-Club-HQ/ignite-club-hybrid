@@ -203,7 +203,7 @@ describe.runIf(backendMocks.mode === "icp")("StartNewSeasonWizard ICP club-seaso
     await screen.findByLabelText("Season name");
     fireEvent.change(screen.getByLabelText("Season name"), { target: { value: "2027 Season" } });
     const structureToggle = screen.getByRole("checkbox", { name: /Duplicate structure/ });
-    expect(structureToggle).toBeDisabled();
+    expect(structureToggle).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     await screen.findByText("Returning target season-new");
 

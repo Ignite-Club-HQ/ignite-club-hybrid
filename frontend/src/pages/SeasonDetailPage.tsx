@@ -120,14 +120,14 @@ function SupabaseSeasonDetailPage() {
           return data ?? [];
         },
         icp: async (ctx) => {
-          const all: any[] = await listLiveTeams(ctx, clubId!);
+          const { readLiveSeasonTeams } = await import("@/live/features/club");
+          const all = await readLiveSeasonTeams(ctx, seasonId ?? "");
           return all
-            .filter((t) => t.season_id === seasonId || (Array.isArray(t.season_id) && t.season_id[0] === seasonId))
             .map((t) => ({
               id: t.id,
               name: t.name,
-              level_age: t.level_age?.[0] || null,
-              lifecycle_status: t.lifecycle_status ?? (t.archived ? "archived" : "active"),
+              level_age: t.age_group[0] ?? null,
+              lifecycle_status: t.archived ? "archived" : "active",
             }));
         },
       }, { clubId: clubId! });

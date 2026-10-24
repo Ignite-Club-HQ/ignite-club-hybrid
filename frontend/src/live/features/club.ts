@@ -1368,6 +1368,11 @@ export async function carryOverLiveSeasonPlayers(ctx: FeatureBackendContext, sou
   return Number(await unwrapCandid(actor.carry_over_season_players(source, target, members), "Carry season players"));
 }
 
+export async function readLiveSeasonTeams(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.read_season_teams(seasonId), "Read season teams");
+}
+
 // ---------------------------------------------------------------------------
 // Season analytics — canister counterpart of the Supabase
 // season_team_summary / season_player_stats RPCs. Read-only from the

@@ -2014,6 +2014,17 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) }
   };
 
+  public shared ({ caller }) func read_season_teams(season_id : Text) : async { #Ok : [Types.ClubTeam]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let season = seasons.find(func s = s.id == season_id) ?? return #Err("Season missing");
+      if (not isMember(caller, season.club_id) or isTransferFenced(season.club_id)) return #Err("Club membership required");
+      let copies = seasonTeamCopies.filter(func pair = pair.0 == season_id);
+      #Ok(teams.filter(func t = t.club_id == season.club_id and t.deleted_at_ms == null and not t.archived and (copies.size() == 0 or copies.any(func pair = pair.2 == t.id))))
+    } finally { removalReceiver.leave(caller) }
+  };
+
   // ---- Season expression-of-interest (EOI) config: a free-form JSON blob
   // per season (form schema / open-close dates for the public EOI page). ----
 
