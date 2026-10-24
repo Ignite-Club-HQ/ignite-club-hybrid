@@ -48,6 +48,7 @@ export interface CleanupRecord {
     { 'complete' : null },
   'competition' : [] | [string],
 }
+export interface Intent { 'file' : VaultFile, 'ready' : boolean }
 export interface Main {
   'acknowledge_file_upload' : ActorMethod<
     [string],
@@ -313,6 +314,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_my_upload_intent' : ActorMethod<
+    [string],
+    { 'Ok' : Intent } |
+      { 'Err' : string }
+  >,
   'read_my_upload_page' : ActorMethod<
     [string, string],
     { 'Ok' : { 'ids' : Array<string>, 'next' : [] | [string] } } |

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createLiveVaultBackup, exportLiveVaultBackupBlob, getLiveVaultBackup } from "./features/vault";
+import { createLiveVaultBackup, exportLiveVaultBackupBlob, exportLiveVaultBackupToSink, getLiveVaultBackup } from "./features/vault";
 import type { FeatureBackendContext } from "./featureRouter";
 
 const m = vi.hoisted(() => ({ page: vi.fn(), legacy: vi.fn(), create: vi.fn(), legacyCreate: vi.fn() }));
@@ -46,5 +46,18 @@ describe("bounded Vault snapshot export", () => {
     m.page.mockResolvedValue({ Err: "App admin required" });
     await expect(getLiveVaultBackup(ctx, "large")).rejects.toThrow("App admin required");
     expect(m.legacy).not.toHaveBeenCalled();
+  });
+  it("writes all 205 rows incrementally and commits only the final validated page", async () => {
+    const write = vi.fn().mockResolvedValue(undefined), close = vi.fn().mockResolvedValue(undefined), abort = vi.fn();
+    await exportLiveVaultBackupToSink(ctx, "large", { write, close, abort });
+    expect(write).toHaveBeenCalledTimes(206);
+    expect(JSON.parse(write.mock.calls[205][0])).toEqual({ kind: "file", row: { id: "204", blob_ref: [] } });
+    expect(m.page).toHaveBeenCalledTimes(6); expect(close).toHaveBeenCalledOnce(); expect(abort).not.toHaveBeenCalled();
+  });
+  it("discards temporary output after a later authorized page fails", async () => {
+    m.page.mockImplementationOnce(async () => ({ Ok: { summary, revision: 9n, offset: 0n, folders: [], files: Array.from({ length: 40 }, (_, i) => ({ id: String(i) })), next: [40n] } })).mockRejectedValueOnce(new Error("Access revoked"));
+    const sink = { write: vi.fn().mockResolvedValue(undefined), close: vi.fn(), abort: vi.fn().mockResolvedValue(undefined) };
+    await expect(exportLiveVaultBackupToSink(ctx, "large", sink)).rejects.toThrow("Access revoked");
+    expect(sink.close).not.toHaveBeenCalled(); expect(sink.abort).toHaveBeenCalledOnce(); expect(m.legacy).not.toHaveBeenCalled();
   });
 });

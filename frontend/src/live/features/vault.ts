@@ -2,9 +2,11 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { IbeCiphertext } from "@icp-sdk/vetkeys";
 import { connectLivePiiAccessControl, connectLiveVaultDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
-import { encryptPiiValue, fetchPiiVetKeys } from "../piiVetKeys";
+import { decryptPiiText, encryptPiiValue, fetchPiiVetKeys } from "../piiVetKeys";
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
 import { scheduleVaultUploadRecovery } from "../vaultUploadRecovery";
+import { reconcileVaultUploadIntent } from "../vaultUploadIntentRecovery";
+import { writeVaultBackupChunks, type VaultBackupSink } from "../vaultBackupWriter";
 
 /**
  * Vault feature -> vault_domain canister (folder/file metadata) plus
@@ -362,10 +364,7 @@ async function readVaultPages(ctx: FeatureBackendContext, clubId: string, teamId
   // Shared quiet recovery traverses every bounded journal page, including empty
   // filtered pages. It never holds up normal file reads or retries unknown bytes.
   void (async () => {
-    const scope = JSON.stringify([ctx.target, clubId]);
-    await scheduleVaultUploadRecovery(ctx.identity, scope,
-      after => unwrapCandid(actor.read_my_upload_page(clubId, after), "Read pending Vault uploads"),
-      id => unwrapCandid(actor.recover_file_upload(id), "Recover pending Vault file"));
+    await recoverLiveVaultPendingUploads(ctx);
   })().catch(() => { /* older canisters or unavailable recovery never block file reads */ });
   const items: import("../../lab/bindings/vault_domain/declarations/vault_domain.did.js").VaultFileWithFolder[] = [];
   let offset = 0n;
@@ -608,6 +607,33 @@ export async function recoverLiveVaultUpload(ctx: FeatureBackendContext, id: str
   return unwrapCandid(actor.recover_file_upload(id), "Recover private file upload");
 }
 
+export async function recoverLiveVaultPendingUploads(ctx: FeatureBackendContext, clubId = "") {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return scheduleVaultUploadRecovery(ctx.identity, JSON.stringify([ctx.target, clubId]),
+    after => unwrapCandid(actor.read_my_upload_page(clubId, after), "Read pending Vault uploads"),
+    async id => {
+      // Older modules only list ready intents; retain their existing authorized recovery.
+      let intent;
+      try { intent = await unwrapCandid(actor.read_my_upload_intent(id), "Read own Vault upload"); }
+      catch (error) { if (!isMissingBackupMethod(error)) throw error; await unwrapCandid(actor.recover_file_upload(id), "Recover ready Vault upload"); return; }
+      await reconcileVaultUploadIntent(ctx, id, {
+        read: async () => intent,
+        marker: async path => {
+          const row = await getLiveEncryptedPii(ctx, path, "blob", "read_pii", "Reconcile own Vault upload");
+          if (!row) return null;
+          return decryptPiiText(ctx, path, "blob", Uint8Array.from(row.ciphertext));
+        },
+        grant: async (file, path) => {
+          const competition = file.competition_id[0];
+          if (competition) await grantLivePiiReadCompetition(ctx, path, "blob", competition);
+          else await grantLivePiiReadClub(ctx, path, "blob", file.club);
+        },
+        acknowledge: () => unwrapCandid(actor.acknowledge_file_upload(id), "Confirm recovered Vault upload"),
+        recover: () => unwrapCandid(actor.recover_file_upload(id), "Recover private Vault upload"),
+      });
+    });
+}
+
 export async function trashLiveVaultFile(ctx: FeatureBackendContext, fileId: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.trash_file(fileId), "Trash vault file");
@@ -786,14 +812,20 @@ export async function* readLiveVaultBackupPages(ctx: FeatureBackendContext, id: 
 }
 
 const backupJson = (_key: string, value: unknown) => typeof value === "bigint" ? value.toString() : value;
+export async function* readLiveVaultBackupChunks(ctx: FeatureBackendContext, id: string) {
+  for await (const page of readLiveVaultBackupPages(ctx, id)) {
+    if (page.offset === 0n) yield JSON.stringify({ kind: "vault-backup", version: 1, ...page.summary }, backupJson) + "\n";
+    for (const folder of page.folders) yield JSON.stringify({ kind: "folder", row: folder }, backupJson) + "\n";
+    for (const file of page.files) yield JSON.stringify({ kind: "file", row: file }, backupJson) + "\n";
+  }
+}
+export async function exportLiveVaultBackupToSink(ctx: FeatureBackendContext, id: string, sink: VaultBackupSink) {
+  return writeVaultBackupChunks(readLiveVaultBackupChunks(ctx, id), sink);
+}
 export async function exportLiveVaultBackupBlob(ctx: FeatureBackendContext, id: string): Promise<Blob> {
   // JSONL avoids a second full-manifest stringify and keeps each encoded chunk bounded.
   const chunks: BlobPart[] = [];
-  for await (const page of readLiveVaultBackupPages(ctx, id)) {
-    if (page.offset === 0n) chunks.push(JSON.stringify({ kind: "vault-backup", version: 1, ...page.summary }, backupJson) + "\n");
-    for (const folder of page.folders) chunks.push(JSON.stringify({ kind: "folder", row: folder }, backupJson) + "\n");
-    for (const file of page.files) chunks.push(JSON.stringify({ kind: "file", row: file }, backupJson) + "\n");
-  }
+  for await (const chunk of readLiveVaultBackupChunks(ctx, id)) chunks.push(chunk);
   return new Blob(chunks, { type: "application/x-ndjson" });
 }
 export async function restoreLiveVaultBackup(ctx: FeatureBackendContext, id: string) {

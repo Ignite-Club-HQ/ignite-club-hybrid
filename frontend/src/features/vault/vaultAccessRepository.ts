@@ -85,6 +85,8 @@ export async function fetchVaultAccessibleClubs(
   return withFeatureBackend("vault", {
     supabase: async () => fetchVaultAccessibleClubsSupabase(userId, isAppAdmin, client),
     icp: async (ctx) => {
+      // Each group scans only this owner's journal, independently of opened clubs.
+      void import("@/live/features/vault").then(v => v.recoverLiveVaultPendingUploads(ctx)).catch(() => { /* uncertain outcomes stay reserved */ });
       const { listLiveClubs } = await import("@/live/features/club");
       const { listLiveClubSubscriptions, liveHasAnyPro } = await import("@/live/features/proAccess");
       const { clubDispatch } = await import("@/live/groupDispatch");

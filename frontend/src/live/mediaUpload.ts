@@ -6,7 +6,7 @@ import { getActiveIcpTarget } from "./targetRegistry";
 import { isBlobStoreConfigured, uploadBytesToBlobStore } from "./blobStoreUpload";
 import { resolveAuthBackend } from "./authBackendMode";
 import { clubIdFromMediaPath, encryptClubMedia, encryptPiiValue, isClubMediaLockSupported } from "./piiVetKeys";
-import { grantLiveClubPiiRead, grantLivePiiReadCompetition, registerLivePii } from "./features/vault";
+import { grantLiveClubPiiRead, grantLivePiiReadClub, grantLivePiiReadCompetition, registerLivePii } from "./features/vault";
 import { MEDIA_BLOB_PII_FIELD } from "./mediaDecrypt";
 import type { LiveBlobRef } from "./mediaStorage";
 import { sha256Hex } from "./blobStoreProtocol";
@@ -111,7 +111,8 @@ export async function tryUploadMediaToBlobStore(args: {
       identity.getPrincipal(),
     );
     if (clubId && !args.competitionId) {
-      await grantLiveClubPiiRead(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, clubId);
+      if (args.beforeUpload) await grantLivePiiReadClub(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, clubId);
+      else await grantLiveClubPiiRead(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, clubId);
     }
     if (args.competitionId) {
       await grantLivePiiReadCompetition(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, args.competitionId);

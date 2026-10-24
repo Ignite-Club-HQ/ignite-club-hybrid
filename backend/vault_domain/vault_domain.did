@@ -340,6 +340,10 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_my_upload_intent: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok: Intent;
+                                         });
    read_my_upload_page: (club: text, after: text) ->
     (variant {
        Err: text;
@@ -482,6 +486,11 @@ type Main =
        Err: text;
        Ok: VaultFolder;
      });
+ };
+type Intent = 
+ record {
+   file: VaultFile;
+   ready: bool;
  };
 type CleanupRecord = 
  record {

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   encryptPiiValue: vi.fn(),
   isClubMediaLockSupported: vi.fn(() => true),
   grantLiveClubPiiRead: vi.fn(),
+  grantLivePiiReadClub: vi.fn(),
   grantLivePiiReadCompetition: vi.fn(),
   registerLivePii: vi.fn(),
   sha256Hex: vi.fn(() => "hash"),
@@ -34,11 +35,13 @@ vi.mock("./piiVetKeys", () => ({
 }));
 vi.mock("./features/vault", () => ({
   grantLiveClubPiiRead: mocks.grantLiveClubPiiRead,
+  grantLivePiiReadClub: mocks.grantLivePiiReadClub,
   grantLivePiiReadCompetition: mocks.grantLivePiiReadCompetition,
   registerLivePii: mocks.registerLivePii,
 }));
 vi.mock("./mediaDecrypt", () => ({ MEDIA_BLOB_PII_FIELD: "blob" }));
 vi.mock("./blobStoreProtocol", () => ({ sha256Hex: mocks.sha256Hex }));
+vi.mock("./mediaStorage", () => ({ orderBlobStoresForPath: () => ["media_blob_store"] }));
 
 import { tryUploadMediaToBlobStore } from "./mediaUpload";
 
@@ -127,5 +130,13 @@ describe("tryUploadMediaToBlobStore competition scope", () => {
       lock: "own",
     });
     expect(mocks.uploadBytesToBlobStore).toHaveBeenCalledOnce();
+  });
+  it("does not swallow a private Vault club-grant refusal", async () => {
+    const privateTarget = { alias: "test-target", canisterIds: { media_blob_store: "store" } } as never;
+    const beforeUpload = vi.fn().mockResolvedValue(undefined);
+    mocks.grantLivePiiReadClub.mockRejectedValueOnce(new Error("Club grant refused"));
+    await expect(tryUploadMediaToBlobStore({ context: { target: privateTarget, identity: identity as never }, storagePath: "clubs/club-1/vault/file.pdf", file: new Blob(["file"]), mime: "application/pdf", lock: "own", beforeUpload })).rejects.toThrow("Club grant refused");
+    expect(beforeUpload).toHaveBeenCalled();
+    expect(mocks.grantLiveClubPiiRead).not.toHaveBeenCalled();
   });
 });
