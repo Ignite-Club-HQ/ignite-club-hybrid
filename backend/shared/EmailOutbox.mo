@@ -40,7 +40,8 @@ module {
     };
     public func compact(cursor : ?Text,limit : Nat) : {next_cursor:?Text;scanned:Nat} {
       var scanned=0;var last:?Text=null;
-      for((id,j) in Map.entries(jobs)) {
+      let rows=switch cursor {case null Map.entries(jobs);case (?c)Map.entriesFrom(jobs,Text.compare,c)};
+      for((id,j) in rows) {
         if(switch cursor {case (?c)id > c;case null true}) {
           if(scanned >= limit)return {next_cursor=last;scanned};
           scanned+=1;last:=?id;
