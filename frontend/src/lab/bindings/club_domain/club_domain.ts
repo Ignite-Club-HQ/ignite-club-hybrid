@@ -1377,7 +1377,7 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
-    merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -1429,6 +1429,13 @@ export interface MainInterface {
     }>;
     prepare_deleted_retained_media(token: string, entry: Object): Promise<Result__1>;
     prepare_media_quota_reservation(store: Principal, token: string, club_id: string, category: string, bytes: bigint): Promise<Result>;
+    prepare_my_broadcast_erasure(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     profile_team_history(profile_id: string): Promise<Array<ProfileTeamHistoryEntry>>;
     publish_season(season_id: string): Promise<{
         __kind__: "Ok";
@@ -1447,6 +1454,13 @@ export interface MainInterface {
     purge_expired_deletions(): Promise<{
         __kind__: "Ok";
         Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    purge_my_broadcast_data(): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
     } | {
         __kind__: "Err";
         Err: string;
@@ -2083,7 +2097,7 @@ export interface MainInterface {
      * / Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
      * / Any NEW stored principal / principal-text field added to this canister must be added here.
      */
-    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -5088,6 +5102,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.prepare_media_quota_reservation(arg0, arg1, arg2, arg3, arg4);
         return from_candid_Result_n38(result);
     }
+    async prepare_my_broadcast_erasure(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.prepare_my_broadcast_erasure();
+        return from_candid_variant_n17(result);
+    }
     async profile_team_history(arg0: string): Promise<Array<ProfileTeamHistoryEntry>> {
         const result = await this.actor.profile_team_history(arg0);
         return from_candid_vec_n259(result);
@@ -5121,6 +5145,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.purge_expired_deletions();
         return from_candid_variant_n83(result);
+    }
+    async purge_my_broadcast_data(): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_my_broadcast_data();
+        return from_candid_variant_n36(result);
     }
     async queue_pending_invite_email(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";

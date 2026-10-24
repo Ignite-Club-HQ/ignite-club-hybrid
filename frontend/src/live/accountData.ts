@@ -93,8 +93,39 @@ export async function eraseMyIcpAccount(
       import('./accountDeletionInventory'), import('./domains'),
     ]);
     inventory = await openAccountDeletionInventory(target, identity,
-      ['club_domain', 'vault_domain', 'events_domain', 'messaging_domain', 'competition_domain']);
+      ['club_domain', 'vault_domain', 'events_domain', 'messaging_domain', 'competition_domain', 'notification_queue']);
     if (inventory.revision !== undefined) await client.prepareAccountDeletion(account.id, inventory.revision);
+    // Every service resolves aliases from identity itself and installs a durable
+    // broadcast-only fence before any proof is retired or membership revoked.
+    for (const [domain, connect] of [
+      ['competition_domain', 'connectLiveCompetitionDomain'],
+      ['club_domain', 'connectLiveClubDomain'],
+      ['notification_queue', 'connectLiveNotificationQueue'],
+    ] as const) {
+      for (const t of inventory.targetsFor(domain)) {
+        await inventory.validate();
+        const { actor } = await domains[connect](t, identity);
+        const result = await actor.prepare_my_broadcast_erasure();
+        if ('Err' in result) throw new Error(result.Err);
+        await inventory.validate();
+      }
+    }
+    // Frozen competition completion must be checked before club/queue evidence
+    // changes. Each destructive service rechecks its local obligations.
+    for (const t of inventory.targetsFor('competition_domain')) {
+      await inventory.validate();
+      const { actor } = await domains.connectLiveCompetitionDomain(t, identity);
+      const result = await actor.check_my_broadcast_erasure();
+      if ('Err' in result) throw new Error(result.Err);
+      await inventory.validate();
+    }
+    for (const t of inventory.targetsFor('club_domain')) {
+      await inventory.validate();
+      const { actor } = await domains.connectLiveClubDomain(t, identity);
+      const result = await actor.purge_my_broadcast_data();
+      if ('Err' in result) throw new Error(result.Err);
+      await inventory.validate();
+    }
     // Revoke the independent club authorization source before erasing the
     // identity profile. Partial failure is surfaced and safe to retry.
     for (const t of inventory.targetsFor('club_domain')) {
@@ -114,6 +145,7 @@ export async function eraseMyIcpAccount(
       ["events", "connectLiveEventsDomain", "events_domain"],
       ["messaging", "connectLiveMessagingDomain", "messaging_domain"],
       ["competitions", "connectLiveCompetitionDomain", "competition_domain"],
+      ["notifications", "connectLiveNotificationQueue", "notification_queue"],
     ] as const) {
       for (const t of inventory.targetsFor(domain)) {
       await inventory.validate();

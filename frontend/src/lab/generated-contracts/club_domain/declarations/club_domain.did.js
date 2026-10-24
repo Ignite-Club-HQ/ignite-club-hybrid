@@ -1713,6 +1713,11 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'prepare_my_broadcast_erasure' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'profile_team_history' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(ProfileTeamHistoryEntry)],
@@ -1731,6 +1736,11 @@ export const idlFactory = ({ IDL }) => {
     'purge_expired_deletions' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'purge_my_broadcast_data' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'queue_pending_invite_email' : IDL.Func(

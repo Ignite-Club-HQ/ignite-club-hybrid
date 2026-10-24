@@ -7,9 +7,10 @@ Release existing competition changes, check signed-in behaviour in both groups, 
 ## Bounded privacy result
 
 - `accountData.ts` previously committed identity erasure even after a personal-content purge failed. It now throws before identity commit/settlement and retains the caller identity and bound reservation for cleanup retries. Successful purges in other services and revoked memberships are not rolled back.
-- Competition sender/official fields have cleanup, but `club_domain.broadcastRelayReceipts` and `notification_queue.competitionBroadcastAudiences` can still retain person-linked identifiers. The frontend account deletion path does not coordinate cleanup of these records. This is not certified complete erasure.
-- Never delete or rewrite frozen audience proof independently: processing/unknown deliveries and cross-service reconciliation rely on the original evidence. A complete fix requires coordinated settlement-aware anonymization; removing shared club records or claiming erased delivery evidence would be unsafe.
-- Account-deletion regression checks: three focused files, ICP 22 passed/17 skipped; Supabase 31 passed/8 skipped. Preview build OK. These are local results, not live erasure acceptance.
+- Self-deletion now captures notification queues, resolves aliases through each configured identity authority, installs durable broadcast-only fences, checks complete frozen competition plans, retires exact queue audience evidence through the original club relay, removes relay identifiers, and purges the account's queue/device records before identity commit.
+- Processing deliveries, unknown relay counts and incomplete/missing competition plans refuse cleanup. Terminal relay/queue markers prevent resend/reconciliation replay; permanent subject fences prevent a suspended callback or alias from recreating broadcast work. Security denial tombstones retain principals intentionally; this is not a promise to remove every identifier from security history or arbitrary text.
+- Disposable canister checks pass: processing refusal, exact retirement, alias inbox cleanup, unrelated recipients retained, lost/duplicate cleanup retries and upgrade replay barriers. Concrete settlement-predicate tests pass. Three focused app files: ICP 23 passed/17 skipped; Supabase 32 passed/8 skipped. Eighteen upgrade/journal checks and 17-contract Candid drift/ICP guards pass; preview build OK. No live erasure acceptance.
+- Admin account removal remains access/identity removal, not a personal-content-erasure promise. Historical unknown operations remain blocked; no evidence is reconstructed.
 
 ## Release findings
 
@@ -17,7 +18,16 @@ Paul's GitHub API returned 37 hybrid Actions and two repository secret names: `D
 
 The existing Group 2 competition workflow validates exactly competition/events. It cannot release club and notification changes. The closed Group 2 workflow upgrades thirteen services and is too broad. The subscription workflow includes photo stores, which are outside this competition release. None was dispatched.
 
-Required exact release scope: pinned router additive public metadata update plus existing Group 1/2 competition, club, events and notification services, with stable-memory preservation, original photo-authority/wiring checks, durable per-target acknowledgements and verified routing snapshot refresh. A coordinated runner for that complete scope remains unfinished; do not substitute a broad workflow or release the app against unavailable methods.
+The new **Upgrade competitions (both ICP groups)** workflow builds only notification_queue, club_domain, events_domain and competition_domain. Its dedicated runner validates exactly eight existing targets, registered placements, sole governor/subnets/fuel, original authority wiring and both photo-key receipts. Wiring and relevant management settings are journal-bound; ambiguous upgrades do not replay. It never creates, funds, rewires or opens groups.
+
+Run `check` first. Upgrade confirmation: `UPGRADE BOTH GROUPS COMPETITION`. Keep the router additive public metadata API as a separate pinned `router` upgrade through the existing mainnet workflow, before the eight-target release; do not change router configuration mid-journal. Missing reciprocal grants or identity service-reader access fail closed and need an exact approved configuration repair, not implicit setters.
+
+After successful upgrade readback, the workflow refreshes the verified routing snapshot and only matching G2 service fingerprints. Release the compatible app only after this completes. Existing History/subscription/thirteen-service workflows remain unchanged.
+
+Local reproduction:
+1. Build club_domain using its own Mops configuration; build competition_domain and notification_queue using the root configuration.
+2. Compile `frontend/scripts/broadcast-erasure-identity.mo` only as a disposable test authority, never deploy it.
+3. Run `frontend/scripts/test-broadcast-erasure-replica.mjs` with `BROADCAST_IDENTITY_WASM`, `CLUB_DOMAIN_WASM`, `COMPETITION_DOMAIN_WASM`, `NOTIFICATION_QUEUE_WASM` and `POCKET_IC_BIN` pointing to those local artifacts.
 
 ## Acceptance and external prerequisites
 

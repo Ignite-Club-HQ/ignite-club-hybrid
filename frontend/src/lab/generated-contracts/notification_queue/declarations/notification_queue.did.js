@@ -381,8 +381,18 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'prepare_my_broadcast_erasure' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'purge_my_data' : IDL.Func(
+        [],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
@@ -490,6 +500,11 @@ export const idlFactory = ({ IDL }) => {
     'remove_device_tokens' : IDL.Func(
         [IDL.Text, IDL.Vec(IDL.Text)],
         [DeviceTokenCountResult],
+        [],
+      ),
+    'retire_competition_broadcast' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Vec(IDL.Text), IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'schedule_message' : IDL.Func(

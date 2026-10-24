@@ -216,6 +216,10 @@ type Main =
            };
      });
    can_invite_players_to_team: (team_id: text) -> (bool) query;
+   check_my_broadcast_erasure: () -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
    claim_email_job: () ->
     (variant {
        Err: text;
@@ -594,6 +598,10 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   prepare_my_broadcast_erasure: () -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -792,7 +800,7 @@ type Main =
        Err: text;
        Ok: TeamEntry;
      });
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;

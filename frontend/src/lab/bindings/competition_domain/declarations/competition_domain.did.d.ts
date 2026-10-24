@@ -235,6 +235,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'can_invite_players_to_team' : ActorMethod<[string], boolean>,
+  'check_my_broadcast_erasure' : ActorMethod<
+    [],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'claim_email_job' : ActorMethod<
     [],
     {
@@ -602,6 +607,11 @@ export interface Main {
   >,
   'prepare_account_removal' : ActorMethod<
     [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'prepare_my_broadcast_erasure' : ActorMethod<
+    [],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

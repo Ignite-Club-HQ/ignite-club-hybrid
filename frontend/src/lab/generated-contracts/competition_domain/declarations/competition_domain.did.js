@@ -386,6 +386,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'can_invite_players_to_team' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'check_my_broadcast_erasure' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'claim_email_job' : IDL.Func(
         [],
         [
@@ -823,6 +828,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'prepare_account_removal' : IDL.Func(
         [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'prepare_my_broadcast_erasure' : IDL.Func(
+        [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

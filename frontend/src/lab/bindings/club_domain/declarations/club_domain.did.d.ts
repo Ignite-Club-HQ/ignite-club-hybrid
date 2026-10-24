@@ -1141,6 +1141,11 @@ export interface Main {
     [Principal, string, string, string, bigint],
     Result
   >,
+  'prepare_my_broadcast_erasure' : ActorMethod<
+    [],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'profile_team_history' : ActorMethod<
     [string],
     Array<ProfileTeamHistoryEntry>
@@ -1158,6 +1163,11 @@ export interface Main {
   'purge_expired_deletions' : ActorMethod<
     [],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'purge_my_broadcast_data' : ActorMethod<
+    [],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'queue_pending_invite_email' : ActorMethod<
