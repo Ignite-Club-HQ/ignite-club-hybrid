@@ -493,7 +493,7 @@ describe.runIf(!supabaseMode)("Vault mutation repository — ICP", () => {
     await deleteVaultFolder("folder-a", fake.client);
     expect(vaultMocks.updateFolder).toHaveBeenCalledWith(icpContext, "folder-a", "Policies");
     expect(vaultMocks.renameFile).toHaveBeenCalledWith(icpContext, "file-a", "Rules.pdf");
-    expect(vaultMocks.moveFile).toHaveBeenCalledWith(icpContext, "file-a", "folder-b");
+    expect(vaultMocks.moveFile).toHaveBeenCalledWith(icpContext, "file-a", "folder-b", undefined);
     expect(vaultMocks.trashFile).toHaveBeenCalledWith(icpContext, "file-a");
     expect(vaultMocks.restoreFile).toHaveBeenCalledWith(icpContext, "file-a");
     expect(vaultMocks.deleteFolder).toHaveBeenCalledWith(icpContext, "folder-a");

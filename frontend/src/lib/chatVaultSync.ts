@@ -537,7 +537,6 @@ async function syncChatAttachmentToVaultIcp({
   clubId,
   teamId,
   chatGroupName,
-  chatGroupId,
   chatGroupAllowedRoles,
   isClubAdminChat,
 }: {
@@ -593,9 +592,9 @@ async function syncChatAttachmentToVaultIcp({
           let savedUrl = entry.url;
           let size = 0;
           if (!entry.isExternalLink) {
-            const { decryptMediaUrl } = await import("@/live/mediaDecrypt");
+            const { resolveIcpBlobObjectUrl } = await import("@/live/mediaDecrypt");
             const { tryUploadMediaToBlobStore } = await import("@/live/mediaUpload");
-            const unlocked = await decryptMediaUrl(ctx, entry.url);
+            const unlocked = await resolveIcpBlobObjectUrl(entry.url);
             if (!unlocked) throw new Error("Chat attachment could not be unlocked");
             const response = await fetch(unlocked);
             if (!response.ok) throw new Error("Chat attachment could not be read");
