@@ -1,16 +1,3 @@
-type Request = 
- record {
-   account_id: text;
-   generation: nat64;
-   inventory_digest: blob;
-   subjects: vec principal;
- };
-type Receipt = 
- record {
-   outstanding: nat;
-   receiver: principal;
-   request: Request;
- };
 type PublicMiniLeagueSummary = 
  record {
    club_id: text;
@@ -394,10 +381,6 @@ type Main =
      }) query;
    my_availability: () -> (vec MiniLeagueSessionAvailability) composite_query;
    my_leagues: () -> (vec MiniLeague) composite_query;
-   prepare_account_removal: (request: Request) -> (variant {
-                                                     Err: text;
-                                                     Ok;
-                                                   });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -506,11 +489,6 @@ type Main =
      });
    read_account_my_availability: () -> (vec MiniLeagueSessionAvailability);
    read_account_my_leagues: () -> (vec MiniLeague);
-   read_account_removal_drain: (request: Request) ->
-    (variant {
-       Err: text;
-       Ok: Receipt;
-     });
    read_account_verify_child_guardian: (user: principal, child: text) ->
     (bool);
    read_account_verify_league_access: (viewer: principal, league:
@@ -519,10 +497,6 @@ type Main =
     MiniLeaguePlayer) -> (bool);
    read_can_read_league_matches: (viewer: principal, league_id: text,
     club_id: text) -> (bool);
-   read_group_opening_configuration: () -> (vec record {
-                                                  text;
-                                                  text;
-                                                });
    rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
@@ -546,11 +520,6 @@ type Main =
     (variant {
        Err: text;
        Ok: MiniLeagueJoinLink;
-     });
-   seal_account_removal: (request: Request) ->
-    (variant {
-       Err: text;
-       Ok: Receipt;
      });
    set_availability: (session_id: text, player_id: text, status: text) ->
     (variant {

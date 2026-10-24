@@ -138,17 +138,6 @@ export const idlFactory = ({ IDL }) => {
     'name' : IDL.Text,
     'club_id' : IDL.Text,
   });
-  const Request = IDL.Record({
-    'account_id' : IDL.Text,
-    'inventory_digest' : IDL.Vec(IDL.Nat8),
-    'subjects' : IDL.Vec(IDL.Principal),
-    'generation' : IDL.Nat64,
-  });
-  const Receipt = IDL.Record({
-    'outstanding' : IDL.Nat,
-    'request' : Request,
-    'receiver' : IDL.Principal,
-  });
   const Main = IDL.Service({
     'add_admin' : IDL.Func(
         [IDL.Text, IDL.Principal],
@@ -486,11 +475,6 @@ export const idlFactory = ({ IDL }) => {
         ['composite_query'],
       ),
     'my_leagues' : IDL.Func([], [IDL.Vec(MiniLeague)], ['composite_query']),
-    'prepare_account_removal' : IDL.Func(
-        [Request],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
     'purge_club_snapshot' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
@@ -645,11 +629,6 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_account_my_leagues' : IDL.Func([], [IDL.Vec(MiniLeague)], []),
-    'read_account_removal_drain' : IDL.Func(
-        [Request],
-        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
-        [],
-      ),
     'read_account_verify_child_guardian' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Bool],
@@ -668,11 +647,6 @@ export const idlFactory = ({ IDL }) => {
     'read_can_read_league_matches' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text],
         [IDL.Bool],
-        [],
-      ),
-    'read_group_opening_configuration' : IDL.Func(
-        [],
-        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
         [],
       ),
     'rekey_principal' : IDL.Func(
@@ -698,11 +672,6 @@ export const idlFactory = ({ IDL }) => {
     'rotate_mini_league_join_link' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : MiniLeagueJoinLink, 'Err' : IDL.Text })],
-        [],
-      ),
-    'seal_account_removal' : IDL.Func(
-        [Request],
-        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
     'set_availability' : IDL.Func(
