@@ -97,6 +97,33 @@ try {
   assert.deepEqual(await store.actor.get_content_hash(path), []);
   assert.deepEqual(ok(await vault.actor.read_account_get_file(saved.id)), []);
   assert.ok('Err' in await vault.actor.register_file(saved.id, '', 'club-a', [], 'resurrected', 'https://example.com/reused', 0n, 'link/external', true, [], [], []));
+  // A replacement at the same path must survive an old Vault cleanup intent.
+  const replacementUpload = ok(await store.actor.begin_upload(path, 'application/pdf', 4n, 1));
+  ok(await store.actor.put_chunk(replacementUpload, 0, payload));
+  const originalAgain = ok(await store.actor.finalize_upload(replacementUpload));
+  const savedAgain = ok(await vault.actor.register_file('replacement-test', '', 'club-a', [], 'private.pdf', url, 4n, 'application/pdf', false, [{ ...ref, content_hash: originalAgain.content_hash }], [], []));
+  ok(await vault.actor.begin_file_cleanup(savedAgain.id));
+  assert.ok('Err' in await vault.actor.register_file('conflicting-reference', '', 'club-a', [], 'private.pdf', url, 4n, 'application/pdf', false, [ref], [], []));
+  const pendingReplacement = ok(await store.actor.begin_upload(path, 'application/pdf', 4n, 1));
+  assert.ok('Err' in await vault.actor.resume_file_cleanup(savedAgain.id));
+  ok(await store.actor.put_chunk(pendingReplacement, 0, Uint8Array.from([9,8,7,6])));
+  const replacement = ok(await store.actor.finalize_upload(pendingReplacement));
+  assert.notEqual(replacement.content_hash, ref.content_hash);
+  assert.ok('Err' in await vault.actor.resume_file_cleanup(savedAgain.id));
+  assert.equal((await store.actor.get_content_hash(path))[0], replacement.content_hash);
+  // Metadata erasure retains an exact, governor-readable cleanup receipt across upgrades.
+  const erasedPath = 'clubs/club-a/vault/erase-proof';
+  const erasedUpload = ok(await store.actor.begin_upload(erasedPath, 'application/pdf', 4n, 1));
+  ok(await store.actor.put_chunk(erasedUpload, 0, payload));
+  const erasedBytes = ok(await store.actor.finalize_upload(erasedUpload));
+  const erasedRef = { canister: ref.canister, path: erasedPath, content_hash: erasedBytes.content_hash };
+  ok(await vault.actor.register_file('erase-proof', '', 'club-a', [], 'private.pdf', `https://${ref.canister}.raw.icp0.io/${erasedPath}`, 4n, 'application/pdf', false, [erasedRef], [], []));
+  // Governor cannot purge itself here without losing the fixture; use a separately authorized staff uploader.
+  const erasureAcl = ok(await club.actor.export_acl());
+  ok(await club.actor.replace_acl(erasureAcl.acl_version, { ...erasureAcl.acl, roles: [...roles, { user: committee, role: 'coach', club: ['club-a'], team: [] }] }));
+  vault.actor.setPrincipal(committee);
+  ok(await register('committee-link'));
+  vault.actor.setPrincipal(governor);
   const restoreAcl = ok(await club.actor.export_acl());
   ok(await club.actor.replace_acl(restoreAcl.acl_version, { ...restoreAcl.acl, roles: [...roles, { user: member, role: 'coach', club: ['club-a'], team: [] }] }));
   vault.actor.setPrincipal(member);
