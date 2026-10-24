@@ -1,6 +1,6 @@
 // External Resend transport; all queue claims and receipts remain on ICP.
 import { createRequire } from 'node:module';
-import { createPrivateKey, privateDecrypt, constants, createDecipheriv } from 'node:crypto';
+import { createPrivateKey, privateDecrypt, constants, createDecipheriv, createHash } from 'node:crypto';
 const require = createRequire(new URL('../frontend/package.json', import.meta.url));
 const { Actor, HttpAgent } = require('@icp-sdk/core/agent');
 const { Ed25519KeyIdentity } = require('@icp-sdk/core/identity');
@@ -17,7 +17,20 @@ export async function deliverClaim(actor, claim, send) {
   const { job } = claim;
   let outcome = 'unknown', provider = '';
   try {
-    const payload = job.ciphertext ? decryptPayload(job.ciphertext, process.env.ICP_EMAIL_PRIVATE_KEY) : {
+    let payload;
+    if (job.ciphertext) {
+      const decrypted = decryptPayload(job.ciphertext, process.env.ICP_EMAIL_PRIVATE_KEY);
+      if (decrypted.resource !== job.resource || typeof decrypted.to !== 'string') throw new Error('Email binding mismatch');
+      const recipient = decrypted.to.trim().toLowerCase();
+      const hash = text => createHash('sha256').update(text).digest('hex');
+      if (job.kind === 'official') {
+        if (hash(recipient) !== claim.to || typeof decrypted.code !== 'string' || hash(decrypted.code) !== claim.body) throw new Error('Official invitation mismatch');
+        payload = { to: recipient, subject: claim.subject, text: `Accept your invitation: ${process.env.ICP_EMAIL_APP_URL}/competitions/officials/join?email=1&token=${encodeURIComponent(job.resource)}\nVerification code: ${decrypted.code}` };
+      } else {
+        if (job.kind !== 'pending_invite' || recipient !== claim.to.trim().toLowerCase()) throw new Error('Invitation recipient mismatch');
+        payload = { to: recipient, subject: claim.subject, text: `Accept your invitation: ${process.env.ICP_EMAIL_APP_URL}/join/p/${encodeURIComponent(job.resource)}` };
+      }
+    } else payload = {
       to: claim.to, subject: claim.subject,
       text: claim.body + (claim.token ? `\n${process.env.ICP_EMAIL_APP_URL}/eoi-complete/${encodeURIComponent(claim.token)}` : ''),
     };
@@ -30,7 +43,7 @@ export async function deliverClaim(actor, claim, send) {
   return outcome;
 }
 async function main() {
-  for (const key of ['ICP_EMAIL_WORKER_SEED', 'RESEND_API_KEY', 'ICP_EMAIL_FROM', 'ICP_EMAIL_APP_URL', 'ICP_EMAIL_TARGETS_JSON']) {
+  for (const key of ['ICP_EMAIL_WORKER_SEED', 'ICP_EMAIL_PRIVATE_KEY', 'RESEND_API_KEY', 'ICP_EMAIL_FROM', 'ICP_EMAIL_APP_URL', 'ICP_EMAIL_TARGETS_JSON']) {
     if (!process.env[key]) throw new Error(`Missing ${key}`);
   }
   const targets = JSON.parse(process.env.ICP_EMAIL_TARGETS_JSON);

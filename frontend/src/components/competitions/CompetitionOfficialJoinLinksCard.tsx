@@ -158,7 +158,7 @@ export function CompetitionOfficialJoinLinksCard({
           },
           icp: async (ctx) => {
             const { encryptEmailPayload } = await import("@/live/emailPayload");
-            const ciphertext = await encryptEmailPayload(ctx, { to: recipient, subject: `Join ${competitionName} as a ${roleLabel}`, text: `Accept: ${emailInviteUrl}\nVerification code: ${secrets.code}` });
+            const ciphertext = await encryptEmailPayload(ctx, { to: recipient, resource: secrets.token, code: secrets.code, subject: `Join ${competitionName} as a ${roleLabel}`, text: "" });
             await createLiveCompetitionOfficialEmailInvite(
               ctx, competitionId, role, secrets.token, secrets.emailHash, secrets.codeHash,
             );

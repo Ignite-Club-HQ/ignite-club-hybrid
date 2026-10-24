@@ -198,7 +198,7 @@ export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) 
           const inviteId = result.invite?.id;
           const inviteLink = inviteId ? `${window.location.origin}/join/p/${inviteId}` : "";
           if (!inviteId) throw new Error("Invite was not acknowledged");
-          const ciphertext = await encryptEmailPayload(ctx, { to: row.email.trim(), subject: `You're invited to ${club?.name ?? "our club"} for ${seasonName}`, text: `Join as ${ROLE_LABEL[row.role]}: ${inviteLink}` });
+          const ciphertext = await encryptEmailPayload(ctx, { to: row.email.trim(), resource: inviteId, subject: "Invitation", text: "" });
           const { connectLiveClubDomain } = await import("@/live/domains");
           const { unwrapCandid } = await import("@/live/features/candid");
           const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);

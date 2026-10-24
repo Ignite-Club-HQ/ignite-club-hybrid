@@ -139,6 +139,11 @@ persistent actor class Main(governorInit : Principal) = this {
     let pl = eoiClip(player_name.trim(#char ' '), 120);
     if (club_id == "" or season_id == "" or pn == "" or pl == "" or not pe.contains(#char '@')) return #Err("Missing required fields");
     if (training_days.size() > 7 or game_days.size() > 7) return #Err("Invalid days");
+    let authority = clubDomainCanister ?? return #Err("EOI authority not configured");
+    let club : actor { can_accept_public_eoi : shared (Text, Text) -> async Bool } = actor(authority.toText());
+    if (not (await club.can_accept_public_eoi(club_id, season_id)) or isFenced(club_id)) return #Err("EOI form is not accepting registrations");
+    let recent = eoiSubmissions.filter(func e = e.parent_email == pe and nowMs() - e.created_at_ms < 86_400_000);
+    if (recent.size() >= 3) return #Err("Registration email limit reached");
     let small = func(o : ?Text) : ?Text = switch (o) { case (?t) { let c = eoiClip(t, 1000); if (c == "") null else ?c }; case null null };
     if (eoiSubmissions.filter(func(e) = e.season_id == season_id).size() >= 5000) return #Err("This form is full");
     let dup = eoiSubmissions.find(func(e) = e.season_id == season_id and e.parent_email == pe and e.player_name.toLower() == pl.toLower());
@@ -162,8 +167,10 @@ persistent actor class Main(governorInit : Principal) = this {
       allocated_at_ms = null; confirmed_at_ms = null; registered_at_ms = null; withdrawn_at_ms = null;
       claimed_at_ms = null; parent_confirmed_at_ms = null; revision = 0;
     };
+    if (eoiSubmissions.any(func e = e.season_id == season_id and e.parent_email == pe and e.player_name.toLower() == pl.toLower())) return #Err("Registration already exists");
+    if (eoiSubmissions.filter(func e = e.parent_email == pe and now - e.created_at_ms < 86_400_000).size() >= 3) return #Err("Registration email limit reached");
+    switch (emailOutbox.enqueue("eoi:" # id # ":initial", "eoi", id, "", now)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
     eoiSubmissions := eoiSubmissions.concat([entry]);
-    ignore emailOutbox.enqueue("eoi:" # id # ":initial", "eoi", id, "", now);
     #Ok(id)
   };
   var divisionSettings : [Types.DivisionSetting];
@@ -198,7 +205,10 @@ persistent actor class Main(governorInit : Principal) = this {
       false
     });
     let job = claimed ?? return #Ok(null);
-    if (job.kind == "official") return #Ok(?{ job; to = ""; subject = ""; body = ""; token = "" });
+    if (job.kind == "official") {
+      let invite = competitionOfficialEmailInvites.find(func i = i.token == job.resource) ?? return #Err("Invite missing");
+      return #Ok(?{ job; to = invite.email_hash; subject = "You're invited to an Ignite competition"; body = invite.verification_code_hash; token = "" })
+    };
     if (job.kind == "eoi") {
       let entry = eoiSubmissions.find(func e = e.id == job.resource) ?? return #Err("EOI missing");
       return #Ok(?{ job; to = entry.parent_email; subject = "Complete your Ignite registration"; body = "Your expression of interest has been received. Continue your registration using the link below."; token = entry.claim_token })

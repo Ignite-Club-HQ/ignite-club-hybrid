@@ -221,7 +221,8 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func claim_email_job() : async { #Ok : ?{ job : EmailOutbox.Job; to : Text; subject : Text; body : Text; token : Text }; #Err : Text } {
     if (not emailWorkers.any(func p = p == caller)) return #Err("Email worker required");
     let job = emailOutbox.claim(caller, func j = pendingInvites.any(func i = i.id == j.resource and i.status == "pending" and not isTransferFenced(i.club_id) and not removalReceiver.denied(i.invited_by))) ?? return #Ok(null);
-    #Ok(?{ job; to = ""; subject = ""; body = ""; token = "" })
+    let invite = pendingInvites.find(func i = i.id == job.resource) ?? return #Err("Invite missing");
+    #Ok(?{ job; to = invite.email; subject = "You're invited to Ignite"; body = invite.id; token = "" })
   };
   public shared ({ caller }) func finish_email_job(id : Text, attempt : Nat, outcome : Text, provider_id : Text) : async { #Ok; #Err : Text } {
     if (not emailWorkers.any(func p = p == caller)) return #Err("Email worker required");
@@ -2078,6 +2079,11 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   };
 
+  public shared func can_accept_public_eoi(club_id : Text, season_id : Text) : async Bool {
+    not isTransferFenced(club_id) and profiles.any(func p = p.id == club_id and p.deleted_at_ms == null) and
+    seasons.any(func s = s.id == season_id and s.club_id == club_id and s.status == "active") and eoiLookup(eoiPublicKey(season_id)) != null
+  };
+
   public shared ({ caller }) func set_season_public_eoi_config(season_id : Text, slug : ?Text, public_json : Text) : async { #Ok; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
@@ -3931,6 +3937,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     if (isExcluded(caller, club_id)) return #Err("Forbidden");
     if (kind != "team" and kind != "club" and kind != "guardian") return #Err("Invalid invite kind");
+    if (not validPendingInviteRole(kind, team_id, role)) return #Err("Invalid invitation role or scope");
     if (email == "" or email.size() > 320) return #Err("Invalid email");
     if (kind == "guardian") {
       switch (child_id) {
@@ -4106,6 +4113,8 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Invite not found") };
       case (?invite) {
         if (isTransferFenced(invite.club_id)) return #Err("Club is temporarily locked for a transfer");
+        if (not validPendingInviteRole(invite.kind, invite.team_id, invite.role)) return #Err("Invalid invitation role or scope");
+        if (isExcluded(invite.invited_by, invite.club_id) or removalReceiver.denied(invite.invited_by) or not canManageTeam(invite.invited_by, invite.club_id, invite.team_id)) return #Err("Invite authorization changed");
         if (invite.status == "accepted") return #Err("Invite already accepted");
         if (invite.status == "revoked") return #Err("Invite revoked");
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
@@ -4173,6 +4182,13 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  func validPendingInviteRole(kind : Text, team : ?Text, role : ?Text) : Bool {
+    if (kind == "guardian") return role == null or role == ?"parent";
+    let value = role ?? return false;
+    if (kind == "team") return team != null and (value == "player" or value == "parent" or value == "coach" or value == "team_admin");
+    kind == "club" and team == null and (value == "club_admin" or value == "member" or value == "player" or value == "parent")
   };
 
   // ---- Guardian link/unlink + admin-assisted child/parent linking ----

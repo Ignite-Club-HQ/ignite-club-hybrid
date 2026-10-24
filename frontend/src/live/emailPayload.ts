@@ -1,7 +1,7 @@
 import type { FeatureBackendContext } from "./featureRouter";
 
 /** Only the external delivery worker holds the matching private key. */
-export async function encryptEmailPayload(ctx: FeatureBackendContext, payload: { to: string; subject: string; text: string }) {
+export async function encryptEmailPayload(ctx: FeatureBackendContext, payload: { to: string; subject: string; text: string; resource: string; code?: string }) {
   const { connectLiveClubDomain } = await import("./domains");
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   const config = await actor.get_app_config("email_worker_public_key");
