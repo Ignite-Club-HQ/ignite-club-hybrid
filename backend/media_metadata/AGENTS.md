@@ -1,0 +1,4 @@
+# Gallery rules
+
+- Gallery paging uses an ordered per-club index, revision-pinned continuations and bounded governor backfill; primary Media requests one page per source and never persists unexhausted/failed feeds. Legacy complete-list callers stay explicit. Why: client slicing/full cursor drains do not bound startup work, and partial snapshots must not hide photos.
+- ICP gallery engagement and visibility belong to media_metadata; notifications relay only through configured club_domain, Vault mirrors use separate per-file encrypted uploads with source/store readback, and team cards validate exact owned asset scope before ordinary authorized chat sends. Why: no Supabase gallery fallback, spoofed audiences, reused club ciphertext or duplicate announcement receipts.
