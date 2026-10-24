@@ -10,9 +10,9 @@
 <!-- LOVABLE:END -->
 
 - Preview: frontend/ via lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY; root stays dependency-free.
-- Health merges all group inventories by ID. Why: prevent unmonitored groups.
+- Health merges every group inventory by ID to prevent unmonitored groups.
 - Install via scripts/ensure-frontend-deps.mjs only: npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
-- Read nested AGENTS.md in scripts/, frontend/, backend/, backend/identity_access/ and backend/media_blob_store/ before scoped changes.
+- Before scoped changes read AGENTS.md in scripts/, frontend/, backend/, backend/identity_access/ and backend/media_blob_store/.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
@@ -55,7 +55,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Creation choices filter by theme; absent clubs expose none. Why: retain context.
 - Rewards/Profile share scoped caches; pending Pro stays unknown, history renders independently. Why: avoid waits/false locks.
 - Reciprocal opening requires identity admission-release and exact eligibility-reader evidence for every admission-enabled destination, not deletion wiring alone. Why: destination flags can pass readiness while membership reads are denied.
-- Group 2 account admission uses a separate stable eligibility-only reader grant derived from the pinned router; its protected identity-only upgrade journals intent/readback and refreshes the verified snapshot without opening placements or releasing lifecycle gates. Why: repair account access without exposing broader rehearsal-only operations.
+- Group 2 admission uses a stable eligibility-only grant from the pinned router; protected identity-only upgrades journal intent/readback and refresh the verified snapshot, never open placements/lifecycle gates. Why: repair access without exposing rehearsal operations.
 
 - Subscription prices/quotes use subscriptionPlans and authoritative team writes serialize capacity checks; new payment products remain disabled until provider catalog and verified entity-scoped fulfillment agree. Why: quotes, URL success and global ICP Pro cannot authorize paid club capacity.
 - ICP local media admission and retention read club_domain.get_media_allowance for the exact club/team; admission includes pending gallery/chat/Vault bytes, branding is exempt, and legacy retention checks bounded file pages and unchanged timestamps after awaits. Why: team Pro must not grant club-wide storage or lose replaced/paid media to club-only cleanup.
