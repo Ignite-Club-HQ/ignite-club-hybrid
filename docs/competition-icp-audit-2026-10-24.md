@@ -1,0 +1,77 @@
+# Competition ICP audit — 24 October 2026
+
+## Verdict and scope
+
+**Not gap-free.** Source tracing found reachable Supabase dependencies, missing competition/season workflows, routing/data defects and authorization defects. This audit changes no application behaviour and performs no deployment or mainnet mutation. It cannot establish which defects are present in currently deployed modules, or certify signed-in production behaviour.
+
+Three independent audits covered competition discovery/create/detail/settings/join/public pages; officials, invitations, EOI and seasons; fixtures/results/ladders/History/player reports; linked chat/gallery/Vault; competition-domain authorization and queue fan-out. A further narrow review covers competition-linked news and club competition discovery. Findings below use current source, not previous completion summaries.
+
+Payments remain an accepted external integration. Push/email delivery necessarily involves external providers, but that does not excuse Supabase data dependencies or missing on-chain recipient authorization. Google Drive/device-side exports are not new competition gaps. PlayHQ synchronization is explicitly deferred and is not a current blocker.
+
+## Priority 1 — authorization and private data
+
+1. **Competition notification forgery path.** `backend/notification_queue/src/main.mo:510–565` accepts arbitrary authenticated `competition_broadcast` fan-out without a competition-manager/audience verifier. Legitimate UI uses that kind at `frontend/src/pages/CompetitionDetailPage.tsx:1280–1288`. Caller admission is not resource authorization. Rehearse outsider denial and exact mixed-club audience verification before release; no production exploit was attempted.
+2. **Private broadcast reads lack competition access checks.** `backend/competition_domain/src/main.mo:2669–2673,2947–2955` authenticates but filters broadcasts only by supplied competition ID. Both legacy and protected readers need the same current resource authorization.
+3. **Result writes use stale club-role mirrors.** `backend/competition_domain/src/main.mo:470–485,1049–1077` trusts cached club-admin grants in `set_match_result` without refreshing them. Other manager operations call `syncForCompetition`. Test positive manager writes followed by authoritative revocation and rejected writes, including suspension/revision drift.
+4. **Private engagement metadata lacks resource authorization.** `backend/competition_domain/src/main.mo:2268–2280,2916–2934` accepts arbitrary competition IDs and returns team/match/result counts. The “Admin-only” comment is not enforcement. These methods also ignore dates and hardcode broadcast count zero despite the on-chain ledger.
+5. **Member welcome eligibility uses stale/local mirrors.** `backend/competition_domain/src/main.mo:1691–1715` checks competition roles or entered-club mirrors, not fresh cross-group team membership. Legitimate foreign-team members can fail while stale roles can qualify. Team acceptance and welcome registration are separate operations, not a durable atomic delivery request.
+6. **Join-token purpose/archival checks are incomplete.** `backend/competition_domain/src/main.mo:1859–1888` permits official-role links to authorize team entry without checking link purpose; `:1800–1816` grants a role through `join_competition_by_token` without the archived check used by preview. Test direct mutations, not merely disabled UI.
+7. **Unaccepted teams can enter fixtures.** `backend/competition_domain/src/main.mo:1022–1025` checks entry existence, not accepted/registered status. Invited or declined teams therefore satisfy “Both teams must be registered.”
+
+## Priority 2 — actual off-chain dependencies and missing workflows
+
+| Feature | Current source evidence | Gap |
+| --- | --- | --- |
+| Public EOI | `frontend/src/pages/PublicEoiFormPage.tsx:35–36,79,166–175,198–199` | Route always mounts Supabase config/submission/email; ICP helpers at `:562+` are not connected to that entry point. |
+| EOI administration | `frontend/src/pages/EoiAdminPage.tsx:54–88,103–130` | Live page reads club/season metadata directly from Supabase despite routed submission hooks. |
+| EOI resend | `frontend/src/hooks/useEoiPolish.ts:24–34,62–73` | ICP bookkeeping calls Supabase `send-eoi-invite`; single resend ignores returned errors and can claim success. Endpoint is absent from this checkout; hosted availability/II authorization unverified. |
+| Broadcast thread realtime | `frontend/src/pages/BroadcastChatPage.tsx:782–799,890–915` | Supabase subscriptions mount without an ICP guard; incoming reply enrichment also reads Supabase. Subscription attempts are reachable; actual data receipt was not demonstrated. |
+| Club competition section | `frontend/src/pages/ClubDetailPage.tsx:2031–2035`; `frontend/src/components/competitions/ClubCompetitionsSection.tsx:18–40` | Shared club page mounts a Supabase-only competition section. Queries are conditional on Pro/team availability, not backend; live ICP Pro visibility needs routed data. |
+| Season cloning | `frontend/src/components/seasons/StartNewSeasonWizard.tsx:123–124,309–320` | Team/staff cloning throws and is disabled for ICP. |
+| Season invitations | `frontend/src/components/seasons/SeasonInviteStep.tsx:97–102` | ICP new-member email invitations are withheld, not replaced with authorized canister jobs. |
+| Bulk rollover | `frontend/src/pages/SeasonDetailPage.tsx:379–395` | Bulk team rollover rendered only for non-ICP draft seasons. Other returning-player functionality exists. |
+| Welcome settings | `frontend/src/pages/CompetitionSettingsPage.tsx:285–309,669,682` | Live ICP settings omit the available welcome cards. The officials card is also mounted twice. |
+| Official email invitation UI | `frontend/src/components/competitions/CompetitionOfficialsCard.tsx:258,475`; `CompetitionOfficialJoinLinksCard.tsx:40` | Legacy email form/pending list are hidden in ICP. The newer canister-enabled card has no importing mount in current TSX source; role links alone are not email-invite parity. |
+| Division moves | `frontend/src/pages/CompetitionDetailPage.tsx:965–999,1019–1023` | ICP assigns immediately with `alsoClear=false`, bypassing affected-fixture counting/confirmation/cleanup parity. |
+
+### Email delivery is more than an external provider
+
+Welcome recipients/settings/jobs are stored on competition_domain, which is positive. However `supabase/functions/send-welcome-email-icp/index.ts:99–110,129–150,168–190` requires Supabase service configuration and uses Supabase RPCs for claims/completion. It is **not** a Supabase-independent mail transport. Its competition job lookup uses one `COMPETITION_DOMAIN_CANISTER_ID` (`:123,162`), not owner/group discovery; Group 2 jobs cannot be assumed to reach the correct canister. Refactor delivery claims/receipts and authoritative job resolution separately from the necessarily external email provider. Do not describe this as “nothing touches Supabase.”
+
+## Priority 3 — fixtures, reports, events and routing
+
+- **Manual fixture details are discarded.** `frontend/src/features/competitions/fixtures/manualMatchWorkflow.ts:76–85` records only competition/home/away IDs and reports success. The canister initializes date/division/venue/pitch/round/duration/arrival/notes to null (`backend/competition_domain/src/main.mo:1026–1040`). Existing `updateLiveMatchDetails` supports these fields and event materialization (`frontend/src/live/features/competitions.ts:218–241`), but creation does not invoke it. The existing test explicitly expects the incomplete three-ID mapping.
+- **Player-stat reads throw.** `frontend/src/live/features/events.ts:1772–1780` casts the unresolved `unwrapCandid` Promise to an array and calls `.map`. Report tests mock this helper and cannot detect the real failure.
+- **Player-report detail parity is incomplete.** `frontend/src/features/competitions/history/reportRepository.ts:19` drops child identity, profile metadata and position-minute breakdown (`child_id:null`, `profiles:null`, `position_minutes:null`). Canister stat shape lacks some of those fields. Tests must cover actual stored player identity/time detail, not just aggregate minutes.
+- **Competition events are not selected by competition association.** `frontend/src/components/competitions/CompetitionEventsList.tsx:29–60` retrieves all entered-team events, catches failures into empty lists and deduplicates by title/time. Ordinary training can appear as competition events; unrelated events can collapse into one link. Group-scoped team reads and exact authorized competition-event association are required.
+- **Filtered competition discovery drops participant competitions.** `frontend/src/pages/CompetitionsPage.tsx:160–191` loads by organizer-club filter and maps every competition to empty entries; `:198–215` then requires an accepted participating-club entry for foreign-host visibility. The query key at `:144` also omits the active filter although retrieval depends on it. Complete participant discovery/filtering needs verification.
+- **Anonymous public reads bypass owning-group dispatch.** `frontend/src/live/features/competitions.ts:1006–1017` connects directly to the active/default target for public competition ID; official `crl-` preview similarly directly connects via the helper (`frontend/src/pages/CompetitionOfficialJoinPage.tsx:58–77`). Source shows no owner discovery on these direct entry paths; verify Group 2 public/official links rather than assuming signed-in routing covers them.
+- **Competition broadcast delivery is browser-orchestrated.** `frontend/src/pages/CompetitionDetailPage.tsx:1257–1290` uses one raw context, skips failed team rosters, attaches the first team's club to all recipients and returns team count rather than acknowledged queued recipients. Logging a broadcast is not complete/authorized delivery. Move audience derivation and durable enqueue receipts into trusted services, split by actual owning club, retain unknown outcomes.
+- **Official chat synchronization has role vocabulary drift.** `frontend/src/live/features/competitions.ts:895–898,958–960` uses `committee`; newer official APIs use `committee_member` (`:515,528,540`). Membership top-up runs when managers open settings, not automatically on claim. Test actual committee claims and subsequent authorized chat opening.
+- **Fixture detail update and event materialization are separate requests.** `frontend/src/live/features/competitions.ts:225–241` can commit fixture changes before materialization fails. This requires failure/readback/recovery tests; source alone does not establish duplicate or lost-event outcomes.
+
+## Erasure caveat — do not confuse drain acknowledgement with purge
+
+`backend/competition_domain/src/main.mo:39` supplies `func _ = 0` to `RemovalEndpoints`. Inspecting `backend/shared/RemovalEndpoints.mo:5–13` establishes that callback measures **pending drain obligations**, not erasure; zero does not itself prove an erasure bug or completed purge. The separate concrete gap is that `frontend/src/live/accountData.ts:95–96,111–115` inventories/purges club/Vault/events/messaging only, omitting competition_domain, whose current Candid lacks `purge_my_data` or ordinary club/team erasure receivers. Competition roles/invites/welcome addresses/personal ownership therefore lack equivalent explicit cleanup coverage. Governor transfer-snapshot purge is not ordinary account/club deletion. Historical deletion evidence remains a separate unresolved constraint; never infer old erasures or delete shared records from guesses.
+
+## Positive coverage — implemented does not mean live accepted
+
+Found real canister implementations for competition CRUD/settings, divisions and entries, cross-group authoritative team access, invite acceptance, role links, match/result/score-privacy DTOs, match-to-event History integration, ladders, competition chat mappings, gallery filtering and Vault competition access. Legacy competition-admin threads redirect into ICP group chat, and the legacy gallery panel is guarded before mounting. These are not counted as leaks merely because Supabase imports exist.
+
+## Checks performed
+
+- ICP isolation guard: **passed**. Its current scope is narrower than full feature coverage; direct table reads/subscriptions and omitted UI can still escape detection.
+- Candid drift: **17 active contracts passed**. Matching bindings do not prove correct authorization or deployed compatibility.
+- Focused run 1, 21 files per mode: Supabase **102 passed, 24 failed, 9 skipped**; ICP **102 passed, 20 failed, 13 skipped**. Two fixture/results/privacy files fail because they mount `MatchRow` without router context after its navigation dependency was added. These test-harness failures are not evidence that the deployed app lacks a router.
+- Focused run 2, seven files per mode: Supabase **40 passed, 1 failed, 4 skipped**; ICP **34 passed, 11 skipped**. The remaining Supabase query-contract failure is the same router-context issue. Negative-path import logs include expected errors; passing cases do not imply all route-to-canister flows are verified.
+- Total executed assertions: Supabase **142 passed / 25 failed / 13 skipped**; ICP **136 passed / 20 failed / 24 skipped**. No application/test files were changed to make these green.
+- Preview's latest available build log: **build OK**. No manual build/typecheck performed. No signed-in Internet Identity acceptance or current mainnet module/wiring readback performed.
+
+## Completion order
+
+1. Private-read, result-revocation and competition notification authorization.
+2. Complete competition/EOI/season/public-link data routing and missing UI workflows.
+3. Full fixture-field persistence, exact event associations, report details and role/chat parity.
+4. Durable owner-scoped welcome/broadcast jobs and explicit erasure coverage.
+5. Repair stale test harnesses and add route-to-real-canister, outsider/revocation, cross-group and interrupted-operation regressions.
+6. Separately authorized protected upgrades, verified reciprocal wiring and compatible app release, followed by signed-in both-group acceptance. No broad deploy, creation, reinstallation or authority rewiring is authorized by this audit.
