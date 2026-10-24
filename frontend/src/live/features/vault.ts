@@ -584,6 +584,21 @@ export async function registerLiveVaultFile(
   );
 }
 
+export async function beginLiveVaultUpload(ctx: FeatureBackendContext, file: import("../../lab/bindings/vault_domain/declarations/vault_domain.did.js").VaultFile) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.begin_file_upload(file), "Prepare private file upload");
+}
+
+export async function acknowledgeLiveVaultUpload(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.acknowledge_file_upload(id), "Confirm private file upload");
+}
+
+export async function recoverLiveVaultUpload(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.recover_file_upload(id), "Recover private file upload");
+}
+
 export async function trashLiveVaultFile(ctx: FeatureBackendContext, fileId: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.trash_file(fileId), "Trash vault file");

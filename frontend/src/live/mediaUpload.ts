@@ -63,6 +63,7 @@ export async function tryUploadMediaToBlobStore(args: {
   /** "own" keeps the per-file lock even under clubs/ (e.g. vault files,
    * which only club staff may open — the club lock admits every member). */
   lock?: "club" | "own";
+  beforeUpload?: (ref: LiveBlobRef) => Promise<void>;
 }): Promise<BlobMediaUpload | null> {
   const target = args.context?.target ?? getActiveIcpTarget();
   if (!isBlobStoreConfigured(target)) return null;
@@ -83,13 +84,22 @@ export async function tryUploadMediaToBlobStore(args: {
   const clubId = clubIdFromMediaPath(args.storagePath);
   if (clubId && !args.competitionId && args.lock !== "own" && (await isClubMediaLockSupported(ctx))) {
     const ciphertext = await encryptClubMedia(ctx, clubId, bytes);
-    return uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime);
+    return uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime, args.beforeUpload);
   }
   const ciphertext = await encryptPiiValue(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, bytes);
   // The access record's ciphertext is only a content-hash marker (the store
   // re-verifies the same hash on finalize), so register it IN PARALLEL with
   // the byte upload instead of after it — saves two sequential round trips.
   const localHash = await sha256Hex(ciphertext);
+  // Vault intent must be durable before either bytes or access records leave the device.
+  // The uploader repeats this exact idempotent binding before its first byte reservation.
+  const { orderBlobStoresForPath } = await import("./blobStoreUpload");
+  if (args.beforeUpload) {
+    const key = orderBlobStoresForPath(target, args.storagePath)[0];
+    const canister = key ? target.canisterIds[key] : undefined;
+    if (!canister) throw new Error("No private file store is configured.");
+    await args.beforeUpload({ canister, path: args.storagePath, content_hash: localHash });
+  }
   const registration = (async () => {
     await registerLivePii(
       ctx,
@@ -106,7 +116,7 @@ export async function tryUploadMediaToBlobStore(args: {
     }
   })();
   const [result] = await Promise.all([
-    uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime),
+    uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime, args.beforeUpload),
     registration,
   ]);
   return result;

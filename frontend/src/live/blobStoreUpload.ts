@@ -159,6 +159,7 @@ export async function uploadBytesToBlobStore(
   path: string,
   bytes: Uint8Array,
   mime: string,
+  beforeUpload?: (ref: LiveBlobRef) => Promise<void>,
 ): Promise<BlobStoreUploadResult> {
   const keys = orderBlobStoresForPath(target, path);
   if (keys.length === 0) throw new Error("No photo store is configured.");
@@ -166,7 +167,7 @@ export async function uploadBytesToBlobStore(
   let lastError: unknown = null;
   for (const key of candidates.length > 0 ? candidates : keys) {
     try {
-      return await uploadToStore(target, identity, key, path, bytes, mime);
+      return await uploadToStore(target, identity, key, path, bytes, mime, beforeUpload);
     } catch (error) {
       const friendly = freeLimitMessage(error);
       if (friendly) throw new Error(friendly);
@@ -185,10 +186,12 @@ async function uploadToStore(
   path: string,
   bytes: Uint8Array,
   mime: string,
+  beforeUpload?: (ref: LiveBlobRef) => Promise<void>,
 ): Promise<BlobStoreUploadResult> {
   const { actor, canisterId } = await connectLiveBlobStore(target, identity, storeKey);
   const canister = canisterId.toText();
   const expectedHash = await sha256Hex(bytes);
+  await beforeUpload?.({ canister, path, content_hash: expectedHash });
 
   // A reservation response may be lost after success. Retry identical terms
   // against the same store/path; never fail over an unknown operation.
