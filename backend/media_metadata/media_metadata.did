@@ -74,10 +74,20 @@ type Main =
        Err: text;
        Ok: Comment;
      });
+   add_comment_reply: (asset_id: text, body: text, reply_to_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: Comment;
+     });
    add_reaction: (asset_id: text, kind: text, created_at_ms: nat64) ->
     (variant {
        Err: text;
        Ok: Reaction;
+     });
+   announce_gallery_asset: (asset_id: text) ->
+    (variant {
+       Err: text;
+       Ok: text;
      });
    build_asset_page_index: () ->
     (variant {
@@ -178,10 +188,27 @@ type Main =
                    Err: text;
                    Ok: Page;
                  });
+   read_gallery_asset_for_service: (user: principal, asset_id: text) ->
+    (variant {
+       Err: text;
+       Ok: Asset;
+     });
+   read_gallery_view_counts: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 nat;
+               };
+     });
    read_group_opening_configuration: () -> (vec record {
                                                   text;
                                                   text;
                                                 });
+   record_gallery_view: (asset_id: text) -> (variant {
+                                               Err: text;
+                                               Ok: nat;
+                                             });
    register_asset: (club_id: text, kind: text, mime: text, checksum: 
     text, storage_path: text, visibility: text, expires_at_ms: nat64) ->
     (variant {
@@ -197,6 +224,11 @@ type Main =
     (variant {
        Err: text;
        Ok;
+     });
+   remove_gallery_asset: (asset_id: text, mode: text) ->
+    (variant {
+       Err: text;
+       Ok: record {vault_updated: bool;};
      });
    remove_reaction: (asset_id: text) -> (variant {
                                            Err: text;
@@ -225,6 +257,11 @@ type Main =
     (variant {
        Err: text;
        Ok: Asset;
+     });
+   set_gallery_authorities: (club: principal, vault: principal) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    set_transfer_fence: (club: text, fenced: bool) ->
     (variant {
@@ -268,6 +305,7 @@ type Comment =
    created_at_ms: nat64;
    deleted: bool;
    id: text;
+   reply_to_id: opt text;
  };
 type Capability = 
  record {

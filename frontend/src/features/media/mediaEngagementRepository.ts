@@ -107,9 +107,7 @@ export async function createMediaComment(
       await recordAnalyticsPhotoEngagement(input.photoId, "Comment");
     },
     icp: async (ctx) => {
-      // The canister comment shape has no reply threading; replyToId is
-      // dropped on the ICP branch until the canister model covers it.
-      await addLiveComment(ctx, input.photoId, input.text, Date.now());
+      await addLiveComment(ctx, input.photoId, input.text, Date.now(), input.replyToId);
     },
   }, writeOnce({ photoId: input.photoId }));
 }

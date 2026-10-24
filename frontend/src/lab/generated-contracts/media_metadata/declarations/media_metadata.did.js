@@ -13,6 +13,7 @@ export const idlFactory = ({ IDL }) => {
     'id' : IDL.Text,
     'deleted' : IDL.Bool,
     'body' : IDL.Text,
+    'reply_to_id' : IDL.Opt(IDL.Text),
     'author' : IDL.Principal,
     'created_at_ms' : IDL.Nat64,
     'asset_id' : IDL.Text,
@@ -138,9 +139,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Comment, 'Err' : IDL.Text })],
         [],
       ),
+    'add_comment_reply' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : Comment, 'Err' : IDL.Text })],
+        [],
+      ),
     'add_reaction' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Reaction, 'Err' : IDL.Text })],
+        [],
+      ),
+    'announce_gallery_asset' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
         [],
       ),
     'build_asset_page_index' : IDL.Func(
@@ -277,9 +288,29 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
         [],
       ),
+    'read_gallery_asset_for_service' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Variant({ 'Ok' : Asset, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_gallery_view_counts' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
+    'record_gallery_view' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'register_asset' : IDL.Func(
@@ -295,6 +326,16 @@ export const idlFactory = ({ IDL }) => {
     'removeBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'remove_gallery_asset' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'vault_updated' : IDL.Bool }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'remove_reaction' : IDL.Func(
@@ -340,6 +381,11 @@ export const idlFactory = ({ IDL }) => {
     'set_blob_ref' : IDL.Func(
         [IDL.Text, IDL.Opt(BlobRef)],
         [IDL.Variant({ 'Ok' : Asset, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_gallery_authorities' : IDL.Func(
+        [IDL.Principal, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_transfer_fence' : IDL.Func(

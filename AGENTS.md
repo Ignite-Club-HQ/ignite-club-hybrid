@@ -12,7 +12,7 @@
 - Preview: frontend/ via lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY; root stays dependency-free.
 - Health merges every group inventory by ID to prevent unmonitored groups.
 - Install via scripts/ensure-frontend-deps.mjs only: npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
-- Before scoped changes read AGENTS.md in scripts/, frontend/, backend/, backend/identity_access/ and backend/media_blob_store/.
+- Before scoped changes read AGENTS.md in scripts/, frontend/, backend/ and affected backend subdirectories; media_metadata has gallery-specific rules.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
@@ -70,7 +70,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Discovery shares account/full-target reads; incomplete clubs stay display-only. Sessions bind identity objects and retire on typed drift without replay; scope markers copy contexts and writes use operation keys. Why: prevent lost clubs, stale sessions, nested discovery and merged posts; destination authorization remains required.
 - Schedule member events publish per owning club before labels/duties, retaining the events query prefix for save invalidation; foreign-host fixtures remain independent. Media profiles gate only their own source; incomplete aggregates never persist. Why: unrelated sources must not block authorized content or falsely complete offline inventories.
 - Standard club chats use ensure_default_club_chat with an explicit stable identity and authorized legacy-ID adoption; ordinary group creation stays create-only, and deleted bindings require explicit restore. Why: concurrent devices must not duplicate standard chats, overwrite roles, erase histories or revive deleted rooms.
-- Gallery paging uses an ordered per-club index, revision-pinned continuations and bounded governor backfill; primary Media requests one page per source and never persists unexhausted/failed feeds. Legacy complete-list callers stay explicit. Why: client slicing/full cursor drains do not bound startup work, and partial snapshots must not hide photos.
 - Permanent discovery reserves identity memories 18–24; revision-bound subject/source indexes stage and reclaim in bounded steps, pin all sources even when skipping empty ones; no public cutover until location/concurrency/recovery pass. Stage A remains. Why: incomplete or stale indexes cannot hide clubs or grant access.
 - Membership source retention captures one immutable array generation without copying on writes; exact sequential traversal and historical completion leave newer changes pending and unreadable. Why: finite reconstruction must finish under ongoing writes without certifying stale memberships.
 - Lookup release upgrades only pinned identity plus every registered club source/original G1, with exact subnet/journal coverage; identity-owned enable and every private page recheck full revisions, registry/photo stores, lifecycle and caller through awaits. Complete Stage A fallback stays. Why: historical reports or partial source coverage cannot authorize discovery.
@@ -78,3 +77,4 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Media paging releases only via upgrade-media-paging.yml on the exact G1/G2 media_metadata canisters, finishing backfill before snapshot refresh. Why: never hide photos or touch photo stores.
 
 - ICP event setup atomically commits exact dates, first-occurrence duties and reminders under caller/request receipts; configured club/league consensus supplies audiences, relays retain unknown outcomes. Why: prevent partial saves, foreign notices and deleted-request resurrection.
+

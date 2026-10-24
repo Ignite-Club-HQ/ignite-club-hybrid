@@ -1583,6 +1583,20 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'relay_gallery_notice' : ActorMethod<
+    [
+      Principal,
+      string,
+      [] | [string],
+      Principal,
+      [] | [Principal],
+      string,
+      string,
+      string,
+    ],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'relay_group_pitch_alert' : ActorMethod<
     [Array<string>, string, string, string, string, string],
     { 'Ok' : number } |
@@ -1888,6 +1902,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'set_events_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_gallery_media_authority' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }

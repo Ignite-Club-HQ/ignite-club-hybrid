@@ -452,6 +452,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
 
     let trustedService = clubDomainCanister == ?caller or messagingDomainCanister == ?caller;
+    if ((kind == "photo_uploaded" or kind == "photo_comment" or kind == "photo_reaction" or kind == "comment_reply") and clubDomainCanister != ?caller) return #Err("Trusted gallery relay required");
     if (not trustedService) do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     authenticated(caller);
@@ -511,6 +512,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
 
     let trustedService = clubDomainCanister == ?caller or messagingDomainCanister == ?caller;
+    if ((kind == "photo_uploaded" or kind == "photo_comment" or kind == "photo_reaction" or kind == "comment_reply") and clubDomainCanister != ?caller) return #Err("Trusted gallery relay required");
     if (not trustedService) do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     authenticated(caller);

@@ -10,7 +10,7 @@ import { compressImage } from "@/lib/imageCompression";
 import { localUploadPreviews } from "./localUploadPreviews";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
+import { announceLiveGalleryAsset, registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { useClubTheme } from "@/hooks/useClubTheme";
@@ -51,6 +51,7 @@ interface IcpUploadPhotoSheetProps {
   competitions: IcpUploadNamedOption[];
   defaultClubId?: string;
   defaultCompetitionId?: string;
+  defaultEventId?: string;
 }
 
 const preparedFiles = new WeakMap<File, Promise<{ file: File | Blob }>>();
@@ -77,6 +78,7 @@ export function IcpUploadPhotoSheet({
   competitions,
   defaultClubId,
   defaultCompetitionId,
+  defaultEventId,
   onPendingChange,
 }: IcpUploadPhotoSheetProps) {
   const { activeClubFilter } = useClubTheme();
@@ -190,6 +192,11 @@ export function IcpUploadPhotoSheet({
     const albumId = files.length > 1 ? crypto.randomUUID() : null;
     const trimmedCaption = caption.trim() || null;
     let scopePending = false;
+    let vaultCopyFailed = false;
+    let noticeFailed = false;
+    let chatCardFailed = false;
+    let heroUrl = "";
+    const registeredAssetIds: string[] = [];
     try {
       await withFeatureBackend("media", {
         supabase: async () => {
@@ -223,6 +230,7 @@ export function IcpUploadPhotoSheet({
             }
             // Show the photo from the phone straight away instead of
             // downloading and unlocking what we just sent.
+            if (!heroUrl) heroUrl = uploaded.url;
             localUploadPreviews.set(uploaded.url, URL.createObjectURL(prepared.file));
             const asset = await registerLiveAsset(ctx, {
               clubId,
@@ -239,7 +247,7 @@ export function IcpUploadPhotoSheet({
                 teamId: teamId || null,
                 miniLeagueId: miniLeagueId || null,
                 competitionId: competitionId || null,
-                eventId: null,
+                eventId: defaultEventId ?? null,
                 caption: trimmedCaption,
                 albumId,
               });
@@ -252,6 +260,12 @@ export function IcpUploadPhotoSheet({
                 throw err;
               }
             }
+            if (!scopePending) {
+              const { copyGalleryAssetToVault } = await import('./galleryVaultCopy');
+              await copyGalleryAssetToVault(ctx, { assetId: asset.id, clubId, teamId: teamId || null,
+                file: prepared.file, name: raw.name || 'Gallery photo' }).catch(() => { vaultCopyFailed = true; });
+              registeredAssetIds.push(asset.id);
+            }
             done += 1;
             setProgress({ done, total: files.length });
           };
@@ -260,6 +274,16 @@ export function IcpUploadPhotoSheet({
             while (nextIndex < files.length) await uploadOne(nextIndex++);
           };
           await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
+          if (teamId && registeredAssetIds.length) {
+            const { publishLiveGalleryChatCard } = await import('@/live/features/media');
+
+            await publishLiveGalleryChatCard(ctx, { clubId, teamId, eventId: defaultEventId, assetIds: registeredAssetIds,
+              heroUrl, receipt: `gallery-${albumId}` }).catch(() => { chatCardFailed = true; });
+          }
+          if (registeredAssetIds[0]) {
+            const notice = await announceLiveGalleryAsset(ctx, registeredAssetIds[0]).catch(() => "unknown");
+            noticeFailed = notice !== "queued";
+          }
         },
       }, writeOnce({ clubId }));
       if (scopePending) {
@@ -267,6 +291,9 @@ export function IcpUploadPhotoSheet({
           "Tags and captions will appear after the media backend update is deployed.",
         );
       }
+      if (vaultCopyFailed) toast.warning('Photos published; some Vault copies could not be saved.');
+      if (chatCardFailed) toast.warning('Photos published; the team chat announcement could not be confirmed.');
+      if (noticeFailed) toast.warning('Photos published; the notification could not be confirmed.');
       // Keep the local copies on screen until the refreshed feed has them.
       await Promise.resolve(onUploaded()).catch(() => undefined);
     } catch (err) {

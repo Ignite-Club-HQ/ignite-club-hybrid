@@ -1,3 +1,9 @@
+## Gallery ICP completion — 24 October 2026
+- [x] Add authorized threaded comments, canister-derived gallery notices, exact photo/comment/event/card links, quiet foreground refresh and authorized on-chain photo view counts.
+- [x] Restore exact club/team sharing allowances, scoped staff moderation, separate encrypted/deduplicated source-bound Vault copies, consistent hidden-gallery reads, both deletion choices and owned-asset receipt-based team cards; grouped chat-photo publishing preserves album IDs.
+- [x] Verification: 18 focused files pass in both modes (90 ICP / 71 Supabase checks); disposable real canisters pass views/denial, replies, notice inbox/dedup, copy/hash/scope checks, owned-card receipts, both removals and upgrade retention. Changed canisters compile, 17 contracts/ICP guards/preview pass; public gallery reaches /auth with no runtime errors. Runbook: docs/gallery-icp-completion.md.
+- [ ] Gallery release/acceptance: exact protected media_metadata, vault_domain, club_domain and notification_queue upgrades plus verified reciprocal gallery wiring in both groups, compatible app release and signed-in II upload/card/comment/copy/removal checks remain required. No deployment authorized; signed-in II session unavailable.
+
 ## Events and schedules ICP completion — 24 October 2026
 - [ ] Close authorized import/fixture enrichment, nearby/recent game and pitch-entry reads, schedule refresh/views/preferences and exported fixture links.
 - [ ] Close individual/bulk reminders, audience/cooldown parity, cancellation alerts and duty notifications; move complete recurring-event setup into one canister transaction.

@@ -58,6 +58,9 @@ persistent actor class Main(governorInit : Principal) = this {
   var mediaEvidenceRevision : Nat;
   var folders : [Types.VaultFolder];
   var files : [Types.VaultFile];
+  var galleryMediaAuthority : ?Principal;
+  var gallerySourceFiles : Map.Map<Text, Text>;
+  transient let galleryCopyLocks = Map.empty<Text, Bool>();
   var roles : [Types.RoleGrant];
   var club_domain_canister : ?Principal;
   var competition_domain_canister : ?Principal;
@@ -518,6 +521,69 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  public shared ({ caller }) func set_gallery_media_authority(id : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or Principal.isAnonymous(id)) return #Err("Governor and valid authority required");
+    galleryMediaAuthority := ?id; #Ok
+  };
+  type GallerySource = { id : Text; club_id : Text; owner : Principal; team_id : ?Text; mime : Text; storage_path : Text; blob_ref : ?Types.BlobRef };
+  func gallerySource(user : Principal, source : Text) : async { #Ok : GallerySource; #Err : Text } {
+    let id = galleryMediaAuthority ?? return #Err("Media authority not configured");
+    let media : actor { read_gallery_asset_for_service : shared (Principal, Text) -> async { #Ok : GallerySource; #Err : Text } } = actor(id.toText());
+    let result = await (with timeout = 10) media.read_gallery_asset_for_service(user, source);
+    if (galleryMediaAuthority != ?id) return #Err("Media authority changed"); result
+  };
+  public shared ({ caller }) func get_gallery_copy(source : Text) : async { #Ok : ?Types.VaultFile; #Err : Text } {
+    await admitAccount(caller);
+    let a = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(a)) a };
+    if (not a.owner.equal(caller) and not (await canWrite(caller, a.club_id, a.team_id, null))) return #Err("Gallery owner or scoped staff required");
+    let current = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(row)) row };
+    if (current != a or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery access changed");
+    #Ok(switch (gallerySourceFiles.get(source)) { case (?id) files.find(func f = f.id == id); case null null })
+  };
+  public shared ({ caller }) func register_gallery_copy(source : Text, name : Text, file_url : Text, size : Nat64, mime : Text, blob_ref : Types.BlobRef) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    if (galleryCopyLocks.get(source) == ?true) { removalReceiver.leave(caller); return #Err("Gallery copy in progress") };
+    galleryCopyLocks.add(source, true);
+    try {
+      await admitAccount(caller);
+      let a = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(a)) a };
+      if (not a.owner.equal(caller) or isFenced(a.club_id)) return #Err("Gallery owner required");
+      switch (gallerySourceFiles.get(source)) { case (?id) { return #Ok(files.find(func f = f.id == id) ?? return #Err("Gallery copy was removed")) }; case null {} };
+      let clubId = club_domain_canister ?? return #Err("Club authority not configured");
+      let club : actor { get_media_allowance : shared query (Text, ?Text) -> async { #Ok : { premium : Bool }; #Err : Text } } = actor(clubId.toText());
+      let allowance = await (with timeout = 10) club.get_media_allowance(a.club_id, a.team_id);
+      switch allowance { case (#Ok(s)) { if (not s.premium) return #Err("Scoped Pro required") }; case (#Err(e)) return #Err(e) };
+      if (club_domain_canister != ?clubId or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery copy access changed");
+      if (not validLong(name, 160) or not validLong(file_url, 2048) or not validBlobRef(blob_ref) or size > 10_485_760 or not Text.startsWith(blob_ref.path, #text ("clubs/" # a.club_id # "/vault/"))) return #Err("Invalid private gallery copy");
+      if (switch (a.blob_ref) { case (?ref) ref.path == blob_ref.path and ref.canister == blob_ref.canister; case null false }) return #Err("Vault copy requires separate encrypted bytes");
+      let original = a.blob_ref ?? return #Err("Gallery source has no configured store");
+      if (blob_ref.canister != original.canister) return #Err("Gallery copy store mismatch");
+      let store : actor { get_content_hash : shared query (Text) -> async ?Text } = actor(original.canister);
+      let acknowledgedHash = await (with timeout = 10) store.get_content_hash(blob_ref.path);
+      if (acknowledgedHash != ?blob_ref.content_hash) return #Err("Private copy not acknowledged by source store");
+      // Recheck source access after every external authorization await.
+      let current = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(row)) row };
+      if (current != a or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery source changed");
+      let folder_id = "gallery-uploads-" # a.club_id # (a.team_id ?? "");
+      if (not folders.any(func f = f.id == folder_id)) {
+        let folder : Types.VaultFolder = { id = folder_id; club = a.club_id; team = a.team_id; parent_id = null; name = "Gallery Uploads"; restricted_roles = []; created_by = caller; created_at_ms = nowMs(); deleted_at_ms = null; deleted_by = null; mini_league_id = null; competition_id = null; sort_order = 0; description = null; color = null };
+        folders := folders.concat([folder])
+      };
+      let file : Types.VaultFile = { id = "gallery-file-" # Nat.toText(files.size() + 1); folder_id; club = a.club_id; team = a.team_id; name; file_url; size; mime; uploaded_by = caller; created_at_ms = nowMs(); deleted_at_ms = null; deleted_by = null; mini_league_id = null; competition_id = null; is_external_link = false; blob_ref = ?blob_ref };
+      files := files.concat([file]); gallerySourceFiles.add(source, file.id); mediaEvidenceRevision += 1; #Ok(file)
+    } finally { galleryCopyLocks.remove(source); removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func trash_gallery_copy(user : Principal, source : Text, club : Text) : async { #Ok : Bool; #Err : Text } {
+    if (galleryMediaAuthority != ?caller or isFenced(club)) return #Err("Media authority required");
+    await admitAccount(user);
+    let id = gallerySourceFiles.get(source) ?? return #Ok(false);
+    let file = files.find(func f = f.id == id and f.club == club) ?? return #Err("Gallery copy scope mismatch");
+    if (not file.uploaded_by.equal(user) and not (await canWrite(user, club, file.team, file.competition_id))) return #Err("Gallery owner or scoped staff required");
+    if (galleryMediaAuthority != ?caller or isFenced(club) or removalReceiver.denied(user) or files.find(func f = f.id == id) != ?file) return #Err("Gallery copy changed");
+    if (file.deleted_at_ms == null) { files := files.map(func f = if (f.id == id) ({ f with deleted_at_ms = ?nowMs(); deleted_by = ?user }) else f); mediaEvidenceRevision += 1 };
+    #Ok(true)
   };
 
   public shared ({ caller }) func register_file(

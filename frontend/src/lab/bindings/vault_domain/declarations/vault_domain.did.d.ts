@@ -95,6 +95,11 @@ export interface Main {
     { 'Ok' : [] | [VaultFolder] } |
       { 'Err' : string }
   >,
+  'get_gallery_copy' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [VaultFile] } |
+      { 'Err' : string }
+  >,
   'get_pinned_vault' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [PinnedVault] } |
@@ -274,6 +279,11 @@ export interface Main {
     { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
+  'register_gallery_copy' : ActorMethod<
+    [string, string, string, bigint, string, BlobRef],
+    { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
@@ -309,6 +319,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_gallery_media_authority' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_pinned_vault' : ActorMethod<
     [
       string,
@@ -336,6 +351,11 @@ export interface Main {
   'trash_file' : ActorMethod<
     [string],
     { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
+  'trash_gallery_copy' : ActorMethod<
+    [Principal, string, string],
+    { 'Ok' : boolean } |
       { 'Err' : string }
   >,
   'update_folder' : ActorMethod<

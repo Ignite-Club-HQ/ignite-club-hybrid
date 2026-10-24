@@ -33,9 +33,11 @@ vi.mock("@/live/features/media", () => ({
     return {};
   }),
   deleteLiveAsset: vi.fn(),
+  announceLiveGalleryAsset: vi.fn(async () => "queued"),
 }));
 
-const secure = vi.hoisted(() => ({ unlock: vi.fn(), upload: vi.fn() }));
+const secure = vi.hoisted(() => ({ unlock: vi.fn(), upload: vi.fn(), copy: vi.fn() }));
+vi.mock("@/components/media/galleryVaultCopy", () => ({ copyGalleryAssetToVault: secure.copy }));
 vi.mock("@/live/mediaDecrypt", () => ({ resolveIcpBlobObjectUrl: secure.unlock }));
 vi.mock("@/live/mediaUpload", () => ({ tryUploadMediaToBlobStore: secure.upload }));
 
@@ -52,6 +54,7 @@ beforeEach(() => {
   state.assets = [];
   state.registered = [];
   state.scoped = [];
+  secure.copy.mockReset().mockResolvedValue(null);
   secure.unlock.mockReset().mockResolvedValue("blob:authorized-photo");
   secure.upload.mockReset().mockResolvedValue({ url: "https://store.raw.icp0.io/gallery-copy", blobRef: {
     canister: "gallery-store", path: "gallery-copy", content_hash: "encrypted-hash",
@@ -78,6 +81,7 @@ describe("publishChatImageToGallery (ICP)", () => {
 
     expect(result.alreadyPublished).toBe(false);
     expect(result.photoId).toBe("asset-1");
+    expect(secure.copy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ assetId: "asset-1", clubId: "c1", teamId: "t1" }));
 
     expect(state.registered).toHaveLength(1);
     expect(state.registered[0]).toMatchObject({

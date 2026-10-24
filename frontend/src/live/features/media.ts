@@ -194,10 +194,11 @@ export async function addLiveComment(
   assetId: string,
   body: string,
   createdAtMs: number | Date,
+  replyToId?: string | null,
 ) {
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.add_comment(assetId, body, toNat64(createdAtMs)),
+    actor.add_comment_reply(assetId, body, candidOpt(replyToId)),
     "Add comment",
   );
 }
@@ -236,3 +237,35 @@ export async function listLiveGalleryChatCards(
 // Publish a chat image to the club media gallery (MessageActionSheet)
 // ---------------------------------------------------------------------------
 
+
+/** Feed-only hides metadata without deleting the Vault copy or source bytes. */
+export async function removeLiveGalleryAsset(ctx: FeatureBackendContext, assetId: string, mode: 'feed_only' | 'feed_and_vault') {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_gallery_asset(assetId, mode), 'Remove gallery photo');
+}
+export async function announceLiveGalleryAsset(ctx: FeatureBackendContext, assetId: string) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return unwrapCandid(actor.announce_gallery_asset(assetId), 'Queue gallery notification');
+}
+
+export async function recordLiveGalleryView(ctx: FeatureBackendContext, assetId: string) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return unwrapCandid(actor.record_gallery_view(assetId), 'Record gallery view');
+}
+export async function readLiveGalleryViewCounts(ctx: FeatureBackendContext, ids: string[]) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return unwrapCandid(actor.read_gallery_view_counts(ids), 'Read gallery views');
+}
+
+export async function publishLiveGalleryChatCard(ctx: FeatureBackendContext, input: {
+  clubId: string; teamId: string; eventId?: string | null; assetIds: string[]; heroUrl: string; receipt: string;
+}) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  const card = await unwrapCandid(actor.save_gallery_chat_card([], input.clubId, input.teamId,
+    candidOpt(input.eventId), input.receipt, candidOpt(input.assetIds[0]), [input.heroUrl], input.assetIds.length, input.assetIds, false, false), 'Save gallery chat card');
+  const { sendLiveMessage } = await import('./messaging');
+  const { readContentInScope } = await import('../contentRouting');
+  await readContentInScope(ctx, 'messaging', { clubId: input.clubId }, scoped =>
+    sendLiveMessage(scoped, input.teamId, `[gallery:${card.id}]`, input.receipt));
+  return card;
+}

@@ -3,42 +3,12 @@ import { toast } from "sonner";
 import type { NavigateFunction } from "react-router-dom";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
-const ICP_SESSION_KEY = "ignite_icp_internet_identity_session";
-
-/**
- * SIMPLIFICATION: no club→product mapping exists on the identity_access
- * canister, so ICP share-gating uses "does this principal hold any active
- * entitlement" rather than the exact club/team scope. Revisit once ICP
- * club-scoped products exist.
- */
-async function checkIcpProForShare(): Promise<boolean> {
-  try {
-    const raw = localStorage.getItem(ICP_SESSION_KEY);
-    if (!raw) return false;
-    const principal = (JSON.parse(raw) as { principal?: string })?.principal;
-    if (!principal) return false;
-    const [{ getCurrentInternetIdentity }, { isIcpPrincipalPro }] = await Promise.all([
-      import("@/live/internetIdentityAuth"),
-      import("@/live/identityEntitlements"),
-    ]);
-    const identity = await getCurrentInternetIdentity();
-    if (!identity) return false;
-    return await isIcpPrincipalPro(identity, principal);
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Async Pro check used to gate share actions (photos, events).
  * Checks team-level pro first (if team_id given), then club-level.
  * If neither team nor club id is supplied, denies by default.
  */
-// NOTE(ICP pro-access): fail-closed by design — ICP/Internet Identity users
-// have no Supabase session, so this query never runs/returns no rows and the
-// caller sees "not Pro". Whether ICP accounts get real Pro entitlement (and
-// via what canister) is a pending product decision; this is intentionally
-// left as-is (no behavior change) until that's decided.
 export async function checkProForShare(opts: {
   teamId?: string | null;
   clubId?: string | null;
@@ -47,8 +17,23 @@ export async function checkProForShare(opts: {
   let clubId = rawClubId ?? null;
 
   if (resolveAuthBackend() === "icp") {
-    const allowed = await checkIcpProForShare();
-    return { allowed, clubId };
+    if (!teamId && !clubId) return { allowed: false, clubId };
+    try {
+      const { withFeatureBackend } = await import('@/live/featureRouter');
+      return await withFeatureBackend('membership', {
+        supabase: async () => { throw new Error('ICP sharing required'); },
+        icp: async ctx => {
+          const { connectLiveClubDomain } = await import('@/live/domains');
+          const { getLiveTeam } = await import('@/live/features/club');
+          if (teamId && !clubId) clubId = (await getLiveTeam(ctx, teamId))[0]?.club_id ?? null;
+          if (!clubId) return { allowed: false, clubId: null };
+          const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+          const allowance = await actor.get_media_allowance(clubId, teamId ? [teamId] : []);
+          if ('Err' in allowance) throw new Error(allowance.Err);
+          return { allowed: allowance.Ok.premium, clubId };
+        },
+      }, teamId ? { teamId } : { clubId: clubId ?? undefined });
+    } catch { return { allowed: false, clubId }; }
   }
 
   try {
@@ -101,7 +86,7 @@ export async function gateShareWithPro(
       ? "Upgrade your club to Pro to share."
       : "Contact your club admin to upgrade to Pro.",
     action: clubId && opts.navigate
-      ? { label: "Upgrade", onClick: () => opts.navigate!(`/clubs/${clubId}/upgrade`) }
+      ? { label: "Upgrade", onClick: () => opts.navigate?.(`/clubs/${clubId}/upgrade`) }
       : undefined,
   });
   return false;

@@ -2265,6 +2265,20 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
         [],
       ),
+    'relay_gallery_notice' : IDL.Func(
+        [
+          IDL.Principal,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Principal,
+          IDL.Opt(IDL.Principal),
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
     'relay_group_pitch_alert' : IDL.Func(
         [IDL.Vec(IDL.Text), IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
@@ -2595,6 +2609,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_events_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_gallery_media_authority' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

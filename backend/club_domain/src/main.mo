@@ -227,6 +227,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // Governor-set notification_queue canister id for the manual-payment fee
   // reminder fan-out (Phase 3 F6). Fail-closed while unset.
   var notificationQueueCanister : ?Principal;
+  var galleryMediaAuthority : ?Principal;
   var miniLeagueDomainCanister : ?Principal;
   var competitionDomainCanister : ?Principal;
   // Governor-set downstream canister ids for the permanent-delete fan-out.
@@ -5376,6 +5377,42 @@ persistent actor class Main(governorInit : Principal) = this {
     if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
     eventsDomainCanister := ?id;
     #Ok
+  };
+
+  public shared ({ caller }) func set_gallery_media_authority(id : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or Principal.isAnonymous(id)) return #Err("Governor and valid authority required");
+    galleryMediaAuthority := ?id; #Ok
+  };
+  public shared ({ caller }) func relay_gallery_notice(user : Principal, club : Text, team : ?Text, owner : Principal, parent : ?Principal, kind : Text, key : Text, asset_id : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (galleryMediaAuthority != ?caller or isTransferFenced(club)) return #Err("Gallery authority required");
+    if (kind != "photo_uploaded" and kind != "photo_comment" and kind != "photo_reaction" and kind != "comment_reply") return #Err("Invalid gallery notice kind");
+    if (key.size() > 512 or asset_id.size() > 256 or not isMember(user, club) or isExcluded(user, club)) return #Err("Invalid gallery scope");
+    switch team { case (?t) { if (not teams.any(func row = row.id == t and row.club_id == club and row.deleted_at_ms == null)) return #Err("Foreign team") }; case null {} };
+    let eligible = func(p : Principal) : Bool = not Principal.isAnonymous(p) and not p.equal(user) and not removalReceiver.denied(p) and not isExcluded(p, club) and isMember(p, club);
+    var recipients : [Principal] = [];
+    let add = func(p : Principal) { if (eligible(p) and not recipients.any(func x = x.equal(p))) recipients := recipients.concat([p]) };
+    if (kind == "photo_uploaded") {
+      for (grant in acl.roles.values()) {
+        if (grant.club == ?club and (team == null or grant.team == team or grant.role == "club_admin" or grant.role == "committee")) add(grant.user)
+      };
+      for (child in acl.children.values()) {
+        if (child.club_id == ?club and (switch team { case (?t) child.teams.any(func id = id == t); case null true })) {
+          switch (child.parent) { case (?p) add(p); case null {} };
+          for (g in acl.guardians.values()) if (g.child == child.id) add(g.user)
+        }
+      }
+    } else { add(owner); switch parent { case (?p) add(p); case null {} } };
+    if (recipients.size() > 500) return #Err("Gallery audience exceeds bound");
+    if (recipients.size() == 0) return #Ok(0);
+    for (p in recipients.values()) {
+      if (not removalReceiver.enter(p)) return #Err("Recipient fenced");
+      try { await admitAccount(p) } finally { removalReceiver.leave(p) }
+    };
+    if (galleryMediaAuthority != ?caller or isTransferFenced(club) or not isMember(user, club) or isExcluded(user, club) or recipients.any(func p = not eligible(p))) return #Err("Gallery audience changed");
+    let id = notificationQueueCanister ?? return #Err("Queue not configured");
+    let queue : actor { fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
+    let body = switch kind { case ("photo_uploaded") "New photos were shared in your gallery."; case ("photo_reaction") "Someone reacted to your photo."; case ("comment_reply") "Someone replied to your gallery comment."; case _ "Someone commented on your photo." };
+    await (with timeout = 10) queue.fan_out(recipients.map(func p = p.toText()), club, kind, body, "gallery-" # key, ?asset_id)
   };
 
   // Only the already configured events authority can supply its verified

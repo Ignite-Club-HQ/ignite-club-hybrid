@@ -4,7 +4,7 @@ import { writeOnce } from "@/live/clubScope";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Filter, Images, Loader2, MessageCircle, Trash2 } from "lucide-react";
+import { Eye, Filter, Images, Loader2, MessageCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -12,7 +12,9 @@ import type { FeatureBackendContext } from "@/live/featureRouter";
 import {
   addLiveComment,
   addLiveReaction,
-  deleteLiveAsset,
+  removeLiveGalleryAsset,
+  getLiveAsset,
+  getLiveGalleryChatCard,
   listLiveAssetsPage,
   listLiveComments,
   listLiveReactions,
@@ -48,6 +50,9 @@ import { readMediaSources, type MediaSourceStatus } from './mediaSourceState';
 import { updateMemberReaction } from './reactionUpdates';
 import type { MediaPageCursor } from '@/live/mediaPaging';
 import { retainMediaFeed } from './retainMediaFeed';
+import { galleryLinkState, galleryCanModerate } from './galleryNavigation';
+import { useBlockedUsers } from '@/hooks/useBlockedUsers';
+import { BlockUserDialog } from '@/components/BlockUserDialog';
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -75,6 +80,7 @@ interface LiveCommentView {
   text: string;
   user_id: string;
   created_at: string;
+  reply_to_id?: string | null;
   profiles?: { display_name?: string | null; avatar_url?: string | null } | null;
 }
 
@@ -96,6 +102,7 @@ interface LiveMediaPost {
   competitionId: string | null;
   competitionName: string | null;
   caption: string | null;
+  eventId?: string | null;
   createdAtMs: number;
   reactions: LiveReactionView[];
   comments: LiveCommentView[];
@@ -260,6 +267,7 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
     team_id: [] | [string];
     mini_league_id: [] | [string];
     competition_id: [] | [string];
+    event_id?: [] | [string];
     caption: [] | [string];
     album_id: [] | [string];
     blob_ref: [] | [unknown];
@@ -384,6 +392,7 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
         competitionId,
         competitionName: competitionId ? compNameById.get(competitionId) ?? null : null,
         caption: first.caption[0] ?? null,
+        eventId: (first as typeof first & { event_id?: string[] }).event_id?.[0] ?? null,
         createdAtMs: Number(first.created_at_ms),
         reactions,
         comments,
@@ -454,6 +463,13 @@ export function IcpMediaFeedPage() {
   // Home's "Add photos" shortcut and gallery prompts link to /media?upload=1.
   const [searchParams, setSearchParams] = useSearchParams();
   const competitionId = searchParams.get("competition");
+  const link = galleryLinkState(searchParams);
+  const { isBlocked } = useBlockedUsers();
+  const [blockTarget, setBlockTarget] = useState<LiveMediaPost | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
+  const rolesQuery = useQuery({ queryKey: ['icp-gallery-moderation', principal], enabled: !!principal,
+    queryFn: () => withFeatureBackend('membership', { supabase: async () => [], icp: getLiveMyRoleGrants }, { shared: 'person' }) });
+  const canDeletePost = (post: LiveMediaPost) => post.ownerId === principal || galleryCanModerate(rolesQuery.data ?? [], post.clubId, post.teamId);
   useEffect(() => {
     if (searchParams.get("upload") !== "1") return;
     setUploadOpen(true);
@@ -461,16 +477,16 @@ export function IcpMediaFeedPage() {
     next.delete("upload");
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
-  const [selectedClubId, setSelectedClubId] = useState("all");
-  const [selectedTeamId, setSelectedTeamId] = useState("all");
+  const [selectedClubId, setSelectedClubId] = useState(link.clubId ?? "all");
+  const [selectedTeamId, setSelectedTeamId] = useState(link.teamId ?? "all");
   // Follow the top-left club switcher: when the app is filtered to one club,
   // the feed must not show other clubs' media.
   const { activeClubFilter } = useClubTheme();
   const effectiveClubId = activeClubFilter ?? selectedClubId;
   useEffect(() => {
     setSelectedClubId(activeClubFilter ?? "all");
-    setSelectedTeamId("all");
-  }, [activeClubFilter]);
+    setSelectedTeamId(link.teamId ?? "all");
+  }, [activeClubFilter, link.teamId]);
   const [commentPost, setCommentPost] = useState<LiveMediaPost | null>(null);
   const [commentInput, setCommentInput] = useState("");
   const [pendingComments, setPendingComments] = useState<Record<string, LiveCommentView[]>>({});
@@ -485,6 +501,8 @@ export function IcpMediaFeedPage() {
     // Last visit's feed shows instantly; the fresh one replaces it when ready.
     initialData: () => readFeedSnapshot(principal),
     initialDataUpdatedAt: 0,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     queryFn: async ({ signal }) => {
       const continuation: MediaFeedContinuation = {};
       continuationRef.current = continuation;
@@ -546,6 +564,8 @@ export function IcpMediaFeedPage() {
       return rows.filter(c => !c.deleted).map(galleryCommentFromReceipt);
     },
     retry: 1,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   const reactionEdits = useRef(new Map<string, number>());
@@ -603,18 +623,19 @@ export function IcpMediaFeedPage() {
   });
 
   const commentMutation = useMutation({
-    mutationFn: async ({ post, text }: { post: LiveMediaPost; text: string }) =>
+    mutationFn: async ({ post, text, replyToId }: { post: LiveMediaPost; text: string; replyToId?: string }) =>
       withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
-        icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text, Date.now()),
+        icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text, Date.now(), replyToId),
       }, writeOnce({ clubId: post.clubId })),
     // Show the comment the moment Send is tapped; the feed refetch replaces
     // it with the canister copy (the sheet reads the live post).
-    onMutate: ({ post, text }) => {
+    onMutate: ({ post, text, replyToId }) => {
       setCommentError(null);
       setCommentInput("");
+      setReplyingTo(null);
       const pendingId = `pending-${Date.now()}`;
       setPendingComments((prev) => ({
         ...prev,
@@ -625,6 +646,7 @@ export function IcpMediaFeedPage() {
             text,
             user_id: principal ?? "",
             created_at: new Date().toISOString(),
+            reply_to_id: replyToId ?? null,
             profiles: { display_name: "You", avatar_url: null },
           },
         ],
@@ -663,14 +685,14 @@ export function IcpMediaFeedPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (post: LiveMediaPost) =>
+    mutationFn: async ({ post, mode }: { post: LiveMediaPost; mode: 'feed_only' | 'feed_and_vault' }) =>
       withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
         icp: async (ctx) => {
           for (const asset of post.assets) {
-            await deleteLiveAsset(ctx, asset.id);
+            await removeLiveGalleryAsset(ctx, asset.id, mode);
           }
         },
       }, writeOnce({ photoId: post.representativeAssetId })),
@@ -679,12 +701,50 @@ export function IcpMediaFeedPage() {
     onSettled: invalidate,
   });
 
-  const resolvedUrls = useResolvedAssetUrls(feedQuery.data?.posts);
+  const linkedFeedAsset = useQuery({ queryKey: ['icp-gallery-linked-post', principal, link.photoId], enabled: !!principal && !!link.photoId,
+    queryFn: async () => withFeatureBackend('media', { supabase: async () => null, icp: async ctx => {
+      const asset = await getLiveAsset(ctx, link.photoId ?? ''); if (!asset) return null;
+      const source = liveAssetSource(asset);
+      return { id: asset.album_id[0] ?? asset.id, representativeAssetId: asset.id, assets: [{ id: asset.id, url: LOADING_PHOTO_URL,
+        sourceUrl: source.kind === 'icp-blob' ? source.url : null, loading: true, isVideo: asset.mime.startsWith('video/') }],
+        ownerId: asset.owner.toText(), ownerName: 'Member', ownerAvatarUrl: null, clubId: asset.club_id, clubName: '',
+        teamId: asset.team_id[0] ?? null, teamName: null, miniLeagueId: asset.mini_league_id[0] ?? null, miniLeagueName: null,
+        competitionId: asset.competition_id[0] ?? null, competitionName: null, eventId: asset.event_id[0] ?? null,
+        caption: asset.caption[0] ?? null, createdAtMs: Number(asset.created_at_ms), reactions: [], comments: [] } satisfies LiveMediaPost;
+    } }, { photoId: link.photoId ?? undefined }) });
+  const galleryCardQuery = useQuery({ queryKey: ['icp-gallery-card', principal, link.cardId], enabled: !!principal && !!link.cardId,
+    queryFn: () => withFeatureBackend('media', { supabase: async () => null,
+      icp: ctx => getLiveGalleryChatCard(ctx, link.cardId ?? '') }, { galleryCardId: link.cardId ?? undefined }) });
+  const cardPhotoQuery = useQuery({ queryKey: ['icp-gallery-card-assets', principal, link.cardId], enabled: !!principal && !!galleryCardQuery.data,
+    queryFn: async () => {
+      const card = galleryCardQuery.data; if (!card) return [];
+      return withFeatureBackend('media', { supabase: async () => [], icp: async ctx => {
+        const rows = await Promise.all(card.photo_ids.slice(0, 200).map(id => getLiveAsset(ctx, id)));
+        return rows.flatMap(asset => { if (!asset) return []; const source = liveAssetSource(asset);
+          return [{ id: asset.album_id[0] ?? asset.id, representativeAssetId: asset.id, assets: [{ id: asset.id, url: LOADING_PHOTO_URL,
+            sourceUrl: source.kind === 'icp-blob' ? source.url : null, loading: true, isVideo: asset.mime.startsWith('video/') }], ownerId: asset.owner.toText(),
+            ownerName: 'Member', ownerAvatarUrl: null, clubId: asset.club_id, clubName: '', teamId: asset.team_id[0] ?? null, teamName: null,
+            miniLeagueId: asset.mini_league_id[0] ?? null, miniLeagueName: null, competitionId: asset.competition_id[0] ?? null, competitionName: null,
+            eventId: asset.event_id[0] ?? null, caption: asset.caption[0] ?? null, createdAtMs: Number(asset.created_at_ms), reactions: [], comments: [] } satisfies LiveMediaPost]; });
+      } }, { clubId: card.club_id });
+    } });
+  const allFeedPosts = useMemo(() => {
+    const loaded = feedQuery.data?.posts ?? [];
+    const linked = linkedFeedAsset.data;
+    const known = new Set(loaded.flatMap(p => p.assets.map(a => a.id)));
+    const extra = (cardPhotoQuery.data ?? []).filter(p => !known.has(p.representativeAssetId));
+    return [...(linked && !known.has(link.photoId ?? '') ? [linked] : []), ...extra, ...loaded];
+  }, [feedQuery.data?.posts, linkedFeedAsset.data, link.photoId, cardPhotoQuery.data]);
+  const resolvedUrls = useResolvedAssetUrls(allFeedPosts);
   const posts = useMemo(() => {
-    const all = feedQuery.data?.posts ?? [];
+    const all = allFeedPosts;
     return all
       .filter((post) => {
+        if (isBlocked(post.ownerId)) return false;
+        if (link.cardId && !post.assets.some(a => galleryCardQuery.data?.photo_ids.includes(a.id))) return false;
+        if (link.eventId && post.eventId !== link.eventId) return false;
         if (competitionId && post.competitionId !== competitionId) return false;
+
         if (effectiveClubId !== "all" && post.clubId !== effectiveClubId) return false;
         if (selectedTeamId === "all") return true;
         if (selectedTeamId.startsWith("ml:")) return post.miniLeagueId === selectedTeamId.slice(3);
@@ -699,7 +759,7 @@ export function IcpMediaFeedPage() {
           resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id], loading: false } : a,
         ),
       }));
-  }, [feedQuery.data?.posts, effectiveClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url]);
+  }, [allFeedPosts, link.photoId, effectiveClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url, isBlocked, link.eventId, link.cardId, galleryCardQuery.data]);
 
   // Read comments from the freshest feed copy, not the snapshot taken when
   // the sheet opened, and keep just-sent comments until the canister has them.
@@ -737,6 +797,15 @@ export function IcpMediaFeedPage() {
     [posts],
   );
 
+  const handledLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!link.photoId) { handledLink.current = null; return; }
+    if (handledLink.current === `${link.photoId}:${link.comments}`) return;
+    const index = flatPhotos.findIndex(photo => photo.id === link.photoId);
+    if (index < 0) return;
+    handledLink.current = `${link.photoId}:${link.comments}`;
+    if (link.comments) setCommentPost(flatPhotos[index].post); else setLightboxIndex(index);
+  }, [link.photoId, link.comments, flatPhotos]);
   const startLongPress = (post: LiveMediaPost) => {
     pressTimerRef.current = window.setTimeout(() => setActionPost(post), 500);
   };
@@ -906,6 +975,7 @@ export function IcpMediaFeedPage() {
           competitions={options.competitions}
           defaultClubId={selectedClubId !== "all" ? selectedClubId : undefined}
           defaultCompetitionId={competitionId ?? undefined}
+          defaultEventId={link.eventId ?? undefined}
         />
       )}
 
@@ -931,17 +1001,17 @@ export function IcpMediaFeedPage() {
         teamId={commentPost?.teamId}
         clubId={commentPost?.clubId}
         miniLeagueId={commentPost?.miniLeagueId}
-        comments={activeComments}
+        comments={activeComments.filter(c => !isBlocked(c.user_id))}
         commentInput={commentInput}
         onCommentInputChange={setCommentInput}
         onSubmitComment={() => {
           const text = commentInput.trim();
-          if (commentPost && text) commentMutation.mutate({ post: commentPost, text });
+          if (commentPost && text) commentMutation.mutate({ post: commentPost, text, replyToId: replyingTo?.id });
         }}
         isPending={commentMutation.isPending}
         errorMessage={commentError ?? (commentsQuery.isError ? "We couldn't refresh comments. Please reopen to try again." : null)}
-        replyingTo={null}
-        onSetReplyingTo={() => undefined}
+        replyingTo={replyingTo}
+        onSetReplyingTo={reply => setReplyingTo(reply ?? null)}
         currentUserId={principal}
       />
 
@@ -952,12 +1022,12 @@ export function IcpMediaFeedPage() {
         currentIndex={lightboxIndex ?? 0}
         onNavigate={(i) => setLightboxIndex(i)}
         canDelete={
-          lightboxIndex !== null && flatPhotos[lightboxIndex]?.post.ownerId === principal
+          lightboxIndex !== null && !!flatPhotos[lightboxIndex] && canDeletePost(flatPhotos[lightboxIndex].post)
         }
         onDelete={(photoId) => {
           const entry = flatPhotos.find((p) => p.id === photoId);
           if (entry) {
-            deleteMutation.mutate(entry.post);
+            setActionPost(entry.post);
             setLightboxIndex(null);
           }
         }}
@@ -969,27 +1039,32 @@ export function IcpMediaFeedPage() {
             <SheetTitle>Photo options</SheetTitle>
           </SheetHeader>
           <div className="mt-4 space-y-2">
-            {actionPost && actionPost.ownerId === principal ? (
+            {actionPost && canDeletePost(actionPost) ? (
               <Button
                 variant="destructive"
                 className="w-full"
                 disabled={deleteMutation.isPending}
                 onClick={() => {
-                  deleteMutation.mutate(actionPost);
+                  deleteMutation.mutate({ post: actionPost, mode: 'feed_only' });
                   setActionPost(null);
                 }}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                Delete
+                Remove from feed only
               </Button>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Only the person who shared this can delete it.
               </p>
             )}
+            {actionPost && canDeletePost(actionPost) && <Button variant="destructive" className="w-full" disabled={deleteMutation.isPending}
+              onClick={() => { deleteMutation.mutate({ post: actionPost, mode: 'feed_and_vault' }); setActionPost(null); }}>Delete from feed and Vault</Button>}
+            {actionPost && actionPost.ownerId !== principal && <Button variant="outline" className="w-full"
+              onClick={() => { setBlockTarget(actionPost); setActionPost(null); }}>Block {actionPost.ownerName}</Button>}
           </div>
         </SheetContent>
       </Sheet>
+      {blockTarget && <BlockUserDialog open onOpenChange={open => !open && setBlockTarget(null)} userId={blockTarget.ownerId} userName={blockTarget.ownerName} />}
     </div>
   );
 }
@@ -1018,6 +1093,8 @@ function MediaPostArticle({ post: base, principal, userId, profile, index, onRea
   const details = useQuery({
     queryKey: ['icp-media-post-details', principal, base.clubId, base.representativeAssetId],
     enabled: !!principal && visible,
+    refetchInterval: visible ? 30_000 : false,
+    refetchIntervalInBackground: false,
     queryFn: () => withFeatureBackend('media', {
       supabase: async () => { throw new Error('unreachable'); },
       icp: async ctx => {
@@ -1037,6 +1114,20 @@ function MediaPostArticle({ post: base, principal, userId, profile, index, onRea
     }, { clubId: base.clubId }),
     retry: 1,
   });
+  const viewRecorded = useRef<string | null>(null);
+  useEffect(() => {
+    if (!principal || !visible || viewRecorded.current === `${principal}:${base.representativeAssetId}`) return;
+    viewRecorded.current = `${principal}:${base.representativeAssetId}`;
+    void withFeatureBackend('media', { supabase: async () => undefined, icp: async ctx => {
+      const { recordLiveGalleryView } = await import('@/live/features/media');
+      return recordLiveGalleryView(ctx, base.representativeAssetId);
+    } }, writeOnce({ clubId: base.clubId })).catch(() => undefined);
+  }, [visible, principal, base.clubId, base.representativeAssetId]);
+  const views = useQuery({ queryKey: ['icp-gallery-views', principal, base.clubId, base.representativeAssetId], enabled: !!principal && visible,
+    queryFn: () => withFeatureBackend('media', { supabase: async () => [], icp: async ctx => {
+      const { readLiveGalleryViewCounts } = await import('@/live/features/media');
+      return readLiveGalleryViewCounts(ctx, [base.representativeAssetId]);
+    } }, { clubId: base.clubId }), refetchInterval: 30_000, refetchIntervalInBackground: false });
   const post = details.data ? { ...base, ...details.data, comments: mergeGalleryComments(details.data.comments, base.comments) } : base;
   return <div ref={articleRef}>
               <article className="overflow-hidden rounded-xl border border-border bg-card">
@@ -1100,7 +1191,7 @@ function MediaPostArticle({ post: base, principal, userId, profile, index, onRea
                   <p className="px-3 pb-3 text-sm">{post.caption}</p>
                 )}
               </article>
-    {visible && details.isPending && <div role="status" className="py-1 text-xs text-muted-foreground">Loading comments and reactions…</div>}
+    {views.data?.[0] && <div className="flex items-center gap-1 text-xs text-muted-foreground py-1"><Eye className="h-3 w-3" />{Number(views.data[0][1])}</div>}
     {details.isError && <Button variant="ghost" size="sm" onClick={() => details.refetch()}>Retry comments and reactions</Button>}
   </div>;
 }

@@ -235,6 +235,11 @@ async function publishChatImageToGalleryIcp(
     throw err;
   }
 
+  const { copyGalleryAssetToVault } = await import('@/components/media/galleryVaultCopy');
+  await copyGalleryAssetToVault(ctx, { assetId: asset.id, clubId, teamId: teamId || null, file: blob,
+    name: `Chat photo.${inferExtension(blob)}` }).catch(() => undefined);
+  const { announceLiveGalleryAsset } = await import('@/live/features/media');
+  await announceLiveGalleryAsset(ctx, asset.id).catch(() => undefined);
   return { photoId: asset.id, alreadyPublished: false };
 }
 

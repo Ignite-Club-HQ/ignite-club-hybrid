@@ -103,7 +103,7 @@ export function ReportContentDialog({
             const { submitLiveContentReport } = await import("@/live/features/messaging");
             await submitLiveContentReport(ctx, subjectKind, subjectId, conversationId ?? null, reasonLabel, details);
           },
-        }, conversationId ? writeOnce({ conversationId }) : { shared: "app" });
+        }, conversationId ? writeOnce({ conversationId }) : subjectKind === "photo" ? writeOnce({ photoId: subjectId }) : { shared: "app" });
         toast.success("Report submitted successfully. Our team will review it.");
         handleClose();
         return;

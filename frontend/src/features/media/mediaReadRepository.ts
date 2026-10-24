@@ -213,7 +213,7 @@ export async function fetchMediaComments(
           photo_id: comment.asset_id,
           user_id: comment.author.toText(),
           text: comment.body,
-          reply_to_id: null,
+          reply_to_id: comment.reply_to_id?.[0] ?? null,
           reply_to: null,
           created_at: new Date(Number(comment.created_at_ms)).toISOString(),
           profiles: null,

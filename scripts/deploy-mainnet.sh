@@ -108,6 +108,7 @@ EVENTS_DOMAIN="$(cid events_domain)"
 COMPETITION_DOMAIN="$(cid competition_domain)"
 MINI_LEAGUE_DOMAIN="$(cid mini_league_domain)"
 VAULT_DOMAIN="$(cid vault_domain)"
+MEDIA_METADATA="$(cid media_metadata)"
 PII_ACCESS_CONTROL="$(cid pii_access_control)"
 IDENTITY_ACCESS="$(cid identity_access)"
 
@@ -123,6 +124,11 @@ icp canister call pii_access_control set_club_domain_canister "(principal \"$CLU
 icp canister call pii_access_control set_competition_domain_canister "(principal \"$COMPETITION_DOMAIN\")" -e "$ICP_ENV"
 icp canister call vault_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
 icp canister call club_points_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
+
+echo "==> Wiring: gallery authorities (metadata -> club/Vault)"
+icp canister call media_metadata set_gallery_authorities "(principal \"$CLUB_DOMAIN\", principal \"$VAULT_DOMAIN\")" -e "$ICP_ENV"
+icp canister call club_domain set_gallery_media_authority "(principal \"$MEDIA_METADATA\")" -e "$ICP_ENV"
+icp canister call vault_domain set_gallery_media_authority "(principal \"$MEDIA_METADATA\")" -e "$ICP_ENV"
 
 echo "==> Wiring: messaging_domain <-> notification_queue"
 icp canister call messaging_domain set_notification_queue_canister "(principal \"$NOTIFICATION_QUEUE\")" -e "$ICP_ENV"
