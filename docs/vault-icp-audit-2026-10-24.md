@@ -36,6 +36,15 @@ Vault is **not fully closed or released**. Two independent source audits traced 
 - Google Drive import/sync remains an actual external integration gap; blocking Supabase calls in ICP mode is not a replacement for Google authorization.
 - Restored Internet Identity startup now reads routing configuration on-chain without consulting Supabase. Signed-out and email startup preserve existing hybrid precedence; purchase verification remains an approved payment exception.
 
+### Further cleanup continuation
+
+- Vault cleanup now delegates the original path/hash to the configured store under freshly verified caller authority. The client no longer performs a hash read followed by unrestricted path deletion; unknown outcomes retain the same intent without automatic replay.
+- Repeated pending/completed cleanup is scoped and idempotent, preserves original trash timestamps and clears dangling file pins. Store deletion rejects pending same-path uploads in both local and retained modes. New registrations/restores cannot adopt a path reserved for cleanup.
+- Retained deletion pins the original hash through preparation, rechecks transfer fencing before physical removal and acknowledges accounting settlement before Vault metadata removal. Legacy hashless pending retained receipts fail closed for explicit reconciliation.
+- Account erasure preserves exact original store/path/hash/scope without file names in a new migration-backed cleanup record. Governor-only bounded reads and exact erased-file reconciliation preserve unknown/replacement outcomes; successful retries never duplicate credits. These are operator APIs, not an automatic sweep or proof of whole-account physical erasure.
+- Disposable real canisters verify cleanup resume after upgrade, completed acknowledgement replay, outsider refusal, pending-upload refusal, replacement preservation, blocked new references, erased-provenance persistence and exact cleanup. A separate real retained-authority/store test verifies unavailable authority preserves ciphertext and balances, upgrade retains the receipt, and retry reduces retained bytes exactly once. Focused app tests pass in ICP and Supabase modes; interfaces and isolation guards pass.
+- Still unfinished: durable pre-upload intent/PII-result reconciliation, automated retention and club/team deletion handoff, Google Drive authorization, device-memory-independent large downloads, protected both-group upgrades and signed-in acceptance. No mainnet changes performed.
+
 The original audit findings below are retained as a reference; several are addressed by the completion batch, and the unresolved limits above must not be described as closed.
 
 ### Authorization and inventory
