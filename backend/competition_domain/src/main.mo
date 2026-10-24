@@ -24,6 +24,7 @@ import Iter "mo:core/Iter";
 import Types "types";
 import Welcome "welcomeSettings";
 import FixtureOperations "fixtureOperations";
+import BroadcastPlan "broadcastPlan";
 import ScorePrivacy "scorePrivacy";
 import ClubSnapshot "clubSnapshot";
 
@@ -181,6 +182,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var emailJobs : Map.Map<Text, EmailOutbox.Job>;
   var emailWorkers : [Principal];
   var fixtureReceipts : Map.Map<Text, FixtureOperations.Receipt>;
+  var broadcastPlans:Map.Map<Text,[BroadcastPlan.Target]>;
   transient let emailOutbox = EmailOutbox.Queue(emailJobs);
   public shared ({ caller }) func set_email_workers(workers : [Principal]) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller) or workers.size() > 10 or workers.any(func p = Principal.isAnonymous(p))) return #Err("Governor and valid workers required");
@@ -2893,7 +2895,6 @@ persistent actor class Main(governorInit : Principal) = this {
       var receipt = switch (Map.get(broadcastDeliveries, Text.compare, key)) {
         case (?existing) {
           if (existing.sender != caller or existing.competition != competition or existing.divisions != divisions or existing.title != title or existing.body != body) return #Err("Broadcast operation conflict");
-          if (existing.unknown != null) return #Err("Broadcast outcome unresolved; retain original operation");
           existing
         };
         case null {
@@ -2909,37 +2910,51 @@ persistent actor class Main(governorInit : Principal) = this {
       for (entry in selected.values()) if (not clubIds.any(func id = id == entry.club_id)) clubIds := clubIds.concat([entry.club_id]);
       let host = switch (competitions.find(func c = c.id == competition)) { case null return #Err("Competition not found"); case (?c) c.club_id };
       if (host != "" and not clubIds.any(func id = id == host)) clubIds := clubIds.concat([host]);
+      let plan=switch(Map.get(broadcastPlans,Text.compare,key)) {
+        case (?p)p;
+        case null {
+          if(receipt.unknown!=null or receipt.completed.size()!=0)return #Err("Historical broadcast lacks exact plan; retain unresolved evidence");
+          var targets:[BroadcastPlan.Target]=[];
+          for(club in clubIds.values()) {
+            let teams=selected.filter(func e = e.club_id==club).map(func e = e.team_id);
+            var authority=if(club==host)clubDomainCanister else null;
+            for(team in teams.values())for(id in participantAuthorities().values()) {
+              let service:actor{read_competition_team_access:shared query(Text,Principal)->async{club_id:?Text;is_member:Bool;can_manage:Bool}}=actor(id.toText());
+              let access=try{await service.read_competition_team_access(team,caller)}catch(_){return #Err("Broadcast ownership unavailable")};
+              if(access.club_id==?club){if(authority!=null and authority!=?id)return #Err("Ambiguous broadcast owner");authority:=?id}
+            };
+            let id=authority??return #Err("Broadcast club owner unavailable");
+            targets:=targets.concat([{club;authority=id;teams;officials=if(club==host)roles.filter(func r = r.competition_id==competition).map(func r = r.user)else []}])
+          };
+          await syncForCompetition(caller,competition);
+          if(removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller,competition) or not selected.all(func e = entries.any(func current = current==e)) or Map.get(broadcastDeliveries,Text.compare,key)!=?receipt)return #Err("Broadcast planning changed");
+          Map.add(broadcastPlans,Text.compare,key,targets);targets
+        }
+      };
+      switch(receipt.unknown) {case (?club){
+        let target=plan.find(func t = t.club==club)??return #Err("Original broadcast target missing");
+        let service:actor{reconcile_competition_broadcast:shared(Text,Text)->async{#Ok:?Nat16;#Err:Text}}=actor(target.authority.toText());
+        let recovered=switch(try{await service.reconcile_competition_broadcast(club,receipt.broadcast_id)}catch(_){return #Err("Broadcast outcome still unresolved")}){case(#Err(e))return #Err(e);case(#Ok(v))v};
+        if(Map.get(broadcastDeliveries,Text.compare,key)!=?receipt or removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller,competition))return #Err("Broadcast reconciliation changed");
+        let n=recovered??return #Err("No acceptance proof; original broadcast remains locked");
+        receipt:={receipt with unknown=null;completed=receipt.completed.concat([(club,n)])};Map.add(broadcastDeliveries,Text.compare,key,receipt)
+      };case null {}};
       var count : Nat = 0;
       for ((_, n) in receipt.completed.values()) count += Nat16.toNat(n);
-      for (club in clubIds.values()) {
+      for (target in plan.values()) {
+        let club=target.club;
         if (not receipt.completed.any(func pair = pair.0 == club)) {
-          let clubTeams = selected.filter(func e = e.club_id == club).map(func e = e.team_id);
-          var authority : ?Principal = null;
-          if (club == host) authority := clubDomainCanister;
-          for (team in clubTeams.values()) {
-            let candidates = participantAuthorities();
-            for (id in candidates.values()) {
-              let service : actor { read_competition_team_access : shared query (Text, Principal) -> async { club_id : ?Text; is_member : Bool; can_manage : Bool } } = actor(id.toText());
-              let access = try { await (with timeout = 10) service.read_competition_team_access(team, caller) } catch (_) { return #Err("Broadcast ownership unavailable") };
-              if (access.club_id == ?club) {
-                if (authority != null and authority != ?id) return #Err("Ambiguous broadcast owner");
-                authority := ?id
-              }
-            }
-          };
-          let id = authority ?? return #Err("Broadcast club owner unavailable");
+          let clubTeams=target.teams;let id=target.authority;
           await syncForCompetition(caller, competition);
-          if (removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller, competition) or not selected.all(func e = entries.any(func current = current == e))) return #Err("Broadcast access changed");
-          let officials = if (club == host) roles.filter(func r = r.competition_id == competition).map(func r = r.user) else [];
+          if (removalReceiver.denied(caller) or compFenced(competition) or not canManageCompetition(caller, competition)) return #Err("Broadcast access changed");
+          let officials=target.officials;
           if (Map.get(broadcastDeliveries, Text.compare, key) != ?receipt) return #Err("Broadcast operation already active");
           receipt := { receipt with unknown = ?club }; Map.add(broadcastDeliveries, Text.compare, key, receipt);
           let service : actor { relay_competition_broadcast : shared (Principal, Text, Text, [Text], [Principal], Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
           let reply = try { await (with timeout = 10) service.relay_competition_broadcast(caller, club, competition, clubTeams, officials, body, receipt.broadcast_id) } catch (_) { return #Err("Broadcast outcome unresolved; retain original operation") };
           switch reply {
             case (#Err(e)) {
-              receipt := { receipt with unknown = null };
-              Map.add(broadcastDeliveries, Text.compare, key, receipt);
-              return #Err("Broadcast not queued: " # e)
+              return #Err("Broadcast unresolved; retain exact receipt: " # e)
             };
             case (#Ok(n)) { count += Nat16.toNat(n); receipt := { receipt with unknown = null; completed = receipt.completed.concat([(club, n)]) }; Map.add(broadcastDeliveries, Text.compare, key, receipt) }
           }
