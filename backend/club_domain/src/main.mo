@@ -2707,6 +2707,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let existing = competitionRecovery(club);
     if (snap.competition_recovery == null and (existing.seasons.size() > 0 or existing.mail.size() > 0 or existing.relays.size() > 0)) return #Err("Legacy snapshot omits competition recovery");
     let recovery : CompetitionRecovery = snap.competition_recovery ?? ({ seasons = []; copies = []; assignments = []; clones = []; invites = []; mail = []; relays = [] });
+    if (recovery.relays.any(func pair = erasedBroadcastRelays.get(pair.0) != null or subjectsInRelay(pair.1))) return #Err("Snapshot restores erased broadcast proof");
     if (recovery.mail.any(func pair = switch (Map.get(emailJobs, Text.compare, pair.0)) { case (?old) old != pair.1; case null false }) or recovery.relays.any(func pair = switch (Map.get(broadcastRelayReceipts, Text.compare, pair.0)) { case (?old) old != pair.1; case null false })) return #Err("Snapshot must not roll back delivery evidence");
     let owns = func(id : Text) : Bool = recovery.seasons.any(func x = x.id == id and x.club_id == club);
     if (recovery.seasons.any(func x = x.club_id != club) or recovery.copies.any(func x = not owns(x.0) or not snap.teams.any(func t = t.id == x.1) or not snap.teams.any(func t = t.id == x.2)) or recovery.assignments.any(func x = not owns(x.season_id) or not snap.teams.any(func t = t.id == x.team_id)) or recovery.clones.any(func pair = not owns(pair.1.source) or not owns(pair.1.season_id)) or recovery.invites.any(func i = i.club_id != club) or recovery.mail.any(func pair = pair.0 != pair.1.id or not recovery.invites.any(func i = i.id == pair.1.resource)) or recovery.relays.any(func pair = pair.1.club != club or pair.0 != club # "\u{1f}" # pair.1.key)) return #Err("Foreign competition recovery records");
@@ -2911,6 +2912,9 @@ persistent actor class Main(governorInit : Principal) = this {
       broadcastRelayReceipts.remove(key);
     };
     #Ok(affected.size())
+  };
+  func subjectsInRelay(r : BroadcastRelay.Receipt) : Bool {
+    broadcastErasureSubjects.get(r.user) != null or r.officials.any(func p = broadcastErasureSubjects.get(p) != null) or broadcastErasureSubjects.entries().any(func pair = r.audience.any(func user = BroadcastErasure.matches([pair.0], user)))
   };
 
   // Self-service erasure revokes all linked principals' club authority.
