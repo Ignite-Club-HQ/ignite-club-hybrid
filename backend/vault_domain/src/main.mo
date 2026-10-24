@@ -1426,7 +1426,7 @@ persistent actor class Main(governorInit : Principal) = this {
     for (f in files.values()) {
       if (f.uploaded_by.equal(caller)) {
         deletionIntents.add(f.id, "erased:" # (f.blob_ref.map(func ref = ref.content_hash) ?? "external"));
-        switch f.blob_ref { case (?ref) cleanupRecords.add(f.id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #erased }); case null {} }
+        switch (f.blob_ref) { case (?ref) cleanupRecords.add(f.id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #erased }); case null {} }
       }
     };
     var removed : Nat = 0;
