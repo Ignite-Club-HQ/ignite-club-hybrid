@@ -47,7 +47,7 @@ try {
   assert.ok('Err' in await vault.actor.read_vault_file_page('club-a', [], [], [], [], false, 200n, [first.revision]));
   club.actor.setPrincipal(governor);
   const fresh = ok(await club.actor.export_acl());
-  ok(await club.actor.replace_acl(fresh.acl_version, { ...fresh.acl, roles: roles.filter(r => !r.user.equals(committee)) }));
+  ok(await club.actor.replace_acl(fresh.acl_version, { ...fresh.acl, roles: roles.filter(r => r.user.toText() !== committee.toText()) }));
   vault.actor.setPrincipal(committee);
   assert.deepEqual(ok(await vault.actor.read_account_get_file('private-file')), []);
   vault.actor.setPrincipal(governor);

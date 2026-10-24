@@ -8,6 +8,7 @@ import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
+import Option "mo:core/Option";
 import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
@@ -588,7 +589,6 @@ persistent actor class Main(governorInit : Principal) = this {
       if (switch (a.blob_ref) { case (?ref) ref.path == blob_ref.path and ref.canister == blob_ref.canister; case null false }) return #Err("Vault copy requires separate encrypted bytes");
       let original = a.blob_ref ?? return #Err("Gallery source has no configured store");
       if (blob_ref.canister != original.canister) return #Err("Gallery copy store mismatch");
-      let store : actor { get_content_hash : shared query (Text) -> async ?Text } = actor(original.canister);
       if (not (await verifyFileBytes(caller, blob_ref, size))) return #Err("Private copy not acknowledged by source store");
       // Recheck source access after every external authorization await.
       let current = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(row)) row };
@@ -651,6 +651,7 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     if (not (await canWrite(caller, club, team, competition_id))) return #Err("Club or competition admin required");
     // folder_id "" = vault root (same convention as move_file).
+    if (deletionIntents.get(id) != null) return #Err("File identity already removed or cleanup pending");
     if (not valid(id) or folder_id.size() > 128 or not valid(club)) return #Err("Invalid file fields");
     if (not validLong(name, 160) or not validLong(file_url, 2048) or not validLong(mime, 128)) return #Err("Invalid file fields");
     switch (team) { case (?t) { if (not valid(t)) return #Err("Invalid team") }; case null {} };
@@ -971,6 +972,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (files.find(func row = row.id == id) != ?f or isFenced(f.club)) return #Err("File changed");
     if (deletionIntents.get(id) != null) return #Err("Cleanup outcome requires reconciliation");
     let ref = f.blob_ref ?? return #Err("File provenance unavailable");
+    if (files.any(func other = other.id != id and other.blob_ref == f.blob_ref)) return #Err("Shared file bytes require reference reconciliation");
     if (not vaultStores.any(func id = id.toText() == ref.canister)) return #Err("Original store not configured");
     deletionIntents.add(id, ref.content_hash);
     let hidden = { f with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
@@ -993,7 +995,7 @@ persistent actor class Main(governorInit : Principal) = this {
       files := files.filter(func row = row.id != id);
       let sources = gallerySourceFiles.entries().filter(func entry = entry.1 == id).toArray();
       for ((source, _) in sources.values()) gallerySourceFiles.remove(source);
-      deletionIntents.remove(id); mediaEvidenceRevision += 1; #Ok
+      deletionIntents.add(id, "removed:" # (f.blob_ref.map(func ref = ref.content_hash) ?? "external")); mediaEvidenceRevision += 1; #Ok
     } finally { removalReceiver.leave(caller) }
   };
 
