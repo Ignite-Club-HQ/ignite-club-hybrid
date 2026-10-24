@@ -9,6 +9,8 @@ import {
   listLiveEvents,
   getLiveGameResult,
   getLivePlayerStatsReport,
+  listLiveDetailedGamePlayerStats,
+  readLiveEventHonours,
 } from "@/live/features/events";
 
 /**
@@ -209,10 +211,27 @@ async function fetchReportExtrasIcp(
       const matches: ReportMatch[] = [];
       const scorersByPlayer: Record<string, ScorerAgg> = {};
       for (const event of scopedEvents as any[]) {
-        const result = await getLiveGameResult(ctx, event.id);
+        const [result,assignments,stats] = await Promise.all([getLiveGameResult(ctx,event.id),readLiveEventHonours(ctx,event.id),listLiveDetailedGamePlayerStats(ctx,event.id)]);
+        const {listLiveProfilesByIds}=await import("@/live/features/identityAccessClient");
+        const accountIds=[...assignments.captains,...assignments.goalkeepers].flatMap(a=>"account" in a.player?[a.player.account]:[]);
+        const profiles=await listLiveProfilesByIds(ctx,accountIds);
+        const names=new Map(profiles.map(p=>[p.account_id,p.display_name]));
+        const nameFor=(a:(typeof assignments.captains)[number])=>"account" in a.player?names.get(a.player.account)??"Player":"Player";
+        for(const stat of stats) {
+          const key=playerKey(stat.user_id[0],stat.child_id);if(!key)continue;
+          const gkSeconds=Object.entries(stat.position_minutes??{}).reduce((total,[position,seconds])=>total+(isGoalkeeperPosition(position)?seconds:0),0);
+          if(gkSeconds>0)bump(honours,key,"gkSeconds",gkSeconds);
+          if(gkSeconds>0 || stat.positions_played.some(isGoalkeeperPosition))bump(honours,key,"gkMatches");
+        }
         const gr = result && result.length ? result[0] : null;
-        const homeScore = gr?.home_score == null ? null : Number(gr.home_score);
-        const awayScore = gr?.away_score == null ? null : Number(gr.away_score);
+        const homeScore = gr?.scores_hidden || gr?.home_score == null ? null : Number(gr.home_score);
+        const awayScore = gr?.scores_hidden || gr?.away_score == null ? null : Number(gr.away_score);
+        const parseArray=(text:unknown):unknown[]=>{if(typeof text!=="string")return [];try{const row:unknown=JSON.parse(text);return Array.isArray(row)?row:[]}catch{return []}};
+        const scorers:ReportScorer[]=gr?.scores_hidden?[]:parseArray(gr?.player_stats_json).flatMap(raw=>{
+          if(!raw || typeof raw!=="object")return [];const r=raw as Record<string,unknown>;
+          return typeof r.id==="string" && r.id!=="__own__" && typeof r.name==="string" && typeof r.goals==="number" && Number.isFinite(r.goals) && r.goals>0?[{id:r.id,name:r.name,goals:r.goals}]:[];
+        });
+        for(const scorer of scorers){const previous=scorersByPlayer[scorer.id];scorersByPlayer[scorer.id]={name:scorer.name,goals:(previous?.goals??0)+scorer.goals,games:(previous?.games??0)+1}}
         const outcome =
           homeScore == null || awayScore == null
             ? null
@@ -231,12 +250,12 @@ async function fetchReportExtrasIcp(
           homeScore,
           awayScore,
           result: outcome as ReportMatch["result"],
-          periodScores: [],
-          captainNames: [],
+          periodScores: gr?.scores_hidden?[]:normalisePeriods(parseArray(gr?.period_scores_json)),
+          captainNames: assignments.captains.map(nameFor),
           pomNames: gr?.mvp_player_name?.[0] ? [gr.mvp_player_name[0]] : [],
-          goalkeeperNames: [],
-          playerGoals: 0,
-          scorers: [],
+          goalkeeperNames: assignments.goalkeepers.map(nameFor),
+          playerGoals: gr?.scores_hidden?0:stats.reduce((total,s)=>total+Number(s.goals_scored),0),
+          scorers,
         });
       }
 

@@ -1,6 +1,7 @@
 import Map "mo:core/Map";
 import Text "mo:core/Text";
 import Nat64 "mo:core/Nat64";
+import Iter "mo:core/Iter";
 module {
   public type Job = { id : Text; kind : Text; resource : Text; ciphertext : Text; state : Text; attempt : Nat; worker : ?Principal; provider_id : Text; created_at_ms : Nat64 };
   public class Queue(jobs : Map.Map<Text, Job>) {
@@ -8,7 +9,7 @@ module {
       switch (Map.get(jobs, Text.compare, id)) {
         case (?j) { if (j.state != "pending") return #Err("Email operation already retained; no replay"); if (j.kind != kind or j.resource != resource or j.ciphertext != ciphertext) return #Err("Email operation conflict"); #Ok };
         case null {
-          let active=Map.entries(jobs).filter(func pair = pair.1.state=="pending" or pair.1.state=="processing" or pair.1.state=="unknown").size();
+          var active=0;for((_,j) in Map.entries(jobs))if(j.state=="pending" or j.state=="processing" or j.state=="unknown")active+=1;
           if (active >= 10000 or Map.size(jobs) >= 100_000 or id.size() == 0 or id.size() > 256 or ciphertext.size() > 16000) return #Err("Email queue capacity or input limit");
           Map.add(jobs, Text.compare, id, { id; kind; resource; ciphertext; state = "pending"; attempt = 0; worker = null; provider_id = ""; created_at_ms = now }); #Ok
         }
@@ -33,13 +34,13 @@ module {
     };
     public func scrub(matches : Job -> Bool) : Nat {
       var count=0;
-      for((id,j) in Map.entries(jobs).toArray().values()) {
+      for((id,j) in Iter.toArray(Map.entries(jobs)).values()) {
         if(matches(j)) {Map.add(jobs,Text.compare,id,{j with ciphertext="";resource="";state=if(j.state=="pending")"cancelled" else j.state});count+=1}
       };count
     };
     public func compact(cursor : ?Text,limit : Nat) : {next_cursor:?Text;scanned:Nat} {
       var scanned=0;var last:?Text=null;
-      for((id,j) in Map.entries(jobs).toArray().values()) {
+      for((id,j) in Map.entries(jobs)) {
         if(switch cursor {case (?c)id > c;case null true}) {
           if(scanned >= limit)return {next_cursor=last;scanned};
           scanned+=1;last:=?id;
