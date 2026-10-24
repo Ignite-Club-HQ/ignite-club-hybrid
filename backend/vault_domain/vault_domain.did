@@ -97,6 +97,11 @@ type Main =
                                              Err: text;
                                              Ok: Backup;
                                            });
+   create_backup_summary: (backup_label: text) ->
+    (variant {
+       Err: text;
+       Ok: BackupSummary;
+     });
    create_folder: (id: text, club: text, team: opt text, parent_id: opt text,
     name: text, restricted_roles: vec text, mini_league_id: opt text,
     competition_id: opt text, sort_order: nat32, description: opt text,
@@ -302,6 +307,11 @@ type Main =
        Err: text;
        Ok: Receipt;
      });
+   read_backup_page: (id: text, offset: nat, expected: opt nat) ->
+    (variant {
+       Err: text;
+       Ok: BackupPage;
+     });
    read_club_media_references: (club: text, offset: nat, expected:
     opt nat) -> (variant {
                    Err: text;
@@ -444,6 +454,15 @@ type BackupSummary =
    file_count: nat;
    folder_count: nat;
    id: text;
+ };
+type BackupPage = 
+ record {
+   files: vec VaultFile;
+   folders: vec VaultFolder;
+   next: opt nat;
+   offset: nat;
+   revision: nat;
+   summary: BackupSummary;
  };
 type Backup = 
  record {
