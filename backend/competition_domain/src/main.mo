@@ -1019,8 +1019,8 @@ persistent actor class Main(governorInit : Principal) = this {
     if (compFenced(competition_id)) return #Err("Club is temporarily locked for a transfer");
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (home_team == away_team or not valid(home_team) or not valid(away_team)) return #Err("Invalid match teams");
-    let home_ok = entries.any(func(entry) = entry.competition_id == competition_id and entry.team_id == home_team);
-    let away_ok = entries.any(func(entry) = entry.competition_id == competition_id and entry.team_id == away_team);
+    let home_ok = entries.any(func(entry) = entry.competition_id == competition_id and entry.team_id == home_team and (entry.status == "accepted" or entry.status == "registered"));
+    let away_ok = entries.any(func(entry) = entry.competition_id == competition_id and entry.team_id == away_team and (entry.status == "accepted" or entry.status == "registered"));
     if (not home_ok or not away_ok) return #Err("Both teams must be registered");
     let game : Types.Match = {
       id = "match-" # competition_id # "-" # Nat.toText(matches.size() + 1);
@@ -1053,6 +1053,11 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (matchFenced(match_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let competition_id = switch (matches.find(func item = item.id == match_id)) {
+      case null return #Err("Match not found"); case (?item) item.competition_id;
+    };
+    await syncForCompetition(caller, competition_id);
+    if (removalReceiver.denied(caller) or matchFenced(match_id)) return #Err("Match access changed");
     var found_idx : ?Nat = null;
     var idx = 0;
     for (item in matches.values()) {
@@ -1698,11 +1703,15 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Competition not found") };
       case (?_competition) {
         let hasCompetitionRole = roles.any(func(r) = r.user.equal(caller) and r.competition_id == competition_id);
-        let enteredClubRole = entries.any(func(e) =
-          e.competition_id == competition_id and (e.status == "accepted" or e.status == "registered") and
-          roles.any(func(r) = r.user.equal(caller) and r.competition_id == e.club_id)
-        );
-        if (not (isGovernor(caller) or hasCompetitionRole or enteredClubRole)) return #Err("Competition membership required");
+        var enteredMember = false;
+        let accepted = entries.filter(func e = e.competition_id == competition_id and (e.status == "accepted" or e.status == "registered"));
+        if (accepted.size() > 500) return #Err("Participant inventory too large");
+        for (entry in accepted.values()) {
+          let access = await teamAccess(caller, entry.team_id);
+          if (removalReceiver.denied(caller) or compFenced(competition_id)) return #Err("Competition access changed");
+          if (access.is_member and entries.any(func current = current == entry)) enteredMember := true;
+        };
+        if (not (isGovernor(caller) or hasCompetitionRole or enteredMember)) return #Err("Competition membership required");
         let enabled = switch (competitionWelcomeSettings.find(func(row) = row.competition_id == competition_id)) {
           case (?row) row.enabled;
           case null false;
@@ -1807,6 +1816,10 @@ persistent actor class Main(governorInit : Principal) = this {
       case null #Err("Join link not found");
       case (?link) {
         if (link.revoked) return #Err("Join link revoked");
+        let competition = switch (competitions.find(func item = item.id == link.competition_id)) {
+          case null return #Err("Competition not found"); case (?item) item;
+        };
+        if (competition.status == "archived" or compFenced(link.competition_id)) return #Err("Competition unavailable");
         let grant : Types.RoleGrant = { user = caller; role = link.role; competition_id = link.competition_id; team_id = link.team_id };
         if (not roles.any(func(item) = item.user.equal(caller) and item.role == link.role and item.competition_id == link.competition_id and item.team_id == link.team_id)) {
           roles := roles.concat([grant]);
@@ -1869,6 +1882,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case null #Err("invalid_token");
       case (?link) {
         if (link.revoked) return #Err("invalid_token");
+        if (link.role == "referee" or link.role == "committee" or link.role == "committee_member") return #Err("Team entry link required");
         let competition = switch (competitions.find(func(item) = item.id == link.competition_id)) {
           case (?c) c;
           case null return #Err("Competition not found");
@@ -2666,9 +2680,12 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
-  public query ({ caller }) func list_competition_broadcasts(competition_id : Text) : async { #Ok : [Types.Broadcast]; #Err : Text } {
-    denyLegacyAccountQuery();
+  public shared ({ caller }) func list_competition_broadcasts(competition_id : Text) : async { #Ok : [Types.Broadcast]; #Err : Text } {
     auth(caller);
+    await admitAccount(caller);
+    await syncForCompetition(caller, competition_id);
+    let permitted = await participantVisible(caller, competition_id);
+    if (not permitted or removalReceiver.denied(caller) or compFenced(competition_id)) return #Err("Competition access forbidden");
     #Ok(broadcasts.filter(func(item) = item.competition_id == competition_id).reverse())
   };
 
@@ -2950,6 +2967,9 @@ persistent actor class Main(governorInit : Principal) = this {
 
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     auth(caller);
+    await syncForCompetition(caller, competition_id);
+    let permitted = await participantVisible(caller, competition_id);
+    if (not permitted or removalReceiver.denied(caller) or compFenced(competition_id)) return #Err("Competition access forbidden");
     #Ok(broadcasts.filter(func(item) = item.competition_id == competition_id).reverse())
   
     } finally { removalReceiver.leave(caller) };
