@@ -1256,7 +1256,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if (transferFences.size() > 0) return #Err("Restore is blocked while a club transfer is in progress");
       let backup = backups.find(func b = b.id == id) ?? return #Err("Backup not found");
       if (backupRestoreLocks.get(key) != null) return #Err("Backup restore already in progress");
-      let progress = backupRestoreProgress.get(key) ?? { next = 0; restored = 0; skipped = 0; complete = false };
+      let progress = backupRestoreProgress.get(key) ?? ({ next = 0; restored = 0; skipped = 0; complete = false });
       if (offset > progress.next) return #Err("Restore cursor not acknowledged");
       if (offset < progress.next or progress.complete) return #Ok(progress);
       backupRestoreLocks.add(key, true);
