@@ -64,6 +64,7 @@ try {
   vault.actor.setPrincipal(governor);
   const copy = { canister: store.canisterId.toText(), path: 'clubs/club-a/vault/gallery-private', content_hash: 'private-hash' };
   assert.ok('Err' in await vault.actor.register_gallery_copy(asset.id, 'photo.jpg', 'https://private.example/photo', 5n, 'image/jpeg', copy));
+  assert.ok('Err' in await vault.actor.register_gallery_copy(asset.id, 'photo.jpg', 'https://private.example/photo', 5n, 'image/jpeg', { ...copy, canister: vault.canisterId.toText() }));
   // Enable the existing authoritative club subscription, not a global personal entitlement.
   const sub = { club_id: 'club-a', is_pro: true, is_pro_football: false, admin_pro_override: true, admin_pro_football_override: false,
     expires_at_ms: [], is_trial: false, trial_ends_at_ms: [], plan: 'usd_v2_3_teams', team_limit: [3], updated_at_ms: 1n };
@@ -72,10 +73,18 @@ try {
     const t = type.display(); sub[name] = t.startsWith('opt') ? [] : t === 'bool' ? false : t === 'text' ? '' : 0n;
   }
   club.actor.setPrincipal(governor); ok(await club.actor.save_club_subscription(sub));
+  assert.ok('Err' in await vault.actor.register_gallery_copy(asset.id, 'photo.jpg', 'https://private.example/photo', 5n, 'image/jpeg', { ...copy, content_hash: 'wrong' }));
   const registered = ok(await vault.actor.register_gallery_copy(asset.id, 'photo.jpg', 'https://private.example/photo', 5n, 'image/jpeg', copy));
   assert.equal(ok(await vault.actor.register_gallery_copy(asset.id, 'photo.jpg', 'https://private.example/photo', 5n, 'image/jpeg', copy)).id, registered.id);
+  media.actor.setPrincipal(member);
+  const own = ok(await media.actor.register_asset('club-a', 'photo', 'image/jpeg', 'owned', 'clubs/club-a/gallery/owned', 'club', 99_999_999_999_999n));
+  ok(await media.actor.set_asset_scope(own.id, ['team-gallery'], [], [], [], [], ['album-owned']));
+  const card = ok(await media.actor.save_gallery_chat_card([], 'club-a', 'team-gallery', [], 'gallery-receipt', [own.id], [], 1, [own.id], false, false));
+  assert.equal(ok(await media.actor.save_gallery_chat_card([], 'club-a', 'team-gallery', [], 'gallery-receipt', [own.id], [], 1, [own.id], false, false)).id, card.id);
+  assert.ok('Err' in await media.actor.save_gallery_chat_card([], 'club-a', 'foreign-team', [], 'gallery-foreign', [own.id], [], 1, [own.id], false, false));
+  media.actor.setPrincipal(governor);
   ok(await media.actor.remove_gallery_asset(asset.id, 'feed_only'));
-  assert.equal((await media.actor.list_assets('club-a')).length, 0);
+  assert.equal((await media.actor.list_assets('club-a')).filter(a => a.id === asset.id).length, 0);
   assert.deepEqual(await media.actor.get_asset(asset.id), []);
   assert.deepEqual(await media.actor.list_comments(asset.id), []);
   assert.equal(ok(await vault.actor.get_gallery_copy(asset.id))[0].deleted_at_ms.length, 0);
@@ -86,6 +95,6 @@ try {
   media.actor.setPrincipal(governor);
   await pic.upgradeCanister({ canisterId: media.canisterId, wasm: resolve(root, 'backend/media_metadata/.mops/.build/media_metadata.wasm'), sender: governor,
     arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
-  assert.equal((await media.actor.list_assets('club-a')).length, 0);
+  assert.equal((await media.actor.list_assets('club-a')).filter(a => a.id === asset.id).length, 0);
   console.log('PASS: replies/foreign denial, upload notice dedup/inbox, spoofed gallery notices refused, exact scoped Pro, private-copy dedup, feed-only retention, staff feed+Vault deletion and memory-preserving upgrade.');
 } finally { await pic?.tearDown(); await server.stop(); }
