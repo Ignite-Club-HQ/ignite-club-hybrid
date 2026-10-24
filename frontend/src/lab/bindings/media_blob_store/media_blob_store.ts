@@ -218,6 +218,7 @@ export interface media_blob_storeInterface {
      */
     cycles_balance(): Promise<bigint>;
     delete_blob(path: string): Promise<Result>;
+    delete_vault_blob(subject: Principal, path: string, expected_hash: string): Promise<Result>;
     enable_retained_media_quota(): Promise<Result>;
     enable_shared_media_quota(): Promise<Result>;
     enable_stable_media_storage(): Promise<Result>;
@@ -433,6 +434,10 @@ export class Media_blob_store implements media_blob_storeInterface {
     }
     async delete_blob(arg0: string): Promise<Result> {
         const result = await this.actor.delete_blob(arg0);
+        return from_candid_Result_n1(result);
+    }
+    async delete_vault_blob(arg0: Principal, arg1: string, arg2: string): Promise<Result> {
+        const result = await this.actor.delete_vault_blob(arg0, arg1, arg2);
         return from_candid_Result_n1(result);
     }
     async enable_retained_media_quota(): Promise<Result> {

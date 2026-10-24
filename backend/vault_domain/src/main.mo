@@ -75,6 +75,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var messagingDomainCanister : ?Principal;
   var vaultStores : [Principal];
   var deletionIntents : Map.Map<Text, Text>;
+  type CleanupRecord = { club : Text; team : ?Text; competition : ?Text; blob_ref : Types.BlobRef; state : { #pending; #erased; #complete } };
+  var cleanupRecords : Map.Map<Text, CleanupRecord>;
   var backupRestoreProgress : Map.Map<Text, { next : Nat; restored : Nat; skipped : Nat; complete : Bool }>;
   transient let backupRestoreLocks = Map.empty<Text, Bool>();
 
@@ -634,12 +636,16 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   func verifyFileBytes(user : Principal, ref : Types.BlobRef, size : Nat64) : async Bool {
     let pinned = vaultStores;
+    if (blobCleanupPending(ref)) return false;
     if (not pinned.any(func id = id.toText() == ref.canister)) return false;
     let store : actor { read_vault_blob_evidence : shared (Principal, Text) -> async { #Ok : { owner : Principal; size : Nat; content_hash : Text }; #Err : Text } } = actor(ref.canister);
     let evidence = try { await (with timeout = 10) store.read_vault_blob_evidence(user, ref.path) } catch (_) { return false };
     await admitAccount(user);
-    if (vaultStores != pinned) return false;
+    if (vaultStores != pinned or blobCleanupPending(ref)) return false;
     switch evidence { case (#Ok(e)) e.content_hash == ref.content_hash and e.size == size.toNat(); case (#Err(_)) false }
+  };
+  func blobCleanupPending(ref : Types.BlobRef) : Bool {
+    cleanupRecords.entries().any(func entry = entry.1.state != #complete and entry.1.blob_ref.canister == ref.canister and entry.1.blob_ref.path == ref.path)
   };
 
   public shared ({ caller }) func register_file(
@@ -706,6 +712,9 @@ persistent actor class Main(governorInit : Principal) = this {
       if (not (await verifyFileBytes(caller, ref, size))) return #Err("File byte evidence unavailable or mismatched");
       if (not (await canWrite(caller, club, team, competition_id)) or files.any(func f = f.id == id) or mediaEvidenceRevision != registrationRevision or deletionIntents.get(id) != null or isFenced(club)) return #Err("Registration scope changed");
     } else if (blob_ref != null or size != 0 or not Text.startsWith(file_url, #text "https://")) return #Err("Invalid external link");
+    switch blob_ref { case (?ref) {
+      if (blobCleanupPending(ref)) return #Err("File path cleanup pending")
+    }; case null {} };
     // No await after this check: a removed/restricted destination cannot admit a late upload.
     if (removalReceiver.denied(caller) or isFenced(club) or deletionIntents.get(id) != null or files.any(func f = f.id == id)) return #Err("Registration scope changed");
     switch destination {
@@ -987,18 +996,94 @@ persistent actor class Main(governorInit : Principal) = this {
 
   // Metadata finalization requires byte absence; unknown cleanup keeps the row and intent.
   public shared ({ caller }) func begin_file_cleanup(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
     await admitAccount(caller); auth(caller);
     let f = files.find(func row = row.id == id) ?? return #Err("File not found");
     if (not (await canWrite(caller, f.club, f.team, f.competition_id))) return #Err("Scoped staff required");
     if (files.find(func row = row.id == id) != ?f or isFenced(f.club)) return #Err("File changed");
-    if (deletionIntents.get(id) != null) return #Err("Cleanup outcome requires reconciliation");
     let ref = f.blob_ref ?? return #Err("File provenance unavailable");
     if (files.any(func other = other.id != id and other.blob_ref == f.blob_ref)) return #Err("Shared file bytes require reference reconciliation");
     if (not vaultStores.any(func id = id.toText() == ref.canister)) return #Err("Original store not configured");
+    switch (deletionIntents.get(id)) {
+      case (?hash) {
+        if (hash != ref.content_hash or f.deleted_at_ms == null) return #Err("Cleanup identity changed");
+        cleanupRecords.add(id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #pending });
+        return #Ok(f)
+      };
+      case null {}
+    };
     deletionIntents.add(id, ref.content_hash);
+    cleanupRecords.add(id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #pending });
     let hidden = { f with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
     files := files.map(func row = if (row.id == id) hidden else row); mediaEvidenceRevision += 1;
     #Ok(hidden)
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  // Resume only a previously acknowledged intent; never delete by a browser-supplied path.
+  public shared ({ caller }) func resume_file_cleanup(id : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      let f = switch (files.find(func row = row.id == id)) {
+        case (?row) row;
+        case null {
+          let receipt = cleanupRecords.get(id) ?? return #Err("File not found");
+          if (receipt.state != #complete or not (await canWrite(caller, receipt.club, receipt.team, receipt.competition))) return #Err("Scoped completed cleanup required");
+          if (cleanupRecords.get(id) != ?receipt or isFenced(receipt.club) or removalReceiver.denied(caller)) return #Err("Cleanup scope changed");
+          return #Ok
+        }
+      };
+      let ref = f.blob_ref ?? return #Err("File provenance unavailable");
+      if (deletionIntents.get(id) != ?ref.content_hash or f.deleted_at_ms == null) return #Err("File cleanup required");
+      if (not (await canWrite(caller, f.club, f.team, f.competition_id))) return #Err("Scoped staff required");
+      let pinned = vaultStores;
+      if (not pinned.any(func store = store.toText() == ref.canister) or files.find(func row = row.id == id) != ?f or isFenced(f.club) or removalReceiver.denied(caller)) return #Err("Cleanup scope changed");
+      if (files.any(func other = other.id != id and other.blob_ref == f.blob_ref)) return #Err("Shared file bytes require reference reconciliation");
+      let store : actor { delete_vault_blob : shared (Principal, Text, Text) -> async { #Ok; #Err : Text } } = actor(ref.canister);
+      let result = try { await (with timeout = 10) store.delete_vault_blob(caller, ref.path, ref.content_hash) } catch (_) { return #Err("Cleanup outcome unknown; reconcile same file") };
+      switch result { case (#Err(e)) return #Err(e); case (#Ok) {} };
+      await admitAccount(caller);
+      if (not (await canWrite(caller, f.club, f.team, f.competition_id)) or vaultStores != pinned or files.find(func row = row.id == id) != ?f or deletionIntents.get(id) != ?ref.content_hash or isFenced(f.club) or removalReceiver.denied(caller)) return #Err("Cleanup scope changed");
+      // The store's successful acknowledgement includes retained-accounting settlement.
+      files := files.filter(func row = row.id != id);
+      let sources = gallerySourceFiles.entries().filter(func entry = entry.1 == id).toArray();
+      for ((source, _) in sources.values()) gallerySourceFiles.remove(source);
+      pinned_vaults := pinned_vaults.filter(func pin = pin.vault_file_id != ?id);
+      deletionIntents.add(id, "removed:" # ref.content_hash); mediaEvidenceRevision += 1;
+      cleanupRecords.add(id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #complete });
+      #Ok
+    } finally { removalReceiver.leave(caller) }
+  };
+  // Erased metadata retains only the original cleanup provenance, never file names.
+  // Reads are bounded and governor-only; they do not authorize generic orphan deletion.
+  public shared ({ caller }) func read_cleanup_page(after : Text) : async { #Ok : { items : [(Text, CleanupRecord)]; next : ?Text }; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor required");
+    var items : [(Text, CleanupRecord)] = [];
+    for ((id, record) in cleanupRecords.entriesFrom(after)) {
+      if (id == after and after != "") continue;
+      if (items.size() == 40) return #Ok({ items; next = ?items[39].0 });
+      items := items.concat([(id, record)])
+    };
+    #Ok({ items; next = null })
+  };
+  public shared ({ caller }) func reconcile_erased_file(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor required");
+    let record = cleanupRecords.get(id) ?? return #Err("Cleanup record unavailable");
+    if (record.state == #complete) return #Ok;
+    if (record.state != #erased) return #Err("Erased cleanup required");
+    let ref = record.blob_ref;
+    let pinned = vaultStores;
+    if (not pinned.any(func store = store.toText() == ref.canister) or isFenced(record.club)) return #Err("Cleanup authority unavailable");
+    if (files.any(func file = switch (file.blob_ref) { case (?other) other.canister == ref.canister and other.path == ref.path; case null false })) return #Err("Shared file bytes remain referenced");
+    let store : actor { delete_vault_blob : shared (Principal, Text, Text) -> async { #Ok; #Err : Text } } = actor(ref.canister);
+    let result = try { await (with timeout = 10) store.delete_vault_blob(caller, ref.path, ref.content_hash) } catch (_) { return #Err("Erased cleanup outcome unknown") };
+    switch result { case (#Err(e)) return #Err(e); case (#Ok) {} };
+    if (not isGovernor(caller) or vaultStores != pinned or cleanupRecords.get(id) != ?record or isFenced(record.club)) return #Err("Cleanup authority changed");
+    cleanupRecords.add(id, { record with state = #complete }); mediaEvidenceRevision += 1; #Ok
   };
   public shared ({ caller }) func delete_file_permanent(id : Text) : async { #Ok; #Err : Text } {
     if (not removalReceiver.enter(caller)) return #Err("Account fenced");
@@ -1007,10 +1092,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let f = files.find(func row = row.id == id) ?? return #Err("File not found");
       if (not (await canWrite(caller, f.club, f.team, f.competition_id))) return #Err("Scoped staff required");
       if (not f.is_external_link) {
-        let ref = f.blob_ref ?? return #Err("File provenance unavailable");
-        if (deletionIntents.get(id) != ?ref.content_hash) return #Err("File cleanup required");
-        let store : actor { get_content_hash : shared query (Text) -> async ?Text } = actor(ref.canister);
-        if ((await (with timeout = 10) store.get_content_hash(ref.path)) != null) return #Err("File bytes remain or changed; reconcile cleanup");
+        return #Err("Use acknowledged Vault cleanup; byte absence alone is insufficient");
       };
       if (not (await canWrite(caller, f.club, f.team, f.competition_id)) or files.find(func row = row.id == id) != ?f or isFenced(f.club)) return #Err("Cleanup scope changed");
       files := files.filter(func row = row.id != id);
@@ -1372,7 +1454,10 @@ persistent actor class Main(governorInit : Principal) = this {
     // Metadata erasure must never be undone by another administrator's backup.
     // Physical-byte cleanup remains separately reconciled, not guessed here.
     for (f in files.values()) {
-      if (f.uploaded_by.equal(caller)) deletionIntents.add(f.id, "erased:" # (f.blob_ref.map(func ref = ref.content_hash) ?? "external"));
+      if (f.uploaded_by.equal(caller)) {
+        deletionIntents.add(f.id, "erased:" # (f.blob_ref.map(func ref = ref.content_hash) ?? "external"));
+        switch (f.blob_ref) { case (?ref) cleanupRecords.add(f.id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #erased }); case null {} }
+      }
     };
     var removed : Nat = 0;
     let keepFiles = files.filter(func(f : Types.VaultFile) : Bool = not f.uploaded_by.equal(caller));

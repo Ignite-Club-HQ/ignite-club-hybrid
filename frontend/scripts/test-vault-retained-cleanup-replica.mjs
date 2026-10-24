@@ -1,0 +1,45 @@
+// Real local retained authority/store; never production flags, keys or IDs.
+import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
+import { PocketIc, PocketIcServer } from '@dfinity/pic';
+import { Principal } from '@icp-sdk/core/principal';
+import { IDL } from '@icp-sdk/core/candid';
+import { idlFactory as storeIdl } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
+import { idlFactory as clubIdl } from '../src/lab/bindings/club_domain/declarations/club_domain.did.js';
+const root = resolve(import.meta.dirname, '../..');
+const governor = Principal.fromUint8Array(Uint8Array.from([1,1]));
+const vaultService = Principal.fromUint8Array(Uint8Array.from([2,1]));
+const ok = r => { assert.ok('Ok' in r, r.Err); return r.Ok; };
+const server = await PocketIcServer.start({ binPath: process.env.POCKET_IC_BIN });
+let pic;
+try {
+  pic = await PocketIc.create(server.getUrl());
+  const club = await pic.setupCanister({ idlFactory: clubIdl, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'), sender: governor, controllers: [governor], arg: IDL.encode([IDL.Principal], [governor]), environmentVariables: [{ name: 'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL', value: '1' }] });
+  const wasm = resolve(root, 'backend/media_blob_store/.mops/.build/media_blob_store.wasm');
+  const store = await pic.setupCanister({ idlFactory: storeIdl, wasm, sender: governor, controllers: [governor], environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }, { name: 'IGNITE_MEDIA_RETAINED_LOCAL_REHEARSAL', value: '1' }] });
+  const c = club.actor, s = store.actor; c.setPrincipal(governor); s.setPrincipal(governor);
+  ok(await c.create_club('c', 'Local cleanup', 'local-cleanup', [], []));
+  ok(await c.save_club_subscription({ activated_at_ms: [], admin_pro_football_override: false, admin_pro_override: false, cancelled_at_ms: [], club_id: 'c', expires_at_ms: [], is_pro: true, is_pro_football: false, is_trial: false, plan: 'pro', team_limit: [], trial_ends_at_ms: [] }));
+  ok(await s.set_club_domain_canister(club.canisterId)); ok(await s.set_vault_authority(vaultService)); ok(await c.register_media_quota_store(store.canisterId));
+  const path = 'clubs/c/vault/retained-proof';
+  const upload = ok(await s.begin_upload(path, 'application/pdf', 4n, 1));
+  ok(await s.put_chunk(upload, 0, Uint8Array.from([1,2,3,4]))); const blob = ok(await s.finalize_upload(upload));
+  ok(await c.start_media_quota_cutover()); ok(await c.start_media_retained_cutover());
+  ok(await s.freeze_media_quota()); ok(await s.freeze_retained_media()); ok(await c.import_media_quota_store(store.canisterId));
+  for (let i=0; i<3; i++) ok(await c.import_media_retained_store(store.canisterId));
+  ok(await c.activate_media_quota()); ok(await s.enable_shared_media_quota()); ok(await c.activate_media_retained_quota()); ok(await s.enable_retained_media_quota());
+  assert.equal(ok(await c.read_club_retained_media_bytes('c')).finalized, 4n);
+  s.setPrincipal(vaultService);
+  assert.ok('Err' in await s.delete_vault_blob(governor, path, 'wrong-hash'));
+  await pic.stopCanister({ canisterId: club.canisterId, sender: governor });
+  assert.ok('Err' in await s.delete_vault_blob(governor, path, blob.content_hash));
+  assert.equal((await s.get_content_hash(path))[0], blob.content_hash);
+  await pic.upgradeCanister({ canisterId: store.canisterId, wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  await pic.startCanister({ canisterId: club.canisterId, sender: governor });
+  assert.equal(ok(await c.read_club_retained_media_bytes('c')).finalized, 4n);
+  ok(await s.delete_vault_blob(governor, path, blob.content_hash));
+  ok(await s.delete_vault_blob(governor, path, blob.content_hash));
+  assert.deepEqual(await s.get_content_hash(path), []);
+  assert.equal(ok(await c.read_club_retained_media_bytes('c')).finalized, 0n);
+  console.log('PASS: exact-hash retained deletion preserves bytes/accounting during authority loss; receipt survives upgrade; retry credits exactly once.');
+} finally { await pic?.tearDown(); await server.stop(); }

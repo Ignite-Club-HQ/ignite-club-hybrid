@@ -101,6 +101,17 @@ export const idlFactory = ({ IDL }) => {
     'summary' : BackupSummary,
     'revision' : IDL.Nat,
   });
+  const CleanupRecord = IDL.Record({
+    'club' : IDL.Text,
+    'team' : IDL.Opt(IDL.Text),
+    'blob_ref' : BlobRef,
+    'state' : IDL.Variant({
+      'pending' : IDL.Null,
+      'erased' : IDL.Null,
+      'complete' : IDL.Null,
+    }),
+    'competition' : IDL.Opt(IDL.Text),
+  });
   const Reference = IDL.Record({
     'url' : IDL.Text,
     'path' : IDL.Opt(IDL.Text),
@@ -404,6 +415,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : BackupPage, 'Err' : IDL.Text })],
         [],
       ),
+    'read_cleanup_page' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'next' : IDL.Opt(IDL.Text),
+              'items' : IDL.Vec(IDL.Tuple(IDL.Text, CleanupRecord)),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_club_media_references' : IDL.Func(
         [IDL.Text, IDL.Nat, IDL.Opt(IDL.Nat)],
         [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
@@ -440,6 +464,11 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        [],
+      ),
+    'reconcile_erased_file' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'register_file' : IDL.Func(
@@ -498,6 +527,11 @@ export const idlFactory = ({ IDL }) => {
     'restore_file' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'resume_file_cleanup' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'seal_account_removal' : IDL.Func(

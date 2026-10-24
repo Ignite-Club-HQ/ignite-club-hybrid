@@ -627,25 +627,15 @@ export async function moveLiveVaultFile(
  */
 export async function permanentlyDeleteLiveVaultFile(ctx: FeatureBackendContext, fileId: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  const { listBlobStoreKeys } = await import("../mediaStorage");
-  const { connectLiveBlobStore, deleteBlobFromStore } = await import("../blobStoreUpload");
-  // The canister retains source-bound intent until confirmed byte absence.
-  // A second begin refuses ambiguous cleanup instead of repeating deletion.
   const file = await getLiveVaultFile(ctx, fileId);
   if (file?.is_external_link) return unwrapCandid(actor.delete_file_permanent(fileId), "Delete external link");
-  // Reconcile already-finished bytes without repeating a physical delete.
-  try { return await unwrapCandid(actor.delete_file_permanent(fileId), "Reconcile Vault cleanup"); }
-  catch (error) { if (!(error instanceof Error) || !error.message.includes("File cleanup required")) throw error; }
-  const pinned = await unwrapCandid(actor.begin_file_cleanup(fileId), "Begin Vault cleanup");
-  const ref = pinned.blob_ref[0];
-  if (!ref) throw new Error("Vault file provenance unavailable");
-  const key = listBlobStoreKeys(ctx.target).find(key => ctx.target.canisterIds[key] === ref.canister);
-  if (!key) throw new Error("Original Vault file store is not configured");
-  const { actor: store } = await connectLiveBlobStore(ctx.target, ctx.identity, key);
-  const hash = await store.get_content_hash(ref.path);
-  if (hash[0] !== ref.content_hash) throw new Error("Vault bytes changed; cleanup requires reconciliation");
-  await deleteBlobFromStore(ctx.target, ctx.identity, key, ref.path);
-  return unwrapCandid(actor.delete_file_permanent(fileId), "Confirm Vault cleanup");
+  // Completed and pending intents both reconcile on-chain; never fall back to path-only deletion.
+  try { return await unwrapCandid(actor.resume_file_cleanup(fileId), "Resume Vault cleanup"); }
+  catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("File cleanup required")) throw error;
+  }
+  await unwrapCandid(actor.begin_file_cleanup(fileId), "Begin Vault cleanup");
+  return unwrapCandid(actor.resume_file_cleanup(fileId), "Confirm Vault cleanup");
 }
 
 /**
