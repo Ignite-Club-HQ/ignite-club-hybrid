@@ -86,7 +86,7 @@ export function useChatSharedMedia(
   const enabled = (options?.enabled ?? true) && !!chatId && (!icp || (!!user && initialized));
 
 
-  return useQuery({
+  const mediaQuery = useQuery({
     queryKey: ["chat-shared-media", chatType, chatId, limit, user?.id, icp],
     queryFn: async (): Promise<SharedMediaItem[]> => {
       // ICP branch: conversation ids are the canister's native identifier
@@ -157,22 +157,6 @@ export function useChatSharedMedia(
             }
             items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
             const result = [...new Map(items.map(item => [item.id, item])).values()].slice(0, limit);
-            const profiles = await fetchProfilesWithCache([...new Set(result.map(item => item.author_id))]);
-            const { getLiveVaultFile, getLiveVaultFolder } = await import("@/live/features/vault");
-            await Promise.all(result.map(async item => {
-              const profile = profiles.get(item.author_id);
-              item.author_name = profile?.display_name ?? null;
-              item.author_avatar = profile?.avatar_url ?? null;
-              if (!item.vaultFileId && !item.vaultFolderId) return;
-              try {
-                const fileId = item.vaultFileId, folderId = item.vaultFolderId;
-                const metadata = await withFeatureBackend("vault", {
-                  supabase: async () => null,
-                  icp: vaultCtx => fileId ? getLiveVaultFile(vaultCtx, fileId) : folderId ? getLiveVaultFolder(vaultCtx, folderId, options?.competitionId) : Promise.resolve(null),
-                }, options?.clubId ? { clubId: options.clubId } : fileId ? { vaultFileId: fileId } : { vaultFolderId: folderId ?? "" });
-                if (metadata) item.label = metadata.name;
-              } catch { /* The token remains navigable; destination still checks access. */ }
-            }));
             return result;
           }}, chatType === "dm" || chatType === "broadcast" ? { shared: "person" } : options?.clubId ? { clubId: options.clubId } : chatType === "team" ? { teamId: chatId } : chatType === "club" ? { clubId: chatId } : { conversationId: chatId });
       }
@@ -348,4 +332,35 @@ export function useChatSharedMedia(
     enabled,
     staleTime: 60 * 1000,
   });
+  // Optional labels never hold the actual attachments behind directory/Vault reads.
+  const rows = mediaQuery.data ?? [];
+  const { data: enriched } = useQuery({
+    queryKey: ["chat-shared-media-labels", user?.id, chatId, rows.map(row => row.id).join(","), options?.clubId, options?.competitionId],
+    enabled: enabled && icp && rows.length > 0,
+    queryFn: async () => {
+      const [profiles, vault] = await Promise.all([
+        fetchProfilesWithCache([...new Set(rows.map(row => row.author_id))]).catch(() => new Map()),
+        import("@/live/features/vault"),
+      ]);
+      return Promise.all(rows.map(async row => {
+        const item = { ...row };
+        const profile = profiles.get(item.author_id);
+        item.author_name = profile?.display_name ?? null;
+        item.author_avatar = profile?.avatar_url ?? null;
+        const fileId = item.vaultFileId, folderId = item.vaultFolderId;
+        if (fileId || folderId) {
+          try {
+            const metadata = await withFeatureBackend("vault", {
+              supabase: async () => null,
+              icp: ctx => fileId ? vault.getLiveVaultFile(ctx, fileId) : folderId ? vault.getLiveVaultFolder(ctx, folderId, options?.competitionId) : Promise.resolve(null),
+            }, options?.clubId ? { clubId: options.clubId } : fileId ? { vaultFileId: fileId } : { vaultFolderId: folderId ?? "" });
+            if (metadata) item.label = metadata.name;
+          } catch { /* Navigation still requires destination authorization. */ }
+        }
+        return item;
+      }));
+    },
+    staleTime: 60_000,
+  });
+  return { ...mediaQuery, data: icp && enriched ? enriched : mediaQuery.data };
 }
