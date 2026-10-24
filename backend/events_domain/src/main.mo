@@ -1210,7 +1210,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not manager and (caller.toText() != account_id or not membership.roles.any(func(r) = r.user == caller))) return #Err("Duty completion forbidden");
     if (eventFenced(event_id) or removalReceiver.denied(caller) or not events.any(func(e) = e == event)) return #Err("Event changed");
     let current = duties.find(func(d) = d.event_id == event_id and d.account_id == account_id) ?? return #Err("Duty not found");
-    if (current.completed != true) events := events.map(func(e) = if (e.id == event_id) { e with revision = e.revision + 1; updated_at_ms = nowMs() } else e);
+    if (current.completed != true) events := events.map(func(e) = if (e.id == event_id) ({ e with revision = e.revision + 1; updated_at_ms = nowMs() }) else e);
     setDutyCompleted(event_id, account_id, true)
   
     } finally { removalReceiver.leave(caller) };
@@ -1228,7 +1228,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not manager and (caller.toText() != account_id or not membership.roles.any(func(r) = r.user == caller))) return #Err("Duty completion forbidden");
     if (eventFenced(event_id) or removalReceiver.denied(caller) or not events.any(func(e) = e == event)) return #Err("Event changed");
     let current = duties.find(func(d) = d.event_id == event_id and d.account_id == account_id) ?? return #Err("Duty not found");
-    if (current.completed != false) events := events.map(func(e) = if (e.id == event_id) { e with revision = e.revision + 1; updated_at_ms = nowMs() } else e);
+    if (current.completed != false) events := events.map(func(e) = if (e.id == event_id) ({ e with revision = e.revision + 1; updated_at_ms = nowMs() }) else e);
     setDutyCompleted(event_id, account_id, false)
   
     } finally { removalReceiver.leave(caller) };
@@ -4196,14 +4196,14 @@ persistent actor class Main(governorInit : Principal) = this {
     eventNoticeAttempts := eventNoticeAttempts.concat([{ event_id = event.id; kind; users; key; created_at_ms = timestamp; status = "pending"; queued = 0 }]);
     let body = if (kind == "event_reminder") "Please RSVP for the event" else if (kind == "event_invite") "You have been invited to an event" else if (kind == "event_cancelled") "An event has been cancelled" else "An event duty has been completed";
     let result = try { await (with timeout = 10) service.relay_event_notice(users, event.club_id, kind, body, key, event.id) } catch (_) {
-      eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) { a with status = "unknown" } else a);
+      eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) ({ a with status = "unknown" }) else a);
       return #Err("Notification outcome is unknown; it will not be sent again automatically")
     };
     // Even a downstream error can follow an uncertain write. Retain the hold.
     switch (result) {
-      case (#Err(e)) { eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) { a with status = "unknown" } else a); #Err(e) };
+      case (#Err(e)) { eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) ({ a with status = "unknown" }) else a); #Err(e) };
       case (#Ok(count)) {
-        eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) { a with status = "accepted"; queued = count } else a);
+        eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) ({ a with status = "accepted"; queued = count }) else a);
         if (kind == "event_reminder" and count > 0) {
           reminderLogs := reminderLogs.concat(users.map(func(user) = { id = key # ":" # user; event_id = event.id; channel = "queued"; recipient = user; sent_at_ms = timestamp }));
         };
