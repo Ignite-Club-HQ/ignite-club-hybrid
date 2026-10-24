@@ -1,13 +1,6 @@
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import {
-  addLiveSeriesOccurrence,
-  createLiveEvent,
-  createLiveEventSeries,
-  createLiveOpenDuty,
-  setLiveEventAutoReminder,
-  setLiveEventDuty,
-} from "@/live/features/events";
+import { createLiveEventWithSetup } from "@/live/features/events";
 
 /** Start time for a child occurrence: exact date-time, or the date at the first event's local time. */
 export function occurrenceStartMs(childDate: string, firstStartMs: number): number {
@@ -32,6 +25,8 @@ export function optText(value: unknown): string | null {
 
 export type CreateEventTransactionInput = {
   event: Record<string, unknown>;
+  /** Reuse this ID if the outcome of an earlier create is unknown. */
+  requestId?: string;
   eventDate: string;
   childDates: string[] | null;
   duties: Array<{ name: string; assigned_to: string | null }>;
@@ -89,89 +84,15 @@ export async function createEventTransaction(
       const dutyTeamId = eventRecord.duty_team_id as string | null | undefined;
       const durationMs = Math.max(endsAtMs - startsAtMs, 0) || 3_600_000;
 
-      // Recurring: the browser already computed the exact occurrence dates
-      // (selected weekdays, calendar months, skipped pauses). Create the
-      // series with only the first event, then append each exact date so
-      // ICP matches Supabase occurrence-for-occurrence.
-      if (input.childDates && input.childDates.length > 0) {
-        const { events } = await createLiveEventSeries(ctx, {
-          ...base,
-          // Series records have no address field — carry the address in
-          // location so every occurrence shows it (and its map).
-          location: base.address ?? base.location,
-          // The canister only accepts daily/weekly/fortnightly/monthly. With
-          // untilMs = first start it creates just the first event; the exact
-          // dates are appended below, so the frequency value is cosmetic.
-          frequency: "weekly",
-          firstStartsAtMs: startsAtMs,
-          firstEndsAtMs: startsAtMs + durationMs,
-          untilMs: startsAtMs,
-        });
-        const first = events[0];
-        if (!first) throw new Error("Event series could not be created.");
-        const seriesId = first.series_id?.[0];
-        if (!seriesId) throw new Error("Event series could not be created.");
-        // Everything after the first occurrence runs in the background with
-        // bounded concurrency: each canister update costs ~2s, so awaiting a
-        // season of dates + reminders serially kept the button spinning for
-        // over a minute. The event page opens as soon as the first exists.
-        const dutiesFor = (eventId: string) => input.duties.map((duty) => () =>
-          duty.assigned_to
-            ? setLiveEventDuty(ctx, eventId, duty.assigned_to, duty.name)
-            : createLiveOpenDuty(ctx, eventId, duty.name));
-        const childStarts = input.childDates
-          .map((d) => occurrenceStartMs(d, startsAtMs))
-          .filter((ms) => ms !== startsAtMs);
-        runInBackground([
-          ...dutiesFor(first.id),
-          ...(dutyTeamId ? [() => setLiveEventDutyTeam(ctx, first.id, dutyTeamId)] : []),
-          ...(reminderHours ? [() => setLiveEventAutoReminder(ctx, first.id, reminderHours)] : []),
-          ...childStarts.map((childStart) => async () => {
-            const occ = await addLiveSeriesOccurrence(ctx, seriesId, childStart, childStart + durationMs);
-            if (dutyTeamId) await setLiveEventDutyTeam(ctx, occ.id, dutyTeamId);
-            if (reminderHours) await setLiveEventAutoReminder(ctx, occ.id, reminderHours);
-          }),
-        ], input.onBackgroundDone);
-        return first.id;
-      }
-
-      // No end time (or one before the start) is allowed in the form, but
-      // the canister requires end > start — default to a one-hour event.
-      const created = await createLiveEvent(ctx, { ...base, startsAtMs, endsAtMs: startsAtMs + durationMs });
-
-      // Best-effort duty sync: the canister has no equivalent of the atomic
-      // create_event_with_duties RPC, so duties are written as a separate
-      // sequence of calls after the event exists — atomicity with the event
-      // create is not guaranteed on ICP. Unassigned duties become open-duty
-      // board entries (create_open_duty) rather than being set-duty'd onto an
-      // empty account id.
-      runInBackground([
-        ...input.duties.map((duty) => () =>
-          duty.assigned_to
-            ? setLiveEventDuty(ctx, created.id, duty.assigned_to, duty.name)
-            : createLiveOpenDuty(ctx, created.id, duty.name)),
-        ...(dutyTeamId ? [() => setLiveEventDutyTeam(ctx, created.id, dutyTeamId)] : []),
-        ...(reminderHours ? [() => setLiveEventAutoReminder(ctx, created.id, reminderHours)] : []),
-      ], input.onBackgroundDone);
-
-      return created.id;
+      const dates = [...new Set([startsAtMs, ...(input.childDates ?? []).map(d => occurrenceStartMs(d, startsAtMs))])].sort((a, b) => a - b);
+      if (dates.some(date => !Number.isFinite(date))) throw new Error("Invalid occurrence date");
+      const created = await createLiveEventWithSetup(ctx, {
+        ...base, requestId: input.requestId ?? crypto.randomUUID(),
+        occurrences: dates.map(date => ({ startsAtMs: date, endsAtMs: date + durationMs })),
+        duties: input.duties, dutyTeamId: dutyTeamId ?? null, reminderHours: reminderHours ?? null,
+      });
+      input.onBackgroundDone?.(0);
+      return created.first_event_id;
     },
   }, writeOnce({ clubId: String((input.event as Record<string, unknown>).club_id ?? "") }));
-}
-
-/** Runs follow-up canister writes 6 at a time without blocking the caller. */
-function runInBackground(
-  tasks: Array<() => Promise<unknown>>,
-  onDone?: (failed: number) => void,
-) {
-  if (tasks.length === 0) return;
-  let next = 0;
-  let failed = 0;
-  const worker = async () => {
-    while (next < tasks.length) {
-      const task = tasks[next++];
-      try { await task(); } catch (e) { failed++; console.error("Event follow-up write failed:", e); }
-    }
-  };
-  void Promise.all(Array.from({ length: Math.min(6, tasks.length) }, worker)).then(() => onDone?.(failed));
 }

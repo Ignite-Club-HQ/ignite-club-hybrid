@@ -670,6 +670,18 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Bool],
         [],
       ),
+    'read_event_notification_subjects' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({ 'child' : IDL.Opt(IDL.Text), 'user' : IDL.Text })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],

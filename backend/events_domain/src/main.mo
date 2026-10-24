@@ -30,6 +30,8 @@ import OqlEvents "oqlEvents";
 import HistoryPrivacy "historyPrivacy";
 import PlayhqFeed "playhqFeed";
 import BoardSync "boardSync";
+import EventAudience "eventAudience";
+import EventSetup "eventSetup";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -188,6 +190,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // the last writeLogWindowMs() on every append so it stays bounded instead
   // of growing with total lifetime writes (migration 20261023_000000).
   var activeGameWriteLog : [(Text, Nat64)];
+  var eventSetupReceipts : [(Principal, Text, Blob, EventSetup.Result)];
+  var eventNoticeAttempts : [{ event_id : Text; kind : Text; users : [Text]; key : Text; created_at_ms : Nat64; status : Text; queued : Nat16 }];
+  var scheduleViewPreferences : Map.Map<Principal, Text>;
 
   // Bounded window for activeGameWriteLog (10 minutes) — trimmed on every
   // sync_active_game write so the log never grows with lifetime write count.
@@ -506,6 +511,70 @@ persistent actor class Main(governorInit : Principal) = this {
     events := events.concat([created]); #Ok(created)
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  public shared ({ caller }) func create_event_with_setup(input : EventSetup.Input) : async { #Ok : EventSetup.Result; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      if (not EventSetup.valid(input) or not valid(input.club_id) or not valid(input.title) or not valid(input.description) or not validEventType(input.event_type) or not validLocation(input.location) or not validLocation(input.address) or not validLocation(input.opponent) or not validOptId(input.mini_league_id) or not validRsvpAudience(input.rsvp_audience) or not validRsvpPolicyLists(input.restricted_to_roles, input.target_team_ids)) return #Err("Invalid event setup");
+      let authority = clubDomainCanister ?? return #Err("Club authority unavailable");
+      let club : actor {
+        read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)];
+        get_team : shared query (Text) -> async { #Ok : ?{ club_id : Text; is_active : Bool; archived : Bool; is_shell : Bool; deleted_at_ms : ?Nat64 }; #Err : Text };
+      } = actor(authority.toText());
+      let fresh = try { await (with timeout = 10) club.read_account_list_user_club_roles(caller, input.club_id) } catch (_) { return #Err("Club authority unavailable") };
+      if (not isGovernor(caller) and not fresh.any(func((role, team)) = (role == "club_admin" and team == null) or ((role == "coach" or role == "team_admin") and input.team_id != null and team == input.team_id))) return #Err("Club or team admin required");
+      let membership = switch (await currentEventMembership(input.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(m)) m };
+      for (duty in input.duties.values()) switch (duty.account_id) {
+        case null {};
+        case (?id) { if (not membership.roles.any(func(r) = r.user.toText() == id)) return #Err("Duty assignee is not a current club member") };
+      };
+      var teams : [Text] = input.target_team_ids ?? [];
+      switch (input.team_id) { case (?id) teams := teams.concat([id]); case null {} };
+      switch (input.duty_team_id) { case (?id) teams := teams.concat([id]); case null {} };
+      for (team in teams.values()) {
+        let found = try { await (with timeout = 10) club.get_team(team) } catch (_) { return #Err("Could not validate event team") };
+        switch (found) { case (#Ok(?t)) { if (t.club_id != input.club_id or not t.is_active or t.archived or t.is_shell or t.deleted_at_ms != null) return #Err("Invalid event team") }; case _ return #Err("Event team not found") };
+      };
+      // Revalidate authority and membership after all team awaits. The commit
+      // below contains no await, so no device can see a partially built series.
+      let finalRoles = try { await (with timeout = 10) club.read_account_list_user_club_roles(caller, input.club_id) } catch (_) { return #Err("Club authority unavailable") };
+      if (not isGovernor(caller) and not finalRoles.any(func((role, team)) = (role == "club_admin" and team == null) or ((role == "coach" or role == "team_admin") and input.team_id != null and team == input.team_id))) return #Err("Event permission changed");
+      if (clubDomainCanister != ?authority or isFenced(input.club_id) or removalReceiver.denied(caller)) return #Err("Event setup authority changed");
+      let payload = to_candid(input);
+      switch (eventSetupReceipts.find(func((user, key, _, _)) = user == caller and key == input.request_id)) {
+        case (?(_, _, previous, result)) { if (previous != payload) return #Err("Setup request conflicts with previous payload"); return #Ok(result) };
+        case null {};
+      };
+      let seriesId = if (input.occurrences.size() > 1) ?("ser-" # input.club_id # "-" # series.size().toText()) else null;
+      let base = events.size(); let timestamp = nowMs();
+      let created = Array.tabulate<Types.Event>(input.occurrences.size(), func(i) = {
+        id = "evt-" # input.club_id # "-" # (base + i).toText(); club_id = input.club_id; team_id = input.team_id;
+        title = input.title; description = input.description; event_type = input.event_type; location = input.location;
+        opponent = input.opponent; address = input.address; mini_league_id = input.mini_league_id;
+        cancelled = false; deleted = false; creator = caller; starts_at_ms = input.occurrences[i].starts_at_ms; ends_at_ms = input.occurrences[i].ends_at_ms;
+        series_id = seriesId; revision = 1; updated_at_ms = timestamp; rsvp_audience = input.rsvp_audience;
+        adults_only = input.adults_only; restricted_to_roles = input.restricted_to_roles; target_team_ids = input.target_team_ids
+      });
+      switch (seriesId) { case null {}; case (?id) {
+        let first = created[0]; let last = created[created.size() - 1];
+        series := series.concat([{ id; club_id = input.club_id; team_id = input.team_id; title = input.title; description = input.description; event_type = input.event_type; location = input.location; frequency = "weekly"; first_starts_at_ms = first.starts_at_ms; first_ends_at_ms = first.ends_at_ms; until_ms = last.starts_at_ms; creator = caller; revision = (1 : Nat64); deleted = false; rsvp_audience = input.rsvp_audience; adults_only = input.adults_only; restricted_to_roles = input.restricted_to_roles; target_team_ids = input.target_team_ids }])
+      } };
+      for (event in created.values()) {
+        // Preserve existing creation behavior: assignments belong to the first occurrence.
+        if (event.id == created[0].id) for (duty in input.duties.values()) switch (duty.account_id) {
+          case (?account_id) duties := duties.concat([{ event_id = event.id; account_id; duty = duty.duty; completed = false }]);
+          case null openDuties := openDuties.concat([{ id = "open-" # event.id # "-" # openDuties.size().toText(); event_id = event.id; duty = duty.duty; claimed_by = null; created_at_ms = timestamp }]);
+        };
+        switch (input.duty_team_id) { case null {}; case (?team_id) eventDutyTeams := eventDutyTeams.concat([{ event_id = event.id; team_id }]) };
+        switch (input.reminder_hours) { case null {}; case (?hours_before) autoReminders := autoReminders.concat([{ event_id = event.id; hours_before; sent = false }]) };
+      };
+      events := events.concat(created);
+      let result : EventSetup.Result = { first_event_id = created[0].id; series_id = seriesId; event_ids = created.map(func(e) = e.id) };
+      eventSetupReceipts := eventSetupReceipts.concat([(caller, input.request_id, payload, result)]);
+      #Ok(result)
+    } finally { removalReceiver.leave(caller) }
   };
 
   // Association-scoped fan-out (Phase 3, F5): an association admin creates
@@ -1136,6 +1205,13 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let event = events.find(func(e) = e.id == event_id) ?? return #Err("Event not found");
+    let manager = await freshEventManager(caller, event);
+    let membership = switch (await currentEventMembership(event.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(m)) m };
+    if (not manager and (caller.toText() != account_id or not membership.roles.any(func(r) = r.user == caller))) return #Err("Duty completion forbidden");
+    if (eventFenced(event_id) or removalReceiver.denied(caller) or not events.any(func(e) = e == event)) return #Err("Event changed");
+    let current = duties.find(func(d) = d.event_id == event_id and d.account_id == account_id) ?? return #Err("Duty not found");
+    if (current.completed != true) events := events.map(func(e) = if (e.id == event_id) ({ e with revision = e.revision + 1; updated_at_ms = nowMs() }) else e);
     setDutyCompleted(event_id, account_id, true)
   
     } finally { removalReceiver.leave(caller) };
@@ -1147,6 +1223,13 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let event = events.find(func(e) = e.id == event_id) ?? return #Err("Event not found");
+    let manager = await freshEventManager(caller, event);
+    let membership = switch (await currentEventMembership(event.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(m)) m };
+    if (not manager and (caller.toText() != account_id or not membership.roles.any(func(r) = r.user == caller))) return #Err("Duty completion forbidden");
+    if (eventFenced(event_id) or removalReceiver.denied(caller) or not events.any(func(e) = e == event)) return #Err("Event changed");
+    let current = duties.find(func(d) = d.event_id == event_id and d.account_id == account_id) ?? return #Err("Duty not found");
+    if (current.completed != false) events := events.map(func(e) = if (e.id == event_id) ({ e with revision = e.revision + 1; updated_at_ms = nowMs() }) else e);
     setDutyCompleted(event_id, account_id, false)
   
     } finally { removalReceiver.leave(caller) };
@@ -3939,6 +4022,7 @@ persistent actor class Main(governorInit : Principal) = this {
     duties := duties.filter(func(d) = not inDoomed(d.event_id));
     roster := roster.filter(func(r) = not inDoomed(r.event_id));
     recurrences := recurrences.filter(func(r) = not inDoomed(r.event_id));
+    eventNoticeAttempts := eventNoticeAttempts.filter(func(a) = not inDoomed(a.event_id));
     eventAttendance := eventAttendance.filter(func(a) = not inDoomed(a.event_id));
     eventGuests := eventGuests.filter(func(g) = not inDoomed(g.event_id));
     coachNotes := coachNotes.filter(func(n) = not inDoomed(n.event_id));
@@ -3998,10 +4082,9 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (eventFenced(event_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
-    switch (requireManage(caller, event_id)) {
-      case (#Err(e)) return #Err(e);
-      case (#Ok(event)) { do { let removalReply = await fanOutReminder(event); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply } };
-    };
+    let event = events.find(func(e) = e.id == event_id) ?? return #Err("Event not found");
+    if (not (await freshEventManager(caller, event))) return #Err("Event management forbidden");
+    await fanOutReminder(event, ?caller);
   
     } finally { removalReceiver.leave(caller) };
   };
@@ -4072,39 +4155,143 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
-  func fanOutReminder(event : Types.Event) : async { #Ok : Nat16; #Err : Text } {
-    if (not removalReceiver.enter(event.creator)) return #Err("Event author fenced");
-    try {
-    await admitAccount(event.creator);
-    let event_id = event.id;
-    do {
-      do {
-        switch (notificationQueueCanister) {
-          case null { #Err("Notification queue not configured") };
-          case (?nq) {
-            let responded = rsvps.filter(func(item) = item.event_id == event_id).map(func(item) = item.account_id);
-            var recipients : [Text] = [];
-            for (grant in roles.values()) {
-              if (grant.club_id == event.club_id and (grant.team_id == event.team_id or grant.team_id == null) and recipients.size() < 500) {
-                let accountId = grant.user.toText();
-                if (responded.find(func(r) = r == accountId) == null and recipients.find(func(r) = r == accountId) == null) {
-                  recipients := recipients.concat([accountId]);
-                };
-              };
-            };
-            if (recipients.size() == 0) return #Ok(0);
-            let queue : actor {
-              fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
-            } = actor (Principal.toText(nq));
-            let keyPrefix = "event-reminder-" # event_id # "-" # Nat64.toText(nowMs());
-            try {
-              await queue.fan_out(recipients, event.club_id, "event_reminder", "Reminder: Please RSVP for \"" # event.title # "\"", keyPrefix, ?event_id)
-            } catch (_) { #Err("Notification queue call failed") }
-          };
-        };
-      };
+  func currentEventMembership(club : Text) : async { #Ok : EventAudience.Membership; #Err : Text } {
+    let authority = clubDomainCanister ?? return #Err("Club authority unavailable");
+    let service : actor { read_event_notification_membership : shared (Text) -> async { #Ok : EventAudience.Membership; #Err : Text } } = actor(authority.toText());
+    let result = try { await (with timeout = 10) service.read_event_notification_membership(club) } catch (_) { return #Err("Club membership unavailable") };
+    if (clubDomainCanister != ?authority or isFenced(club)) return #Err("Club membership changed or locked");
+    result
+  };
+  func freshEventManager(caller : Principal, event : Types.Event) : async Bool {
+    let authority = clubDomainCanister ?? return false;
+    let cd : actor { read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)]; read_has_club_membership : shared (Principal, Text) -> async Bool } = actor(authority.toText());
+    let member = try { await (with timeout = 10) cd.read_has_club_membership(caller, event.club_id) } catch (_) { return false };
+    let grants = try { await (with timeout = 10) cd.read_account_list_user_club_roles(caller, event.club_id) } catch (_) { return false };
+    if (clubDomainCanister != ?authority or eventFenced(event.id) or removalReceiver.denied(caller) or not events.any(func(e) = e == event)) return false;
+    isGovernor(caller) or (member and (event.creator == caller or grants.any(func((role, team)) =
+      (role == "club_admin" and team == null) or ((role == "team_admin" or role == "coach") and event.team_id != null and team == event.team_id))))
+  };
+  func eventSubjects(event : Types.Event) : async { #Ok : [EventAudience.Subject]; #Err : Text } {
+    let membership = switch (await currentEventMembership(event.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(m)) m };
+    // Mini-league participation is verified by its owning service, not club mirrors.
+    switch (event.mini_league_id) {
+      case null #Ok(EventAudience.subjects(event, membership));
+      case (?league) {
+        let authority = miniLeagueDomainCanister ?? return #Err("League authority unavailable");
+        let ml : actor { read_event_notification_subjects : shared (Text, Text) -> async { #Ok : [EventAudience.Subject]; #Err : Text } } = actor(authority.toText());
+        let result = try { await (with timeout = 10) ml.read_event_notification_subjects(league, event.club_id) } catch (_) { return #Err("League audience unavailable") };
+        if (miniLeagueDomainCanister != ?authority or eventFenced(event.id) or not events.any(func(e) = e == event)) return #Err("League event changed");
+        result
+      }
+    }
+  };
+  func sendEventNotice(event : Types.Event, kind : Text, selected : [Text], key : Text) : async { #Ok : Nat16; #Err : Text } {
+    let users = selected.filter(func(user) = not eventNoticeAttempts.any(func(a) = a.event_id == event.id and a.kind == kind and a.users.any(func(id) = id == user) and
+      (a.status == "pending" or a.status == "unknown" or (a.status == "accepted" and
+        (if (kind == "event_reminder") nowMs() < a.created_at_ms + 86_400_000 else a.key == key)))));
+    if (users.size() == 0) return #Ok(0);
+    if (users.size() > 500) return #Err("Event notice audience exceeds 500");
+    if (eventFenced(event.id) or not events.any(func(e) = e == event)) return #Err("Event changed or locked");
+    let authority = clubDomainCanister ?? return #Err("Club authority unavailable");
+    let service : actor { relay_event_notice : shared ([Text], Text, Text, Text, Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor(authority.toText());
+    let timestamp = nowMs();
+    eventNoticeAttempts := eventNoticeAttempts.concat([{ event_id = event.id; kind; users; key; created_at_ms = timestamp; status = "pending"; queued = (0 : Nat16) }]);
+    let body = if (kind == "event_reminder") "Please RSVP for the event" else if (kind == "event_invite") "You have been invited to an event" else if (kind == "event_cancelled") "An event has been cancelled" else if (kind == "duty_completed") "An event duty has been completed" else if (kind == "duty_reminder") "You have an event duty coming up" else if (kind == "photo_prompt_reminder") "Add your photos from the game to the team gallery" else "Please RSVP for the game to earn points";
+    let result = try { await (with timeout = 10) service.relay_event_notice(users, event.club_id, kind, body, key, event.id) } catch (_) {
+      eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) ({ a with status = "unknown" }) else a);
+      return #Err("Notification outcome is unknown; it will not be sent again automatically")
     };
-    } finally { removalReceiver.leave(event.creator) };
+    // Even a downstream error can follow an uncertain write. Retain the hold.
+    switch (result) {
+      case (#Err(e)) { eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) ({ a with status = "unknown" }) else a); #Err(e) };
+      case (#Ok(count)) {
+        eventNoticeAttempts := eventNoticeAttempts.map(func(a) = if (a.key == key) ({ a with status = "accepted"; queued = count }) else a);
+        if (kind == "event_reminder" and count > 0) {
+          reminderLogs := reminderLogs.concat(users.map(func(user) = { id = key # ":" # user; event_id = event.id; channel = "queued"; recipient = user; sent_at_ms = timestamp }));
+        };
+        #Ok(count)
+      }
+    }
+  };
+  func fanOutReminder(event : Types.Event, requestedBy : ?Principal) : async { #Ok : Nat16; #Err : Text } {
+    if (event.cancelled or event.deleted or event.starts_at_ms <= nowMs()) return #Err("Event is not awaiting RSVP");
+    let manager = requestedBy ?? event.creator;
+    if (not removalReceiver.enter(manager)) return #Err("Event manager fenced");
+    try {
+      await admitAccount(manager);
+      if (not (await freshEventManager(manager, event))) return #Err("Event manager no longer authorized");
+      let subjects = switch (await eventSubjects(event)) { case (#Err(e)) return #Err(e); case (#Ok(rows)) rows };
+      if (removalReceiver.denied(manager) or not (await freshEventManager(manager, event))) return #Err("Event manager authorization changed");
+      let users = EventAudience.users(EventAudience.unanswered(event, subjects, rsvps));
+      await sendEventNotice(event, "event_reminder", users, "event-reminder-" # event.id # "-" # nowMs().toText())
+    } finally { removalReceiver.leave(manager) }
+  };
+  public shared ({ caller }) func send_individual_event_reminder(event_id : Text, account_id : ?Text, child_id : ?Text) : async { #Ok : Nat16; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
+    try {
+      await admitAccount(caller);
+      let event = events.find(func(e) = e.id == event_id) ?? return #Err("Event not found");
+      if (not (await freshEventManager(caller, event))) return #Err("Event management forbidden");
+      if (event.cancelled or event.deleted or event.starts_at_ms <= nowMs()) return #Err("Event is not awaiting RSVP");
+      let all = switch (await eventSubjects(event)) { case (#Err(e)) return #Err(e); case (#Ok(rows)) rows };
+      let subjects = EventAudience.unanswered(event, all, rsvps).filter(func(s) = switch (child_id) { case (?id) s.child == ?id; case null s.child == null and account_id == ?s.user });
+      if (removalReceiver.denied(caller) or not (await freshEventManager(caller, event))) return #Err("Account or permission changed");
+      let count = await sendEventNotice(event, "event_reminder", EventAudience.users(subjects), "individual-event-reminder-" # event.id # "-" # nowMs().toText());
+      switch (count) { case (#Ok(0)) #Err("No eligible recipients or already reminded in the last 24 hours"); case _ count }
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func read_event_cancellation_audience(event_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
+    try {
+      await admitAccount(caller);
+      let event = events.find(func(e) = e.id == event_id) ?? return #Err("Event not found");
+      if (not (await freshEventManager(caller, event))) return #Err("Event management forbidden");
+      let subjects = switch (await eventSubjects(event)) { case (#Err(e)) return #Err(e); case (#Ok(rows)) rows };
+      if (removalReceiver.denied(caller) or not events.any(func(e) = e == event) or not (await freshEventManager(caller, event))) return #Err("Event or permission changed");
+      #Ok(Nat32.fromNat(EventAudience.users(subjects).size()))
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func notify_event_audience(event_id : Text, kind : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
+    try {
+      await admitAccount(caller);
+      let event = events.find(func(e) = e.id == event_id) ?? return #Err("Event not found");
+      if (kind != "event_invite" and kind != "event_cancelled") return #Err("Invalid event notice");
+      if (kind == "event_cancelled" and not event.cancelled) return #Err("Event is not cancelled");
+      if (not (await freshEventManager(caller, event))) return #Err("Event management forbidden");
+      let subjects = switch (await eventSubjects(event)) { case (#Err(e)) return #Err(e); case (#Ok(rows)) rows };
+      if (removalReceiver.denied(caller) or not (await freshEventManager(caller, event))) return #Err("Account or permission changed");
+      let users = EventAudience.users(subjects).filter(func(id) = id != caller.toText());
+      await sendEventNotice(event, kind, users, kind # "-" # event.id # "-" # (if (kind == "event_invite") "invite" else event.revision.toText()))
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func notify_duty_completion(event_id : Text, account_id : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
+    try {
+      await admitAccount(caller);
+      let event = events.find(func(e) = e.id == event_id) ?? return #Err("Event not found");
+      let manager = await freshEventManager(caller, event);
+      let membership = switch (await currentEventMembership(event.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(m)) m };
+      if (not manager and (caller.toText() != account_id or not membership.roles.any(func(r) = r.user == caller))) return #Err("Duty notification forbidden");
+      if (not duties.any(func(d) = d.event_id == event.id and d.account_id == account_id and d.completed)) return #Err("Duty is not completed");
+      if (removalReceiver.denied(caller)) return #Err("Account fenced");
+      await sendEventNotice(event, "duty_completed", EventAudience.managers(event, membership).filter(func(id) = id != caller.toText()), "duty-completed-" # event.id # "-" # account_id # "-" # event.revision.toText())
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func get_schedule_view() : async ?Text {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
+    try { await admitAccount(caller); auth(caller);
+      if (removalReceiver.denied(caller)) throw Error.reject("Account fenced");
+      scheduleViewPreferences.get(caller)
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func set_schedule_view(view : Text) : async { #Ok; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account fenced");
+    try { await admitAccount(caller); auth(caller);
+      if (removalReceiver.denied(caller)) return #Err("Account fenced");
+      if (view != "list" and view != "calendar") return #Err("Invalid schedule view");
+      scheduleViewPreferences.add(caller, view); #Ok
+    } finally { removalReceiver.leave(caller) }
   };
 
   // ---- Scheduled (auto) RSVP reminders ----
@@ -4186,7 +4373,7 @@ persistent actor class Main(governorInit : Principal) = this {
             if (event.deleted or event.cancelled or event.starts_at_ms <= now) {
               markReminderSent(r.event_id);
             } else if (now >= dueAt) {
-              switch (await fanOutReminder(event)) {
+              switch (await fanOutReminder(event, null)) {
                 case (#Ok(_)) markReminderSent(r.event_id);
                 case (#Err(_)) {};
               };
@@ -4223,14 +4410,8 @@ persistent actor class Main(governorInit : Principal) = this {
         if (event.deleted or event.cancelled or event.starts_at_ms <= now) {
           pointsReminderSent := pointsReminderSent.concat([event.id]);
         } else if (now >= dueAt) {
-          var recipients : [Text] = [];
-          for (grant in roles.values()) {
-            let going = rsvps.any(func(r) = r.event_id == event.id and r.account_id == grant.user.toText() and r.state == "going");
-            if (grant.club_id == event.club_id and (grant.team_id == event.team_id or grant.team_id == null) and not going and recipients.size() < 500) {
-              let user = grant.user.toText();
-              if (not recipients.any(func(id) = id == user)) recipients := recipients.concat([user]);
-            };
-          };
+          let subjects = switch (await eventSubjects(event)) { case (#Err(_)) continue; case (#Ok(rows)) rows };
+          let recipients = EventAudience.users(EventAudience.unanswered(event, subjects, rsvps));
           switch (await fanOutScheduledNotice(event, recipients, "Please RSVP for \"" # event.title # "\" to earn your game points", "event-points-" # event.id)) {
             case (#Ok(_)) {
               if (not pointsReminderSent.any(func(id) = id == event.id)) pointsReminderSent := pointsReminderSent.concat([event.id]);
@@ -4258,58 +4439,30 @@ persistent actor class Main(governorInit : Principal) = this {
     };
   };
 
-  func fanOutScheduledNotice(event : Types.Event, recipients : [Text], body : Text, keyPrefix : Text) : async { #Ok : Nat16; #Err : Text } {
+  func fanOutScheduledNotice(event : Types.Event, recipients : [Text], _body : Text, keyPrefix : Text) : async { #Ok : Nat16; #Err : Text } {
     if (not removalReceiver.enter(event.creator)) return #Err("Event author fenced");
     try {
-    await admitAccount(event.creator);
-    if (recipients.size() == 0) return #Ok(0);
-    switch (notificationQueueCanister) {
-      case null { #Err("Notification queue not configured") };
-      case (?queueCanister) {
-        let queue : actor {
-          fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
-        } = actor (Principal.toText(queueCanister));
-        try {
-          await queue.fan_out(recipients, event.club_id, "event_reminder", body, keyPrefix, ?event.id)
-        } catch (_) { #Err("Scheduled reminder queue call failed") }
-      };
-    }
-    } finally { removalReceiver.leave(event.creator) };
+      await admitAccount(event.creator);
+      if (not (await freshEventManager(event.creator, event))) return #Err("Event author no longer authorized");
+      let kind = if (Text.startsWith(keyPrefix, #text "event-duty")) "duty_reminder" else "event_points_reminder";
+      let membership = switch (await currentEventMembership(event.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(m)) m };
+      let current = recipients.filter(func(id) = membership.roles.any(func(r) = r.user.toText() == id));
+      if (not (await freshEventManager(event.creator, event))) return #Err("Event authority changed");
+      await sendEventNotice(event, kind, current, keyPrefix)
+    } finally { removalReceiver.leave(event.creator) }
   };
 
   func fanOutDutyTeamReminder(event : Types.Event, team_id : Text) : async { #Ok : Nat16; #Err : Text } {
     if (not removalReceiver.enter(event.creator)) return #Err("Event author fenced");
     try {
-    await admitAccount(event.creator);
-    switch (notificationQueueCanister) {
-      case null { #Err("Notification queue not configured") };
-      case (?queueCanister) {
-        var recipients : [Text] = [];
-        for (grant in roles.values()) {
-          if (grant.club_id == event.club_id and grant.team_id == ?team_id and recipients.size() < 500) {
-            let accountId = grant.user.toText();
-            if (not recipients.any(func(id) = id == accountId)) recipients := recipients.concat([accountId]);
-          };
-        };
-        for (assignment in childTeamAssignments.values()) {
-          if (assignment.club_id == event.club_id and assignment.team_id == team_id) {
-            for (guardian in childGuardians.values()) {
-              if (guardian.child_id == assignment.child_id and recipients.size() < 500 and not recipients.any(func(id) = id == guardian.guardian_id)) {
-                recipients := recipients.concat([guardian.guardian_id]);
-              };
-            };
-          };
-        };
-        if (recipients.size() == 0) return #Ok(0);
-        let queue : actor {
-          fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
-        } = actor (Principal.toText(queueCanister));
-        try {
-          await queue.fan_out(recipients, event.club_id, "duty_reminder", "Your team is on duty for \"" # event.title # "\"", "event-duty-team-" # event.id, ?event.id)
-        } catch (_) { #Err("Duty reminder queue call failed") }
-      };
-    }
-    } finally { removalReceiver.leave(event.creator) };
+      await admitAccount(event.creator);
+      if (not (await freshEventManager(event.creator, event))) return #Err("Event author no longer authorized");
+      let membership = switch (await currentEventMembership(event.club_id)) { case (#Err(e)) return #Err(e); case (#Ok(m)) m };
+      let scope : Types.Event = { event with team_id = ?team_id; target_team_ids = null; restricted_to_roles = null; rsvp_audience = null; adults_only = false };
+      let recipients = EventAudience.users(EventAudience.subjects(scope, membership));
+      if (not eventDutyTeams.any(func(a) = a.event_id == event.id and a.team_id == team_id) or not (await freshEventManager(event.creator, event))) return #Err("Duty team changed");
+      await sendEventNotice(event, "duty_reminder", recipients, "event-duty-team-" # event.id)
+    } finally { removalReceiver.leave(event.creator) }
   };
 
   func markReminderSent(event_id : Text) {
@@ -4321,7 +4474,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // members who RSVP'd going (or the whole team if nobody RSVP'd). The 6 h
   // window stops a first deploy from back-filling old games.
   func sweepPhotoPrompts() : async () {
-    let nq = switch (notificationQueueCanister) { case null return; case (?id) id };
+
     let now = nowMs();
     let minAge : Nat64 = 2 * 3_600_000;
     let maxAge : Nat64 = 6 * 3_600_000;
@@ -4331,27 +4484,14 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not removalReceiver.enter(event.creator)) continue;
         try {
         await admitAccount(event.creator);
-        photoPromptsSent := photoPromptsSent.concat([event.id]);
-        sentThisRun += 1;
-        var recipients : [Text] = [];
-        for (r in rsvps.values()) {
-          if (r.event_id == event.id and r.state == "going" and recipients.size() < 500 and recipients.find(func(x) = x == r.account_id) == null) recipients := recipients.concat([r.account_id]);
-        };
-        if (recipients.size() == 0) {
-          for (grant in roles.values()) {
-            if (grant.club_id == event.club_id and grant.team_id == event.team_id and recipients.size() < 500) {
-              let a = grant.user.toText();
-              if (recipients.find(func(x) = x == a) == null) recipients := recipients.concat([a]);
-            };
-          };
-        };
-        if (recipients.size() > 0) {
-          let queue : actor {
-            fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
-          } = actor (Principal.toText(nq));
-          try {
-            ignore await queue.fan_out(recipients, event.club_id, "photo_prompt_reminder", "Got photos from \"" # event.title # "\"? Add them to the team gallery.", "photo-prompt-" # event.id, ?event.id);
-          } catch (_) {};
+        if (not (await freshEventManager(event.creator, event))) continue;
+        let subjects = switch (await eventSubjects(event)) { case (#Err(_)) continue; case (#Ok(rows)) rows };
+        let eligible = subjects.filter(func(subject) = rsvps.any(func(r) = r.event_id == event.id and r.state == "going" and (switch (subject.child) { case null r.account_id == subject.user and r.child_id == null; case (?child) r.child_id == ?child })));
+        let recipients = EventAudience.users(if (eligible.size() > 0) eligible else subjects);
+        if (not (await freshEventManager(event.creator, event))) continue;
+        switch (await sendEventNotice(event, "photo_prompt_reminder", recipients, "photo-prompt-" # event.id)) {
+          case (#Ok(_)) { photoPromptsSent := photoPromptsSent.concat([event.id]); sentThisRun += 1 };
+          case (#Err(_)) {};
         };
         } finally { removalReceiver.leave(event.creator) };
       };

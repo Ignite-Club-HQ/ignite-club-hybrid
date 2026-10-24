@@ -9,7 +9,7 @@ import { resolveReminderRecipients, applyReminderCooldown, normalizeRecipientIds
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
-import { sendLiveEventReminders } from "@/live/features/events";
+import { sendLiveEventReminders, sendLiveIndividualEventReminder, notifyLiveEventAudience } from "@/live/features/events";
 
 import { resolveAuthBackend } from "@/live/authBackendMode";
 const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -89,7 +89,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
           return Number(count);
         },
       }, writeOnce({ eventId: id ?? "" }));
-      if (icpCount !== null) return icpCount;
+      if (icpCount !== null) { if (icpCount === 0) throw new Error("No eligible non-responders, or already reminded in the last 24 hours"); return icpCount; }
 
       // Get all RSVPs for this event
       const { data: existingRsvps, error: rsvpError } = await supabase
@@ -146,7 +146,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
     },
     onSuccess: (count) => {
       toast({ 
-        title: "Reminders sent", 
+        title: resolveAuthBackend() === "icp" ? "Reminders queued" : "Reminders sent", 
         description: `${count} member${count !== 1 ? 's' : ''} have been reminded to RSVP` 
       });
     },
@@ -160,7 +160,15 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
   // in that case we derive recipients entirely from the linked child (children.parent_id + child_guardians).
   const individualRemindMutation = useMutation({
     mutationFn: async ({ userId, displayName, childId }: { userId?: string; displayName: string; childId?: string }) => {
-      if (resolveAuthBackend() === "icp") return { displayName, count: 0, isChild: !!childId, recipientKey: userId || childId || displayName };
+      if (resolveAuthBackend() === "icp") {
+        if (!id) throw new Error('Missing event ID');
+        const count = await withFeatureBackend('events', {
+          supabase: async () => 0,
+          icp: async ctx => Number(await sendLiveIndividualEventReminder(ctx, id, userId, childId)),
+        }, writeOnce({ eventId: id }));
+        if (count === 0) throw new Error('No reminder was queued');
+        return { displayName, count, isChild: !!childId, recipientKey: userId || childId || displayName };
+      }
       let recipientIds: string[] = normalizeRecipientIds([userId]);
 
       if (childId) {
@@ -238,7 +246,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
       const description = isChild
         ? `${count} parent${count !== 1 ? "s" : ""} of ${displayName} ${count !== 1 ? "have" : "has"} been reminded to RSVP`
         : `${displayName} has been reminded to RSVP`;
-      toast({ title: "Reminder sent", description });
+      toast({ title: resolveAuthBackend() === "icp" ? "Reminder queued" : "Reminder sent", description });
     },
     onError: (error: Error) => {
       toast({ title: error.message || "Failed to send reminder", variant: "destructive" });
@@ -283,30 +291,11 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
     mutationFn: async () => {
       if (!event || !id) throw new Error("No event");
       if (resolveAuthBackend() === "icp") {
-        // Audience = team (or whole club) role grants. A stable per-event
-        // idempotency prefix makes notification_queue skip recipients who
-        // were already invited, so only new members get the invite.
-        return withFeatureBackend("membership", {
+        return withFeatureBackend('events', {
           supabase: async () => 0,
-          icp: async (ctx) => {
-            const { listLiveTeamRoleGrants, listLiveRoleGrants } = await import("@/live/features/membership");
-            const ev = event as unknown as { team_id?: string | null; club_id: string; created_by?: string };
-            const grants = (ev.team_id
-              ? await listLiveTeamRoleGrants(ctx, ev.team_id)
-              : await listLiveRoleGrants(ctx, ev.club_id)) as unknown as Array<{ user: { toText(): string } | string }>;
-            const ids = Array.from(new Set(grants.map((g) => (typeof g.user === "string" ? g.user : g.user.toText()))))
-              .filter((uid) => uid !== ev.created_by && `principal:${uid}` !== ev.created_by);
-            if (ids.length === 0) throw new Error("No members to invite for this event.");
-            const created = await fanOutLiveNotifications(ctx, {
-              userIds: ids,
-              clubId: ev.club_id,
-              kind: "event_invite",
-              body: `You've been invited to: ${event.title}`,
-              idempotencyKeyPrefix: `event-invite-${id}`,
-              relatedId: id,
-            });
-            const count = Number(created ?? 0);
-            if (count === 0) throw new Error("All members have already been notified about this event!");
+          icp: async ctx => {
+            const count = Number(await notifyLiveEventAudience(ctx, id, 'event_invite'));
+            if (count === 0) throw new Error('All eligible members have already been notified');
             return count;
           },
         }, writeOnce({ eventId: id }));
@@ -367,7 +356,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
     onSuccess: (count) => {
       setResendDialogOpen(false);
       toast({
-        title: "Invites sent",
+        title: resolveAuthBackend() === "icp" ? "Invites queued" : "Invites sent",
         description: `${count} new member${count !== 1 ? 's' : ''} have been notified`,
       });
     },

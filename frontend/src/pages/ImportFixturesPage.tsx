@@ -1,3 +1,10 @@
+import { withFeatureBackend } from '@/live/featureRouter';
+import { getLiveMyRoleGrants } from '@/live/features/membership';
+import { getLiveClubProfile, getLiveClubSubscription, getLiveTeamSubscription, listLiveTeams } from '@/live/features/club';
+import { readMembershipInScope } from '@/live/membershipRouting';
+import { mapLiveClubSubscriptionToRow, liveHasAnyPro } from '@/live/features/proAccess';
+import { resolveAuthBackend } from '@/live/authBackendMode';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -20,7 +27,9 @@ import { FixturesCSVImport } from "@/components/FixturesCSVImport";
 import { ClubAdminConfirmBanner } from "@/components/ClubAdminConfirmBanner";
 
 export default function ImportFixturesPage() {
+  usePageTitle("Import Fixtures");
   const { user } = useAuth();
+  const backend = resolveAuthBackend();
   const navigate = useNavigate();
   const { activeClubFilter } = useClubTheme();
   const [clubId, setClubId] = useState("");
@@ -28,37 +37,45 @@ export default function ImportFixturesPage() {
 
   // Fetch user's club-level admin roles (club_admin and committee_member)
   const { data: clubAdminRoles, isLoading: clubRolesLoading } = useQuery({
-    queryKey: ["user-club-admin-roles", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
+    queryKey: ["user-club-admin-roles", backend, user?.id],
+    queryFn: () => withFeatureBackend('membership', {
+      supabase: async () => {
+      const { data, error } = await supabase
         .from("user_roles")
         .select("club_id, role")
-        .eq("user_id", user!.id)
+        .eq("user_id", user?.id ?? "")
         .in("role", ["club_admin", "committee_member"])
         .not("club_id", "is", null);
+      if (error) throw error;
       return data || [];
-    },
+      },
+      icp: async ctx => (await getLiveMyRoleGrants(ctx)).filter(g => ['club_admin', 'committee_member'].includes(g.role) && g.club[0]).map(g => ({ club_id: g.club[0] ?? '', role: g.role })),
+    }, { memberGroups: true, merge: (parts: unknown[]) => (parts as Array<Array<{club_id: string; role: string}>>).flat() }),
     enabled: !!user,
   });
 
   // Fetch user's team admin/coach roles
   const { data: teamAdminRoles, isLoading: teamRolesLoading } = useQuery({
-    queryKey: ["user-team-admin-roles", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
+    queryKey: ["user-team-admin-roles", backend, user?.id],
+    queryFn: () => withFeatureBackend('membership', {
+      supabase: async () => {
+      const { data, error } = await supabase
         .from("user_roles")
         .select("team_id, club_id")
-        .eq("user_id", user!.id)
+        .eq("user_id", user?.id ?? "")
         .in("role", ["team_admin", "coach", "committee_member"])
         .not("team_id", "is", null);
+      if (error) throw error;
       return data || [];
-    },
+      },
+      icp: async ctx => (await getLiveMyRoleGrants(ctx)).filter(g => ['team_admin', 'coach', 'committee_member'].includes(g.role) && g.team[0] && g.club[0]).map(g => ({ team_id: g.team[0] ?? '', club_id: g.club[0] ?? '' })),
+    }, { memberGroups: true, merge: (parts: unknown[]) => (parts as Array<Array<{team_id: string; club_id: string}>>).flat() }),
     enabled: !!user,
   });
 
   // Determine which clubs the user can access
   const { data: allClubs } = useQuery({
-    queryKey: ["user-admin-clubs", user?.id, clubAdminRoles, teamAdminRoles],
+    queryKey: ["user-admin-clubs", backend, user?.id, clubAdminRoles, teamAdminRoles],
     queryFn: async () => {
       const clubIdsFromClubs = clubAdminRoles?.map((r) => r.club_id).filter(Boolean) || [];
       const clubIdsFromTeams = teamAdminRoles?.map((r) => r.club_id).filter(Boolean) || [];
@@ -66,12 +83,17 @@ export default function ImportFixturesPage() {
 
       if (clubIds.length === 0) return [];
       
-      const { data } = await supabase
-        .from("clubs")
-        .select("id, name, sport")
-        .in("id", clubIds);
-
-      return data || [];
+      return withFeatureBackend('membership', {
+        supabase: async () => {
+          const { data, error } = await supabase.from('clubs').select('id, name, sport').in('id', clubIds);
+          if (error) throw error;
+          return data ?? [];
+        },
+        icp: async ctx => (await Promise.all(clubIds.map(id => readMembershipInScope(ctx, { clubId: id }, async scoped => {
+          const [club] = await getLiveClubProfile(scoped, id);
+          return club ? { id: club.id, name: club.name, sport: club.sport[0] ?? null } : null;
+        })))).filter((club): club is { id: string; name: string; sport: string | null } => !!club),
+      }, { shared: 'person' });
     },
     enabled: !!user && (!!clubAdminRoles || !!teamAdminRoles),
   });
@@ -105,15 +127,15 @@ export default function ImportFixturesPage() {
 
   // Fetch club subscription to check Pro status for selected club
   const { data: clubSubscription, isLoading: subscriptionLoading } = useQuery({
-    queryKey: ["club-subscription-for-import", clubId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("club_subscriptions")
-        .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
-        .eq("club_id", clubId)
-        .maybeSingle();
-      return data;
-    },
+    queryKey: ["club-subscription-for-import", backend, user?.id, clubId],
+    queryFn: () => withFeatureBackend('membership', {
+      supabase: async () => {
+        const { data, error } = await supabase.from('club_subscriptions').select('is_pro, is_pro_football, admin_pro_override, admin_pro_football_override').eq('club_id', clubId).maybeSingle();
+        if (error) throw error;
+        return data;
+      },
+      icp: async ctx => { const sub = await getLiveClubSubscription(ctx, clubId); return sub ? mapLiveClubSubscriptionToRow(sub) : null; },
+    }, { clubId }),
     enabled: !!clubId,
   });
 
@@ -140,13 +162,15 @@ export default function ImportFixturesPage() {
 
   // Fetch teams with their Pro subscription status
   const { data: teams, isLoading: teamsLoading } = useQuery({
-    queryKey: ["club-teams-for-import", clubId],
-    queryFn: async () => {
-      const { data: teamsData } = await supabase
+    queryKey: ["club-teams-for-import", backend, user?.id, clubId, !!clubHasPro],
+    queryFn: () => withFeatureBackend('membership', {
+      supabase: async () => {
+      const { data: teamsData, error: teamsError } = await supabase
         .from("teams")
         .select("id, name, level_age")
         .eq("club_id", clubId);
       
+      if (teamsError) throw teamsError;
       if (!teamsData || teamsData.length === 0) return [];
       
       // Check if club has Pro
@@ -157,11 +181,12 @@ export default function ImportFixturesPage() {
       }
       
       // If club doesn't have Pro, check each team's subscription
-      const { data: teamSubs } = await supabase
+      const { data: teamSubs, error: subsError } = await supabase
         .from("team_subscriptions")
         .select("team_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
         .in("team_id", teamsData.map(t => t.id));
       
+      if (subsError) throw subsError;
       type TeamSubscriptionStatus = {
         team_id: string;
         is_pro: boolean | null;
@@ -181,7 +206,12 @@ export default function ImportFixturesPage() {
         const hasPro = hasClubPro || !!(sub?.is_pro || sub?.is_pro_football || sub?.admin_pro_override || sub?.admin_pro_football_override);
         return { ...t, hasPro };
       });
-    },
+      },
+      icp: async ctx => Promise.all((await listLiveTeams(ctx, clubId)).map(async team => {
+        const sub = await getLiveTeamSubscription(ctx, team.id);
+        return { id: team.id, name: team.name, level_age: team.age_group[0] ?? null, hasPro: !!clubHasPro || liveHasAnyPro(sub) };
+      })),
+    }, { clubId }),
     enabled: !!clubId,
   });
 
@@ -356,7 +386,7 @@ export default function ImportFixturesPage() {
               {hasClubAdminRole ? (
                 <Button 
                   size="sm" 
-                  onClick={() => navigate(`/clubs/${clubAdminRoles![0].club_id}/upgrade`)}
+                  onClick={() => navigate(`/clubs/${clubAdminRoles?.[0]?.club_id}/upgrade`)}
                   className="w-fit"
                 >
                   <Crown className="h-4 w-4 mr-1" />
@@ -365,7 +395,7 @@ export default function ImportFixturesPage() {
               ) : hasTeamAdminRole && teamsWithoutPro.length > 0 ? (
                 <Button 
                   size="sm" 
-                  onClick={() => navigate(`/teams/${teamAdminRoles![0].team_id}/upgrade`)}
+                  onClick={() => navigate(`/teams/${teamAdminRoles?.[0]?.team_id}/upgrade`)}
                   className="w-fit"
                 >
                   <Crown className="h-4 w-4 mr-1" />

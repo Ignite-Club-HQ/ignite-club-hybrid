@@ -595,6 +595,64 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(all.map(func(u) = { user_id = u; is_staff = staffIds.any(func(x) = x == u); is_parent = parentIds.any(func(x) = x == u) }))
   };
 
+  // The configured event authority asks for opaque RSVP subjects only.
+  // Every player/guardian is revalidated through the consensus authority.
+  public shared ({ caller }) func read_event_notification_subjects(league_id : Text, club_id : Text) : async { #Ok : [{ user : Text; child : ?Text }]; #Err : Text } {
+    if (eventsDomainCanister != ?caller) return #Err("Events authority required");
+    let league = findLeague(league_id) ?? return #Err("Mini-league not found");
+    if (league.club_id != club_id or leagueFenced(league_id)) return #Err("League scope mismatch or locked");
+    let initialPlayers = players.filter(func(p) = p.mini_league_id == league_id);
+    let initialGuardians = guardians;
+    var out : [{ user : Text; child : ?Text }] = [];
+    for (player in initialPlayers.values()) {
+      var users : [Principal] = switch (player.claimed_by) { case (?p) [p]; case null [] };
+      switch (player.parent_user_id) { case (?id) { let p = try { Principal.fromText(id) } catch (_) { return #Err("Invalid league parent") }; if (not users.any(func(u) = u == p)) users := users.concat([p]) }; case null {} };
+      switch (player.child_id) {
+        case null {};
+        case (?child) {
+          for (g in initialGuardians.values()) if (g.child_id == child and not users.any(func(u) = u == g.guardian_user_id)) users := users.concat([g.guardian_user_id]);
+        }
+      };
+      for (user in users.values()) {
+        if (not removalReceiver.enter(user)) return #Err("League parent fenced");
+        try {
+          await admitAccount(user);
+          let allowed = await* playerAccessWrite(user, player);
+          if (allowed and not removalReceiver.denied(user)) {
+            let subject = { user = user.toText(); child = player.child_id };
+            if (not out.any(func(s) = s == subject)) out := out.concat([subject]);
+          }
+        } finally { removalReceiver.leave(user) };
+      };
+      if (out.size() > 500) return #Err("League audience exceeds 500");
+    };
+    // Local explicit league administration is authority; club role candidates
+    // must be refreshed through the club service before any staff subject is added.
+    let initialAdmins = admins;
+    var staff : [Principal] = [league.created_by];
+    for (a in initialAdmins.values()) if (a.mini_league_id == league_id and not staff.any(func(u) = u == a.user_id)) staff := staff.concat([a.user_id]);
+    for (r in roles.values()) if (r.club_id == club_id and (r.role == "league_admin" or r.role == "club_admin" or r.role == "coach") and not staff.any(func(u) = u == r.user)) staff := staff.concat([r.user]);
+    for (user in staff.values()) {
+      if (not removalReceiver.enter(user)) return #Err("League staff fenced");
+      try {
+        await admitAccount(user);
+        let explicit = user == league.created_by or initialAdmins.any(func(a) = a.mini_league_id == league_id and a.user_id == user);
+        let authority = clubDomainCanister ?? return #Err("Club authority unavailable");
+        let cd : actor { read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor(authority.toText());
+        let fresh = try { await (with timeout = 10) cd.read_account_list_user_club_roles(user, club_id) } catch (_) { return #Err("League staff unavailable") };
+        if (clubDomainCanister != ?authority) return #Err("Club authority changed");
+        if ((explicit or fresh.any(func((role, _)) = role == "club_admin" or role == "league_admin" or role == "coach")) and not removalReceiver.denied(user)) {
+          let subject = { user = user.toText(); child = null };
+          if (not out.any(func(s) = s == subject)) out := out.concat([subject]);
+        };
+      } finally { removalReceiver.leave(user) };
+      if (out.size() > 500) return #Err("League audience exceeds 500");
+    };
+    if (admins != initialAdmins) return #Err("League staff changed");
+    if (eventsDomainCanister != ?caller or findLeague(league_id) != ?league or players.filter(func(p) = p.mini_league_id == league_id) != initialPlayers or guardians != initialGuardians or leagueFenced(league_id)) return #Err("League audience changed");
+    #Ok(out)
+  };
+
   // Public: unauthenticated directory listing for the home page "browse
   // mini-leagues" picker. No PII (created_by/admin lists excluded) — just
   // enough to resolve a name/club for active leagues.

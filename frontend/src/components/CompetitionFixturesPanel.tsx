@@ -1,3 +1,6 @@
+import { withFeatureBackend } from '@/live/featureRouter';
+import { readMembershipInScope } from '@/live/membershipRouting';
+import { getLiveTeam, getLiveClubProfile } from '@/live/features/club';
 import { useMemo, useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -991,17 +994,28 @@ function FixturesFilterAndList({
     return Array.from(s);
   }, [matches]);
 
+  const { user } = useAuth();
+  const backend = resolveAuthBackend();
   const { data: linkedTeams = [] } = useQuery({
-    queryKey: ["competition-linked-teams", competitionId, externalTeamIds.length],
-    enabled: externalTeamIds.length > 0,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("teams")
-        .select("id, name, playhq_team_id, club_id, clubs:club_id(id, name)")
-        .in("playhq_team_id", externalTeamIds);
-      if (error) throw error;
-      return (data ?? []).map((row: any) => row.competition_match_results !== undefined ? { ...row, home_score: row.competition_match_results?.home_score ?? null, away_score: row.competition_match_results?.away_score ?? null } : row);
-    },
+    queryKey: ["competition-linked-teams", user?.id, backend, competitionId, [...externalTeamIds].sort(), entries.map(e => e.team_id).sort()],
+    enabled: externalTeamIds.length > 0 && !!user,
+    queryFn: () => withFeatureBackend('competitions', {
+      supabase: async () => {
+        const { data, error } = await supabase.from('teams').select('id, name, playhq_team_id, club_id, clubs:club_id(id, name)').in('playhq_team_id', externalTeamIds);
+        if (error) throw error;
+        return data ?? [];
+      },
+      icp: async ctx => {
+        const ids = [...new Set(entries.map(e => e.team_id).filter((id): id is string => typeof id === 'string'))];
+        const rows = await Promise.all(ids.map(id => readMembershipInScope(ctx, { teamId: id }, async scoped => {
+          const [team] = await getLiveTeam(scoped, id);
+          if (!team || !team.playhq_team_id[0] || !externalTeamIds.includes(team.playhq_team_id[0])) return null;
+          const [club] = await getLiveClubProfile(scoped, team.club_id);
+          return { id: team.id, name: team.name, playhq_team_id: team.playhq_team_id[0], club_id: team.club_id, clubs: club ? { id: club.id, name: club.name } : null };
+        })));
+        return rows.filter(row => row !== null);
+      },
+    }, { competitionId }),
   });
 
   // Map external (PlayHQ) team id → { clubId, clubName }

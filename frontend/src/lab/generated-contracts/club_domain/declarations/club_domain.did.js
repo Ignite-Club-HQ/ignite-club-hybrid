@@ -2079,6 +2079,35 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_event_notification_membership' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'guardians' : IDL.Vec(
+                IDL.Record({ 'user' : IDL.Principal, 'child_id' : IDL.Text })
+              ),
+              'children' : IDL.Vec(
+                IDL.Record({
+                  'id' : IDL.Text,
+                  'teams' : IDL.Vec(IDL.Text),
+                  'parent' : IDL.Opt(IDL.Principal),
+                })
+              ),
+              'roles' : IDL.Vec(
+                IDL.Record({
+                  'role' : IDL.Text,
+                  'user' : IDL.Principal,
+                  'team_id' : IDL.Opt(IDL.Text),
+                  'club_id' : IDL.Text,
+                })
+              ),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
@@ -2229,6 +2258,11 @@ export const idlFactory = ({ IDL }) => {
     'rekey_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'relay_event_notice' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
         [],
       ),
     'relay_group_pitch_alert' : IDL.Func(

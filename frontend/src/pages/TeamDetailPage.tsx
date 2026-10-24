@@ -1,3 +1,5 @@
+import { readIcpPitchRoster } from '@/lib/pitchEntryRoster';
+import { readGoingGameRsvps, readGameSubsDuty } from '@/lib/gameEventReads';
 import { useState, useEffect, useRef, Suspense, useMemo, type ReactNode } from "react";
 import { prefetchProfiles } from "@/hooks/useProfiles";
 import { cacheProfiles, getProfileFromCache, selectCachedProfileById, selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -676,6 +678,11 @@ export default function TeamDetailPage() {
   const { data: teamChildren = [], isLoading: isChildrenLoading, isFetching: isChildrenFetching, refetch: refetchChildren } = useQuery({
     queryKey: membershipKeys.teamChildren(id),
     queryFn: async () => {
+      if (resolveAuthBackend() === 'icp') {
+        if (!id) return [];
+        const roster = await readIcpPitchRoster(id);
+        return roster.children.map(child => ({ id: child.child_id, child_id: child.child_id, children: { id: child.child_id, name: child.child_name, year_of_birth: null, parent_id: null, profiles: null, allParentNames: [] } }));
+      }
       const { data: rpcChildren, error: rpcError } = await supabase.rpc("get_team_children_for_pitch_board", {
         p_team_id: id!,
       });
@@ -765,7 +772,7 @@ export default function TeamDetailPage() {
           icp: async (ctx) => {
             let grants: Array<{ account_id: string; role: string }>;
             try {
-              grants = await listLiveTeamRoleGrants(ctx, id!);
+              grants = (await listLiveTeamRoleGrants(ctx, id ?? "")).map(g => ({ account_id: g.account_id.replace(/^principal:/, ""), role: g.role }));
             } catch {
               // Pre-deploy canisters lack list_team_role_grants; fall back to
               // the caller's own grants so they at least see themselves.
@@ -906,13 +913,7 @@ export default function TeamDetailPage() {
     queryKey: eventKeys.pitchGoingRsvps(linkedEventId),
     queryFn: async () => {
       if (!linkedEventId) return null;
-      const { data, error } = await supabase
-        .from("rsvps")
-        .select("user_id, child_id, status")
-        .eq("event_id", linkedEventId)
-        .eq("status", "going");
-      if (error) throw error;
-      return data || [];
+      return readGoingGameRsvps(linkedEventId);
     },
     enabled: !!linkedEventId && !useIcpLab,
     staleTime: 30_000,
@@ -1044,13 +1045,7 @@ export default function TeamDetailPage() {
     queryFn: async () => {
       const nearbyEventId = await findNearbyGameEvent(id!);
       if (!nearbyEventId) return null;
-      const { data, error } = await supabase
-        .from("duties")
-        .select("id, name")
-        .eq("event_id", nearbyEventId)
-        .eq("assigned_to", user!.id);
-      if (error) throw error;
-      return (data || []).some((d: any) => normalizeDutyName(d.name) === "subs manager") ? nearbyEventId : null;
+      return user?.id && await readGameSubsDuty(nearbyEventId, user.id) ? nearbyEventId : null;
     },
     enabled: !!id && !!user && !isCoachOrAdmin && !isClubAdmin && !useIcpLab,
     staleTime: 0,
@@ -1071,12 +1066,7 @@ export default function TeamDetailPage() {
     queryKey: ["subs-manager-duty", linkedEventId, user?.id],
     queryFn: async () => {
       if (!linkedEventId || !user) return false;
-      const { data } = await supabase
-        .from("duties")
-        .select("id, name")
-        .eq("event_id", linkedEventId)
-        .eq("assigned_to", user.id)
-      return (data || []).some((d: any) => normalizeDutyName(d.name) === "subs manager");
+      return readGameSubsDuty(linkedEventId, user.id);
     },
     enabled: !!linkedEventId && !!user && !useIcpLab,
     staleTime: 0,
@@ -1092,6 +1082,20 @@ export default function TeamDetailPage() {
   const { data: activeGame } = useQuery({
     queryKey: ["team-active-game", id],
     queryFn: async () => {
+      if (resolveAuthBackend() === 'icp') {
+        if (!id) return null;
+        return withFeatureBackend('events', {
+          supabase: async () => null,
+          icp: async ctx => {
+            const { getLiveActiveGame } = await import('@/live/features/events');
+            const [row] = await getLiveActiveGame(ctx, id);
+            if (!row) return null;
+            let pitch_state: Record<string, unknown> = {};
+            try { pitch_state = JSON.parse(String(row.pitch_state_json ?? '{}')); } catch { /* corrupt optional state */ }
+            return { id: String(row.id), updated_at: new Date(Number(row.updated_at_ms)).toISOString(), pitch_state };
+          },
+        }, { teamId: id });
+      }
       const { data } = await supabase
         .from("active_games")
         .select("id, updated_at, pitch_state")
@@ -1448,11 +1452,7 @@ export default function TeamDetailPage() {
     let goingChildIds: Set<string> | null = null;
     let goingAdultIds: Set<string> | null = null;
     if (nearbyEventId) {
-      const { data: goingRows } = await supabase
-        .from("rsvps")
-        .select("user_id, child_id")
-        .eq("event_id", nearbyEventId)
-        .eq("status", "going");
+      const goingRows = await readGoingGameRsvps(nearbyEventId);
       goingChildIds = new Set((goingRows || []).map(r => r.child_id).filter((v): v is string => !!v));
       goingAdultIds = new Set((goingRows || []).map(r => r.user_id).filter((v): v is string => !!v));
     }

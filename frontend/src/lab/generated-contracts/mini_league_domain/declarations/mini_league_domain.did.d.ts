@@ -429,6 +429,11 @@ export interface Main {
     [Principal, string, string],
     boolean
   >,
+  'read_event_notification_subjects' : ActorMethod<
+    [string, string],
+    { 'Ok' : Array<{ 'child' : [] | [string], 'user' : string }> } |
+      { 'Err' : string }
+  >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],

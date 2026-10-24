@@ -1,0 +1,20 @@
+import Audience "../src/eventAudience";
+import Array "mo:core/Array";
+import Types "../src/types";
+import Principal "mo:core/Principal";
+let parent = Principal.fromText("aaaaa-aa");
+let player = Principal.fromText("2vxsx-fae");
+let event : Types.Event = { id = "e"; club_id = "c"; team_id = ?"t"; title = "Match"; description = " "; event_type = "game"; location = null; opponent = null; address = null; mini_league_id = null; cancelled = false; deleted = false; creator = parent; starts_at_ms = 1; ends_at_ms = 2; series_id = null; revision = 1; updated_at_ms = 0; rsvp_audience = null; adults_only = false; restricted_to_roles = null; target_team_ids = null };
+let membership : Audience.Membership = {
+  roles = [{ user = parent; role = "parent"; club_id = "c"; team_id = ?"t" }, { user = player; role = "player"; club_id = "c"; team_id = ?"other" }];
+  children = [{ id = "child"; teams = ["t"]; parent = ?parent }]; guardians = [];
+};
+let subjects = Audience.subjects(event, membership);
+assert subjects.size() == 2;
+assert not subjects.any(func(s) = s.user == player.toText());
+let responses : [Types.Rsvp] = [{ event_id = "e"; account_id = parent.toText(); child_id = null; state = "going"; notes = ""; has_paid = null; source = "manual"; updated_at_ms = 0 }];
+assert Audience.unanswered(event, subjects, responses) == [{ user = parent.toText(); child = ?"child" }];
+assert Audience.users(subjects) == [parent.toText()];
+assert Audience.subjects({ event with adults_only = true }, membership).size() == 1;
+assert Audience.subjects({ event with rsvp_audience = ?"parents_only" }, membership).size() == 1;
+assert Audience.subjects({ event with team_id = null; target_team_ids = ?["other"] }, membership) == [{ user = player.toText(); child = null }];

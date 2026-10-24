@@ -9,10 +9,10 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- Preview runs frontend/ through lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY. Keep root dependency-free.
-- Health merges all group inventories by ID. Why: prevent unmonitored groups.
-- Install only via scripts/ensure-frontend-deps.mjs; npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
-- Read nested AGENTS.md in scripts/, frontend/, backend/, backend/identity_access/ and backend/media_blob_store/ before scoped changes.
+- Preview: frontend/ via lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY; root stays dependency-free.
+- Health merges every group inventory by ID to prevent unmonitored groups.
+- Install via scripts/ensure-frontend-deps.mjs only: npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
+- Before scoped changes read AGENTS.md in scripts/, frontend/, backend/, backend/identity_access/ and backend/media_blob_store/.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
@@ -43,19 +43,19 @@ it. Skills are authoritative — prefer them over general knowledge.
 - OQL: bounded read-only, allowlisted fields; authorize before filtering/paging/counts; no self-calls.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages. Policy 2026-10-19: encrypted-media clubs stay put; no re-encryption or reconciliation bypass. Place new clubs into groups. Why: photo keys belong to the creating group.
 - Admission uses the general switch: governor-verified configuration revision, canonical group/placement/policy inventory, hashes and removal wiring must match the live registry; ordinary placements advance only the separate assignment/deletion/session revision. Legacy snapshots need regeneration. Snapshot revisions are decimal text before hashing/emission. Why: new clubs must not invalidate approval, while configuration drift still fails closed.
-- Router-only deployment upgrades the pinned existing mainnet router with no creation, service rewiring or automatic fuel conversion. Why: an approval-counter repair must not change club services or media keys.
+- Router-only deploy upgrades the pinned mainnet router: no creation, rewiring or automatic fuel conversion. Why: approval-counter repairs must preserve club services/media keys.
 
 - Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
 - G2 journal readback pins the acknowledged commit; unknown writes stop. Why: branch reads can lag.
 
 - Router index rebuilds from stable rows; writes refresh, picks recheck gates. Never deploy scale-probe.
 - History uses nullable DTOs/exact links and verified humans; PlayHQ keys are tenant-scoped, claims grant no ownership. Deploy history scope upgrades only competition/events, never creates or rewires others. Why: preserve data and isolate releases.
-- /admin/group-infrastructure owns utilization. Why: duplicates drift.
+- /admin/group-infrastructure owns utilization; duplicates drift.
 - News uses the listed club, audience checks, cold discovery and retry. Why: rediscovery hides posts.
-- Creation choices filter by theme; absent clubs expose none. Why: retain context.
+- Creation choices filter by theme; absent clubs expose none to retain context.
 - Rewards/Profile share scoped caches; pending Pro stays unknown, history renders independently. Why: avoid waits/false locks.
-- Opening reciprocal checks require identity-side admission-release and exact eligibility-reader evidence for every admission-enabled destination; deletion wiring alone is insufficient. Why: configured destination flags can otherwise pass readiness while all membership reads are denied.
-- Group 2 account admission uses a separate stable eligibility-only reader grant derived from the pinned router; its protected identity-only upgrade journals intent/readback and refreshes the verified snapshot without opening placements or releasing lifecycle gates. Why: repair account access without exposing broader rehearsal-only operations.
+- Reciprocal opening requires identity admission-release and exact eligibility-reader evidence for every admission-enabled destination, not deletion wiring alone. Why: destination flags can pass readiness while membership reads are denied.
+- Group 2 admission uses a stable eligibility-only grant from the pinned router; protected identity-only upgrades journal intent/readback and refresh the verified snapshot, never open placements/lifecycle gates. Why: repair access without exposing rehearsal operations.
 
 - Subscription prices/quotes use subscriptionPlans and authoritative team writes serialize capacity checks; new payment products remain disabled until provider catalog and verified entity-scoped fulfillment agree. Why: quotes, URL success and global ICP Pro cannot authorize paid club capacity.
 - ICP local media admission and retention read club_domain.get_media_allowance for the exact club/team; admission includes pending gallery/chat/Vault bytes, branding is exempt, and legacy retention checks bounded file pages and unchanged timestamps after awaits. Why: team Pro must not grant club-wide storage or lose replaced/paid media to club-only cleanup.
@@ -65,8 +65,8 @@ it. Skills are authoritative — prefer them over general knowledge.
 - ICP media allowance excludes the SDK's fixed versioned IBE framing, charges unframed legacy bytes in full and rechecks actual assembled size plus other pending uploads before commit; physical capacity still counts ciphertext. Why: customers pay for file bytes, while a spoofed declaration must not bypass quota.
 - New ICP club fulfillment uses distinct usd_v2_* plan identifiers through platform-authorized subscription writes; legacy identifiers retain their existing allowances. Why: new caps must not silently change promo grants.
 - Subscription deployment uses a separate exact four-target Group 1/2 club/media workflow, immutable journal readback and verified snapshot refresh; never reuse the closed thirteen-service runner or broad all-service deploy. Why: preserve unrelated services, routing, photo authorities and unknown upgrade evidence.
-- New groups are added only through the one-click Add new group workflow (scripts/add-group.mjs + add-group-plan.mjs); its steps must stay resume-safe and auto-retry only idempotent, nothing-happened failures. Why: multi-workflow manual openings repeatedly failed part-way.
-- Group opening approval is recorded on the router (record_routing_approval, revision-checked, governor-only) and the app accepts it only when the live configuration revision, group set and canonical configuration hash match; the build-time snapshot only pins router and host. Why: opening must not require an app release, yet drift must still fail closed.
+- Add groups only via Add new group (scripts/add-group.mjs + add-group-plan.mjs); steps must resume safely and retry only idempotent nothing-happened failures. Why: manual multi-workflow openings failed part-way.
+- Router record_routing_approval is governor-only/revision-checked; app acceptance requires matching live configuration revision, group set and canonical hash. Build snapshot pins router/host only. Why: opening needs no app release; drift fails closed.
 - Discovery shares account/full-target reads; incomplete clubs stay display-only. Sessions bind identity objects and retire on typed drift without replay; scope markers copy contexts and writes use operation keys. Why: prevent lost clubs, stale sessions, nested discovery and merged posts; destination authorization remains required.
 - Schedule member events publish per owning club before labels/duties, retaining the events query prefix for save invalidation; foreign-host fixtures remain independent. Media profiles gate only their own source; incomplete aggregates never persist. Why: unrelated sources must not block authorized content or falsely complete offline inventories.
 - Standard club chats use ensure_default_club_chat with an explicit stable identity and authorized legacy-ID adoption; ordinary group creation stays create-only, and deleted bindings require explicit restore. Why: concurrent devices must not duplicate standard chats, overwrite roles, erase histories or revive deleted rooms.
@@ -76,3 +76,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Lookup release upgrades only pinned identity plus every registered club source/original G1, with exact subnet/journal coverage; identity-owned enable and every private page recheck full revisions, registry/photo stores, lifecycle and caller through awaits. Complete Stage A fallback stays. Why: historical reports or partial source coverage cannot authorize discovery.
 
 - Media paging releases only via upgrade-media-paging.yml on the exact G1/G2 media_metadata canisters, finishing backfill before snapshot refresh. Why: never hide photos or touch photo stores.
+
+- ICP event setup atomically commits exact dates, first-occurrence duties and reminders under caller/request receipts; configured club/league consensus supplies audiences, relays retain unknown outcomes. Why: prevent partial saves, foreign notices and deleted-request resurrection.

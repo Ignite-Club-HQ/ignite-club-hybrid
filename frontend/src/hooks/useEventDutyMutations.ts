@@ -9,6 +9,7 @@ import { writeOnce } from "@/live/clubScope";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   completeLiveEventDuty,
+  notifyLiveDutyCompletion,
   createLiveOpenDuty,
   claimLiveOpenDuty,
   removeLiveEventDuty,
@@ -189,6 +190,15 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
   // user_roles until membership data lives on ICP.
   const notifyDutyCompleted = async (duty: any) => {
     if (!event || !duty) return;
+    if (isFeatureRoutedToIcp('events')) {
+      try {
+        await withFeatureBackend('events', {
+          supabase: async () => undefined,
+          icp: ctx => notifyLiveDutyCompletion(ctx, event.id, duty.assigned_to),
+        }, writeOnce({ eventId: event.id }));
+      } catch (error) { throw new DutyNotificationPartialError(error instanceof Error ? error.message : 'Notification failed'); }
+      return;
+    }
     const memberName = profile?.display_name || "A member";
 
     const roleQuery = event.team_id

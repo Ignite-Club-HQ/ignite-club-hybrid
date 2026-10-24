@@ -519,6 +519,14 @@ type Main =
     MiniLeaguePlayer) -> (bool);
    read_can_read_league_matches: (viewer: principal, league_id: text,
     club_id: text) -> (bool);
+   read_event_notification_subjects: (league_id: text, club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 child: opt text;
+                 user: text;
+               };
+     });
    read_group_opening_configuration: () -> (vec record {
                                                   text;
                                                   text;

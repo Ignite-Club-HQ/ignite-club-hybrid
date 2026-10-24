@@ -48,11 +48,16 @@ vi.mock("@/live/loadBackendRouting", () => ({
   isFeatureRoutedToIcp: () => process.env.IGNITE_TEST_BACKEND_MODE === "icp",
 }));
 
+const audience = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: (_feature: unknown, providers: {icp: (ctx: unknown) => unknown}) => providers.icp({}) }));
+vi.mock('@/live/features/events', () => ({ readLiveEventCancellationAudience: audience.read }));
+vi.mock('@/live/authBackendMode', () => ({ resolveAuthBackend: () => process.env.IGNITE_TEST_BACKEND_MODE === 'icp' ? 'icp' : 'supabase' }));
 // ---- helpers ----------------------------------------------------------
 
 const baseProps = {
   open: true,
   onOpenChange: vi.fn(),
+  eventId: "e1",
   eventTitle: "Weekly Training",
   teamId: "team-1",
   clubId: "club-1",
@@ -65,6 +70,8 @@ const setUserRoles = (data: unknown, error: any = null) => {
 
 beforeEach(() => {
   cleanup();
+  audience.read.mockReset();
+  audience.read.mockRejectedValue(new Error("Audience unavailable"));
   Object.keys(tableResponses).forEach((k) => delete tableResponses[k]);
 });
 
@@ -197,6 +204,13 @@ describe.runIf(!icpMode)("RecurringCancelEventDialog — fail-closed on recipien
 });
 
 describe.runIf(icpMode)("RecurringCancelEventDialog ICP boundary", () => {
+  it('enables notifications after the event authority verifies three recipients', async () => {
+    audience.read.mockResolvedValue(3);
+    render(<RecurringCancelEventDialog {...baseProps} onSingleAction={vi.fn()} onSeriesAction={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText(/3 members will be notified/i)).toBeInTheDocument());
+    expect(screen.getByRole('checkbox')).not.toBeDisabled();
+    expect(audience.read).toHaveBeenCalledWith(expect.anything(), 'e1');
+  });
   it("keeps series cancellation available but disables unverifiable push delivery", async () => {
     const onSingleAction = vi.fn();
     const onSeriesAction = vi.fn();

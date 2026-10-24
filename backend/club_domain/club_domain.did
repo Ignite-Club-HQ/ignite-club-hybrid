@@ -1623,6 +1623,31 @@ type Main =
              revision: nat;
            };
      });
+   read_event_notification_membership: (club: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          children:
+           vec record {
+                 id: text;
+                 parent: opt principal;
+                 teams: vec text;
+               };
+          guardians: vec record {
+                           child_id: text;
+                           user: principal;
+                         };
+          roles:
+           vec
+            record {
+              club_id: text;
+              role: text;
+              team_id: opt text;
+              user: principal;
+            };
+        };
+     });
    /// Bounded consensus configuration evidence; never changes or grants access.
    read_group_opening_configuration: () -> (vec record {
                                                   text;
@@ -1735,6 +1760,11 @@ type Main =
        err: text;
        ok: nat;
      });
+   relay_event_notice: (users: vec text, club: text, kind: text, body: 
+    text, key: text, event_id: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat16;
+                                         });
    relay_group_pitch_alert: (users: vec text, club: text, kind: text, body:
     text, key: text, related: text) -> (variant {
                                           Err: text;

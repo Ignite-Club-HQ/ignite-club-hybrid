@@ -1,3 +1,5 @@
+import { readIcpPitchRoster } from '@/lib/pitchEntryRoster';
+import { readGoingGameRsvps } from '@/lib/gameEventReads';
 import { readDiscoveredMiniLeagues } from "@/live/accountDiscovery";
 import { readMiniLeagueInScope } from "@/live/miniLeagueRouting";
 import { readMembershipInScope } from '@/live/membershipRouting';
@@ -1809,7 +1811,7 @@ export default function HomePage() {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
-            const team = await getLiveTeam(ctx, teamId).catch(() => null);
+            const [team] = await getLiveTeam(ctx, teamId);
             return resolveLiveProFootballAccess(ctx, { teamId, clubId: team?.club_id ?? null });
           },
         }, { teamId: teamId! });
@@ -1834,6 +1836,7 @@ export default function HomePage() {
       return !!clubSubscription?.is_pro_football;
     },
     loadRoster: async (teamId) => {
+      if (resolveAuthBackend() === 'icp') return readIcpPitchRoster(teamId);
       const [membersResult, childrenResult] = await Promise.all([
         supabase
           .from("user_roles")
@@ -1849,14 +1852,7 @@ export default function HomePage() {
       };
     },
     findNearbyEvent: findNearbyGameEvent,
-    loadGoingRsvps: async (eventId) => {
-      const { data } = await supabase
-        .from("rsvps")
-        .select("user_id, child_id")
-        .eq("event_id", eventId)
-        .eq("status", "going");
-      return data || [];
-    },
+    loadGoingRsvps: readGoingGameRsvps,
   });
 
 

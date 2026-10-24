@@ -136,6 +136,7 @@ export function EventDetailActionDialogs({
 
       {recurring ? (
         <RecurringCancelEventDialog
+          eventId={event.id}
           open={cancelDialogOpen}
           onOpenChange={setCancelDialogOpen}
           eventTitle={event.title}

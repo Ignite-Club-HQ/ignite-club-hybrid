@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from '@/hooks/useAuth';
+import { resolveAuthBackend } from '@/live/authBackendMode';
+import { readIcpGameEvents, recentGame } from '@/lib/gameEventReads';
 
 /**
  * Returns true if there was a match (event type='game') for the given team
@@ -15,14 +18,17 @@ export function useRecentMatchWindow({
   teamId?: string | null;
   miniLeagueId?: string | null;
 }) {
-  const enabled = !!teamId || !!miniLeagueId;
+  const { user, initialized } = useAuth();
+  const icp = resolveAuthBackend() === 'icp';
+  const enabled = (!!teamId || !!miniLeagueId) && !!user && initialized;
 
   const { data } = useQuery({
-    queryKey: ["recent-match-window", teamId ?? null, miniLeagueId ?? null],
+    queryKey: ["recent-match-window", user?.id, icp, teamId ?? null, miniLeagueId ?? null],
     enabled,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      if (icp) return recentGame(await readIcpGameEvents(teamId, miniLeagueId), Date.now());
       const nowIso = new Date().toISOString();
       const fortyEightHoursAgoIso = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
