@@ -2651,12 +2651,12 @@ persistent actor class Main(governorInit : Principal) = this {
     if(matchFenced(match_id) or not canManageCompetition(caller,original.competition_id)) return #Err("Competition manager required");
     let game=switch(matches.find(func(m)=m.id==match_id and m.revision==original.revision)){case null return #Err("Match changed");case(?m)m};
     let starts=switch(game.scheduled_at_ms){case null return #Err("Schedule the match first");case(?s)s};
-    let teams=entries.filter(func(e)=e.competition_id==game.competition_id and (e.team_id==game.home_team or e.team_id==game.away_team)).map(func(e)={team_id=e.team_id;club_id=e.club_id});
+    let teams=entries.filter(func(e)=e.competition_id==game.competition_id and (e.status=="accepted" or e.status=="registered") and (e.team_id==game.home_team or e.team_id==game.away_team)).map(func(e)={team_id=e.team_id;club_id=e.club_id});
     if(teams.size()!=2) return #Err("Both teams must be registered");
     let authority=switch(eventsDomainCanister){case null return #Err("Events authority unavailable");case(?id)id};
-    let service : actor { upsert_competition_match_events : shared ({match_id:Text;competition_id:Text;creator:Principal;teams:[{team_id:Text;club_id:Text}];starts_at_ms:Nat64;ends_at_ms:Nat64;title:Text;venue:?Text}) -> async {#Ok:[Text];#Err:Text} }=actor(authority.toText());
-    let result=try{do { let removalReply = await (with timeout=10) service.upsert_competition_match_events({match_id;competition_id=game.competition_id;creator=caller;teams;starts_at_ms=starts;ends_at_ms=starts+Nat64.fromNat(Nat16.toNat(game.duration_minutes??90))*60_000;title=game.home_team#" vs "#game.away_team;venue=game.venue}); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }}catch(_){return #Err("Fixture synchronization failed; retry the same match")};
-    if(eventsDomainCanister!=?authority or matchFenced(match_id)) return #Err("Fixture authority changed or locked");
+    let service : actor { materialize_competition_fixture : shared ({match_id:Text;competition_id:Text;creator:Principal;teams:[{team_id:Text;club_id:Text}];starts_at_ms:Nat64;ends_at_ms:Nat64;title:Text;venue:?Text},Nat64) -> async {#Ok:[Text];#Err:Text} }=actor(authority.toText());
+    let result=try{do { let removalReply = await (with timeout=10) service.materialize_competition_fixture({match_id;competition_id=game.competition_id;creator=caller;teams;starts_at_ms=starts;ends_at_ms=starts+Nat64.fromNat(Nat16.toNat(game.duration_minutes??90))*60_000;title=game.home_team#" vs "#game.away_team;venue=game.venue},game.revision); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }}catch(_){return #Err("Fixture synchronization unresolved; retain the same fixture request")};
+    if(eventsDomainCanister!=?authority or matchFenced(match_id) or not matches.any(func m = m.id == game.id and m.revision == game.revision)) return #Err("Fixture authority or revision changed");
     result
   
     } finally { removalReceiver.leave(caller) };

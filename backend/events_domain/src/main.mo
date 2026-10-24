@@ -143,6 +143,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var pitchBoardSettings : [Types.PitchBoardSettings];
   var gameSummaries : [Types.GameSummary];
   var gamePlayerStats : [Types.GamePlayerStat];
+  var fixtureMaterializations : Map.Map<Text, { revision : Nat64; input : Types.MatchEventInput; event_ids : [Text] }>;
   var gameResults : [Types.GameResult];
   var activeGames : [Types.ActiveGame];
   var playHQConfig : ?Types.PlayHQConfig;
@@ -690,6 +691,12 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({caller}) func upsert_competition_match_events(input : Types.MatchEventInput) : async {#Ok:[Text];#Err:Text} {
+    await materializeFixture(caller,input,0)
+  };
+  public shared ({caller}) func materialize_competition_fixture(input : Types.MatchEventInput, revision : Nat64) : async {#Ok:[Text];#Err:Text} {
+    await materializeFixture(caller,input,revision)
+  };
+  func materializeFixture(caller : Principal,input : Types.MatchEventInput, revision : Nat64) : async {#Ok:[Text];#Err:Text} {
     if (not removalReceiver.enter(input.creator)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -698,6 +705,15 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(input.creator);do { let removalReply = await admitAccount(input.creator); if (removalReceiver.denied(input.creator)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (authority != competitionDomainCanister or input.teams.size() != 2 or input.starts_at_ms >= input.ends_at_ms or input.title.size() > 256) return #Err("Invalid fixture or changed authority");
     if(input.teams[0].team_id==input.teams[1].team_id or input.teams.any(func(t)=not valid(t.team_id) or not valid(t.club_id) or isFenced(t.club_id))) return #Err("Invalid or locked fixture teams");
+    switch (Map.get(fixtureMaterializations,Text.compare,input.match_id)) {
+      case (?receipt) {
+        if (revision < receipt.revision) return #Err("Stale fixture materialization");
+        if (revision == receipt.revision) {
+          if (receipt.input != input) return #Err("Fixture revision payload conflict");
+          return #Ok(receipt.event_ids)
+        }
+      }; case null {};
+    };
     // Validate every existing link before touching either event.
     for(target in input.teams.values()){
       switch(competitionMatchLinks.find(func(l)=l.match_id==input.match_id and l.team_id==target.team_id)){
@@ -716,9 +732,14 @@ persistent actor class Main(governorInit : Principal) = this {
       competitionMatchLinks:=competitionMatchLinks.filter(func(l)=l.event_id!=id).concat([{event_id=id;competition_id=input.competition_id;match_id=input.match_id;team_id=target.team_id}]);
       ids:=ids.concat([id]);
     };
+    Map.add(fixtureMaterializations,Text.compare,input.match_id,{revision;input;event_ids=ids});
     #Ok(ids)
   
     } finally { removalReceiver.leave(input.creator) };
+  };
+  public shared ({caller}) func read_fixture_materialization(match_id : Text) : async { #Ok : ?{ revision : Nat64; input : Types.MatchEventInput; event_ids : [Text] }; #Err : Text } {
+    if (competitionDomainCanister != ?caller) return #Err("Trusted competition authority required");
+    #Ok(Map.get(fixtureMaterializations,Text.compare,match_id))
   };
 
   // Fixture-card tap-to-event: returns the per-team event ids materialized
