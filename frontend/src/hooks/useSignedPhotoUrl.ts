@@ -1,7 +1,7 @@
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveIcpBlobObjectUrl, parseIcpBlobUrl } from "@/live/mediaDecrypt";
+import { resolveIcpBlobObjectUrl, parseIcpBlobUrl, icpPhotoResolutionScope, clearIcpPhotoResolutionCache } from "@/live/mediaDecrypt";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
 
 // In-memory cache for signed URLs (hydrated from localStorage on load)
@@ -13,6 +13,12 @@ const CACHE_DURATION_MS = 50 * 60 * 1000;
 const SIGNED_URL_EXPIRES_IN_SECONDS = 3600;
 const REQUEST_TIMEOUT_MS = 5000;
 const PRIVATE_BUCKETS = ["photos", "chat-attachments", "avatars", "competition-vault"] as const;
+
+function signedCacheKey(url: string): string {
+  return parseIcpBlobUrl(url, getActiveIcpTarget(), false)
+    ? `${icpPhotoResolutionScope()}:${url}`
+    : url;
+}
 
 type PrivateBucket = (typeof PRIVATE_BUCKETS)[number];
 
@@ -189,7 +195,7 @@ function readCachedSignedUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const localPreview = localUploadPreviews.get(url);
   if (localPreview) return localPreview;
-  const cached = urlCache.get(url);
+  const cached = urlCache.get(signedCacheKey(url));
   if (cached && cached.expiresAt > Date.now()) return cached.url;
   // ICP blob-store URLs serve IBE ciphertext — they are never directly
   // loadable, so they must always fall through to the decrypt path in
@@ -202,6 +208,7 @@ function readCachedSignedUrl(url: string | null | undefined): string | null {
 }
 
 export function useSignedPhotoUrl(originalUrl: string | null | undefined) {
+  const resolutionScope = originalUrl ? signedCacheKey(originalUrl) : "";
   // Synchronous cache hydration is critical for virtualised chat: if we
   // start with `null` and resolve in an effect, every row remount during a
   // fast back-scroll shows the skeleton for one frame before the cached
@@ -232,7 +239,7 @@ export function useSignedPhotoUrl(originalUrl: string | null | undefined) {
         const resolvedUrl = await resolveSignedUrl(originalUrl);
 
         if (resolvedUrl !== originalUrl) {
-          urlCache.set(originalUrl, {
+          urlCache.set(resolutionScope, {
             url: resolvedUrl,
             expiresAt: Date.now() + CACHE_DURATION_MS,
           });
@@ -259,7 +266,7 @@ export function useSignedPhotoUrl(originalUrl: string | null | undefined) {
     return () => {
       isCancelled = true;
     };
-  }, [originalUrl]);
+  }, [originalUrl, resolutionScope]);
 
   return { signedUrl, isLoading };
 }
@@ -272,7 +279,7 @@ export async function getSignedPhotoUrls(urls: string[]): Promise<Record<string,
   const uncachedUrls: string[] = [];
 
   for (const url of urls) {
-    const cached = urlCache.get(url);
+    const cached = urlCache.get(signedCacheKey(url));
     if (cached && cached.expiresAt > Date.now()) {
       result[url] = cached.url;
     } else {
@@ -302,7 +309,7 @@ export async function getSignedPhotoUrls(urls: string[]): Promise<Record<string,
     result[originalUrl] = resolvedUrl;
 
     if (resolvedUrl !== originalUrl) {
-      urlCache.set(originalUrl, {
+      urlCache.set(signedCacheKey(originalUrl), {
         url: resolvedUrl,
         expiresAt: Date.now() + CACHE_DURATION_MS,
       });
@@ -317,6 +324,7 @@ export async function getSignedPhotoUrls(urls: string[]): Promise<Record<string,
 // Clear cache (useful for logout)
 export function clearSignedUrlCache() {
   urlCache.clear();
+  clearIcpPhotoResolutionCache();
   try {
     if (typeof localStorage !== "undefined") localStorage.removeItem(LS_KEY);
   } catch {

@@ -12,11 +12,11 @@ vi.mock('./internetIdentityAuth', () => ({ getCurrentInternetIdentityConfirmed: 
 vi.mock('./groupDispatch', () => ({ clubDispatch: { readAcross: state.readAcross, read: state.read } }));
 vi.mock('./piiVetKeys', () => ({ clubIdFromMediaPath: (path: string) => /^clubs\/([^/]+)\//.exec(path)?.[1] ?? null, tryDecryptClubMedia: async () => null, decryptPiiValue: state.decrypt }));
 vi.mock('./deviceMediaCache', () => ({ readCachedPhoto: state.cached, writeCachedPhoto: vi.fn() }));
-import { parseIcpBlobUrl, resolveIcpBlobObjectUrl } from './mediaDecrypt';
+import { clearIcpPhotoResolutionCache, parseIcpBlobUrl, resolveIcpBlobObjectUrl } from './mediaDecrypt';
 describe('grouped media decryption', () => {
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   beforeEach(() => {
-    vi.clearAllMocks(); localStorage.clear(); state.active = true;
+    clearIcpPhotoResolutionCache(); vi.clearAllMocks(); localStorage.clear(); state.active = true;
     state.readAcross.mockResolvedValue([state.group]); state.decrypt.mockResolvedValue(new Uint8Array([4, 5]));
     state.read.mockImplementation(async (_feature, _club, _domain, fn) => fn({ target: state.group }));
     state.cached.mockResolvedValue(null);
@@ -65,5 +65,41 @@ describe('grouped media decryption', () => {
     await expect(resolveIcpBlobObjectUrl('https://group-store.raw.icp0.io/clubs/club-b/photo.jpg')).rejects.toThrow('approved group inventory');
     expect(fetch).not.toHaveBeenCalled();
     expect(state.decrypt).not.toHaveBeenCalled();
+  });
+  it('shares concurrent and reopened photos without another download or routing read', async () => {
+    localStorage.setItem('ignite_icp_internet_identity_session', JSON.stringify({ principal: 'parent-a' }));
+    const url = 'https://group-store.raw.icp0.io/clubs/club-b/photo.jpg';
+    expect(await Promise.all([resolveIcpBlobObjectUrl(url), resolveIcpBlobObjectUrl(url)])).toEqual(['blob:unlocked', 'blob:unlocked']);
+    expect(await resolveIcpBlobObjectUrl(url)).toBe('blob:unlocked');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(state.read).toHaveBeenCalledTimes(1);
+    expect(state.decrypt).toHaveBeenCalledTimes(1);
+  });
+  it('does not share photos between accounts', async () => {
+    const url = 'https://group-store.raw.icp0.io/clubs/club-b/photo.jpg';
+    localStorage.setItem('ignite_icp_internet_identity_session', JSON.stringify({ principal: 'parent-a' }));
+    await resolveIcpBlobObjectUrl(url);
+    localStorage.setItem('ignite_icp_internet_identity_session', JSON.stringify({ principal: 'parent-b' }));
+    state.identity.mockResolvedValue({ getPrincipal: () => ({ toText: () => 'parent-b' }) });
+    await resolveIcpBlobObjectUrl(url);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it('allows a fresh attempt after a failed photo download', async () => {
+    localStorage.setItem('ignite_icp_internet_identity_session', JSON.stringify({ principal: 'parent-a' }));
+    const url = 'https://group-store.raw.icp0.io/clubs/club-b/photo.jpg';
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'));
+    await expect(resolveIcpBlobObjectUrl(url)).rejects.toThrow('offline');
+    await expect(resolveIcpBlobObjectUrl(url)).resolves.toBe('blob:unlocked');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it('discards an old pending result after sign-out clears the cache', async () => {
+    localStorage.setItem('ignite_icp_internet_identity_session', JSON.stringify({ principal: 'parent-a' }));
+    let finish: ((bytes: Uint8Array) => void) | undefined;
+    state.decrypt.mockImplementationOnce(() => new Promise<Uint8Array>(resolve => { finish = resolve; }));
+    const request = resolveIcpBlobObjectUrl('https://group-store.raw.icp0.io/clubs/club-b/photo.jpg');
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    clearIcpPhotoResolutionCache();
+    finish?.(new Uint8Array([1]));
+    await expect(request).rejects.toThrow('account changed');
   });
 });

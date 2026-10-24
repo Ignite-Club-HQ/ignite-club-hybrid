@@ -50,6 +50,7 @@ export function clearPiiVetKeyCache(): void {
   vetKeyCache.clear();
   clubMediaKeyCache.clear();
   clubMediaLockSupported.clear();
+  void import("./mediaDecrypt").then(m => m.clearIcpPhotoResolutionCache());
   void clearDeviceMediaCaches();
 }
 
