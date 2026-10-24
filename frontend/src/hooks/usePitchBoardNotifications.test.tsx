@@ -9,6 +9,7 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 
 // ---------- useAuth mock ----------
 let currentUser: { id: string } | null = { id: "user-A" };
+vi.mock('@/live/authBackendMode', () => ({ resolveAuthBackend: () => 'supabase' }));
 vi.mock("./useAuth", () => ({
   useAuth: () => ({ user: currentUser }),
 }));
@@ -22,7 +23,8 @@ const singleCalls: Array<{ userId: string }> = [];
 function nextResp(userId: string): Promise<Resp> {
   const q = responses[userId];
   if (!q || q.length === 0) return Promise.resolve({ data: null, error: null });
-  const next = q.length === 1 ? q[0] : q.shift()!;
+  const next = q.length === 1 ? q[0] : q.shift();
+  if (!next) return Promise.resolve({ data: null, error: null });
   return typeof next === "function" ? next() : Promise.resolve(next);
 }
 
