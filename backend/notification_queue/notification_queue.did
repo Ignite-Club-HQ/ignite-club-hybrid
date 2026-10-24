@@ -209,6 +209,11 @@ type Main =
    due_scheduled: (now_ms: nat64, limit: nat16) -> (ScheduledResults);
    enqueue: (id: text, user: text, club: text, kind: text, body: text, key:
     text) -> (Result);
+   enqueue_competition_broadcast: (users: vec text, club: text, related:
+    text, body: text, key: text) -> (variant {
+                                       Err: text;
+                                       Ok: nat16;
+                                     });
    export_club_snapshot: (club: text) ->
     (variant {
        Err: text;
@@ -266,7 +271,7 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
-   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -318,7 +323,7 @@ type Main =
                                   Err: text;
                                   Ok;
                                 });
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;

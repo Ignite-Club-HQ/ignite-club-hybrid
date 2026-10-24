@@ -713,6 +713,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    queue_competition_broadcast(operation: string, competition: string, divisions: Array<string>, title: string, body: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_account_can_invite_players_to_team(team_id: string): Promise<boolean>;
     read_account_competition_engagement_summary(competition_ids: Array<string>, since_ms: bigint, until_ms: bigint): Promise<{
         __kind__: "Ok";
@@ -2116,6 +2123,16 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
+        return from_candid_variant_n70(result);
+    }
+    async queue_competition_broadcast(arg0: string, arg1: string, arg2: Array<string>, arg3: string, arg4: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.queue_competition_broadcast(arg0, arg1, arg2, arg3, arg4);
         return from_candid_variant_n70(result);
     }
     async read_account_can_invite_players_to_team(arg0: string): Promise<boolean> {

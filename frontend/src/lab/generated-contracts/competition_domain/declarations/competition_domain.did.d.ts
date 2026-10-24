@@ -551,6 +551,11 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'queue_competition_broadcast' : ActorMethod<
+    [string, string, Array<string>, string, string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'read_account_can_invite_players_to_team' : ActorMethod<[string], boolean>,
   'read_account_competition_engagement_summary' : ActorMethod<
     [Array<string>, bigint, bigint],

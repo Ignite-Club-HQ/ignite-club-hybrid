@@ -173,6 +173,13 @@ export interface MainInterface {
     }>;
     due_scheduled(now_ms: bigint, limit: number): Promise<ScheduledResults>;
     enqueue(id: string, user: string, club: string, kind: string, body: string, key: string): Promise<Result>;
+    enqueue_competition_broadcast(users: Array<string>, club: string, related: string, body: string, key: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     export_club_snapshot(club: string): Promise<{
         __kind__: "Ok";
         Ok: Uint8Array;
@@ -231,7 +238,7 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
-    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -286,7 +293,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -570,6 +577,16 @@ export class Notification_queue implements notification_queueInterface {
     async enqueue(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string): Promise<Result> {
         const result = await this.actor.enqueue(arg0, arg1, arg2, arg3, arg4, arg5);
         return from_candid_Result_n1(result);
+    }
+    async enqueue_competition_broadcast(arg0: Array<string>, arg1: string, arg2: string, arg3: string, arg4: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.enqueue_competition_broadcast(arg0, arg1, arg2, arg3, arg4);
+        return from_candid_variant_n24(result);
     }
     async export_club_snapshot(arg0: string): Promise<{
         __kind__: "Ok";

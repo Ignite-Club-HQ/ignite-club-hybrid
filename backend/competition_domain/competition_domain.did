@@ -556,6 +556,12 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   queue_competition_broadcast: (operation: text, competition: text,
+    divisions: vec text, title: text, body: text) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    read_account_can_invite_players_to_team: (team_id: text) -> (bool);
    read_account_competition_engagement_summary: (competition_ids: vec text,
     since_ms: int, until_ms: int) ->
