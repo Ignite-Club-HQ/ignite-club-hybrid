@@ -643,6 +643,32 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     false
   };
+  public shared ({ caller }) func purge_my_data() : async { #Ok : Nat; #Err : Text } {
+    auth(caller);
+    if (isGovernor(caller)) return #Err("Governor erasure forbidden");
+    var count = roles.filter(func r = r.user == caller).size();
+    roles := roles.filter(func r = r.user != caller);
+    count += competitionInvites.filter(func r = r.invitee == caller or r.created_by == caller).size();
+    competitionInvites := competitionInvites.filter(func r = r.invitee != caller and r.created_by != caller);
+    competitionJoinLinks := competitionJoinLinks.map(func r = if (r.created_by == caller) ({ r with revoked = true; created_by = Principal.anonymous() }) else r);
+    roleLinks := roleLinks.map(func r = if (r.created_by == caller) ({ r with revoked = true; created_by = Principal.anonymous() }) else r);
+    competitionOfficialEmailInvites := competitionOfficialEmailInvites.filter(func r = r.created_by != caller and r.accepted_by != ?caller);
+    competitionMemberWelcomeJobs := competitionMemberWelcomeJobs.filter(func r = r.member != caller);
+    personalCompetitionOwners := personalCompetitionOwners.filter(func r = r.1 != caller);
+    tokens := tokens.map(func r = if (r.issued_by == caller) ({ r with used = true; issued_by = Principal.anonymous() }) else r);
+    broadcasts := broadcasts.map(func r = if (r.sender == caller) ({ r with sender = Principal.anonymous() }) else r);
+    eoiSubmissions := eoiSubmissions.filter(func r = r.parent_user_id != ?caller);
+    playhqClaims := playhqClaims.filter(func r = r.user != caller);
+    bulkAccessPrincipals := bulkAccessPrincipals.filter(func p = p != caller);
+    // Keep unknown-write evidence, but scrub identity and make it non-replayable.
+    for ((key, receipt) in Map.entries(broadcastDeliveries).toArray().values()) {
+      if (receipt.sender == caller) {
+        Map.remove(broadcastDeliveries, Text.compare, key);
+        Map.add(broadcastDeliveries, Text.compare, "erased:" # receipt.broadcast_id, { receipt with sender = Principal.anonymous() });
+      }
+    };
+    #Ok(count)
+  };
   public shared ({ caller }) func read_my_competition_cards() : async { #Ok : [{ competition : Types.Competition; entries : [Types.TeamEntry] }]; #Err : Text } {
     if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
     try {
