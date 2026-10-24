@@ -942,6 +942,27 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  public shared ({ caller }) func move_file_to_root(id : Text, team : ?Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      let f = files.find(func f = f.id == id and f.deleted_at_ms == null) ?? return #Err("File not found");
+      if (deletionIntents.get(id) != null) return #Err("Cleanup pending");
+      if (f.competition_id != null or f.mini_league_id != null) return #Err("Use the existing competition or league root");
+      if (not (await canWrite(caller, f.club, f.team, null)) or not (await canWrite(caller, f.club, team, null))) return #Err("Source and destination staff required");
+      if (f.folder_id != "") { let parent = folders.find(func p = p.id == f.folder_id) ?? return #Err("Folder unavailable"); if (not (await canAccessFolder(caller, parent))) return #Err("Folder access forbidden") };
+      switch team { case (?teamId) {
+        let cid = club_domain_canister ?? return #Err("Club authority required");
+        let service : actor { get_team : shared query (Text) -> async { #Ok : ?{ club_id : Text }; #Err : Text } } = actor(cid.toText());
+        switch (await (with timeout = 10) service.get_team(teamId)) { case (#Ok(?t)) { if (t.club_id != f.club) return #Err("Foreign team") }; case (_) return #Err("Team unavailable") };
+        if (club_domain_canister != ?cid) return #Err("Authority changed")
+      }; case null {} };
+      if (not (await canWrite(caller, f.club, f.team, null)) or not (await canWrite(caller, f.club, team, null)) or files.find(func x = x.id == id) != ?f or isFenced(f.club)) return #Err("Move authorization changed");
+      let updated = { f with folder_id = ""; team };
+      files := files.map(func x = if (x.id == id) updated else x); mediaEvidenceRevision += 1; #Ok(updated)
+    } finally { removalReceiver.leave(caller) }
+  };
+
   // Metadata finalization requires byte absence; unknown cleanup keeps the row and intent.
   public shared ({ caller }) func begin_file_cleanup(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
     await admitAccount(caller); auth(caller);

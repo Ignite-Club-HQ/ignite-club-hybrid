@@ -60,7 +60,7 @@ export function MoveFileDialog({
         .order("name");
       return data || [];
     },
-    enabled: open && !!user?.id && !!clubId && !teamId && !icp,
+    enabled: open && !!user?.id && !!clubId && !teamId,
   });
 
   const isLoading = isLoadingFolders || isLoadingTeams;
@@ -103,7 +103,7 @@ export function MoveFileDialog({
 
   const handleMove = () => {
     if (file) {
-      onMove(file.id, selectedFolderId, icp ? undefined : selectedTeamId);
+      onMove(file.id, selectedFolderId, selectedTeamId);
     }
   };
 
@@ -179,7 +179,6 @@ export function MoveFileDialog({
   // Determine if move button should be disabled
   const isMoveDisabled = () => {
     if (isMoving || isLoading || foldersError) return true;
-    if (icp && !selectedFolderId && file?.team_id) return true;
     
     // If a team is selected, check if file is already in that team at root
     if (selectedTeamId) {
@@ -216,7 +215,7 @@ export function MoveFileDialog({
           ) : (
             <div className="max-h-[300px] overflow-y-auto space-y-1 border rounded-lg p-2">
               {/* Root option (no folder, club level) */}
-              {(!icp || !file?.team_id) && <div
+              {<div
                 className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
                   isRootSelected
                     ? "bg-primary text-primary-foreground"

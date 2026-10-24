@@ -601,8 +601,10 @@ export async function moveLiveVaultFile(
   ctx: FeatureBackendContext,
   fileId: string,
   folderId: string,
+  targetTeamId?: string | null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  if (!folderId && targetTeamId !== undefined) return unwrapCandid(actor.move_file_to_root(fileId, candidOpt(targetTeamId)), "Move Vault root");
   return unwrapCandid(actor.move_file(fileId, folderId), "Move vault file");
 }
 
