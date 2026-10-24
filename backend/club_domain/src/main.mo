@@ -5402,7 +5402,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let eligible = func(user : Principal) : Bool {
       not Principal.isAnonymous(user) and not removalReceiver.denied(user) and not isExcluded(user, club) and isMember(user, club)
     };
-    let activeTeams = clubTeams.filter(func(t) = t.club_id == club and t.is_active and not t.archived and t.deleted_at_ms == null and not t.is_shell).map(func(t) = t.id);
+    let activeTeams = teams.filter(func(t) = t.club_id == club and t.is_active and not t.archived and t.deleted_at_ms == null and not t.is_shell).map(func(t) = t.id);
     let clubRoles = acl.roles.filter(func(r) = r.club == ?club and eligible(r.user));
     let kids = acl.children.filter(func(c) = c.club_id == ?club).map(func(c) = {
       id = c.id; teams = c.teams.filter(func(t) = activeTeams.any(func(id) = id == t));
