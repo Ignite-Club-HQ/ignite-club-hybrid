@@ -71,6 +71,17 @@ export const idlFactory = ({ IDL }) => {
     'competition_id' : IDL.Text,
     'club_id' : IDL.Text,
   });
+  const Job = IDL.Record({
+    'id' : IDL.Text,
+    'resource' : IDL.Text,
+    'ciphertext' : IDL.Text,
+    'attempt' : IDL.Nat,
+    'kind' : IDL.Text,
+    'provider_id' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'state' : IDL.Text,
+    'worker' : IDL.Opt(IDL.Principal),
+  });
   const CompetitionEngagementSummary = IDL.Record({
     'total_matches' : IDL.Nat,
     'active_teams' : IDL.Nat,
@@ -357,6 +368,24 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'can_invite_players_to_team' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'claim_email_job' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(
+              IDL.Record({
+                'to' : IDL.Text,
+                'job' : Job,
+                'token' : IDL.Text,
+                'subject' : IDL.Text,
+                'body' : IDL.Text,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'claim_eoi_by_token' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : EoiSubmission, 'Err' : IDL.Text })],
@@ -476,6 +505,11 @@ export const idlFactory = ({ IDL }) => {
         [],
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'finish_email_job' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
       ),
     'get_chat_settings' : IDL.Func(
         [IDL.Text],
@@ -771,6 +805,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'queue_official_invite_email' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'read_account_can_invite_players_to_team' : IDL.Func(
         [IDL.Text],
         [IDL.Bool],
@@ -1043,6 +1082,11 @@ export const idlFactory = ({ IDL }) => {
     'set_division_hide_ladder' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : DivisionSetting, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_email_workers' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_events_domain_canister' : IDL.Func(

@@ -245,6 +245,17 @@ export interface InvitePayload {
   'body' : string,
 }
 export interface InviteStats { 'total' : bigint, 'accepted' : bigint }
+export interface Job {
+  'id' : string,
+  'resource' : string,
+  'ciphertext' : string,
+  'attempt' : bigint,
+  'kind' : string,
+  'provider_id' : string,
+  'created_at_ms' : bigint,
+  'state' : string,
+  'worker' : [] | [Principal],
+}
 export interface Link {
   'id' : string,
   'sort_order' : number,
@@ -376,6 +387,21 @@ export interface Main {
   'check_team_name_unique' : ActorMethod<
     [string, string],
     { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'claim_email_job' : ActorMethod<
+    [],
+    {
+        'Ok' : [] | [
+          {
+            'to' : string,
+            'job' : Job,
+            'token' : string,
+            'subject' : string,
+            'body' : string,
+          }
+        ]
+      } |
       { 'Err' : string }
   >,
   'claim_shell_team' : ActorMethod<
@@ -570,6 +596,11 @@ export interface Main {
   'find_pending_invite_by_email_hash' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [PendingInviteEmailHash] } |
+      { 'Err' : string }
+  >,
+  'finish_email_job' : ActorMethod<
+    [string, bigint, string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'free_usage_counters' : ActorMethod<
@@ -1116,6 +1147,11 @@ export interface Main {
   'purge_expired_deletions' : ActorMethod<
     [],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'queue_pending_invite_email' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'read_account_execute' : ActorMethod<[string], Result__2>,
@@ -1922,6 +1958,11 @@ export interface Main {
   >,
   'set_competition_domain_canister' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_email_workers' : ActorMethod<
+    [Array<Principal>],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

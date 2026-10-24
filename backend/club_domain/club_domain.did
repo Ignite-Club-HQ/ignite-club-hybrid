@@ -563,6 +563,18 @@ type Main =
        Err: text;
        Ok: bool;
      }) query;
+   claim_email_job: () ->
+    (variant {
+       Err: text;
+       Ok:
+        opt record {
+              body: text;
+              job: Job;
+              subject: text;
+              to: text;
+              token: text;
+            };
+     });
    claim_shell_team: (token: text) -> (variant {
                                          Err: text;
                                          Ok: ClubTeam;
@@ -750,6 +762,11 @@ type Main =
        Err: text;
        Ok: opt PendingInviteEmailHash;
      }) query;
+   finish_email_job: (id: text, attempt: nat, outcome: text, provider_id:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    free_usage_counters: (club_id: text) ->
     (variant {
        Err: text;
@@ -1296,6 +1313,11 @@ type Main =
                                      Err: text;
                                      Ok: nat32;
                                    });
+   queue_pending_invite_email: (id: text, ciphertext: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    read_account_execute: (input: text) -> (Result__2);
    read_account_find_pending_invite_by_email_hash: (club_id: text, hash:
     text) -> (variant {
@@ -2077,6 +2099,10 @@ type Main =
        Err: text;
        Ok;
      });
+   set_email_workers: (workers: vec principal) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    set_events_domain_canister: (id: principal) -> (variant {
                                                      Err: text;
                                                      Ok;
@@ -2282,6 +2308,18 @@ type Link =
    draft: Draft;
    id: text;
    sort_order: nat32;
+ };
+type Job = 
+ record {
+   attempt: nat;
+   ciphertext: text;
+   created_at_ms: nat64;
+   id: text;
+   kind: text;
+   provider_id: text;
+   resource: text;
+   state: text;
+   worker: opt principal;
  };
 type InviteStats = 
  record {
