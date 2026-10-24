@@ -1,3 +1,8 @@
+## File Vault ICP audit — 24 October 2026
+- [ ] Audit every Vault app and canister flow for off-chain dependencies and essential functionality parity.
+- [ ] Close confirmed gaps with scoped authorization, original encrypted-file access and unchanged Supabase behaviour.
+- [ ] Run focused dual-mode/real-canister checks and document exact release and signed-in acceptance blockers; no deployment authorized.
+
 ## Gallery ICP completion — 24 October 2026
 - [x] Add authorized threaded comments, canister-derived gallery notices, exact photo/comment/event/card links, quiet foreground refresh and authorized on-chain photo view counts.
 - [x] Restore exact club/team sharing allowances, scoped staff moderation, separate encrypted/deduplicated source-bound Vault copies, consistent hidden-gallery reads, both deletion choices and owned-asset receipt-based team cards; grouped chat-photo publishing preserves album IDs.
