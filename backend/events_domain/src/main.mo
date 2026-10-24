@@ -2820,8 +2820,10 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
     try {
       auth(caller); await admitAccount(caller);
-      let ids = competitionEventOperations.filter(func o = o.competition_id == competition_id).flatMap(func o = o.event_ids)
-        .concat(competitionMatchLinks.filter(func l = l.competition_id == competition_id).map(func l = l.event_id));
+      var ids : [Text] = competitionMatchLinks.filter(func l = l.competition_id == competition_id).map(func l = l.event_id);
+      for (operation in competitionEventOperations.values()) {
+        if (operation.competition_id == competition_id) ids := ids.concat(operation.event_ids);
+      };
       if (ids.size() > 500) return #Err("Competition event inventory requires paging");
       var visible : [Types.Event] = [];
       for (event in events.filter(func e = not e.deleted and ids.any(func id = id == e.id)).values()) {
