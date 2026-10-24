@@ -358,6 +358,14 @@ export async function registerLivePiiText(
  */
 async function readVaultPages(ctx: FeatureBackendContext, clubId: string, teamId: string | null, leagueId: string | null, competitionId: string | null, folderId: string | null, trash: boolean) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  // Quiet bounded recovery: only acknowledged uploads by this account qualify.
+  // No automatic byte retry, compensation or Supabase fallback on unknown outcomes.
+  void (async () => {
+    const page = await unwrapCandid(actor.read_my_upload_page(clubId, ""), "Read pending Vault uploads");
+    for (const id of page.ids) {
+      try { await unwrapCandid(actor.recover_file_upload(id), "Recover pending Vault file"); } catch { /* retain the exact intent */ }
+    }
+  })().catch(() => { /* older canisters or unavailable recovery never block file reads */ });
   const items: import("../../lab/bindings/vault_domain/declarations/vault_domain.did.js").VaultFileWithFolder[] = [];
   let offset = 0n;
   let revision: [] | [bigint] = [];

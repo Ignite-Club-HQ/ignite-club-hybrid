@@ -84,7 +84,9 @@ export async function tryUploadMediaToBlobStore(args: {
   const clubId = clubIdFromMediaPath(args.storagePath);
   if (clubId && !args.competitionId && args.lock !== "own" && (await isClubMediaLockSupported(ctx))) {
     const ciphertext = await encryptClubMedia(ctx, clubId, bytes);
-    return uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime, args.beforeUpload);
+    return args.beforeUpload
+      ? uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime, args.beforeUpload)
+      : uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime);
   }
   const ciphertext = await encryptPiiValue(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, bytes);
   // The access record's ciphertext is only a content-hash marker (the store
@@ -116,7 +118,9 @@ export async function tryUploadMediaToBlobStore(args: {
     }
   })();
   const [result] = await Promise.all([
-    uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime, args.beforeUpload),
+    args.beforeUpload
+      ? uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime, args.beforeUpload)
+      : uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime),
     registration,
   ]);
   return result;
