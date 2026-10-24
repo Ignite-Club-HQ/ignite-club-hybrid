@@ -1,6 +1,7 @@
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Suspense } from "react";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
+import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
 import { readIcpGroupMetadata } from "@/features/messaging/thread/icpThreadRead";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
@@ -1229,6 +1230,9 @@ export default function GroupChatPage() {
     },
 
     onSuccess: (result, variables, context) => {
+      if (result?.confirmedMessage) {
+        applyConfirmedInboxPreview(queryClient, "group", user?.id, groupId, result.confirmedMessage);
+      }
       if (result?.confirmedMessage && context?.tempId) {
         confirmPendingSend(queryClient, ["group-messages", groupId], context.tempId, result.confirmedMessage);
         setLocalMessages((prev) => prev?.filter((row) => row.id !== context.tempId));
