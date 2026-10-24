@@ -1,7 +1,7 @@
 import type { Identity } from '@icp-sdk/core/agent';
 import type { IcpTargetConfig } from './targetRegistry';
 
-type DeletionDomain = 'club_domain' | 'vault_domain' | 'events_domain' | 'messaging_domain' | 'competition_domain';
+type DeletionDomain = 'club_domain' | 'vault_domain' | 'events_domain' | 'messaging_domain' | 'competition_domain' | 'notification_queue';
 
 /** Keep discovery alive through deletion: membership loss must not drop an authority on retry. */
 export async function openAccountDeletionInventory(target: IcpTargetConfig, identity: Identity,

@@ -18,13 +18,16 @@ vi.mock('./domains', () => {
   const connect = (domain: string) => async (target: IcpTargetConfig) => ({ actor: {
     erase_my_membership: () => state.revoke(target.canisterIds[domain]),
     purge_my_data: () => state.purge(domain, target.canisterIds[domain]),
+    prepare_my_broadcast_erasure: async () => ({ Ok: null }),
+    check_my_broadcast_erasure: async () => ({ Ok: null }),
+    purge_my_broadcast_data: async () => ({ Ok: 0 }),
   } });
   return { connectLiveClubDomain: connect('club_domain'), connectLiveVaultDomain: connect('vault_domain'),
-    connectLiveEventsDomain: connect('events_domain'), connectLiveMessagingDomain: connect('messaging_domain'), connectLiveCompetitionDomain: connect('competition_domain') };
+    connectLiveEventsDomain: connect('events_domain'), connectLiveMessagingDomain: connect('messaging_domain'), connectLiveCompetitionDomain: connect('competition_domain'), connectLiveNotificationQueue: connect('notification_queue') };
 });
 import { eraseMyIcpAccount } from './accountData';
 const target = (prefix: string) => ({ alias: 'mainnet', host: 'https://icp-api.io', networkKind: 'public_mainnet',
-  canisterIds: Object.fromEntries(['club_domain', 'vault_domain', 'events_domain', 'messaging_domain', 'competition_domain'].map(d => [d, `${prefix}-${d}`])) }) as IcpTargetConfig;
+  canisterIds: Object.fromEntries(['club_domain', 'vault_domain', 'events_domain', 'messaging_domain', 'competition_domain', 'notification_queue'].map(d => [d, `${prefix}-${d}`])) }) as IcpTargetConfig;
 const identity = {} as Identity;
 beforeEach(() => {
   vi.clearAllMocks(); state.active = true; state.order = [];
@@ -38,7 +41,7 @@ describe('account erasure across all registered groups', () => {
   it('revokes every authority before purging and erases the shared identity last', async () => {
     await eraseMyIcpAccount(identity, target('shared'));
     expect(state.revoke.mock.calls.map(c => c[0])).toEqual(['shared-club_domain', 'a-club_domain', 'b-club_domain']);
-    expect(state.purge).toHaveBeenCalledTimes(12);
+    expect(state.purge).toHaveBeenCalledTimes(15);
     expect(state.order.slice(0, 3)).toEqual(['revoke:shared-club_domain', 'revoke:a-club_domain', 'revoke:b-club_domain']);
     expect(state.order.at(-1)).toBe('erase-identity');
     expect(state.dispose).toHaveBeenCalledTimes(1);
@@ -62,14 +65,14 @@ describe('account erasure across all registered groups', () => {
   it('calls shared authorities only once when also present in the group registry', async () => {
     state.registry.mockResolvedValue([target('shared'), target('b')]);
     await eraseMyIcpAccount(identity, target('shared'));
-    expect(state.revoke).toHaveBeenCalledTimes(2); expect(state.purge).toHaveBeenCalledTimes(8);
+    expect(state.revoke).toHaveBeenCalledTimes(2); expect(state.purge).toHaveBeenCalledTimes(10);
   });
   it('continues other purges but retains identity when one group cleanup fails', async () => {
     state.purge.mockImplementation(async (domain, id) => {
       if (id === 'b-messaging_domain') return { Err: 'Busy' }; return { Ok: 1 };
     });
     await expect(eraseMyIcpAccount(identity, target('shared'))).rejects.toThrow('Account deletion is incomplete: messaging');
-    expect(state.purge).toHaveBeenCalledTimes(12); expect(state.erase).not.toHaveBeenCalled();
+    expect(state.purge).toHaveBeenCalledTimes(15); expect(state.erase).not.toHaveBeenCalled();
     expect(state.dispose).toHaveBeenCalledTimes(1);
   });
   it('does not query group discovery while scaling is off', async () => {

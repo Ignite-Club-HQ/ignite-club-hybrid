@@ -1,4 +1,5 @@
 import Principal "mo:core/Principal";
+import Array "mo:core/Array";
 import Text "mo:core/Text";
 module {
   public func matches(subjects : [Principal], user : Text) : Bool {
