@@ -46,7 +46,7 @@ import {
   trimCompetitionRounds,
   updateCompetitionMatch,
 } from "@/features/competitions/fixtures/matchWorkflows";
-import { buildManualMatchRow, createManualMatch } from "@/features/competitions/fixtures/manualMatchWorkflow";
+import { buildManualMatchRow, createManualMatch,recoverManualMatch } from "@/features/competitions/fixtures/manualMatchWorkflow";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { TeamAvatar } from "@/components/competition/TeamAvatar";
 import { LadderView } from "@/components/competition/CompetitionLadderView";
@@ -1838,7 +1838,15 @@ function AddMatchButton({ competitionId, entries, divisions, defaultOpen = false
   };
 
   if (!open) {
-    return <Button size="sm" variant="outline" onClick={() => setOpen(true)}><Plus className="h-4 w-4 mr-1" /> Add match</Button>;
+    return <Button size="sm" variant="outline" disabled={saving} onClick={async () => {
+      if(resolveAuthBackend()==="icp") {
+        setSaving(true);
+        try {if(await recoverManualMatch(competitionId)){toast({title:"Match recovered"});qc.invalidateQueries({queryKey:["competition-matches",competitionId]});onSaved?.();return}}
+        catch(error){toast({title:"Could not recover match",description:error instanceof Error?error.message:"Please try again.",variant:"destructive"});return}
+        finally{setSaving(false)}
+      }
+      setOpen(true);
+    }}><Plus className="h-4 w-4 mr-1" /> Add match</Button>;
   }
   // Shared input class so every field looks like the matchmaker direction.
   const fieldClass =

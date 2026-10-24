@@ -4637,7 +4637,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let eraseIndices=details.keys().toArray().filter(func i = details[i].user_id==?me or details[i].user_id==?("principal:" # me) or (switch(details[i].child_id){case (?id)erasedChildren.any(func c = c==id);case null false}));
       if(eraseIndices.size()!=0){
         var i=0;gamePlayerStats:=gamePlayerStats.map(func s {if(s.event_id==eventId){let erase=eraseIndices.any(func j = j==i);i+=1;if(erase){removed+=1;{s with user_id=null;fill_in_player_name=null}}else s}else s});
-        Map.add(gamePlayerDetails,Text.compare,eventId,details.map(func d {if(d.user_id==?me or d.user_id==?("principal:" # me) or (switch(d.child_id){case (?id)erasedChildren.any(func c = c==id);case null false})){d with user_id=null;child_id=null}else d}))
+        Map.add(gamePlayerDetails,Text.compare,eventId,details.map(func d {if(d.user_id==?me or d.user_id==?("principal:" # me) or (switch(d.child_id){case (?id)erasedChildren.any(func c = c==id);case null false})){ {d with user_id=null;child_id=null} }else d}))
       }
     };
     #Ok(Nat32.fromNat(removed))
