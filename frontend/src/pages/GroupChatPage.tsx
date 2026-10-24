@@ -580,6 +580,8 @@ export default function GroupChatPage() {
     pageSize: MESSAGES_PER_PAGE,
     supabaseClient: supabase,
     clubId: group?.club_id,
+    userId: user?.id,
+    clubId: group?.club_id,
   });
 
   // Scope key for the realtime edit/soft-delete reconciliation registry.

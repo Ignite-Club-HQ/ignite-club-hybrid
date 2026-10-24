@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { liveOnlineCount, livePresenceHeartbeat } from "@/live/features/messaging";
+import { livePresenceHeartbeat } from "@/live/features/messaging";
+import { useIcpConversationPresence } from "@/hooks/useIcpConversationPresence";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnlineSet } from "@/hooks/useUserPresence";
 import type { Database } from "@/integrations/supabase/types";
@@ -61,7 +62,7 @@ export function useChatOnlineCount(
       withFeatureBackend("messaging", {
         supabase: async () => {},
         icp: (ctx) => livePresenceHeartbeat(ctx, Capacitor.isNativePlatform() ? Capacitor.getPlatform() : "web"),
-      }, { shared: "person" }).catch(() => {});
+      }, clubId ? { clubId } : chatType === "team" ? { teamId: chatId } : chatType === "club" ? { clubId: chatId } : { conversationId: chatId }).catch(() => {});
     };
     beat();
     const timer = setInterval(beat, 120 * 1000);
@@ -71,20 +72,9 @@ export function useChatOnlineCount(
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [routedToIcp, enabled, chatId]);
+  }, [routedToIcp, enabled, chatId, clubId, chatType]);
 
-  const { data: icpOnlineCount } = useQuery({
-    queryKey: ["chat-online-count-icp", chatId],
-    queryFn: () =>
-      withFeatureBackend("messaging", {
-        supabase: async () => 0,
-        icp: (ctx) => liveOnlineCount(ctx, chatId!),
-      }, { shared: "person" }),
-    enabled: routedToIcp && enabled && !!chatId,
-    staleTime: 60 * 1000,
-    refetchInterval: 120 * 1000,
-    refetchIntervalInBackground: false,
-  });
+  const icpOnline = useIcpConversationPresence(chatId, { enabled, clubId: clubId ?? (chatType === "club" ? chatId : null) });
 
   const { data: memberIds } = useQuery({
     queryKey: [
@@ -197,15 +187,15 @@ export function useChatOnlineCount(
     refetchInterval: 45 * 1000,
   });
 
-  if (routedToIcp) return icpOnlineCount ?? 0;
-
   // Union the two sources (mirrors the green-dot logic in
   // ChatParticipantsList so the header count and the per-member dots
   // reconcile), then exclude the current user.
-  return useMemo(() => {
+  const legacyCount = useMemo(() => {
     const union = new Set<string>(realtimeOnlineSet);
     for (const id of heartbeatOnlineIds || []) union.add(id);
     if (user?.id) union.delete(user.id);
     return union.size;
   }, [realtimeOnlineSet, heartbeatOnlineIds, user?.id]);
+  if (routedToIcp) { icpOnline.delete(user?.id ?? ""); return icpOnline.size; }
+  return legacyCount;
 }

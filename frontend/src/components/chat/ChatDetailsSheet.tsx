@@ -95,7 +95,7 @@ export function ChatDetailsSheet({
     chatId,
     // Scan a wider window of recent messages so the preview strip can show
     // up to 8 photos even when recent messages are mostly text/links.
-    { limit: 80, enabled: open && !useIcpLab },
+    { limit: 80, enabled: open, clubId, teamId, miniLeagueId, competitionId },
   );
 
   const close = () => onOpenChange(false);
@@ -278,7 +278,7 @@ export function ChatDetailsSheet({
                     <NavRow
                       label="View file vault"
                       onClick={async () => {
-                        if (isGroup) {
+                        if (isGroup && !useIcpLab && resolveAuthBackend() !== "icp") {
                           // Look up folder linked to this group chat first
                           const { data: folder } = await supabase
                             .from("vault_folders")
@@ -399,6 +399,10 @@ export function ChatDetailsSheet({
         chatType={mediaType}
         chatId={chatId}
         title="Shared in chat"
+        clubId={clubId}
+        teamId={teamId}
+        miniLeagueId={miniLeagueId}
+        competitionId={competitionId}
       />
 
       {activeMedia && (

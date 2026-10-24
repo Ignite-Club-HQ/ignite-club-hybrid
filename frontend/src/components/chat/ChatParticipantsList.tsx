@@ -26,6 +26,7 @@ import AddRoleToMemberDialog from "@/components/AddRoleToMemberDialog";
 import { ParticipantProfileSheet, type ParticipantRoleEntry } from "@/components/chat/ParticipantProfileSheet";
 import { cn } from "@/lib/utils";
 import { useOnlineSet } from "@/hooks/useUserPresence";
+import { useIcpConversationPresence } from "@/hooks/useIcpConversationPresence";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -691,6 +692,7 @@ export function ChatParticipantsList({
 
   // Online status: combine realtime presence with DB heartbeat (last 90s).
   const realtimeOnline = useOnlineSet(memberIds);
+  const icpOnline = useIcpConversationPresence(chatId, { enabled, clubId });
   const { data: heartbeatOnlineIds } = useQuery({
     queryKey: ["chat-members-online-heartbeat", chatType, chatId, memberIds],
     queryFn: async (): Promise<string[]> => {
@@ -707,10 +709,10 @@ export function ChatParticipantsList({
     refetchInterval: 45 * 1000,
   });
   const onlineIds = useMemo(() => {
-    const s = new Set<string>(realtimeOnline);
+    const s = new Set<string>(isFeatureRoutedToIcp("messaging") ? icpOnline : realtimeOnline);
     for (const id of heartbeatOnlineIds || []) s.add(id);
     return s;
-  }, [realtimeOnline, heartbeatOnlineIds]);
+  }, [realtimeOnline, heartbeatOnlineIds, [...icpOnline].sort().join(",")]);
 
   const sortedMembers = useMemo(() => {
     return [...uniqueMembers].sort((a, b) => {
