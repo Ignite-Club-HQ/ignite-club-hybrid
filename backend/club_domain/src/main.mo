@@ -221,6 +221,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var memberPayments : [Types.MemberPayment];
   var teamSponsorAllocations : [Types.TeamSponsorAllocation];
   var seasons : [Types.Season];
+  var seasonCloneReceipts : Map.Map<Text, { source : Text; name : Text; copy_staff : Bool; season_id : Text }>;
+  var seasonTeamCopies : [(Text, Text, Text)];
   var seasonTeamSummaries : [Types.SeasonTeamSummary];
   var seasonPlayerStats : [Types.SeasonPlayerStat];
 
@@ -1917,6 +1919,72 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  public shared ({ caller }) func duplicate_season_structure(operation : Text, source_id : Text, name : Text, copy_staff : Bool) : async { #Ok : Types.Season; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let source = seasons.find(func s = s.id == source_id) ?? return #Err("Source season not found");
+      if (not isAdmin(caller, source.club_id) or isTransferFenced(source.club_id)) return #Err("Club admin required");
+      if (operation.size() == 0 or operation.size() > 128 or name.size() == 0 or name.size() > 200) return #Err("Invalid season request");
+      let key = caller.toText() # "\u{1f}" # operation;
+      switch (Map.get(seasonCloneReceipts, Text.compare, key)) {
+        case (?receipt) {
+          if (receipt.source != source_id or receipt.name != name or receipt.copy_staff != copy_staff) return #Err("Season operation conflict");
+          return #Ok(seasons.find(func s = s.id == receipt.season_id) ?? return #Err("Created season no longer exists"))
+        }; case null {};
+      };
+      let sourceAssignments = seasonTeamAssignments.filter(func a = a.season_id == source_id);
+      let priorCopies = seasonTeamCopies.filter(func pair = pair.0 == source_id);
+      let sourceTeams = teams.filter(func t = t.club_id == source.club_id and t.deleted_at_ms == null and not t.archived and
+        (if (priorCopies.size() > 0) priorCopies.any(func pair = pair.2 == t.id) else if (sourceAssignments.size() > 0) sourceAssignments.any(func a = a.team_id == t.id) else true));
+      if (sourceTeams.size() > 100) return #Err("Season team batch exceeds limit");
+      switch (teamCapacityError(source.club_id, sourceTeams.size())) { case (?error) return #Err(error); case null {} };
+      let id = "season-copy-" # source.club_id # "-" # Nat.toText(seasons.size() + 1) # "-" # Nat64.toText(nowNs());
+      let created : Types.Season = { source with id; name; status = "draft"; start_date = ""; end_date = ""; created_at_ms = nowMs(); updated_at_ms = nowMs() };
+      var copied : [Types.ClubTeam] = [];
+      var staff : [Types.RoleGrant] = [];
+      var mapping : [(Text, Text, Text)] = [];
+      for (team in sourceTeams.values()) {
+        let teamId = id # "-team-" # Nat.toText(copied.size());
+        copied := copied.concat([{ team with id = teamId; is_shell = false; shell_claim_token = null; shell_claimed_at_ms = null; shell_claimed_by = null; shell_contact_email = null; shell_contact_name = null; shell_invited_by = null; playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false }]);
+        mapping := mapping.concat([(id, team.id, teamId)]);
+        if (copy_staff) {
+          staff := staff.concat(acl.roles.filter(func r = r.club == ?source.club_id and r.team == ?team.id and (r.role == "coach" or r.role == "team_admin") and not removalReceiver.denied(r.user) and not isExcluded(r.user, source.club_id)).map(func r = ({ r with team = ?teamId })));
+        }
+      };
+      // All validation precedes the single local commit; no remote calls below.
+      seasons := seasons.concat([created]); teams := teams.concat(copied);
+      acl := { acl with teams = acl.teams.concat(copied.map(func t = ({ id = t.id; club = t.club_id }))); roles = acl.roles.concat(staff) };
+      seasonTeamCopies := seasonTeamCopies.concat(mapping);
+      Map.add(seasonCloneReceipts, Text.compare, key, { source = source_id; name; copy_staff; season_id = id });
+      bumpMembershipDiscovery();
+      #Ok(created)
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func carry_over_season_players(source_id : Text, target_id : Text, members : [Text]) : async { #Ok : Nat; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      let source = seasons.find(func s = s.id == source_id) ?? return #Err("Source season not found");
+      let target = seasons.find(func s = s.id == target_id) ?? return #Err("Target season not found");
+      if (source.id == target.id or source.club_id != target.club_id or target.status != "draft" or not isAdmin(caller, target.club_id) or isTransferFenced(target.club_id)) return #Err("Same-club draft season and admin required");
+      if (members.size() > 500) return #Err("Rollover batch exceeds limit");
+      var additions : [Types.SeasonTeamAssignment] = [];
+      for (member in members.values()) {
+        if (additions.any(func a = a.member_id == member)) return #Err("Duplicate member");
+        let previous = seasonTeamAssignments.find(func a = a.season_id == source_id and a.member_id == member) ?? return #Err("Source member missing");
+        let destination = switch (seasonTeamCopies.find(func pair = pair.0 == target_id and pair.1 == previous.team_id)) { case (?pair) pair.2; case null previous.team_id };
+        if (not teams.any(func t = t.id == destination and t.club_id == target.club_id and t.deleted_at_ms == null and not t.archived)) return #Err("Destination team unavailable");
+        additions := additions.concat([{ previous with season_id = target_id; team_id = destination; added_at_ms = nowMs() }]);
+      };
+      let missing = additions.filter(func a = not seasonTeamAssignments.any(func current = current.season_id == target_id and current.member_id == a.member_id));
+      if (additions.any(func a = seasonTeamAssignments.any(func current = current.season_id == target_id and current.member_id == a.member_id and current.team_id != a.team_id))) return #Err("Target player already assigned differently");
+      seasonTeamAssignments := seasonTeamAssignments.concat(missing);
+      #Ok(missing.size())
+    } finally { removalReceiver.leave(caller) }
   };
 
   // ---- Season expression-of-interest (EOI) config: a free-form JSON blob
