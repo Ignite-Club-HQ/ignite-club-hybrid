@@ -312,6 +312,17 @@ type Main =
        Err: text;
        Ok: BackupPage;
      });
+   read_cleanup_page: (after: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             items: vec record {
+                          text;
+                          CleanupRecord;
+                        };
+             next: opt text;
+           };
+     });
    read_club_media_references: (club: text, offset: nat, expected:
     opt nat) -> (variant {
                    Err: text;
@@ -338,6 +349,10 @@ type Main =
           revision: nat;
         };
      });
+   reconcile_erased_file: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
    register_file: (id: text, folder_id: text, club: text, team: opt text,
     name: text, file_url: text, size: nat64, mime: text, is_external_link:
     bool, blob_ref: opt BlobRef, mini_league_id: opt text, competition_id:
@@ -443,6 +458,18 @@ type Main =
        Err: text;
        Ok: VaultFolder;
      });
+ };
+type CleanupRecord = 
+ record {
+   blob_ref: BlobRef;
+   club: text;
+   competition: opt text;
+   state: variant {
+            complete;
+            erased;
+            pending;
+          };
+   team: opt text;
  };
 type BlobRef = 
  record {
