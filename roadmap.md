@@ -1,4 +1,6 @@
 ## Competition ICP audit — 24 October 2026
+- [ ] Approved closure: repair competition authorization/broadcasts, routed public/EOI/club discovery, fixture/event/report parity, officials/welcome/seasons and explicit erasure coverage; add focused regressions and real-canister checks. Preserve unknown outcomes and existing Supabase behaviour; no mainnet deployment authorized.
+- [ ] Competition live release/acceptance: protected exact both-group upgrades, wiring readback and signed-in II flows require separate authorization/session; do not claim local code is live.
 - [x] Audit competition pages, linked features and canister authority paths; record confirmed off-chain dependencies, parity gaps, authorization findings and release evidence limits in docs/competition-icp-audit-2026-10-24.md. Application behaviour unchanged; no deployment or mainnet mutation.
 - [x] Run 28 focused files per mode: Supabase 142 passed/25 failed/13 skipped; ICP 136 passed/20 failed/24 skipped. Failures are missing router context in three test files, not proof of deployed router failure. Isolation guards and 17-contract drift pass, but do not certify complete functionality. Current preview build OK; signed-in II and live module/wiring acceptance unavailable.
 
