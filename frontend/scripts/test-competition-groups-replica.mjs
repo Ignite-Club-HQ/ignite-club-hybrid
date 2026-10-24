@@ -58,6 +58,14 @@ try {
   assert.deepEqual(ok(await c.list_matches(competition)), []);
   c.setPrincipal(manager);
   const fixture = ok(await c.record_match(competition, home, away));
+  const input={competition_id:competition,home_team:home,away_team:away,division_id:[],scheduled_at_ms:[],venue:['Oval'],pitch_number:['2'],round_number:[3],duration_minutes:[60],arrival_minutes_before:[20],notes:['Final']};
+  const atomic=ok(await c.create_fixture('fixture-operation',input));
+  assert.equal(atomic.venue[0],'Oval');assert.equal(atomic.duration_minutes[0],60);
+  assert.equal(ok(await c.create_fixture('fixture-operation',input)).id,atomic.id);
+  assert.equal(ok(await c.read_fixture_operation('fixture-operation'))[0].match_id,atomic.id);
+  denied(await c.create_fixture('fixture-operation',{...input,notes:['Changed']}));
+  c.setPrincipal(stranger);assert.deepEqual(ok(await c.read_fixture_operation('fixture-operation')),[]);
+  c.setPrincipal(manager);
   c.setPrincipal(stranger);
   denied(await c.move_team_division(competition, home, [], ['new-division'], true));
   c.setPrincipal(manager);
@@ -72,6 +80,7 @@ try {
   assert.ok(ok(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Match notice')) > 0n);
   const acknowledged = ok(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Match notice'));
   assert.ok(acknowledged > 0n);
+  QA.actor.setPrincipal(stranger);denied(await QA.actor.read_competition_broadcast_receipt('host','anything'));
   denied(await c.queue_competition_broadcast('broadcast-operation', competition, [], 'Cup', 'Changed payload'));
   QB.actor.setPrincipal(parent);
   assert.equal(ok(await QB.actor.list_inbox(parent.toText(), ['guest'], 100)).filter(n => n.kind === 'competition_broadcast').length, 1);
