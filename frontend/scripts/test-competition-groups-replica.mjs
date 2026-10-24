@@ -46,6 +46,7 @@ try {
   ok(await v.set_competition_domain_canister(C.canisterId));
   c.setPrincipal(manager);
   const competition = ok(await c.create_competition('host', 'Cup', '2026')).id;
+  ok(await c.set_competition_welcome_email(competition,true,'Welcome','Season welcome'));
   denied(await c.register_team(competition, away, 'host')); // forged foreign ownership
   ok(await c.register_team(competition, home, 'host'));
   assert.equal(ok(await c.invite_team(competition, away)).club_id, 'guest');
@@ -58,6 +59,8 @@ try {
   assert.deepEqual(ok(await c.read_competition_club(competition)), ['host']);
   denied(await c.list_matches(competition)); // invited is not yet a participant
   assert.equal(ok(await c.respond_to_entry_invite(competition, away, true)).club_id, 'guest');
+  assert.equal(ok(await c.read_competition_welcome_message(competition))[0].message,'Season welcome');
+  c.setPrincipal(stranger);denied(await c.read_competition_welcome_message(competition));c.setPrincipal(parent);
   assert.deepEqual(ok(await c.read_competition_club(competition)), ['host']);
   assert.deepEqual(ok(await c.list_matches(competition)), []);
   c.setPrincipal(manager);
