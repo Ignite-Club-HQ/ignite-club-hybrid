@@ -63,8 +63,8 @@ export async function notifyIcpSubstitutionDue(teamId: string, eventId: string |
       if (!caller || caller !== userId.replace(/^principal:/, '')) throw new Error('Pitch-board account changed');
       let clubId: string;
       if (teamId.startsWith('event-group-')) {
-        const { livePitchRecipients } = await import('@/components/pitch/hooks/livePitchNotifications');
-        clubId = (await livePitchRecipients(ctx, teamId, eventId, caller, true, true)).clubId;
+        const { notifyLiveGroupPitch } = await import('@/live/features/events');
+        return notifyLiveGroupPitch(ctx, teamId.slice('event-group-'.length), 'substitution', '', key);
       } else {
         const { getLiveTeam } = await import('@/live/features/club');
         const [team] = await getLiveTeam(ctx, teamId);
@@ -78,5 +78,5 @@ export async function notifyIcpSubstitutionDue(teamId: string, eventId: string |
         idempotencyKeyPrefix: key,
       });
     },
-  }, writeOnce({ teamId }));
+  }, writeOnce(teamId.startsWith('event-group-') ? { eventGroupId: teamId.slice('event-group-'.length) } : { teamId }));
 }

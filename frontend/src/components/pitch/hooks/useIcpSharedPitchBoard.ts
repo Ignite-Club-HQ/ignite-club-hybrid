@@ -9,6 +9,15 @@ export function useIcpSharedPitchBoard({ teamId, userId, enabled, readOnly, appl
   const applyRef = useRef(apply);
   applyRef.current = apply;
   useEffect(() => {
+    if (!enabled || !teamId.startsWith('event-group-')) return;
+    function remote(event: Event) {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.source === 'icp-remote' && detail.teamId === teamId && detail.pitch) applyRef.current(detail.pitch);
+    }
+    window.addEventListener('game-state-changed', remote);
+    return () => window.removeEventListener('game-state-changed', remote);
+  }, [enabled, teamId]);
+  useEffect(() => {
     if (!enabled || !userId || teamId.startsWith('event-group-')) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
