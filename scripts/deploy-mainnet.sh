@@ -128,6 +128,8 @@ icp canister call club_points_domain set_club_domain_canister "(principal \"$CLU
 echo "==> Wiring: gallery authorities (metadata -> club/Vault)"
 icp canister call media_metadata set_gallery_authorities "(principal \"$CLUB_DOMAIN\", principal \"$VAULT_DOMAIN\")" -e "$ICP_ENV"
 icp canister call club_domain set_gallery_media_authority "(principal \"$MEDIA_METADATA\")" -e "$ICP_ENV"
+icp canister call vault_domain set_messaging_domain_canister "(principal \"$MESSAGING_DOMAIN\")" -e "$ICP_ENV"
+icp canister call messaging_domain set_vault_domain_canister "(principal \"$VAULT_DOMAIN\")" -e "$ICP_ENV"
 icp canister call vault_domain set_gallery_media_authority "(principal \"$MEDIA_METADATA\")" -e "$ICP_ENV"
 
 echo "==> Wiring: messaging_domain <-> notification_queue"

@@ -70,6 +70,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var transferFences : [Text];
   var nextBackupSeq : Nat64;
   var nextGalleryFileSeq : Nat;
+  var messagingDomainCanister : ?Principal;
   var deletionIntents : Map.Map<Text, Text>;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
@@ -982,6 +983,33 @@ persistent actor class Main(governorInit : Principal) = this {
     value == "team" or value == "club" or value == "group"
   };
 
+  type ChatAccess = { club : Text; team : ?Text; can_manage : Bool };
+  func chatAccess(subject : Principal, chatType : Text, chatId : Text) : async ?ChatAccess {
+    let id = messagingDomainCanister ?? return null;
+    let service : actor { read_vault_chat_access : shared (Principal, Text, Text) -> async { #Ok : ChatAccess; #Err : Text } } = actor(id.toText());
+    let response = try { await (with timeout = 10) service.read_vault_chat_access(subject, chatType, chatId) } catch (_) { return null };
+    await admitAccount(subject);
+    if (messagingDomainCanister != ?id) return null;
+    switch response { case (#Ok(a)) ?a; case (#Err(_)) null }
+  };
+  public shared ({ caller }) func set_messaging_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or id.equal(Principal.anonymous())) return #Err("Governor required");
+    messagingDomainCanister := ?id; #Ok
+  };
+  func pinTargetVisible(user : Principal, pin : Types.PinnedVault, access : ChatAccess) : async Bool {
+    if (pin.club != access.club) return false;
+    if (pin.root_scope == ?"club") return pin.root_id == ?access.club;
+    if (pin.root_scope == ?"team") return pin.root_id == access.team and access.team != null;
+    switch pin.vault_folder_id { case (?id) {
+      let f = folders.find(func f = f.id == id and f.club == access.club and f.deleted_at_ms == null) ?? return false;
+      return await accountFolderAccess(user, f)
+    }; case null {} };
+    switch pin.vault_file_id { case (?id) {
+      let f = files.find(func f = f.id == id and f.club == access.club and f.deleted_at_ms == null) ?? return false;
+      return await accountFileAccess(user, f)
+    }; case null false }
+  };
+
   public shared ({ caller }) func set_pinned_vault(
     chat_type : Text,
     chat_id : Text,
@@ -997,12 +1025,17 @@ persistent actor class Main(governorInit : Principal) = this {
     await admitAccount(caller);
     if (isFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let conversationAccess = await chatAccess(caller, chat_type, chat_id);
+    let access = conversationAccess ?? return #Err("Conversation access unavailable");
+    if (access.club != club or not access.can_manage) return #Err("Conversation manager required");
     if (not validChatType(chat_type)) return #Err("Invalid chat type");
     if (not valid(chat_id) or not valid(club)) return #Err("Invalid pin fields");
     switch (root_scope) {
       case (?scope) { if (scope != "team" and scope != "club") return #Err("Invalid root scope") };
       case null {};
     };
+    let targetCount = (if (vault_file_id != null) 1 else 0) + (if (vault_folder_id != null) 1 else 0) + (if (root_id != null) 1 else 0);
+    if (targetCount != 1 or (root_id != null and root_scope == null) or (root_id == null and root_scope != null)) return #Err("Exactly one pin target required");
     if (vault_file_id == null and vault_folder_id == null and root_id == null) {
       return #Err("Nothing to pin");
     };
@@ -1037,6 +1070,9 @@ persistent actor class Main(governorInit : Principal) = this {
       chat_type; chat_id; club; vault_file_id; vault_folder_id; root_scope; root_id;
       enabled; set_by = caller; updated_at_ms = nowMs();
     };
+    if (not (await pinTargetVisible(caller, pin, access))) return #Err("Pin target access forbidden");
+    let freshAccess = (await chatAccess(caller, chat_type, chat_id)) ?? return #Err("Conversation access changed");
+    if (freshAccess != access or isFenced(club)) return #Err("Conversation access changed");
     pinned_vaults := pinned_vaults.filter(func(item) = not (item.chat_type == chat_type and item.chat_id == chat_id)).concat([pin]);
     #Ok(pin)
   
@@ -1057,7 +1093,8 @@ persistent actor class Main(governorInit : Principal) = this {
     switch (pinned_vaults.find(func(item) = item.chat_type == chat_type and item.chat_id == chat_id)) {
       case null { #Ok };
       case (?pin) {
-        if (not (await canWrite(caller, pin.club, null, null))) return #Err("Club role required");
+        let access = (await chatAccess(caller, chat_type, chat_id)) ?? return #Err("Conversation access unavailable");
+        if (not access.can_manage or access.club != pin.club or pinned_vaults.find(func p = p.chat_type == chat_type and p.chat_id == chat_id) != ?pin or isFenced(pin.club)) return #Err("Conversation manager required");
         pinned_vaults := pinned_vaults.filter(func(item) = not (item.chat_type == chat_type and item.chat_id == chat_id));
         #Ok
       };
@@ -1485,7 +1522,10 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     auth(caller);
-    #Ok(pinned_vaults.find(func(item) = item.chat_type == chat_type and item.chat_id == chat_id))
+    let access = (await chatAccess(caller, chat_type, chat_id)) ?? return #Err("Conversation access unavailable");
+    let pin = pinned_vaults.find(func p = p.chat_type == chat_type and p.chat_id == chat_id) ?? return #Ok(null);
+    if (not (await pinTargetVisible(caller, pin, access)) or pinned_vaults.find(func p = p.chat_type == chat_type and p.chat_id == chat_id) != ?pin) return #Ok(null);
+    #Ok(?pin)
   
     } finally { removalReceiver.leave(caller) };
   };
