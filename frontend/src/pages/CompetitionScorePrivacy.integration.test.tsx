@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({ hide: false, override: null as boolean | null, ma
 vi.mock('@/hooks/usePageTitle', () => ({ usePageTitle: () => {} }));
 vi.mock('@/live/loadBackendRouting', () => ({ isFeatureRoutedToIcp: () => db.icp }));
 vi.mock('@/live/targetRegistry', () => ({ getActiveIcpTarget: () => ({}) }));
+vi.mock('@/live/publicGroupReads', () => ({ readUniquePublicGroup: async (target: unknown, read: (target: unknown) => Promise<unknown>) => read(target) }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'viewer' } }) }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: (_: string, p: any) => db.icp ? p.icp({ target: {}, identity: {} }) : p.supabase() }));
