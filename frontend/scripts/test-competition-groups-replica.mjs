@@ -159,6 +159,7 @@ try {
   ok(await queueRestored.actor.set_transfer_fence('host',false));
   queueRestored.actor.setPrincipal(A.canisterId);
   // Discover the exact retained receipt from its generated message key.
+  restored.actor.setPrincipal(governor);
   const originalBroadcast=ok(await restored.actor.read_account_list_competition_broadcasts(competition)).find(n=>n.title==='Cup');
   assert.ok(originalBroadcast);
   const proof=ok(await queueRestored.actor.read_competition_broadcast_receipt('host',originalBroadcast.id))[0];
