@@ -195,6 +195,7 @@ export function IcpUploadPhotoSheet({
     let vaultCopyFailed = false;
     let noticeFailed = false;
     let chatCardFailed = false;
+    let heroUrl = "";
     const registeredAssetIds: string[] = [];
     try {
       await withFeatureBackend("media", {
@@ -229,6 +230,7 @@ export function IcpUploadPhotoSheet({
             }
             // Show the photo from the phone straight away instead of
             // downloading and unlocking what we just sent.
+            if (!heroUrl) heroUrl = uploaded.url;
             localUploadPreviews.set(uploaded.url, URL.createObjectURL(prepared.file));
             const asset = await registerLiveAsset(ctx, {
               clubId,
@@ -274,9 +276,9 @@ export function IcpUploadPhotoSheet({
           await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
           if (teamId && registeredAssetIds.length) {
             const { publishLiveGalleryChatCard } = await import('@/live/features/media');
-            const firstUrl = [...localUploadPreviews.keys()][0] ?? '';
+
             await publishLiveGalleryChatCard(ctx, { clubId, teamId, eventId: defaultEventId, assetIds: registeredAssetIds,
-              heroUrl: firstUrl, receipt: `gallery-${albumId}` }).catch(() => { chatCardFailed = true; });
+              heroUrl, receipt: `gallery-${albumId}` }).catch(() => { chatCardFailed = true; });
           }
           if (registeredAssetIds[0]) {
             const notice = await announceLiveGalleryAsset(ctx, registeredAssetIds[0]).catch(() => "unknown");

@@ -4,7 +4,7 @@ import { writeOnce } from "@/live/clubScope";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Filter, Images, Loader2, MessageCircle, Trash2 } from "lucide-react";
+import { Eye, Filter, Images, Loader2, MessageCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -1114,6 +1114,20 @@ function MediaPostArticle({ post: base, principal, userId, profile, index, onRea
     }, { clubId: base.clubId }),
     retry: 1,
   });
+  const viewRecorded = useRef<string | null>(null);
+  useEffect(() => {
+    if (!principal || !visible || viewRecorded.current === `${principal}:${base.representativeAssetId}`) return;
+    viewRecorded.current = `${principal}:${base.representativeAssetId}`;
+    void withFeatureBackend('media', { supabase: async () => undefined, icp: async ctx => {
+      const { recordLiveGalleryView } = await import('@/live/features/media');
+      return recordLiveGalleryView(ctx, base.representativeAssetId);
+    } }, writeOnce({ clubId: base.clubId })).catch(() => undefined);
+  }, [visible, principal, base.clubId, base.representativeAssetId]);
+  const views = useQuery({ queryKey: ['icp-gallery-views', principal, base.clubId, base.representativeAssetId], enabled: !!principal && visible,
+    queryFn: () => withFeatureBackend('media', { supabase: async () => [], icp: async ctx => {
+      const { readLiveGalleryViewCounts } = await import('@/live/features/media');
+      return readLiveGalleryViewCounts(ctx, [base.representativeAssetId]);
+    } }, { clubId: base.clubId }), refetchInterval: 30_000, refetchIntervalInBackground: false });
   const post = details.data ? { ...base, ...details.data, comments: mergeGalleryComments(details.data.comments, base.comments) } : base;
   return <div ref={articleRef}>
               <article className="overflow-hidden rounded-xl border border-border bg-card">
@@ -1177,7 +1191,7 @@ function MediaPostArticle({ post: base, principal, userId, profile, index, onRea
                   <p className="px-3 pb-3 text-sm">{post.caption}</p>
                 )}
               </article>
-    {visible && details.isPending && <div role="status" className="py-1 text-xs text-muted-foreground">Loading comments and reactions…</div>}
+    {views.data?.[0] && <div className="flex items-center gap-1 text-xs text-muted-foreground py-1"><Eye className="h-3 w-3" />{Number(views.data[0][1])}</div>}
     {details.isError && <Button variant="ghost" size="sm" onClick={() => details.refetch()}>Retry comments and reactions</Button>}
   </div>;
 }

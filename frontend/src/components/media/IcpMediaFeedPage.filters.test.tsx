@@ -9,7 +9,7 @@ vi.mock('@tanstack/react-query', async (importOriginal) => ({
   ...await importOriginal<typeof import('@tanstack/react-query')>(),
   useQuery: (options: { queryKey: string[] }) => {
     state.reads(options.queryKey);
-    if (['icp-gallery-card', 'icp-gallery-card-assets', 'icp-gallery-linked-post'].includes(options.queryKey[0])) return { data: null };
+    if (['icp-gallery-card', 'icp-gallery-card-assets', 'icp-gallery-linked-post', 'icp-gallery-views'].includes(options.queryKey[0])) return { data: null };
     if (options.queryKey[0] === 'icp-gallery-moderation') return { data: [] };
     if (options.queryKey[0] === 'blocked-users') return { data: [] };
     return options.queryKey[0] === 'icp-principal' ? { data: 'member' } : {

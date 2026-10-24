@@ -37,6 +37,8 @@ describe('closed-group reciprocal configuration', () => {
     expect(find('notification_queue', 'grant_worker')?.args[0]).toEqual(Principal.fromText(globals.pushWorker));
     expect(find('media_blob_store', 'set_club_domain_canister')?.args[0]).toEqual(Principal.fromText(p.canisters.club_domain ?? ''));
     expect(find('club_domain', 'register_media_quota_store')?.args[0]).toEqual(Principal.fromText(globals.mediaBlobStore));
+    expect(find('media_metadata', 'set_gallery_authorities')?.args).toEqual([Principal.fromText(p.canisters.club_domain ?? ''), Principal.fromText(p.canisters.vault_domain ?? '')]);
+    expect(find('vault_domain', 'set_gallery_media_authority')?.args[0]).toEqual(Principal.fromText(p.canisters.media_metadata ?? ''));
     expect(find('timer_jobs', 'grant_worker')?.args[0]).toEqual(Principal.fromText(globals.pushWorker));
     expect(find('competition_domain', 'set_participant_club_authorities')?.args[0]).toEqual([Principal.fromText(p.canisters.club_domain ?? '')]);
     expect(plan.some(op => op.method === 'set_identity_authority' || op.method === 'set_account_authorities')).toBe(false);
