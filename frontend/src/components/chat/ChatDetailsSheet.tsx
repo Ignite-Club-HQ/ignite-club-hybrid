@@ -80,6 +80,7 @@ export function ChatDetailsSheet({
   onInviteToMiniLeague,
   onInviteToTeam,
 }: ChatDetailsSheetProps) {
+  const { user, initialized } = useAuth();
   const useIcpLab = isFeatureRoutedToIcp("messaging");
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -114,11 +115,18 @@ export function ChatDetailsSheet({
   // Resolve a clubId for Pro gating when not explicitly provided (e.g. team chats).
   const resolvedTeamIdForClub = chatType === "team" ? chatId : teamId;
   const { data: derivedClubId } = useQuery({
-    queryKey: ["chat-details-sheet-club-id", resolvedTeamIdForClub, clubId, chatType, chatId],
-    enabled: open && !useIcpLab && !clubId && (chatType === "team" || (chatType === "group" && !!resolvedTeamIdForClub)) && resolveAuthBackend() !== "icp",
+    queryKey: ["chat-details-sheet-club-id", resolvedTeamIdForClub, clubId, chatType, chatId, user?.id, useIcpLab],
+    enabled: open && initialized && !!user && !clubId && (chatType === "team" || (chatType === "group" && !!resolvedTeamIdForClub)),
     staleTime: 60_000,
     queryFn: async () => {
       if (!resolvedTeamIdForClub) return null;
+      if (useIcpLab || resolveAuthBackend() === "icp") {
+        const { getLiveTeam } = await import("@/live/features/club");
+        return withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async ctx => { const [team] = await getLiveTeam(ctx, resolvedTeamIdForClub); return team?.club_id ?? null; },
+        }, { teamId: resolvedTeamIdForClub });
+      }
       const { data } = await supabase
         .from("teams")
         .select("club_id")
@@ -278,6 +286,22 @@ export function ChatDetailsSheet({
                     <NavRow
                       label="View file vault"
                       onClick={async () => {
+                        if (isGroup && (useIcpLab || resolveAuthBackend() === "icp") && proClubId) {
+                          try {
+                            const { getLivePinnedVault, listLiveVaultFolders } = await import("@/live/features/vault");
+                            const folderId = await withFeatureBackend("vault", {
+                              supabase: async () => null,
+                              icp: async ctx => {
+                                const pin = await getLivePinnedVault(ctx, "group", chatId);
+                                if (pin?.enabled && pin.vault_folder_id[0]) return pin.vault_folder_id[0];
+                                const folders = await listLiveVaultFolders(ctx, proClubId, teamId ?? null, miniLeagueId ?? null, competitionId ?? null);
+                                // Match the existing on-chain attachment mirror's root-folder convention.
+                                return folders.find(folder => folder.name === name && !folder.parent_id[0] && !folder.deleted_at_ms[0])?.id ?? null;
+                              },
+                            }, { clubId: proClubId });
+                            if (folderId) { handleNavigate(`/vault/folder/${folderId}`); return; }
+                          } catch { toast.error("Could not open the file vault. Please try again."); return; }
+                        }
                         if (isGroup && !useIcpLab && resolveAuthBackend() !== "icp") {
                           // Look up folder linked to this group chat first
                           const { data: folder } = await supabase
