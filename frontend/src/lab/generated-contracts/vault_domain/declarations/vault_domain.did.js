@@ -107,6 +107,11 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat,
   });
   const Main = IDL.Service({
+    'begin_file_cleanup' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
     'clear_pinned_vault' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -281,6 +286,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
         [],
       ),
+    'move_file_to_root' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
     'prepare_account_removal' : IDL.Func(
         [Request],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -391,6 +401,29 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
         [],
       ),
+    'read_vault_file_page' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
+          IDL.Nat,
+          IDL.Opt(IDL.Nat),
+        ],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'next' : IDL.Opt(IDL.Nat),
+              'items' : IDL.Vec(VaultFileWithFolder),
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'register_file' : IDL.Func(
         [
           IDL.Text,
@@ -454,6 +487,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'set_messaging_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_pinned_vault' : IDL.Func(
         [
           IDL.Text,
@@ -470,6 +508,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_transfer_fence' : IDL.Func(
         [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_vault_stores' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

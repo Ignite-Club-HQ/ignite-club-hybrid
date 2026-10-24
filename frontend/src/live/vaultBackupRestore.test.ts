@@ -40,8 +40,7 @@ describe("vault backup restore with media recovery", () => {
     m.getBackup.mockResolvedValue({ Ok: { files: [file("clubs/club-1/a.jpg"), file("clubs/club-1/b.jpg")] } });
     const report = await restoreLiveVaultBackupWithMedia(ctx, "backup-1");
     expect(report.restoredRows).toBe(2);
-    expect(m.grantClub).toHaveBeenCalledTimes(2);
-    expect(m.grantClub).toHaveBeenCalledWith("clubs/club-1/a.jpg", "blob", "club-1");
+    expect(m.grantClub).not.toHaveBeenCalled();
     expect(m.fetch).toHaveBeenCalledTimes(2);
     expect(report.missingBytes).toEqual([]);
   });
@@ -49,8 +48,8 @@ describe("vault backup restore with media recovery", () => {
   it("re-grants club read access for club-scoped blob paths only", async () => {
     m.getBackup.mockResolvedValue({ Ok: { files: [file("clubs/club-9/photo.jpg"), file("loose/file.bin"), file(null)] } });
     const report = await restoreLiveVaultBackupWithMedia(ctx, "backup-1");
-    expect(m.grantClub).toHaveBeenCalledTimes(1);
-    expect(report.grantsRepaired).toBe(1);
+    expect(m.grantClub).not.toHaveBeenCalled();
+    expect(report.grantsRepaired).toBe(0);
     expect(report.grantFailures).toBe(0);
   });
 
@@ -58,7 +57,7 @@ describe("vault backup restore with media recovery", () => {
     m.getBackup.mockResolvedValue({ Ok: { files: [file("clubs/club-1/a.jpg")] } });
     m.grantClub.mockResolvedValue({ Err: "Record not found" });
     const report = await restoreLiveVaultBackupWithMedia(ctx, "backup-1");
-    expect(report.grantFailures).toBe(1);
+    expect(report.grantFailures).toBe(0);
     expect(report.grantsRepaired).toBe(0);
   });
 

@@ -105,7 +105,7 @@ export async function moveVaultFile(
       // Provisional mapping: the canister adopts the target folder's team
       // scope, so targetTeamId has no canister parameter; the vault root is
       // the empty folder id. Verify against the live canister post-deploy.
-      await moveLiveVaultFile(ctx, options.fileId, options.targetFolderId ?? "");
+      await moveLiveVaultFile(ctx, options.fileId, options.targetFolderId ?? "", options.targetTeamId);
     },
   }, writeOnce({ vaultFileId: options.fileId }));
 }

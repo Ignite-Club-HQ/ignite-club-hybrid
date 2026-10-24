@@ -127,6 +127,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // where the member thread participants are derived from the competition's
   // admin-role list rather than browser-supplied input.
   var competitionDomainCanister : ?Principal;
+  var vaultDomainCanister : ?Principal;
 
   // Global broadcast conversation id. Mirrors the Supabase broadcast_messages
   // feed: one platform-wide stream that every signed-in member can read, with
@@ -5078,6 +5079,28 @@ persistent actor class Main(governorInit : Principal) = this {
     configured == notificationQueueCanister and not convFenced(conversation_id) and canReadTeamMessages(subject, conversation_id)
   
     } finally { removalReceiver.leave(subject) };
+  };
+
+  // Resource-specific delegation; this returns no message bodies or participants.
+  public shared ({ caller }) func read_vault_chat_access(subject : Principal, chat_type : Text, chat_id : Text) : async { #Ok : { club : Text; team : ?Text; can_manage : Bool }; #Err : Text } {
+    if (vaultDomainCanister != ?caller) return #Err("Vault authority required");
+    if (not removalReceiver.enter(subject)) return #Err("Account fenced");
+    try {
+      await admitAccount(subject);
+      let conversation = conversations.find(func c =
+        (chat_type == "team" and c.team_id == ?chat_id) or
+        (chat_type == "club" and c.club_id == chat_id and c.team_id == null and inferConversationKind(c) == "club") or
+        (chat_type == "group" and c.id == chat_id)) ?? return #Err("Conversation not found");
+      try { await* requireChatAccess(subject, conversation.id) } catch (_) { return #Err("Conversation access forbidden") };
+      if (vaultDomainCanister != ?caller or conversations.find(func c = c.id == conversation.id) != ?conversation or not canAccessConversation(subject, conversation.id) or convFenced(conversation.id)) return #Err("Conversation access forbidden");
+      let manager = isGovernor(subject) or isGroupAdmin(subject, conversation.id) or hasRole(subject, "club_admin", ?conversation.club_id, null) or
+        (conversation.team_id != null and (hasRole(subject, "team_admin", ?conversation.club_id, conversation.team_id) or hasRole(subject, "coach", ?conversation.club_id, conversation.team_id)));
+      #Ok({ club = conversation.club_id; team = conversation.team_id; can_manage = manager })
+    } finally { removalReceiver.leave(subject) }
+  };
+  public shared ({ caller }) func set_vault_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller) or id.equal(Principal.anonymous())) return #Err("Governor required");
+    vaultDomainCanister := ?id; #Ok
   };
 
   public shared ({ caller }) func prepare_account_removal(request : RemovalReceiver.Request) : async { #Ok; #Err : Text } {

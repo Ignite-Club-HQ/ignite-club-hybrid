@@ -28,6 +28,8 @@ export function groupConfigurationPlan(p: Provision, globals: ConfigurationGloba
   const operations: Operation[] = [];
   operations.push({ domain: 'media_blob_store', method: 'set_club_domain_canister', args: [principal(p.canisters.club_domain)] });
   operations.push({ domain: 'club_domain', method: 'register_media_quota_store', args: [blob] });
+  operations.push({ domain: 'vault_domain', method: 'set_vault_stores', args: [[blob]] });
+  operations.push({ domain: 'media_blob_store', method: 'set_vault_authority', args: [principal(p.canisters.vault_domain)] });
   operations.push({ domain: 'timer_jobs', method: 'grant_worker', args: [worker] });
   const link = (domain: GroupDomain, method: string, target: GroupDomain, vector = false) => {
     const id = principal(p.canisters[target]);
@@ -40,6 +42,8 @@ export function groupConfigurationPlan(p: Provision, globals: ConfigurationGloba
   operations.push({ domain: 'media_metadata', method: 'set_gallery_authorities', args: [principal(p.canisters.club_domain), principal(p.canisters.vault_domain)] });
   link('club_domain', 'set_gallery_media_authority', 'media_metadata');
   link('vault_domain', 'set_gallery_media_authority', 'media_metadata');
+  link('vault_domain', 'set_messaging_domain_canister', 'messaging_domain');
+  link('messaging_domain', 'set_vault_domain_canister', 'vault_domain');
   link('notification_queue', 'set_messaging_domain_canister', 'messaging_domain');
   operations.push({ domain: 'notification_queue', method: 'set_identity_access_canister', args: [identity] });
   operations.push({ domain: 'notification_queue', method: 'grant_worker', args: [worker] });

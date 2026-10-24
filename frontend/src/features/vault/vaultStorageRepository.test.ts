@@ -13,6 +13,7 @@ const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 const live = vi.hoisted(() => ({ files: vi.fn().mockResolvedValue([]), teams: vi.fn().mockResolvedValue([]), context: {} }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: unknown, p: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => supabaseMode ? p.supabase() : p.icp(live.context) }));
 vi.mock("@/live/features/vault", () => ({ listLiveVaultClubFiles: live.files }));
+vi.mock("@/live/features/promoCodes", () => ({ getLiveClubStoragePurchasedGb: vi.fn().mockResolvedValue(0) }));
 vi.mock("@/live/features/club", () => ({ listLiveTeams: live.teams }));
 vi.mock("@/live/blobStoreUpload", () => ({ getLiveClubMediaBytes: vi.fn().mockResolvedValue({ finalized: 0, pending: 0 }) }));
 
@@ -202,4 +203,10 @@ describe.runIf(!supabaseMode)("Vault storage accounting — ICP fallback", () =>
     vi.mocked(getLiveClubMediaBytes).mockResolvedValue({ finalized: 0, pending: 0 });
     await expect(fetchVaultStorageBreakdown("club-a", scriptedClient({}).client)).resolves.toMatchObject({ total: 0 });
   });
+  it("does not report zero usage when the original store cannot be measured", async () => {
+    const { getLiveClubMediaBytes } = await import("@/live/blobStoreUpload");
+    vi.mocked(getLiveClubMediaBytes).mockRejectedValueOnce(new Error("store unavailable"));
+    await expect(fetchVaultStorageBreakdown("club-a", scriptedClient({}).client)).rejects.toThrow("store unavailable");
+  });
+
 });

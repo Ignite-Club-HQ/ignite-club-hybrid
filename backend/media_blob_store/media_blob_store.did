@@ -283,6 +283,15 @@ service : {
          revision: nat;
        };
     });
+  read_vault_blob_evidence: (subject: principal, path: text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            content_hash: text;
+            owner: principal;
+            size: nat;
+          };
+    });
   reconcile_retained_deletions: (cursor: text) ->
    (variant {
       Err: text;
@@ -322,6 +331,7 @@ service : {
   set_club_domain_canister: (canister_id: principal) -> (Result);
   set_club_media_transfer_fence: (club: text, on: bool, expected: opt nat) ->
    (Result);
+  set_vault_authority: (id: principal) -> (Result);
   stable_storage_status: () ->
    (record {
       allocated_bytes: nat64;

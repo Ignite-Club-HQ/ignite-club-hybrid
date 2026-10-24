@@ -8,18 +8,13 @@ import { hasVaultProEntitlement } from "./vaultAccess";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
-/**
- * ICP Pro is a per-principal IAP entitlement (identity_access canister) with
- * no per-club/per-team product mapping — mirroring useIcpProAccess, any
- * active entitlement counts as Pro for every vault context the member can
- * see. The live modules are imported dynamically so the Supabase bundle
- * never pulls in the ICP agent SDK.
- */
-async function fetchIcpCallerIsPro(ctx: FeatureBackendContext): Promise<boolean> {
-  const { fetchIcpEntitlements } = await import("@/live/identityEntitlements");
-  const principal = ctx.identity.getPrincipal().toText();
-  const summary = await fetchIcpEntitlements(ctx.identity, principal, ctx.target);
-  return summary.isPro;
+/** Scoped capacity authority; personal/global Pro never unlocks club files. */
+async function scopedVaultPro(ctx: FeatureBackendContext, clubId: string, teamId: string | null = null): Promise<boolean> {
+  const { connectLiveClubDomain } = await import("@/live/domains");
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const allowance = await actor.get_media_allowance(clubId, teamId ? [teamId] : []);
+  if ("Err" in allowance) throw new Error(allowance.Err);
+  return allowance.Ok.premium;
 }
 
 export type VaultClubSummary = Pick<
@@ -87,7 +82,6 @@ export async function fetchVaultAccessibleClubs(
   // Asked once per lookup, not once per group: membership comes from the
   // already-open routing session and the IAP entitlement lives on identity.
   let memberIdsOnce: Promise<string[] | null> | undefined;
-  let callerIsProOnce: Promise<boolean> | undefined;
   return withFeatureBackend("vault", {
     supabase: async () => fetchVaultAccessibleClubsSupabase(userId, isAppAdmin, client),
     icp: async (ctx) => {
@@ -97,24 +91,18 @@ export async function fetchVaultAccessibleClubs(
       const { withReadDeadline } = await import("@/live/readDeadline");
       memberIdsOnce ??= isAppAdmin ? Promise.resolve(null) : clubDispatch.memberClubIds();
       // Entitlement failure only drops global IAP Pro; club grants still apply.
-      callerIsProOnce ??= fetchIcpCallerIsPro(ctx).catch(() => false);
       return withReadDeadline((async () => {
-        const [rows, memberIds] = await Promise.all([listLiveClubs(ctx), memberIdsOnce!]);
+        const [rows, memberIds] = await Promise.all([listLiveClubs(ctx), (memberIdsOnce ?? Promise.resolve(null))]);
         const clubs = rows.filter(club => (!memberIds || memberIds.includes(club.id)) && !club.deleted_at_ms?.length);
         if (clubs.length === 0) return [];
         // Per-club "Free Pro" grants from club_domain plus the caller's own
         // IAP entitlement (global Pro for its holder).
-        const [subs, callerIsPro] = await Promise.all([
-          listLiveClubSubscriptions(ctx, clubs.map((club) => club.id)),
-          callerIsProOnce!,
-        ]);
-        // Byte accounting for the storage bar stays on Supabase (media bytes
-        // are an approved Supabase area); ICP reports 0 so the bar renders
-        // empty rather than erroring.
+        const subs = await listLiveClubSubscriptions(ctx, clubs.map(club => club.id));
+        // Subscription flags here label clubs; scoped actions read media allowance.
         return clubs.map((club) => ({
           id: club.id,
           name: club.name,
-          is_pro: callerIsPro || liveHasAnyPro(subs.get(club.id)),
+          is_pro: liveHasAnyPro(subs.get(club.id)),
           storage_used_bytes: 0,
         }));
       })(), "Vault clubs", VAULT_GROUP_READ_MS);
@@ -184,8 +172,7 @@ export async function fetchVaultClubHasPro(
     },
     // Club "Free Pro" grant on club_domain, or the caller's IAP entitlement.
     icp: async (ctx) => {
-      const { resolveLiveProAccess } = await import("@/live/features/proAccess");
-      return resolveLiveProAccess(ctx, { clubId });
+      return scopedVaultPro(ctx, clubId);
     },
   }, { clubId });
 }
@@ -207,9 +194,8 @@ export async function fetchVaultTeamHasPro(
     // Team grant → owning club's grant → caller's IAP entitlement.
     icp: async (ctx) => {
       const { getLiveTeam } = await import("@/live/features/club");
-      const { resolveLiveProAccess } = await import("@/live/features/proAccess");
       const [team] = await getLiveTeam(ctx, teamId);
-      return resolveLiveProAccess(ctx, { teamId, clubId: team?.club_id ?? null });
+      return team ? scopedVaultPro(ctx, team.club_id, teamId) : false;
     },
   }, { teamId });
 }
@@ -266,7 +252,7 @@ export async function fetchVaultAnyProAccess(
       ]);
       if ([...teamSubs.values()].some(liveHasAnyPro)) return true;
       if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
-      return fetchIcpCallerIsPro(ctx);
+      return false;
     },
   }, { memberGroups: true, merge: (parts: boolean[]) => parts.some(Boolean) });
 }

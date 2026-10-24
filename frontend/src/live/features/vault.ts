@@ -358,11 +358,23 @@ export async function registerLivePiiText(
  */
 async function readVaultPages(ctx: FeatureBackendContext, clubId: string, teamId: string | null, leagueId: string | null, competitionId: string | null, folderId: string | null, trash: boolean) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  const items = [];
+  const items: import("../../lab/bindings/vault_domain/declarations/vault_domain.did.js").VaultFileWithFolder[] = [];
   let offset = 0n;
   let revision: [] | [bigint] = [];
   for (;;) {
-    const page = await unwrapCandid(actor.read_vault_file_page(clubId, candidOpt(teamId), candidOpt(leagueId), candidOpt(competitionId), candidOpt(folderId), trash, offset, revision), "Read Vault page");
+    let page;
+    try {
+      page = await unwrapCandid(actor.read_vault_file_page(clubId, candidOpt(teamId), candidOpt(leagueId), candidOpt(competitionId), candidOpt(folderId), trash, offset, revision), "Read Vault page");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Older deployed modules retain their existing authorized read paths.
+      // Never fall back on permission, timeout or partial-page failures.
+      if (offset !== 0n || !/has no (?:query |update |)method|method not found|IC0536|is not a function/i.test(message)) throw error;
+      if (competitionId) return unwrapCandid(actor.list_competition_files_with_folder(folderId ?? "", competitionId), "Read legacy competition Vault");
+      if (trash) return unwrapCandid(actor.list_trashed_files_with_folder(clubId), "Read legacy Vault trash");
+      if (folderId) return unwrapCandid(actor.list_files_with_folder(folderId), "Read legacy Vault folder");
+      return unwrapCandid(actor.list_club_files_with_folder(clubId, candidOpt(teamId), candidOpt(leagueId)), "Read legacy Vault files");
+    }
     items.push(...page.items);
     revision = [page.revision];
     const next = page.next[0];
@@ -391,7 +403,7 @@ export async function listLiveVaultFolders(
 
 export async function listLiveVaultFiles(ctx: FeatureBackendContext, folderId: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_files(folderId), "List vault files");
+  return (await listLiveVaultFilesWithFolder(ctx, folderId)).map(entry => entry.file);
 }
 
 /** Single file read; null when the file is missing or the caller cannot view its folder. */
@@ -433,17 +445,9 @@ export async function listLiveVaultFilesWithFolder(
   folderId: string,
   competitionId: string | null = null,
 ) {
-  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  if (competitionId) {
-    return unwrapCandid(
-      actor.list_competition_files_with_folder(folderId, competitionId),
-      "List competition vault files with folder",
-    );
-  }
-  return unwrapCandid(
-    actor.list_files_with_folder(folderId),
-    "List vault files with folder",
-  );
+  const folder = await getLiveVaultFolder(ctx, folderId, competitionId);
+  if (!folder) throw new Error("Vault folder not found or access denied");
+  return readVaultPages(ctx, folder.club, folder.team[0] ?? null, folder.mini_league_id[0] ?? null, folder.competition_id[0] ?? null, folderId, false);
 }
 
 export async function listLiveVaultClubFilesWithFolder(
@@ -609,8 +613,10 @@ export async function moveLiveVaultFile(
   ctx: FeatureBackendContext,
   fileId: string,
   folderId: string,
+  targetTeamId?: string | null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  if (!folderId && targetTeamId !== undefined) return unwrapCandid(actor.move_file_to_root(fileId, candidOpt(targetTeamId)), "Move Vault root");
   return unwrapCandid(actor.move_file(fileId, folderId), "Move vault file");
 }
 
@@ -755,22 +761,12 @@ export async function restoreLiveVaultBackupWithMedia(
   const backup = await getLiveVaultBackup(ctx, id);
   const restoredRows = Number(await restoreLiveVaultBackup(ctx, id));
   const { blobAssetUrl } = await import("../mediaStorage");
-  const { clubIdFromMediaPath } = await import("../piiVetKeys");
   const report: LiveVaultBackupRestoreReport = { restoredRows, grantsRepaired: 0, grantFailures: 0, missingBytes: [] };
   for (const file of backup.files) {
     const ref = file.blob_ref?.[0];
     if (!ref) continue;
-    const clubId = clubIdFromMediaPath(ref.path);
-    if (clubId) {
-      try {
-        await grantLivePiiReadClub(ctx, ref.path, "blob", clubId);
-        report.grantsRepaired += 1;
-      } catch {
-        report.grantFailures += 1;
-      }
-    }
     try {
-      const res = await fetch(blobAssetUrl(ref.canister, ref.path), { method: "HEAD" });
+      const res = await fetch(blobAssetUrl(ref.canister, ref.path), { method: "GET", headers: { Range: "bytes=0-7" } });
       if (!res.ok) report.missingBytes.push(ref.path);
     } catch {
       report.missingBytes.push(ref.path);

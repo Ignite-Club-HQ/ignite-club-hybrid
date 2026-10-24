@@ -32,6 +32,11 @@ export interface BlobRef {
   'canister' : string,
 }
 export interface Main {
+  'begin_file_cleanup' : ActorMethod<
+    [string],
+    { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
   'clear_pinned_vault' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -174,6 +179,11 @@ export interface Main {
     { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
+  'move_file_to_root' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
   'prepare_account_removal' : ActorMethod<
     [Request],
     { 'Ok' : null } |
@@ -261,6 +271,26 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_vault_file_page' : ActorMethod<
+    [
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      boolean,
+      bigint,
+      [] | [bigint],
+    ],
+    {
+        'Ok' : {
+          'next' : [] | [bigint],
+          'items' : Array<VaultFileWithFolder>,
+          'revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'register_file' : ActorMethod<
     [
       string,
@@ -324,6 +354,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_messaging_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_pinned_vault' : ActorMethod<
     [
       string,
@@ -340,6 +375,11 @@ export interface Main {
   >,
   'set_transfer_fence' : ActorMethod<
     [string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_vault_stores' : ActorMethod<
+    [Array<Principal>],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

@@ -308,6 +308,20 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_vault_blob_evidence' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'owner' : IDL.Principal,
+              'content_hash' : IDL.Text,
+              'size' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'reconcile_retained_deletions' : IDL.Func(
         [IDL.Text],
         [
@@ -356,6 +370,7 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'set_vault_authority' : IDL.Func([IDL.Principal], [Result], []),
     'stable_storage_status' : IDL.Func(
         [],
         [

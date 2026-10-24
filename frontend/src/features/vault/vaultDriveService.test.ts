@@ -9,6 +9,10 @@ import {
   storeVaultDriveOAuthTokens,
 } from "./vaultDriveService";
 
+const routing = vi.hoisted(() => ({ icp: false }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => routing.icp }));
+beforeEach(() => { routing.icp = false; });
+
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
 describe("Vault Google Drive feature boundary", () => {
@@ -106,5 +110,16 @@ describe("Vault Google Drive OAuth return", () => {
     expect(sessionStorage.getItem("googleDriveRefreshToken")).toBeNull();
     expect(sessionStorage.getItem("googleDriveGoogleEmail")).toBeNull();
     expect(sessionStorage.getItem("driveLinkAccessToken")).toBeNull();
+  });
+});
+
+describe("ICP Drive isolation", () => {
+  it("refuses OAuth and title transport before any Supabase call", async () => {
+    routing.icp = true;
+    const invoke = vi.fn();
+    const client = { functions: { invoke } } as unknown as IgniteSupabaseClient;
+    await expect(resolveVaultDriveTitles("club-a", client)).rejects.toThrow("not configured");
+    await expect(exchangeVaultDriveOAuthCode({ code: "test", redirectUri: "test" }, client)).rejects.toThrow("not configured");
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

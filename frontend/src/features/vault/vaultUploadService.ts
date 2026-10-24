@@ -119,6 +119,7 @@ export async function uploadVaultItem(
       const { compressImage } = await import("@/lib/imageCompression");
       options = { ...options, file: (await compressImage(options.file)).file };
     }
+    const registrationId = crypto.randomUUID();
     const blobUpload = dependencies.tryBlobUpload
       ? await dependencies.tryBlobUpload({
           // "vault/" segment lets the canister apply the vault free-plan cap.
@@ -139,7 +140,7 @@ export async function uploadVaultItem(
       icp: async (ctx) => {
         await registerLiveVaultFile(
           ctx,
-          crypto.randomUUID(),
+          registrationId,
           options.folderId ?? "",
           clubId,
           options.view.type === "team" ? options.view.teamId : null,
