@@ -3113,12 +3113,12 @@ persistent actor class Main(governorInit : Principal) = this {
       if (removalReceiver.denied(caller) or groupFenced(group_id) or latest.deleted or latest.revision != event.revision or current.event_id != event.id or not canEditGroupState(caller, current)) return #Err("Forbidden");
       let recipients = BoardSync.dutyRecipients(eventGroupDuties, group_id);
       if (recipients.size() == 0) return #Ok(0);
-      let queueId = notificationQueueCanister ?? return #Err("Notification queue not configured");
-      let queue : actor { fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text } } = actor (queueId.toText());
+      let relayId = clubDomainCanister ?? return #Err("Club authority not configured");
+      let relay : actor { relay_group_pitch_alert : shared ([Text], Text, Text, Text, Text, Text) -> async { #Ok : Nat16; #Err : Text } } = actor (relayId.toText());
       let body = if (action == "formation") "Formation changed to " # detail
         else if (action == "team_size") "Team size changed to " # detail # " players"
         else "A planned substitution is due";
-      await (with timeout = 10) queue.fan_out(recipients, latest.club_id, "pitch_board_" # action, body, "pitch-" # group_id # "-" # key, ?("event-group-" # group_id))
+      await (with timeout = 10) relay.relay_group_pitch_alert(recipients, latest.club_id, "pitch_board_" # action, body, "pitch-" # group_id # "-" # key, "event-group-" # group_id)
     } finally { removalReceiver.leave(caller) }
   };
 

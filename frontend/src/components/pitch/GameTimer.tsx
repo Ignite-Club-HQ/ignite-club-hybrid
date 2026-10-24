@@ -384,7 +384,8 @@ const GameTimer = forwardRef<GameTimerRef, GameTimerProps>(({
           const res = await readServerTimer(teamId ?? null);
           if (!cancelled && res.found && isServerAnchoredTimer(res.timer_state)) applyServerSnapshot(res.timer_state, res.server_now);
         }
-      } finally { if (!cancelled) timer = setTimeout(refresh, 5000); }
+      } catch (error) { console.warn('[GameTimer] Clock refresh failed', error); }
+      finally { if (!cancelled) timer = setTimeout(refresh, 5000); }
     }
     void refresh();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };

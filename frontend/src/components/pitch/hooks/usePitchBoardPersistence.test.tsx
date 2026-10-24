@@ -154,14 +154,12 @@ describe("usePitchBoardPersistence", () => {
     expect(from).toHaveBeenCalledTimes(1);
   });
 
-  it.runIf(icpMode)("persists the active plan on-chain without Supabase writes", async () => {
+  it.runIf(icpMode)("leaves ICP writes to the shared CAS owner without a competing mirror", async () => {
     const autoSubPlan = [{ half: 1, time: 300, playerOut: { id: "p1" }, playerIn: { id: "p2" }, executed: false }];
     renderHook(() => usePitchBoardPersistence(props({ autoSubActive: true, autoSubPlan })));
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     expect(savePitchState).toHaveBeenCalled();
     expect(from).not.toHaveBeenCalled();
-    expect(syncLiveActiveGame).toHaveBeenCalledWith({}, expect.objectContaining({ teamId: "team-1", boardSessionId: "pitch-team-1" }));
-    const saved = syncLiveActiveGame.mock.calls[0]?.[1];
-    expect(JSON.parse(saved.pitchStateJson)).toMatchObject({ autoSubActive: true, autoSubPlan });
+    expect(syncLiveActiveGame).not.toHaveBeenCalled();
   });
 });

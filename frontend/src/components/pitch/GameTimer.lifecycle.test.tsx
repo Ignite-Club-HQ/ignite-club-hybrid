@@ -30,6 +30,8 @@ vi.mock("@capacitor/app", () => ({
 }));
 
 const NOW = Date.UTC(2026, 6, 25, 10, 0, 0);
+const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === 'icp';
+vi.mock('@/live/authBackendMode', () => ({ resolveAuthBackend: () => process.env.IGNITE_TEST_BACKEND_MODE === 'icp' ? 'icp' : 'supabase' }));
 
 const snapshot = (
   elapsedSeconds: number,
@@ -66,6 +68,16 @@ async function settle() {
 }
 
 describe("GameTimer lock, background and hydration lifecycle", () => {
+  it.runIf(icpMode)('reads a newer peer clock while open without sending a timer command', async () => {
+    server.read.mockResolvedValue(response(snapshot(60)));
+    const ref = createRef<GameTimerRef>();
+    render(<GameTimer ref={ref} teamId="team-a" compact readOnly />);
+    await settle();
+    server.read.mockResolvedValue(response(snapshot(90, { last_event_at: new Date(NOW + 1000).toISOString() })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(ref.current?.getElapsedSeconds()).toBe(90);
+    expect(server.send).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
