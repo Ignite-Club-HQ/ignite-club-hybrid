@@ -2,7 +2,7 @@ import type { IcpTargetConfig } from "./targetRegistry";
 import { ROUTING_GATES_SNAPSHOT } from "./generated/routingGates";
 import type { RoutingGatesSnapshot } from "./generalActivation";
 
-/** Public reads only. No membership session, router calls or write authority. */
+/** Build-anchored fallback inventory only; never a membership/write grant. */
 export function publicReadTargets(base: IcpTargetConfig, snapshot: RoutingGatesSnapshot | null = ROUTING_GATES_SNAPSHOT): IcpTargetConfig[] {
   if (!snapshot) return [base];
   if (!base.canisterIds.shard_router) return [base];
@@ -30,13 +30,14 @@ export async function readFreshPublicTargets(base: IcpTargetConfig, snapshot = R
   const {actor}=await connectLiveShardRouter(base,new AnonymousIdentity());
   let revision:bigint|undefined;let cursor:[]|[string]=[];
   const groups:Array<{id:string;domains:Array<{domain:string;canister:{toText():string}}>}> = [];
+  const domains=new Set(["club_domain","events_domain","messaging_domain","vault_domain","competition_domain","club_points_domain","mini_league_domain","media_metadata","insights_domain","notification_queue","pii_access_control","timer_jobs","secret_workload_identity"]);
   for(let page=0;page<64;page++) {
     const reply=await actor.read_public_group_targets(snapshot.targetAlias,revision===undefined?[]:[revision],cursor,64);
     if("Err" in reply)throw new Error(reply.Err);
     const row=reply.Ok;revision??=row.configuration_revision;
     if(row.configuration_revision!==revision || row.groups.length>64)throw new Error("Public group revision changed");
     for(const group of row.groups) {
-      if(groups.some(g=>g.id===group.id) || group.domains.length!==13 || new Set(group.domains.map(d=>d.domain)).size!==13)throw new Error("Incomplete public group inventory");
+      if(groups.some(g=>g.id===group.id) || group.domains.length!==13 || new Set(group.domains.map(d=>d.domain)).size!==13 || group.domains.some(d=>!domains.has(d.domain)))throw new Error("Incomplete public group inventory");
       groups.push(group);
     }
     if(!row.next_cursor.length) {

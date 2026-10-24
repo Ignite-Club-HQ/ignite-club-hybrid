@@ -692,7 +692,9 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({caller}) func upsert_competition_match_events(input : Types.MatchEventInput) : async {#Ok:[Text];#Err:Text} {
-    await materializeFixture(caller,input,0)
+    if(competitionDomainCanister!=?caller)return #Err("Trusted competition canister only");
+    let revision=switch(Map.get(fixtureMaterializations,Text.compare,input.match_id)){case null 1;case (?r){if(r.input==input)r.revision else r.revision+1}};
+    await materializeFixture(caller,input,revision)
   };
   public shared ({caller}) func materialize_competition_fixture(input : Types.MatchEventInput, revision : Nat64) : async {#Ok:[Text];#Err:Text} {
     await materializeFixture(caller,input,revision)
@@ -4742,9 +4744,9 @@ persistent actor class Main(governorInit : Principal) = this {
     if (eventViewOldCount > 0) changed += eventViewOldCount;
 
     if (not dry_run) {
-      gamePlayerStats:=gamePlayerStats.map(func s = if(s.user_id==?oldText){s with user_id=?newText}else if(s.user_id==?("principal:" # oldText)){s with user_id=?("principal:" # newText)}else s);
-      for((id,ds) in Map.entries(gamePlayerDetails).toArray().values())Map.add(gamePlayerDetails,Text.compare,id,ds.map(func d = if(d.user_id==?oldText){d with user_id=?newText}else if(d.user_id==?("principal:" # oldText)){d with user_id=?("principal:" # newText)}else d));
-      for((id,r) in Map.entries(fixtureMaterializations).toArray().values())if(r.input.creator==old)Map.add(fixtureMaterializations,Text.compare,id,{r with input={r.input with creator=new_principal}});
+      gamePlayerStats:=gamePlayerStats.map(func s = if(s.user_id==?oldText)({s with user_id=?newText})else if(s.user_id==?("principal:" # oldText))({s with user_id=?("principal:" # newText)})else s);
+      for((id,ds) in Map.entries(gamePlayerDetails).toArray().values())Map.add(gamePlayerDetails,Text.compare,id,ds.map(func d = if(d.user_id==?oldText)({d with user_id=?newText})else if(d.user_id==?("principal:" # oldText))({d with user_id=?("principal:" # newText)})else d));
+      for((id,r) in Map.entries(fixtureMaterializations).toArray().values())if(r.input.creator==old){let input=r.input;Map.add(fixtureMaterializations,Text.compare,id,{r with input={input with creator=new_principal}})};
       if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new_principal }) else r);
       if (eventsOld > 0) events := events.map(func(e) = if (e.creator.equal(old)) ({ e with creator = new_principal }) else e);
       if (assocOld > 0) associationEvents := associationEvents.map(func(a) = if (a.created_by.equal(old)) ({ a with created_by = new_principal }) else a);

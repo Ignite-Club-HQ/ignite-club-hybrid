@@ -18,7 +18,7 @@ describe("public group read inventory", () => {
     expect(publicReadTargets(base, null)).toEqual([base]);
   });
   it("discovers a newly registered group absent from the build snapshot",async()=>{
-    const domains=["club_domain","competition_domain","events_domain","media_metadata","vault_domain","messaging_domain","notification_queue","rewards_domain","profile_domain","mini_league_domain","polls_domain","identity_access","schedule_domain"].map(domain=>({domain,canister:{toText:()=>domain==="competition_domain"?"g3":domain}}));
+    const domains=["club_domain","events_domain","messaging_domain","vault_domain","competition_domain","club_points_domain","mini_league_domain","media_metadata","insights_domain","notification_queue","pii_access_control","timer_jobs","secret_workload_identity"].map(domain=>({domain,canister:{toText:()=>domain==="competition_domain"?"g3":domain}}));
     read.mockResolvedValue({Ok:{configuration_revision:2n,groups:[{id:"g3",domains}],next_cursor:[]}});
     expect((await readFreshPublicTargets(base,snapshot)).map(t=>t.canisterIds.competition_domain)).toEqual(["g1","g3"]);
   });
