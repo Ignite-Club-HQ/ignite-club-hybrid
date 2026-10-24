@@ -358,7 +358,7 @@ export async function registerLivePiiText(
  */
 async function readVaultPages(ctx: FeatureBackendContext, clubId: string, teamId: string | null, leagueId: string | null, competitionId: string | null, folderId: string | null, trash: boolean) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  const items = [];
+  const items: import("../../lab/bindings/vault_domain/declarations/vault_domain.did.js").VaultFileWithFolder[] = [];
   let offset = 0n;
   let revision: [] | [bigint] = [];
   for (;;) {
@@ -391,7 +391,7 @@ export async function listLiveVaultFolders(
 
 export async function listLiveVaultFiles(ctx: FeatureBackendContext, folderId: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_files(folderId), "List vault files");
+  return (await listLiveVaultFilesWithFolder(ctx, folderId)).map(entry => entry.file);
 }
 
 /** Single file read; null when the file is missing or the caller cannot view its folder. */
@@ -433,17 +433,9 @@ export async function listLiveVaultFilesWithFolder(
   folderId: string,
   competitionId: string | null = null,
 ) {
-  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  if (competitionId) {
-    return unwrapCandid(
-      actor.list_competition_files_with_folder(folderId, competitionId),
-      "List competition vault files with folder",
-    );
-  }
-  return unwrapCandid(
-    actor.list_files_with_folder(folderId),
-    "List vault files with folder",
-  );
+  const folder = await getLiveVaultFolder(ctx, folderId, competitionId);
+  if (!folder) throw new Error("Vault folder not found or access denied");
+  return readVaultPages(ctx, folder.club, folder.team[0] ?? null, folder.mini_league_id[0] ?? null, folder.competition_id[0] ?? null, folderId, false);
 }
 
 export async function listLiveVaultClubFilesWithFolder(

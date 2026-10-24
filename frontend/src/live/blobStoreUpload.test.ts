@@ -61,4 +61,10 @@ describe("Pro media allowance", () => {
     await expect(getLiveClubMediaBytes(target, identity, "club-a")).resolves.toEqual({ finalized: 10, pending: 2 });
     expect(mocks.get_club_media_bytes).toHaveBeenCalledWith("club-a");
   });
+  it("preserves unreadable store failures rather than returning partial zero bytes", async () => {
+    const { getLiveClubMediaBytes } = await import("./blobStoreUpload");
+    mocks.get_club_media_bytes.mockRejectedValueOnce(new Error("store unavailable"));
+    await expect(getLiveClubMediaBytes(target, identity, "club-a")).rejects.toThrow("store unavailable");
+  });
+
 });

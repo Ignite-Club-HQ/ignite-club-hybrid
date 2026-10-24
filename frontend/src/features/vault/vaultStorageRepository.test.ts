@@ -202,4 +202,10 @@ describe.runIf(!supabaseMode)("Vault storage accounting — ICP fallback", () =>
     vi.mocked(getLiveClubMediaBytes).mockResolvedValue({ finalized: 0, pending: 0 });
     await expect(fetchVaultStorageBreakdown("club-a", scriptedClient({}).client)).resolves.toMatchObject({ total: 0 });
   });
+  it("does not report zero usage when the original store cannot be measured", async () => {
+    const { getLiveClubMediaBytes } = await import("@/live/blobStoreUpload");
+    vi.mocked(getLiveClubMediaBytes).mockRejectedValueOnce(new Error("store unavailable"));
+    await expect(fetchVaultStorageBreakdown("club-a", scriptedClient({}).client)).rejects.toThrow("store unavailable");
+  });
+
 });

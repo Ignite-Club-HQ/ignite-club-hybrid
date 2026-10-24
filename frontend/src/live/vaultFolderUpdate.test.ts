@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn() }));
 vi.mock("./domains", () => ({
-  connectLiveVaultDomain: async () => ({ actor: { get_folder: mocks.get, update_folder: mocks.update } }),
+  connectLiveVaultDomain: async () => ({ actor: { get_folder: mocks.get, get_competition_folder: mocks.get, update_folder: mocks.update } }),
   connectLivePiiAccessControl: vi.fn(),
 }));
 vi.mock("./piiVetKeys", () => ({ encryptPiiValue: vi.fn(), fetchPiiVetKeys: vi.fn() }));
