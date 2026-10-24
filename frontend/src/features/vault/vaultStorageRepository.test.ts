@@ -13,6 +13,7 @@ const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 const live = vi.hoisted(() => ({ files: vi.fn().mockResolvedValue([]), teams: vi.fn().mockResolvedValue([]), context: {} }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: unknown, p: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) => supabaseMode ? p.supabase() : p.icp(live.context) }));
 vi.mock("@/live/features/vault", () => ({ listLiveVaultClubFiles: live.files }));
+vi.mock("@/live/features/promoCodes", () => ({ getLiveClubStoragePurchasedGb: vi.fn().mockResolvedValue(0) }));
 vi.mock("@/live/features/club", () => ({ listLiveTeams: live.teams }));
 vi.mock("@/live/blobStoreUpload", () => ({ getLiveClubMediaBytes: vi.fn().mockResolvedValue({ finalized: 0, pending: 0 }) }));
 
