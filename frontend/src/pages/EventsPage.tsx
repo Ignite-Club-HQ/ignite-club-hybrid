@@ -151,8 +151,6 @@ interface Event {
   club_id: string;
   team_id: string | null;
   competition_match_id?: string | null;
-  is_competition_fixture?: boolean;
-  competition_id?: string | null;
   duty_team_id?: string | null;
   mini_league_id: string | null;
   is_cancelled: boolean;
