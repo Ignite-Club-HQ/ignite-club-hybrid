@@ -10,7 +10,7 @@ import { compressImage } from "@/lib/imageCompression";
 import { localUploadPreviews } from "./localUploadPreviews";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
+import { announceLiveGalleryAsset, registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { useClubTheme } from "@/hooks/useClubTheme";
@@ -190,6 +190,7 @@ export function IcpUploadPhotoSheet({
     const albumId = files.length > 1 ? crypto.randomUUID() : null;
     const trimmedCaption = caption.trim() || null;
     let scopePending = false;
+    const registeredAssetIds: string[] = [];
     try {
       await withFeatureBackend("media", {
         supabase: async () => {
@@ -252,6 +253,12 @@ export function IcpUploadPhotoSheet({
                 throw err;
               }
             }
+            if (!scopePending) {
+              const { copyGalleryAssetToVault } = await import('./galleryVaultCopy');
+              await copyGalleryAssetToVault(ctx, { assetId: asset.id, clubId, teamId: teamId || null,
+                file: prepared.file, name: raw.name || 'Gallery photo' });
+              registeredAssetIds.push(asset.id);
+            }
             done += 1;
             setProgress({ done, total: files.length });
           };
@@ -260,6 +267,7 @@ export function IcpUploadPhotoSheet({
             while (nextIndex < files.length) await uploadOne(nextIndex++);
           };
           await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
+          if (registeredAssetIds[0]) await announceLiveGalleryAsset(ctx, registeredAssetIds[0]);
         },
       }, writeOnce({ clubId }));
       if (scopePending) {

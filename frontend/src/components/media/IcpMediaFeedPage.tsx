@@ -12,7 +12,6 @@ import type { FeatureBackendContext } from "@/live/featureRouter";
 import {
   addLiveComment,
   addLiveReaction,
-  deleteLiveAsset,
   removeLiveGalleryAsset,
   getLiveAsset,
   getLiveGalleryChatCard,
@@ -778,9 +777,6 @@ export function IcpMediaFeedPage() {
     [posts],
   );
 
-  const linkedAsset = useQuery({ queryKey: ['icp-gallery-link', principal, link.photoId], enabled: !!principal && !!link.photoId,
-    queryFn: () => withFeatureBackend('media', { supabase: async () => null,
-      icp: ctx => getLiveAsset(ctx, link.photoId ?? '') }, { photoId: link.photoId ?? undefined }) });
   const handledLink = useRef<string | null>(null);
   useEffect(() => {
     if (!link.photoId || handledLink.current === link.photoId) return;
