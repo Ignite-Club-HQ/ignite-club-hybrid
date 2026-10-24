@@ -962,11 +962,24 @@ function TeamsByDivision({
       : "Unassigned";
     const divFilter = [entry.division_id, divisionId].filter(Boolean) as string[];
 
-    // ICP mode has no competition_matches table to check for affected
-    // fixtures, so assign directly through the canister without the
-    // Supabase move-confirmation flow.
+    // Count through the owning competition; do not infer absence on failure.
     if (resolveAuthBackend() === "icp") {
-      await doAssignDivision(entry.id, divisionId, false, entry.team_id, divFilter);
+      try {
+        const rows = await withFeatureBackend("competitions", {
+          supabase: async () => [],
+          icp: async ctx => (await import("@/live/features/competitions")).listLiveCompetitionMatches(ctx, competitionId),
+        }, { competitionId });
+        const affected = rows.filter(m => (m.home_team_id === entry.team_id || m.away_team_id === entry.team_id) &&
+          (divFilter.length === 0 || (m.division_id[0] != null && divFilter.includes(m.division_id[0]))));
+        if (!affected.length) await doAssignDivision(entry.id, divisionId, false, entry.team_id, divFilter);
+        else {
+          setClearFixtures(true);
+          setMoveConfirm({ entryId: entry.id, teamId: entry.team_id, teamName: entry.teams?.name ?? "Team",
+            fromDivisionId: entry.division_id ?? null, toDivisionId: divisionId, toName, affectedMatchCount: affected.length });
+        }
+      } catch (error) {
+        toast({ title: "Could not check fixtures", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      }
       return;
     }
 
@@ -1007,6 +1020,7 @@ function TeamsByDivision({
     affectedDivisionIds: string[] = [],
   ) => {
     setSavingId(entryId);
+    let cleared = false;
     try {
       await withFeatureBackend("competitions", {
         supabase: async () => {
@@ -1018,7 +1032,11 @@ function TeamsByDivision({
         },
         icp: async (ctx) => {
           if (!teamId) throw new Error("Team id is required to assign a division");
-          await assignLiveDivision(ctx, competitionId, teamId, divisionId);
+          const current = entries.find((e: any) => e.team_id === teamId);
+          if (!current) throw new Error("Team entry changed; refresh before moving");
+          const { moveLiveTeamDivision } = await import("@/live/features/competitions");
+          const count = await moveLiveTeamDivision(ctx, competitionId, teamId, current.division_id ?? null, divisionId, alsoClear);
+          cleared = alsoClear && count > 0;
         },
       }, writeOnce({ competitionId }));
     } catch (error: any) {
@@ -1026,8 +1044,7 @@ function TeamsByDivision({
       toast({ title: "Could not move team", description: error?.message, variant: "destructive" });
       return;
     }
-    let cleared = false;
-    if (alsoClear && teamId) {
+    if (resolveAuthBackend() !== "icp" && alsoClear && teamId) {
       // IMPORTANT: never delete completed matches — those carry the team's
       // points/results which now follow them to the new division via the
       // competition_ladder view. Only clear scheduled/pending fixtures.
@@ -1251,9 +1268,7 @@ function TeamsByDivision({
     </div>
   );
 }
-// ICP broadcast: logs on competition_domain, then fans out an in-app/push
-// notification to every member of the accepted (optionally division-limited)
-// teams through notification_queue. Recipient ids are principal text.
+// The trusted competition service resolves and queues the audience per club.
 async function sendIcpCompetitionBroadcast(competitionId: string, competitionName: string, message: string, divisionIds: Set<string>): Promise<number> {
   const operation = crypto.randomUUID();
   return withFeatureBackend("competitions", {
@@ -1326,8 +1341,10 @@ function BroadcastsPanel({ competitionId, competitionName, divisions, acceptedTe
     queryKey: ["competition-broadcasts", competitionId],
     queryFn: async () => {
       if (resolveAuthBackend() === "icp") {
-        const [{ icpCtx }, { listLiveCompetitionBroadcasts }] = await Promise.all([import("@/lib/icpClubTeamLookup"), import("@/live/features/competitions")]);
-        const rows = await listLiveCompetitionBroadcasts(await icpCtx(), competitionId);
+        const rows = await withFeatureBackend("competitions", {
+          supabase: async () => [],
+          icp: async ctx => (await import("@/live/features/competitions")).listLiveCompetitionBroadcasts(ctx, competitionId),
+        }, { competitionId });
         return rows.slice(0, 20).map((b: any) => {
           const meta = (() => { try { return JSON.parse(b.title); } catch { return {}; } })();
           return { id: b.id, message: b.body, created_at: new Date(Number(b.created_at_ms)).toISOString(), recipient_team_count: Number(meta.teams ?? 0) };

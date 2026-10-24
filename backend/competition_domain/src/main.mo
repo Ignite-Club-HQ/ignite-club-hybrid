@@ -683,7 +683,17 @@ persistent actor class Main(governorInit : Principal) = this {
         let invited = if (visible) false else await invitedManager(caller, item.id);
         if (removalReceiver.denied(caller)) return #Err("Account access changed");
         if ((visible or invited) and not compFenced(item.id) and competitions.any(func current = current == item)) {
-          rows := rows.concat([{ competition = item; entries = entries.filter(func e = e.competition_id == item.id) }]);
+          var scopedEntries : [Types.TeamEntry] = [];
+          if (canManageCompetition(caller, item.id)) {
+            scopedEntries := entries.filter(func e = e.competition_id == item.id);
+          } else {
+            for (entry in entries.filter(func e = e.competition_id == item.id).values()) {
+              let access = await teamAccess(caller, entry.team_id);
+              if (removalReceiver.denied(caller) or compFenced(item.id)) return #Err("Competition access changed");
+              if ((access.can_manage or (access.is_member and (entry.status == "accepted" or entry.status == "registered"))) and entries.any(func current = current == entry)) scopedEntries := scopedEntries.concat([entry]);
+            };
+          };
+          if (competitions.any(func current = current == item)) rows := rows.concat([{ competition = item; entries = scopedEntries }]);
         }
       };
       #Ok(rows)
@@ -902,6 +912,24 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  // One local commit: completed results are never cleared by a division move.
+  public shared ({ caller }) func move_team_division(competition_id : Text, team_id : Text, expected_division : ?Text, division_id : ?Text, clear_fixtures : Bool) : async { #Ok : Nat; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller); await syncForCompetition(caller, competition_id);
+      if (removalReceiver.denied(caller) or compFenced(competition_id) or not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+      switch (division_id) { case (?d) { if (d.size() == 0 or d.size() > 128) return #Err("Invalid division") }; case null {} };
+      let current = entries.find(func e = e.competition_id == competition_id and e.team_id == team_id) ?? return #Err("Team not registered");
+      if (current.division_id != expected_division) return #Err("Team division changed; refresh before moving");
+      if (current.division_id == division_id) return #Ok(0);
+      let affected = matches.filter(func m = clear_fixtures and m.competition_id == competition_id and m.status != "completed" and (m.home_team_id == team_id or m.away_team_id == team_id) and ((expected_division == null and division_id == null) or (m.division_id != null and (m.division_id == expected_division or m.division_id == division_id))));
+      if (affected.any(func m = matchFenced(m.id))) return #Err("Fixture temporarily locked");
+      entries := entries.map(func e = if (e == current) ({ e with division_id }) else e);
+      matches := matches.filter(func m = not affected.any(func removed = removed.id == m.id));
+      #Ok(affected.size())
+    } finally { removalReceiver.leave(caller) }
   };
 
   public shared ({ caller }) func issue_join_token(competition_id : Text, team_id : Text, expires_at_ms : Nat64) : async { #Ok : Types.JoinToken; #Err : Text } {
