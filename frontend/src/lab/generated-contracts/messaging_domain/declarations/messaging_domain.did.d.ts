@@ -291,6 +291,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_club_dm_settings' : ActorMethod<[string], ClubDmSettings>,
+  'get_direct_conversation' : ActorMethod<
+    [string],
+    { 'Ok' : Conversation } |
+      { 'Err' : string }
+  >,
   'get_group_join_policy' : ActorMethod<
     [string],
     { 'join_policy' : string, 'category' : [] | [string] }
@@ -303,6 +308,11 @@ export interface Main {
   'get_group_metadata_multi' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<GroupMetadata> } |
+      { 'Err' : string }
+  >,
+  'get_message_window' : ActorMethod<
+    [string, string],
+    { 'Ok' : MessagePage } |
       { 'Err' : string }
   >,
   'get_mini_league_chat' : ActorMethod<
@@ -386,6 +396,11 @@ export interface Main {
   'list_content_reports' : ActorMethod<
     [[] | [string]],
     { 'Ok' : Array<ContentReport> } |
+      { 'Err' : string }
+  >,
+  'list_conversation_online_users' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Principal> } |
       { 'Err' : string }
   >,
   'list_deleted_groups' : ActorMethod<

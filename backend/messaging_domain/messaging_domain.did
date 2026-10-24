@@ -367,6 +367,11 @@ type Main =
        Ok: Settings;
      });
    get_club_dm_settings: (club_id: text) -> (ClubDmSettings) query;
+   get_direct_conversation: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: Conversation;
+     });
    get_group_join_policy: (conversation_id: text) ->
     (record {
        category: opt text;
@@ -381,6 +386,11 @@ type Main =
     (variant {
        Err: text;
        Ok: vec GroupMetadata;
+     });
+   get_message_window: (conversation_id: text, message_id: text) ->
+    (variant {
+       Err: text;
+       Ok: MessagePage;
      });
    get_mini_league_chat: (club_id: text, league_id: text) ->
     (variant {
@@ -472,6 +482,11 @@ type Main =
        Err: text;
        Ok: vec ContentReport;
      }) query;
+   list_conversation_online_users: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec principal;
+     });
    list_deleted_groups: () ->
     (variant {
        Err: text;
@@ -556,7 +571,7 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
-   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -833,7 +848,7 @@ type Main =
        Err: text;
        Ok;
      });
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
