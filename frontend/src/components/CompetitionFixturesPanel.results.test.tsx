@@ -89,7 +89,7 @@ function renderPanel(props: { isAdmin?: boolean; source?: string } = {}) {
       divisions={[]}
       entries={[]}
       source={props.source}
-    />,
+    />
     </MemoryRouter>
   );
 }
