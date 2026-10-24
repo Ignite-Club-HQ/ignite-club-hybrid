@@ -1255,39 +1255,16 @@ function TeamsByDivision({
 // notification to every member of the accepted (optionally division-limited)
 // teams through notification_queue. Recipient ids are principal text.
 async function sendIcpCompetitionBroadcast(competitionId: string, competitionName: string, message: string, divisionIds: Set<string>): Promise<number> {
-  const [{ icpCtx }, comps, { listLiveTeamRoleGrants }, { fanOutLiveNotifications }] = await Promise.all([
-    import("@/lib/icpClubTeamLookup"),
-    import("@/live/features/competitions"),
-    import("@/live/features/membership"),
-    import("@/live/features/notifications"),
-  ]);
-  const ctx = await icpCtx();
-  const entries = await comps.listLiveCompetitionEntries(ctx, competitionId);
-  const teams = entries.filter((e: any) => {
-    if (e.status !== "accepted" && e.status !== "registered") return false;
-    if (divisionIds.size === 0) return true;
-    const div = Array.isArray(e.division_id) ? e.division_id[0] : e.division_id;
-    return !!div && divisionIds.has(div);
-  });
-  const sent = await comps.sendLiveCompetitionBroadcast(ctx, competitionId, JSON.stringify({ teams: teams.length }), message);
-  const recipients = new Set<string>();
-  for (const t of teams) {
-    try {
-      const grants = await listLiveTeamRoleGrants(ctx, t.team_id);
-      grants.forEach((g: any) => recipients.add(g.user.toText()));
-    } catch (e) { console.warn("[broadcast] roster read failed", t.team_id, e); }
-  }
-  if (recipients.size > 0) {
-    await fanOutLiveNotifications(ctx, {
-      userIds: Array.from(recipients),
-      clubId: teams[0]?.club_id ?? "",
-      kind: "competition_broadcast",
-      body: `${competitionName}: ${message}`.slice(0, 1000),
-      idempotencyKeyPrefix: sent.id,
-      relatedId: competitionId,
-    });
-  }
-  return teams.length;
+  const operation = crypto.randomUUID();
+  return withFeatureBackend("competitions", {
+    supabase: async () => { throw new Error("ICP competition required"); },
+    icp: async ctx => {
+      const { connectLiveCompetitionDomain } = await import("@/live/domains");
+      const { unwrapCandid } = await import("@/live/features/candid");
+      const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+      return Number(await unwrapCandid(actor.queue_competition_broadcast(operation, competitionId, [...divisionIds].sort(), competitionName.slice(0, 200), message), "Queue competition broadcast"));
+    },
+  }, { competitionId, writeKey: operation, attempts: 1 });
 }
 
 function BroadcastsHeaderBadge({ competitionId }: { competitionId: string }) {
@@ -1295,8 +1272,13 @@ function BroadcastsHeaderBadge({ competitionId }: { competitionId: string }) {
     queryKey: ["competition-broadcasts-count", competitionId],
     queryFn: async () => {
       if (resolveAuthBackend() === "icp") {
-        const [{ icpCtx }, { listLiveCompetitionBroadcasts }] = await Promise.all([import("@/lib/icpClubTeamLookup"), import("@/live/features/competitions")]);
-        return (await listLiveCompetitionBroadcasts(await icpCtx(), competitionId)).length;
+        return withFeatureBackend("competitions", {
+          supabase: async () => 0,
+          icp: async ctx => {
+            const { listLiveCompetitionBroadcasts } = await import("@/live/features/competitions");
+            return (await listLiveCompetitionBroadcasts(ctx, competitionId)).length;
+          },
+        }, { competitionId });
       }
       const { count } = await supabase
         .from("competition_broadcasts")
@@ -1387,7 +1369,7 @@ function BroadcastsPanel({ competitionId, competitionName, divisions, acceptedTe
       try {
         const count = await sendIcpCompetitionBroadcast(competitionId, competitionName, message.trim(), selectedDivisionIds);
         try { (navigator as any).vibrate?.(15); } catch {}
-        toast({ title: `Broadcast sent to ${count} team${count === 1 ? "" : "s"}` });
+        toast({ title: `Broadcast queued for ${count} recipient${count === 1 ? "" : "s"}` });
         setMessage("");
         setActiveTemplate(null);
         setSelectedDivisionIds(new Set());
@@ -1414,7 +1396,7 @@ function BroadcastsPanel({ competitionId, competitionName, divisions, acceptedTe
     }
     const count = (data as any).recipient_team_count;
     try { (navigator as any).vibrate?.(15); } catch {}
-    toast({ title: `Broadcast sent to ${count} team${count === 1 ? "" : "s"}` });
+    toast({ title: `Broadcast queued for ${count} recipient${count === 1 ? "" : "s"}` });
     setMessage("");
     setActiveTemplate(null);
     setSelectedDivisionIds(new Set());
