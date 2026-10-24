@@ -57,7 +57,7 @@ try {
   assert.deepEqual(await events.actor.get_schedule_view(),['calendar']);
   events.actor.setPrincipal(member);
   assert.deepEqual(await events.actor.get_schedule_view(),[]);
-  await pic.upgradeCanister({ canisterId: events.canisterId, wasm: process.env.EVENTS_DOMAIN_WASM, sender: governor, arg: IDL.encode([IDL.Principal],[governor]) });
+  await pic.upgradeCanister({ canisterId: events.canisterId, wasm: process.env.EVENTS_DOMAIN_WASM, sender: governor, arg: IDL.encode([IDL.Principal],[governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   events.actor.setPrincipal(coach);
   assert.deepEqual(await events.actor.get_schedule_view(),['calendar']);
   assert.deepEqual(ok(await events.actor.create_event_with_setup(input)),created);
