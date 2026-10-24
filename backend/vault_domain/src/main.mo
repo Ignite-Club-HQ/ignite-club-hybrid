@@ -82,6 +82,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var uploadIntents : Map.Map<Text, UploadJournal.Intent>;
   var lifecycleFileCursor : Nat;
   var lifecycleCleanupCursor : Text;
+  var lifecycleFolderCursor : Nat;
   transient var lifecycleRunning = false;
   var backupRestoreProgress : Map.Map<Text, { next : Nat; restored : Nat; skipped : Nat; complete : Bool }>;
   transient let backupRestoreLocks = Map.empty<Text, Bool>();
@@ -1227,7 +1228,26 @@ persistent actor class Main(governorInit : Principal) = this {
         page := page.concat([(id, record)])
       };
       lifecycleCleanupCursor := if (page.size() == 20) page[19].0 else "";
-      for ((id, record) in page.values()) { if (record.state == #erased) { ignore await reconcileErasedAs(governor, id) } }
+      for ((id, record) in page.values()) { if (record.state == #erased) { ignore await reconcileErasedAs(governor, id) } };
+      // Empty folders need their own bounded scan: a scope with no files never
+      // reaches the byte-cleanup loop. Absence or soft deletion is not evidence.
+      let folderStart = if (lifecycleFolderCursor < folders.size()) lifecycleFolderCursor else 0;
+      let folderEnd = Nat.min(folders.size(), folderStart + 20);
+      let folderCandidates = Array.tabulate<Types.VaultFolder>(folderEnd - folderStart, func i = folders[folderStart + i]);
+      lifecycleFolderCursor := if (folderEnd < folders.size()) folderEnd else 0;
+      for (folder in folderCandidates.values()) {
+        if (isFenced(folder.club)) continue;
+        let cid = switch club_domain_canister { case (?id) id; case null continue };
+        let cd : actor { read_vault_erasure_scope : shared query (Text, ?Text) -> async Bool } = actor(cid.toText());
+        let erased = try { await (with timeout = 10) cd.read_vault_erasure_scope(folder.club, folder.team) } catch (_) { continue };
+        if (not erased or club_domain_canister != ?cid or isFenced(folder.club) or folders.find(func f = f.id == folder.id) != ?folder) continue;
+        // Keep hierarchy while any live/uncertain upload or child still needs it.
+        if (files.any(func f = f.folder_id == folder.id) or folders.any(func f = f.parent_id == ?folder.id) or uploadIntents.entries().any(func e = e.1.file.folder_id == folder.id and deletionIntents.get(e.0) == null and not files.any(func f = f.id == e.0))) continue;
+        folders := folders.filter(func f = f.id != folder.id);
+        backups := backups.map(func b = { b with folders = b.folders.filter(func f = f.id != folder.id) });
+        pinned_vaults := pinned_vaults.filter(func p = p.vault_folder_id != ?folder.id);
+        mediaEvidenceRevision += 1
+      }
     } finally { lifecycleRunning := false }
   };
   transient let _lifecycleTimer = Timer.recurringTimer<system>(#seconds(900), sweepVaultLifecycle);

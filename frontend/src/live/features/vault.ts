@@ -4,6 +4,7 @@ import { connectLivePiiAccessControl, connectLiveVaultDomain } from "../domains"
 import type { FeatureBackendContext } from "../featureRouter";
 import { encryptPiiValue, fetchPiiVetKeys } from "../piiVetKeys";
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
+import { scheduleVaultUploadRecovery } from "../vaultUploadRecovery";
 
 /**
  * Vault feature -> vault_domain canister (folder/file metadata) plus
@@ -358,13 +359,13 @@ export async function registerLivePiiText(
  */
 async function readVaultPages(ctx: FeatureBackendContext, clubId: string, teamId: string | null, leagueId: string | null, competitionId: string | null, folderId: string | null, trash: boolean) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  // Quiet bounded recovery: only acknowledged uploads by this account qualify.
-  // No automatic byte retry, compensation or Supabase fallback on unknown outcomes.
+  // Shared quiet recovery traverses every bounded journal page, including empty
+  // filtered pages. It never holds up normal file reads or retries unknown bytes.
   void (async () => {
-    const page = await unwrapCandid(actor.read_my_upload_page(clubId, ""), "Read pending Vault uploads");
-    for (const id of page.ids) {
-      try { await unwrapCandid(actor.recover_file_upload(id), "Recover pending Vault file"); } catch { /* retain the exact intent */ }
-    }
+    const scope = JSON.stringify([ctx.target, clubId]);
+    await scheduleVaultUploadRecovery(ctx.identity, scope,
+      after => unwrapCandid(actor.read_my_upload_page(clubId, after), "Read pending Vault uploads"),
+      id => unwrapCandid(actor.recover_file_upload(id), "Recover pending Vault file"));
   })().catch(() => { /* older canisters or unavailable recovery never block file reads */ });
   const items: import("../../lab/bindings/vault_domain/declarations/vault_domain.did.js").VaultFileWithFolder[] = [];
   let offset = 0n;
