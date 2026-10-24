@@ -1000,11 +1000,11 @@ persistent actor class Main(governorInit : Principal) = this {
     if (pin.club != access.club) return false;
     if (pin.root_scope == ?"club") return pin.root_id == ?access.club;
     if (pin.root_scope == ?"team") return pin.root_id == access.team and access.team != null;
-    switch pin.vault_folder_id { case (?id) {
+    switch (pin.vault_folder_id) { case (?id) {
       let f = folders.find(func f = f.id == id and f.club == access.club and f.deleted_at_ms == null) ?? return false;
       return await accountFolderAccess(user, f)
     }; case null {} };
-    switch pin.vault_file_id { case (?id) {
+    switch (pin.vault_file_id) { case (?id) {
       let f = files.find(func f = f.id == id and f.club == access.club and f.deleted_at_ms == null) ?? return false;
       return await accountFileAccess(user, f)
     }; case null false }
