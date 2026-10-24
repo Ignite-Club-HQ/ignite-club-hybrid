@@ -146,14 +146,16 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok
   };
   func scheduledFenced(id : Text) : Bool = transferFences.size() > 0 and scheduled.any(func(x) = x.id == id and (switch (x.club_id) { case (?c) isFenced(c); case null false }));
-  type FenceSnapshot = { items : [Types.Notification]; scheduled : [Types.ScheduledMessage] };
+  type BroadcastReceipt = { club : Text; related : Text; body : Text; count : Nat16 };
+  type FenceSnapshot = { broadcast_proofs : ?[(Text, BroadcastReceipt, [Text])]; items : [Types.Notification]; scheduled : [Types.ScheduledMessage] };
   func fenceSnapshot(c : Text) : FenceSnapshot {
 
-    { items = items.filter(func(x) = x.club == c);
+    { broadcast_proofs = ?Map.entries(competitionBroadcastReceipts).filter(func pair = pair.1.club == c).map(func pair = (pair.0, pair.1, Map.get(competitionBroadcastAudiences, Text.compare, pair.0) ?? [])).toArray(); items = items.filter(func(x) = x.club == c);
       scheduled = scheduled.filter(func(x) = x.club_id == ?c) }
   };
   func fenceDrop(c : Text) {
     if (items.any(func(x) = x.club == c and x.status == #Processing)) Runtime.trap("Unsettled delivery must be retained");
+    for ((key, r) in Map.entries(competitionBroadcastReceipts).toArray().values()) if (r.club == c) { Map.remove(competitionBroadcastReceipts, Text.compare, key); Map.remove(competitionBroadcastAudiences, Text.compare, key) };
     items := items.filter(func(x) = not (x.club == c));
     scheduled := scheduled.filter(func(x) = not (x.club_id == ?c));
   };
@@ -169,6 +171,11 @@ persistent actor class Main(governorInit : Principal) = this {
     let decoded : ?FenceSnapshot = from_candid (snapshot);
     let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
     let c = club;
+    let proofs = s.broadcast_proofs ?? [];
+    if (proofs.any(func pair = switch (Map.get(competitionBroadcastReceipts, Text.compare, pair.0)) { case (?old) old != pair.1 or Map.get(competitionBroadcastAudiences, Text.compare, pair.0) != ?pair.2; case null false })) return #Err("Snapshot must not replace original broadcast proof");
+    if (s.broadcast_proofs == null and Map.entries(competitionBroadcastReceipts).any(func pair = pair.1.club == club)) return #Err("Legacy snapshot omits broadcast proof");
+    if (proofs.any(func pair = pair.1.club != club or pair.2.any(recipientFenced))) return #Err("Foreign or fenced broadcast proof");
+    if (proofs.any(func pair = switch (Map.get(competitionBroadcastReceipts, Text.compare, pair.0)) { case (?r) r.club != club; case null false })) return #Err("Broadcast proof key collision");
 
     if (s.items.any(func(x) = not (x.club == c))
         or s.scheduled.any(func(x) = not (x.club_id == ?c))) return #Err("Snapshot contains foreign records");
@@ -178,6 +185,7 @@ persistent actor class Main(governorInit : Principal) = this {
     fenceDrop(club); // idempotent replace
     items := items.concat(s.items);
     scheduled := scheduled.concat(s.scheduled);
+    for ((key, r, audience) in proofs.values()) { Map.add(competitionBroadcastReceipts, Text.compare, key, r); Map.add(competitionBroadcastAudiences, Text.compare, key, audience) };
     #Ok(s.items.size())
   };
   public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {

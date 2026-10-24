@@ -283,10 +283,24 @@ persistent actor class Main(governorInit : Principal) = this {
   func compFenced(id : Text) : Bool = transferFences.size() > 0 and competitions.any(func(x) = x.id == id and isFenced(x.club_id));
   func matchFenced(id : Text) : Bool = transferFences.size() > 0 and matches.any(func(x) = x.id == id and compFenced(x.competition_id));
   type FenceSnapshot = ClubSnapshot.FenceSnapshot;
+  func emailInClub(job : EmailOutbox.Job, club : Text) : Bool {
+    if (job.kind == "eoi") return eoiSubmissions.any(func e = e.id == job.resource and e.club_id == club);
+    if (job.kind == "official" or job.kind == "official_welcome") return competitionOfficialEmailInvites.any(func i = i.token == job.resource and competitions.any(func c = c.id == i.competition_id and c.club_id == club));
+    if (job.kind == "member_welcome") return competitionMemberWelcomeJobs.any(func j = j.token == job.resource and competitions.any(func c = c.id == j.competition_id and c.club_id == club));
+    false
+  };
+  func clubRecovery(c : Text) : ClubSnapshot.Recovery {
+    let inC = func(id : Text) : Bool = competitions.any(func x = x.club_id == c and x.id == id);
+    let deliveries = Map.entries(broadcastDeliveries).filter(func pair = inC(pair.1.competition)).toArray();
+    { email_jobs = Map.entries(emailJobs).filter(func pair = emailInClub(pair.1, c)).toArray();
+      fixture_receipts = Map.entries(fixtureReceipts).filter(func pair = inC(pair.1.input.competition_id)).toArray();
+      broadcast_deliveries = deliveries;
+      broadcast_plans = Map.entries(broadcastPlans).filter(func pair = deliveries.any(func d = d.0 == pair.0)).toArray() }
+  };
   func fenceSnapshot(c : Text) : FenceSnapshot {
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
-    { playhq_metadata=?playhqMatchMetadata.filter(func(x)=inC(x.competition_id));playhq_stats=?playhqStats.filter(func(x)=inC(x.competition_id));score_privacy = ?scorePrivacySettings.filter(func(x) = inC(x.competition_id));
+    { recovery = ?clubRecovery(c); playhq_metadata=?playhqMatchMetadata.filter(func(x)=inC(x.competition_id));playhq_stats=?playhqStats.filter(func(x)=inC(x.competition_id));score_privacy = ?scorePrivacySettings.filter(func(x) = inC(x.competition_id));
       competitions = competitions.filter(func(x) = x.club_id == c);
       roles = roles.filter(func(x) = inC(x.competition_id));
       entries = entries.filter(func(x) = inC(x.competition_id));
@@ -309,6 +323,11 @@ persistent actor class Main(governorInit : Principal) = this {
       official_chats = officialChats.filter(func(x) = inC(x.competition_id)) }
   };
   func fenceDrop(c : Text) {
+    let recovery = clubRecovery(c);
+    for ((key, _) in recovery.email_jobs.values()) Map.remove(emailJobs, Text.compare, key);
+    for ((key, _) in recovery.fixture_receipts.values()) Map.remove(fixtureReceipts, Text.compare, key);
+    for ((key, _) in recovery.broadcast_deliveries.values()) Map.remove(broadcastDeliveries, Text.compare, key);
+    for ((key, _) in recovery.broadcast_plans.values()) Map.remove(broadcastPlans, Text.compare, key);
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
     scorePrivacySettings := scorePrivacySettings.filter(func(x) = not inC(x.competition_id));
@@ -351,6 +370,21 @@ persistent actor class Main(governorInit : Principal) = this {
     let c = club;
     let rootC = s.competitions;
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
+    let existingRecovery = clubRecovery(club);
+    if (s.recovery == null and (existingRecovery.email_jobs.size() > 0 or existingRecovery.fixture_receipts.size() > 0 or existingRecovery.broadcast_deliveries.size() > 0)) return #Err("Legacy snapshot omits existing recovery records");
+    let recovery : ClubSnapshot.Recovery = s.recovery ?? ({ email_jobs = []; fixture_receipts = []; broadcast_deliveries = []; broadcast_plans = [] });
+    if (ClubSnapshot.duplicateKeys(recovery.email_jobs.map(func pair = pair.0)) or ClubSnapshot.duplicateKeys(recovery.fixture_receipts.map(func pair = pair.0)) or ClubSnapshot.duplicateKeys(recovery.broadcast_deliveries.map(func pair = pair.0)) or ClubSnapshot.duplicateKeys(recovery.broadcast_plans.map(func pair = pair.0))) return #Err("Duplicate recovery keys");
+    if (recovery.email_jobs.any(func pair = switch (Map.get(emailJobs, Text.compare, pair.0)) { case (?old) old != pair.1; case null false }) or recovery.broadcast_deliveries.any(func pair = switch (Map.get(broadcastDeliveries, Text.compare, pair.0)) { case (?old) old != pair.1; case null false })) return #Err("Snapshot must not roll back delivery evidence");
+    let emailOwned = func(j : EmailOutbox.Job) : Bool {
+      if (j.kind == "eoi") return s.eoi.any(func e = e.id == j.resource);
+      if (j.kind == "official" or j.kind == "official_welcome") return s.official_invites.any(func i = i.token == j.resource);
+      if (j.kind == "member_welcome") return (s.member_welcome_jobs ?? []).any(func w = w.token == j.resource);
+      false
+    };
+    if (recovery.email_jobs.any(func pair = pair.0 != pair.1.id or not emailOwned(pair.1)) or recovery.fixture_receipts.any(func pair = not inC(pair.1.input.competition_id) or not s.matches.any(func m = m.id == pair.1.match_id and m.competition_id == pair.1.input.competition_id)) or recovery.broadcast_deliveries.any(func pair = not inC(pair.1.competition) or not s.broadcasts.any(func b = b.id == pair.1.broadcast_id and b.competition_id == pair.1.competition)) or recovery.broadcast_plans.any(func pair = not recovery.broadcast_deliveries.any(func d = d.0 == pair.0))) return #Err("Foreign recovery snapshot records");
+    // An unknown provider/queue commit cannot be moved to a different authority.
+    if (recovery.email_jobs.any(func pair = pair.1.state == "processing" or pair.1.state == "unknown") or existingRecovery.email_jobs.any(func pair = pair.1.state == "processing" or pair.1.state == "unknown") or recovery.broadcast_deliveries.any(func pair = pair.1.unknown != null) or existingRecovery.broadcast_deliveries.any(func pair = pair.1.unknown != null)) return #Err("Resolve original delivery outcomes before snapshot replacement");
+    if (recovery.email_jobs.any(func pair = switch (Map.get(emailJobs, Text.compare, pair.0)) { case (?j) not emailInClub(j, club); case null false }) or recovery.fixture_receipts.any(func pair = switch (Map.get(fixtureReceipts, Text.compare, pair.0)) { case (?r) not competitions.any(func c = c.id == r.input.competition_id and c.club_id == club); case null false }) or recovery.broadcast_deliveries.any(func pair = switch (Map.get(broadcastDeliveries, Text.compare, pair.0)) { case (?r) not competitions.any(func c = c.id == r.competition and c.club_id == club); case null false }) or recovery.broadcast_plans.any(func pair = Map.get(broadcastPlans, Text.compare, pair.0) != null and not existingRecovery.broadcast_plans.any(func old = old.0 == pair.0))) return #Err("Recovery key collides with another scope");
     if(phqMeta.any(func(x)=not inC(x.competition_id) or not s.matches.any(func(m)=m.id==x.match_id and m.competition_id==x.competition_id)) or phqStats.any(func(x)=not phqMeta.any(func(m)=m.match_id==x.match_id and m.game_id==x.game_id and m.tenant==x.tenant and m.competition_id==x.competition_id))) return #Err("Foreign PlayHQ snapshot records");
     if (privacy.any(func(x) = not inC(x.competition_id))
         or s.competitions.any(func(x) = not (x.club_id == c))
@@ -397,11 +431,17 @@ persistent actor class Main(governorInit : Principal) = this {
     personalCompetitionOwners := personalCompetitionOwners.concat(s.owners);
     roleLinks := roleLinks.concat(s.role_links);
     officialChats := officialChats.concat(s.official_chats);
+    for ((key, row) in recovery.email_jobs.values()) Map.add(emailJobs, Text.compare, key, row);
+    for ((key, row) in recovery.fixture_receipts.values()) Map.add(fixtureReceipts, Text.compare, key, row);
+    for ((key, row) in recovery.broadcast_deliveries.values()) Map.add(broadcastDeliveries, Text.compare, key, row);
+    for ((key, row) in recovery.broadcast_plans.values()) Map.add(broadcastPlans, Text.compare, key, row);
     #Ok(s.competitions.size())
   };
   public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
     if (not fenceGov(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before purge");
+    let recovery = clubRecovery(club);
+    if (recovery.email_jobs.any(func pair = pair.1.state == "processing" or pair.1.state == "unknown") or recovery.broadcast_deliveries.any(func pair = pair.1.unknown != null)) return #Err("Unresolved delivery receipts must remain at original authority");
     let n = fenceSnapshot(club).competitions.size(); fenceDrop(club); #Ok(n)
   };
 
@@ -724,6 +764,7 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func purge_my_data() : async { #Ok : Nat; #Err : Text } {
     auth(caller);
     if (isGovernor(caller)) return #Err("Governor erasure forbidden");
+    for ((key, r) in Map.entries(broadcastDeliveries)) if (r.unknown != null and (r.sender == caller or (switch (Map.get(broadcastPlans, Text.compare, key)) { case (?plan) plan.any(func t = t.officials.any(func p = p == caller)); case null false }))) return #Err("Resolve original broadcast before account erasure");
     var count = roles.filter(func r = r.user == caller).size();
     roles := roles.filter(func r = r.user != caller);
     count += competitionInvites.filter(func r = r.invitee == caller or r.created_by == caller).size();
@@ -751,6 +792,10 @@ persistent actor class Main(governorInit : Principal) = this {
         Map.add(broadcastDeliveries, Text.compare, "erased:" # receipt.broadcast_id, { receipt with sender = Principal.anonymous() });
         switch(Map.get(broadcastPlans,Text.compare,key)){case (?plan){Map.remove(broadcastPlans,Text.compare,key);Map.add(broadcastPlans,Text.compare,"erased:" # receipt.broadcast_id,plan.map(func t = {t with officials=t.officials.filter(func p = p!=caller)}))};case null {}};
       }
+    };
+    // Officials also occur in other senders' frozen plans.
+    for ((key, plan) in Map.entries(broadcastPlans).toArray().values()) {
+      Map.add(broadcastPlans, Text.compare, key, plan.map(func t = { t with officials = t.officials.filter(func p = p != caller) }));
     };
     #Ok(count)
   };
@@ -3000,6 +3045,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (old.equal(new)) return #err("old and new must differ");
     if (old.equal(governor)) return #err("Cannot rekey the governor");
     for((_,r) in Map.entries(broadcastDeliveries))if(r.sender==old and r.unknown!=null)return #err("Resolve original broadcast before account rekey");
+    for ((key, r) in Map.entries(broadcastDeliveries)) if (r.unknown != null and (switch (Map.get(broadcastPlans, Text.compare, key)) { case (?plan) plan.any(func t = t.officials.any(func p = p == old)); case null false })) return #err("Resolve original official broadcast before rekey");
     let oldPrefix=old.toText() # "\u{1f}";let newPrefix=new.toText() # "\u{1f}";
     let fixtureUpdates=Map.entries(fixtureReceipts).toArray();
     for((key,r) in fixtureUpdates.values()) {
@@ -3032,6 +3078,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let newOfficialInvites=competitionOfficialEmailInvites.map(func r {if(r.created_by==old or r.accepted_by==?old){changed+=1;{r with created_by=if(r.created_by==old)new else r.created_by;accepted_by=if(r.accepted_by==?old)?new else r.accepted_by}}else r});
     let newMemberJobs=competitionMemberWelcomeJobs.map(func r {if(r.member==old){changed+=1;{r with member=new}}else r});
     for((_,r) in fixtureUpdates.values())if(r.creator==old)changed+=1;
+    for ((_, plan) in Map.entries(broadcastPlans)) for (target in plan.values()) changed += target.officials.filter(func p = p == old).size();
 
     let newRoles = roles.map(func(item : Types.RoleGrant) : Types.RoleGrant {
       if (item.user.equal(old)) { changed += 1; { item with user = new } } else item
@@ -3080,6 +3127,7 @@ persistent actor class Main(governorInit : Principal) = this {
         }
       };
       roles := newRoles;
+      for ((key, plan) in Map.entries(broadcastPlans).toArray().values()) Map.add(broadcastPlans, Text.compare, key, plan.map(func t = { t with officials = t.officials.map(func p = if (p == old) new else p) }));
       tokens := newTokens;
       competitionInvites := newCompetitionInvites;
       competitionJoinLinks := newCompetitionJoinLinks;
