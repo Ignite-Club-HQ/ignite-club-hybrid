@@ -215,12 +215,13 @@ persistent actor class Main(governorInit : Principal) = this {
       let invite = pendingInvites.find(func i = i.id == id) ?? return #Err("Invite missing");
       if (not canManageTeam(caller, invite.club_id, invite.team_id) or isTransferFenced(invite.club_id) or invite.status != "pending") return #Err("Invite manager required");
       if (ciphertext.size() < 32) return #Err("Encrypted payload required");
+      if (Map.entries(emailJobs).filter(func pair = nowMs() - pair.1.created_at_ms < 86_400_000).size() >= 100) return #Err("Daily invitation email limit reached");
       emailOutbox.enqueue("invite:" # id, "pending_invite", id, ciphertext, nowMs())
     } finally { removalReceiver.leave(caller) }
   };
   public shared ({ caller }) func claim_email_job() : async { #Ok : ?{ job : EmailOutbox.Job; to : Text; subject : Text; body : Text; token : Text }; #Err : Text } {
     if (not emailWorkers.any(func p = p == caller)) return #Err("Email worker required");
-    let job = emailOutbox.claim(caller, func j = pendingInvites.any(func i = i.id == j.resource and i.status == "pending" and not isTransferFenced(i.club_id) and not removalReceiver.denied(i.invited_by))) ?? return #Ok(null);
+    let job = emailOutbox.claim(caller, func j = pendingInvites.any(func i = i.id == j.resource and i.status == "pending" and not isTransferFenced(i.club_id) and not removalReceiver.denied(i.invited_by) and not isExcluded(i.invited_by, i.club_id) and canManageTeam(i.invited_by, i.club_id, i.team_id))) ?? return #Ok(null);
     let invite = pendingInvites.find(func i = i.id == job.resource) ?? return #Err("Invite missing");
     #Ok(?{ job; to = invite.email; subject = "You're invited to Ignite"; body = invite.id; token = "" })
   };
@@ -3984,6 +3985,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { if (not isAdmin(caller, club_id)) return #Err("Club admin required") };
     };
     let token = "pinv-" # (await randomHex(16));
+    if (removalReceiver.denied(caller)) return #Err("Invite authorization changed");
     if (kind == "guardian") {
       if (not canManageTeam(caller, club_id, team_id)) return #Err("Invite authorization changed");
       switch (child_id) {

@@ -13,7 +13,7 @@ export function decryptPayload(value, pem) {
   decipher.setAuthTag(bytes.subarray(-16));
   return JSON.parse(Buffer.concat([decipher.update(bytes.subarray(0, -16)), decipher.final()]).toString());
 }
-export async function deliverClaim(actor, claim, send) {
+export async function deliverClaim(actor, claim, send, authority = '') {
   const { job } = claim;
   let outcome = 'unknown', provider = '';
   try {
@@ -34,7 +34,7 @@ export async function deliverClaim(actor, claim, send) {
       to: claim.to, subject: claim.subject,
       text: claim.body + (claim.token ? `\n${process.env.ICP_EMAIL_APP_URL}/eoi-complete/${encodeURIComponent(claim.token)}` : ''),
     };
-    const reply = await send(payload, `ignite:${job.id}`);
+    const reply = await send(payload, `ignite:${authority ? `${authority}:` : ''}${job.id}`);
     if (reply.ok && reply.id) { outcome = 'sent'; provider = reply.id; }
     else if (reply.definiteFailure) outcome = 'failed';
   } catch { /* Unknown provider outcomes stay locked; never auto-expire/replay. */ }
@@ -62,7 +62,7 @@ async function main() {
         const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ from: process.env.ICP_EMAIL_FROM, to: [payload.to], subject: payload.subject, text: payload.text }) });
         const body = await response.json().catch(() => ({}));
         return { ok: response.ok, id: body.id, definiteFailure: response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status) };
-      });
+      }, target.canisterId);
     }
   }
 }

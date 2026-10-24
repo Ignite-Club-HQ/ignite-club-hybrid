@@ -192,6 +192,7 @@ persistent actor class Main(governorInit : Principal) = this {
       await syncForCompetition(caller, invite.competition_id);
       if (removalReceiver.denied(caller) or compFenced(invite.competition_id) or not canManageCompetition(caller, invite.competition_id) or not competitionOfficialEmailInvites.any(func i = i == invite) or invite.revoked or invite.accepted_by != null) return #Err("Invitation unavailable");
       if (ciphertext.size() < 32) return #Err("Encrypted email payload required");
+      if (Map.entries(emailJobs).filter(func pair = nowMs() - pair.1.created_at_ms < 86_400_000).size() >= 100) return #Err("Daily invitation email limit reached");
       emailOutbox.enqueue("official:" # token, "official", token, ciphertext, nowMs())
     } finally { removalReceiver.leave(caller) }
   };
