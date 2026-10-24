@@ -9,6 +9,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 let queryResult: { data: { value: unknown } | null; error: unknown } = { data: null, error: null };
 const maybeSingle = vi.fn(async () => queryResult);
+const onChainRead = vi.hoisted(() => vi.fn());
+vi.mock("./appConfig", () => ({ readLiveAppConfig: onChainRead }));
 const selectChain = {
   select: () => selectChain,
   eq: () => selectChain,
@@ -56,6 +58,8 @@ beforeEach(() => {
   maybeSingle.mockClear();
   applyBackendRoutingConfig(null);
   localStorage.clear();
+  onChainRead.mockReset();
+  onChainRead.mockResolvedValue(null);
   vi.unstubAllEnvs();
 });
 
@@ -64,6 +68,22 @@ afterEach(() => {
 });
 
 describe("loadBackendRoutingConfig precedence", () => {
+  it("restored Internet Identity uses on-chain routing without a Supabase read", async () => {
+    localStorage.setItem("ignite_icp_internet_identity_session", JSON.stringify({ principal: "aaaaa-aa" }));
+    queryResult = { data: { value: supabaseConfig }, error: null };
+    onChainRead.mockResolvedValue(JSON.stringify(icpConfig));
+    await loadBackendRoutingConfig();
+    expect(getBackendRoutingConfig().defaultBackend).toBe("icp");
+    expect(maybeSingle).not.toHaveBeenCalled();
+  });
+  it("an unavailable ICP routing read uses the cache without consulting Supabase", async () => {
+    localStorage.setItem("ignite_icp_internet_identity_session", JSON.stringify({ principal: "aaaaa-aa" }));
+    localStorage.setItem(BACKEND_ROUTING_CACHE_KEY, JSON.stringify(icpConfig));
+    onChainRead.mockRejectedValue(new Error("Replica unavailable"));
+    await loadBackendRoutingConfig();
+    expect(getBackendRoutingConfig().defaultBackend).toBe("icp");
+    expect(maybeSingle).not.toHaveBeenCalled();
+  });
   it("applies the stored row and caches it", async () => {
     queryResult = { data: { value: icpConfig }, error: null };
     await loadBackendRoutingConfig();

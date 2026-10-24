@@ -74,6 +74,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var messagingDomainCanister : ?Principal;
   var vaultStores : [Principal];
   var deletionIntents : Map.Map<Text, Text>;
+  var backupRestoreProgress : Map.Map<Text, { next : Nat; restored : Nat; skipped : Nat; complete : Bool }>;
+  transient let backupRestoreLocks = Map.empty<Text, Bool>();
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -695,10 +697,11 @@ persistent actor class Main(governorInit : Principal) = this {
       }; case null {}
     };
     if (not is_external_link) {
+      let registrationRevision = mediaEvidenceRevision;
       let ref = blob_ref ?? return #Err("Encrypted file provenance required");
       if (not Text.startsWith(ref.path, #text ("clubs/" # club # "/vault/")) or file_url != "https://" # ref.canister # ".raw.icp0.io/" # ref.path) return #Err("Private Vault bytes required");
       if (not (await verifyFileBytes(caller, ref, size))) return #Err("File byte evidence unavailable or mismatched");
-      if (not (await canWrite(caller, club, team, competition_id)) or files.any(func f = f.id == id)) return #Err("Registration scope changed");
+      if (not (await canWrite(caller, club, team, competition_id)) or files.any(func f = f.id == id) or mediaEvidenceRevision != registrationRevision or deletionIntents.get(id) != null or isFenced(club)) return #Err("Registration scope changed");
     } else if (blob_ref != null or size != 0 or not Text.startsWith(file_url, #text "https://")) return #Err("Invalid external link");
     let file : Types.VaultFile = {
       id; folder_id; club; team; name; file_url; size; mime;
@@ -1243,12 +1246,81 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  // Each acknowledged cursor is durable before another external await.
+  // Repeated/older pages read the receipt; they never repeat completed writes.
+  public shared ({ caller }) func restore_backup_page(id : Text, offset : Nat) : async { #Ok : { next : Nat; restored : Nat; skipped : Nat; complete : Bool }; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    let key = caller.toText() # ":" # id;
+    try {
+      await admitAccount(caller); auth(caller);
+      if (not isAppAdmin(caller)) return #Err("App admin required");
+      if (transferFences.size() > 0) return #Err("Restore is blocked while a club transfer is in progress");
+      let backup = backups.find(func b = b.id == id) ?? return #Err("Backup not found");
+      if (backupRestoreLocks.get(key) != null) return #Err("Backup restore already in progress");
+      let progress = backupRestoreProgress.get(key) ?? ({ next = 0; restored = 0; skipped = 0; complete = false });
+      if (offset > progress.next) return #Err("Restore cursor not acknowledged");
+      if (offset < progress.next or progress.complete) return #Ok(progress);
+      backupRestoreLocks.add(key, true);
+      try {
+        var next = progress.next; var restored = progress.restored; var skipped = progress.skipped;
+        let total = backup.folders.size() + backup.files.size();
+        let end = Nat.min(total, next + 40);
+        while (next < end) {
+          let rowRevision = mediaEvidenceRevision;
+          var inserted = false;
+          if (next < backup.folders.size()) {
+            let f = backup.folders[next];
+            if (f.deleted_at_ms == null and not folders.any(func row = row.id == f.id)) {
+              let allowed = await canWrite(caller, f.club, f.team, f.competition_id);
+              let parentAllowed = switch (f.parent_id) {
+                case null true;
+                case (?parentId) switch (folders.find(func p = p.id == parentId)) {
+                  case null false;
+                  case (?parent) parent.club == f.club and parent.team == f.team and parent.mini_league_id == f.mini_league_id and parent.competition_id == f.competition_id and (await canAccessFolder(caller, parent))
+                }
+              };
+              await admitAccount(caller);
+              if (mediaEvidenceRevision != rowRevision) return #Err("Vault changed during restore; resume from acknowledged cursor");
+              if (allowed and parentAllowed and isAppAdmin(caller) and transferFences.size() == 0 and not isFenced(f.club) and not folders.any(func row = row.id == f.id) and
+                (f.parent_id == null or folders.any(func p = ?p.id == f.parent_id and p.deleted_at_ms == null and p.club == f.club and p.team == f.team and p.competition_id == f.competition_id and p.mini_league_id == f.mini_league_id))) {
+                folders := folders.concat([f]); inserted := true; mediaEvidenceRevision += 1
+              }
+            }
+          } else {
+            let f = backup.files[next - backup.folders.size()];
+            if (f.deleted_at_ms == null and deletionIntents.get(f.id) == null and not files.any(func row = row.id == f.id)) {
+              let available = if (f.is_external_link) true else switch (f.blob_ref) { case (?ref) await verifyFileBytes(caller, ref, f.size); case null false };
+              let destinationAllowed = if (f.folder_id == "") true else switch (folders.find(func p = p.id == f.folder_id)) {
+                case null false;
+                case (?parent) parent.club == f.club and parent.team == f.team and parent.mini_league_id == f.mini_league_id and parent.competition_id == f.competition_id and (await canAccessFolder(caller, parent))
+              };
+              let allowed = await canWrite(caller, f.club, f.team, f.competition_id);
+              await admitAccount(caller);
+              if (mediaEvidenceRevision != rowRevision) return #Err("Vault changed during restore; resume from acknowledged cursor");
+              if (available and destinationAllowed and allowed and isAppAdmin(caller) and transferFences.size() == 0 and not isFenced(f.club) and deletionIntents.get(f.id) == null and not files.any(func row = row.id == f.id) and
+                (f.folder_id == "" or folders.any(func p = p.id == f.folder_id and p.deleted_at_ms == null and p.club == f.club and p.team == f.team and p.competition_id == f.competition_id and p.mini_league_id == f.mini_league_id))) {
+                files := files.concat([f]); inserted := true; mediaEvidenceRevision += 1
+              }
+            }
+          };
+          next += 1;
+          if (inserted) restored += 1 else skipped += 1;
+          backupRestoreProgress.add(key, { next; restored; skipped; complete = next == total });
+        };
+        let receipt = { next; restored; skipped; complete = next == total };
+        backupRestoreProgress.add(key, receipt);
+        #Ok(receipt)
+      } finally { backupRestoreLocks.remove(key) }
+    } finally { removalReceiver.leave(caller) }
+  };
+
   public shared ({ caller }) func delete_backup(id : Text) : async { #Ok; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await admitAccount(caller);
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (backupRestoreLocks.entries().any(func entry = entry.0.endsWith(#text(":" # id)))) return #Err("Backup restore in progress");
     if (not backups.any(func(b : Types.Backup) : Bool = b.id == id)) return #Err("Backup not found");
     backups := backups.filter(func(b : Types.Backup) : Bool = b.id != id);
     #Ok
@@ -1263,6 +1335,11 @@ persistent actor class Main(governorInit : Principal) = this {
   // records are erased they are undecryptable by anyone.
   public shared ({ caller }) func purge_my_data() : async { #Ok : Nat32; #Err : Text } {
     auth(caller);
+    // Metadata erasure must never be undone by another administrator's backup.
+    // Physical-byte cleanup remains separately reconciled, not guessed here.
+    for (f in files.values()) {
+      if (f.uploaded_by.equal(caller)) deletionIntents.add(f.id, "erased:" # (f.blob_ref.map(func ref = ref.content_hash) ?? "external"));
+    };
     var removed : Nat = 0;
     let keepFiles = files.filter(func(f : Types.VaultFile) : Bool = not f.uploaded_by.equal(caller));
     mediaEvidenceRevision += 1;

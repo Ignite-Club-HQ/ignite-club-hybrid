@@ -329,6 +329,18 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'restore_backup_page' : ActorMethod<
+    [string, bigint],
+    {
+        'Ok' : {
+          'skipped' : bigint,
+          'next' : bigint,
+          'complete' : boolean,
+          'restored' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'restore_file' : ActorMethod<
     [string],
     { 'Ok' : VaultFile } |

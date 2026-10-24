@@ -24,16 +24,17 @@ Vault is **not fully closed or released**. Two independent source audits traced 
 - Registered internal files require pinned-store hash and actual size evidence. Registration retries preserve the same file identity. Gallery IDs allocate monotonically rather than using current file count.
 - Permanent deletion retains a hash-bound intent until physical bytes are confirmed absent; unknown/interrupted cleanup keeps metadata and blocks blind replay. Permanent tombstones prevent file-ID resurrection. Shared-byte references refuse individual cleanup pending reconciliation.
 - Private chat mirrors make independent encrypted copies; raw URLs/zero-byte internal registrations are no longer accepted as copies.
-- Small metadata backups restore only available files into valid destinations after fresh authority checks. Recovery no longer grants club-wide decryption rights. Large backups currently refuse above 200 rows instead of silently restoring an incomplete inventory.
+- Metadata backups now restore through durable 40-row receipts, including inventories above 200 rows. Repeated cursors return acknowledged progress; interrupted reads resume after an upgrade. Restoration never overwrites current rows, widens decryption grants or revives erased-file IDs.
 - Exact club/team media allowance controls paid Vault access; personal global Pro does not unlock an unpaid club. Media usage failures remain errors instead of publishing incomplete zero/low totals.
 - Reciprocal Vault/messaging/store wiring is included in provisioning/release configuration; no wiring has been applied live.
 
 ### Still-open engineering and integration limits
 
 - Upload registration now has a stable ID and store evidence, but there is not yet a durable cross-device orphan-upload/unknown-registration reconciliation journal.
-- Backup restoration above 200 folder/file rows still needs bounded resumable pages; it intentionally fails closed today.
+- The legacy unpaged restore still refuses above 200 rows; the updated app uses the new bounded restoration endpoint. Large backup snapshot creation/download still returns the full manifest and needs separately bounded export for very large inventories.
 - Blob retention and whole-account erasure still need coordinated Vault metadata/source/pin reconciliation under the existing separately gated lifecycle design. Missing physical bytes are not recovered by a metadata backup.
 - Google Drive import/sync remains an actual external integration gap; blocking Supabase calls in ICP mode is not a replacement for Google authorization.
+- Restored Internet Identity startup now reads routing configuration on-chain without consulting Supabase. Signed-out and email startup preserve existing hybrid precedence; purchase verification remains an approved payment exception.
 
 The original audit findings below are retained as a reference; several are addressed by the completion batch, and the unresolved limits above must not be described as closed.
 
@@ -69,3 +70,4 @@ Google Drive OAuth import, linked-folder sync and title resolution remain Supaba
 - Completion verification: 12 focused files passed with 101 ICP and 131 Supabase checks (before two additional paging-compatibility checks); 17-contract drift and ICP guards passed. Real disposable Vault, club, messaging and blob-store actors verified outsider/direct-query denial, role revocation/ancestors, 205-file paging, stale revision, forged size/provenance, private pin permissions, idempotent registration, interrupted cleanup/tombstone and populated upgrade readback.
 - Public `/vault` redirected to `/auth` with zero runtime errors. This is not signed-in Vault acceptance and does not verify private file opening on a phone.
 - Existing and future canister changes require separately authorized exact protected upgrades in both groups, reciprocal authority verification, compatible web/native release and signed-in Internet Identity acceptance. No signed-in II session is available in this sandbox; private Vault UI acceptance is unverified.
+- Continuation batch: startup isolation and backup continuation tests pass in both modes; real canisters verify >200 backup progress, exact repeated receipts, future-cursor denial, mid-restore upgrade resume and erased-file resurrection refusal. Unknown upload recovery and coordinated physical retention/erasure are not claimed completed.

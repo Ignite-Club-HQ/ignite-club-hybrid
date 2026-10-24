@@ -355,6 +355,16 @@ type Main =
                                     Err: text;
                                     Ok: nat;
                                   });
+   restore_backup_page: (id: text, offset: nat) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             complete: bool;
+             next: nat;
+             restored: nat;
+             skipped: nat;
+           };
+     });
    restore_file: (id: text) -> (variant {
                                   Err: text;
                                   Ok: VaultFile;
