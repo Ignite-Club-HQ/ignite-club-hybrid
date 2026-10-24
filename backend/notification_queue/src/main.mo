@@ -3,6 +3,7 @@ import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
 import Map "mo:core/Map";
 import Error "mo:core/Error";
+import Iter "mo:core/Iter";
 import PrimMem "mo:⛔";
 import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
@@ -1686,7 +1687,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in notification_queue");
 
     var changed = 0;
-    let broadcastAudienceUpdates = Map.entries(competitionBroadcastAudiences).toArray().map(func pair {
+    let broadcastAudienceUpdates = Iter.toArray(Map.entries(competitionBroadcastAudiences)).map(func pair {
       let (key, audience) = pair;
       if (audience.any(func user = user == oldText)) changed += 1;
       var canonical : [Text] = [];
