@@ -366,6 +366,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let decoded : ?FenceSnapshot = from_candid (snapshot);
     let s = switch (decoded) { case (?x) x; case null return #Err("Invalid snapshot") };
     if (removalReceiver.snapshotDenied(snapshot)) return #Err("Snapshot references fenced account");
+    if (broadcastErasureSubjects.entries().any(func pair = fenceBlobHas(snapshot, pair.0.toText()))) return #Err("Snapshot restores broadcast-erasure subject");
     let privacy = switch (s.score_privacy) { case (?rows) rows; case null [] };
     let phqMeta=s.playhq_metadata??[];let phqStats=s.playhq_stats??[];
     let c = club;

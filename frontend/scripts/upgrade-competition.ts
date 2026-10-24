@@ -54,8 +54,8 @@ for (const groupId of ['g1', 'g2']) validateRegistration(groupId, targets, initi
 type Target = typeof targets[number];
 const mgmtIdl = () => IDL.Service({ canister_status: IDL.Func([IDL.Record({ canister_id: IDL.Principal })], [IDL.Record({
   status: IDL.Variant({ running: IDL.Null, stopped: IDL.Null, stopping: IDL.Null }), module_hash: IDL.Opt(IDL.Vec(IDL.Nat8)), cycles: IDL.Nat,
-  settings: IDL.Record({ controllers: IDL.Vec(IDL.Principal), environment_variables: IDL.Vec(IDL.Record({ name: IDL.Text, value: IDL.Text })) }) })], []) });
-type Status = { status: Record<string, null>; module_hash: Uint8Array[]; cycles: bigint; settings: { controllers: Principal[]; environment_variables: { name: string; value: string }[] } };
+  settings: IDL.Record({ controllers: IDL.Vec(IDL.Principal), compute_allocation: IDL.Nat, memory_allocation: IDL.Nat, freezing_threshold: IDL.Nat, reserved_cycles_limit: IDL.Nat, wasm_memory_limit: IDL.Nat, environment_variables: IDL.Vec(IDL.Record({ name: IDL.Text, value: IDL.Text })) }) })], []) });
+type Status = { status: Record<string, null>; module_hash: Uint8Array[]; cycles: bigint; settings: { controllers: Principal[]; compute_allocation: bigint; memory_allocation: bigint; freezing_threshold: bigint; reserved_cycles_limit: bigint; wasm_memory_limit: bigint; environment_variables: { name: string; value: string }[] } };
 const observe = async (s: Target) => {
   const cid = Principal.fromText(s.canisterId);
   const mgmt = Actor.createActor(mgmtIdl, { agent, canisterId: 'aaaaa-aa', effectiveCanisterId: cid } as Parameters<typeof Actor.createActor>[1]) as unknown as { canister_status(a: { canister_id: Principal }): Promise<Status> };
@@ -65,7 +65,7 @@ const observe = async (s: Target) => {
   const actual = { moduleHash: Buffer.from(status.module_hash[0] ?? []).toString('hex'), controllers: status.settings.controllers.map(p => p.toText()),
     running: 'running' in status.status, cycles: status.cycles, subnetId: String(subnet?.subnetId ?? ''), environment: status.settings.environment_variables };
   verifyUpgradeStatus(s, actual, GROUP2_GOVERNOR);
-  return { moduleHash: actual.moduleHash, settingsHash: digest([...actual.environment].sort((a,b) => a.name.localeCompare(b.name))), cycles: String(actual.cycles) };
+  return { moduleHash: actual.moduleHash, settingsHash: digest({ ...status.settings, controllers: actual.controllers, environment_variables: [...actual.environment].sort((a,b) => a.name.localeCompare(b.name)) }), cycles: String(actual.cycles) };
 };
 const gate = async () => {
   const current = await registry();

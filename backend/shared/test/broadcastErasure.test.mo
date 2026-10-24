@@ -1,0 +1,10 @@
+import E "../BroadcastErasure";
+import Principal "mo:core/Principal";
+let p = Principal.fromText("aaaaa-aa");
+assert E.matches([p], "aaaaa-aa");
+assert E.matches([p], "principal:aaaaa-aa");
+assert not E.matches([p], "other");
+assert E.completed(["a", "b"], [("a", 1), ("b", 2)], null);
+assert not E.completed(["a", "b"], [("a", 1)], null);
+assert not E.completed(["a", "b"], [("a", 1), ("a", 2)], null);
+assert not E.completed(["a"], [("a", 1)], ?"a");
