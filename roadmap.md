@@ -1,4 +1,5 @@
 ## File Vault ICP audit — 24 October 2026
+- [ ] Current continuation: close bounded backup creation/export and remaining safely implementable upload/lifecycle reconciliation, with dual-mode and disposable-canister checks; no live deployment.
 - [x] Implement current-role/ancestor authorization, revision-bound file pages, canonical chat pins, authorized root moves, store hash/actual-size registration evidence, deletion intents/tombstones, small availability-aware backup restore, competition context and scoped storage reporting; verify locally without deploying.
 - [x] Remove Supabase routing reads for restored II sessions; add 40-row durable backup restore receipts with replay/future-cursor checks, upgrade resume, post-await revision guards and erased-file tombstones.
 - [ ] Vault lifecycle completion: durable cross-device upload-registration/orphan reconciliation and coordinated retention/erasure metadata/source/pin reconciliation remain engineering work; very large backup creation/download still needs bounded manifest export. Do not claim these closed.
