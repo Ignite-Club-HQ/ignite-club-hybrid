@@ -1,4 +1,5 @@
 ## Sent-message preview delay — 24 October 2026
+- [x] Vault link-card delay: each file/folder formerly required all-group resource-owner discovery; cards now try the open chat's known club/team with destination access checks, retaining resource discovery on absence and preserving failures. Query keys bind account/backend and start after auth restoration; focused checks pending.
 - [x] Found ICP previews wait for polling (30 seconds web / 120 seconds native) and full directory refreshes; acknowledged team/club/group sends now update existing exact-account inbox rows directly, retaining newer messages across stale responses and clearing marks with removed queries. All 38 focused checks pass in both ICP and Supabase modes; ICP guard passes and preview build OK.
 - [ ] Signed-in phone send-to-inbox timing: unavailable Internet Identity session; no publication or canister changes.
 
