@@ -25,6 +25,7 @@ const accessMocks = vi.hoisted(() => ({
   entitlements: vi.fn(),
   memberIds: vi.fn(),
   scopes: vi.fn(),
+  allowance: vi.fn(),
 }));
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 const icpContext = { identity: { getPrincipal: () => ({ toText: () => "principal-a" }) }, target: { alias: "test" } };
@@ -51,6 +52,8 @@ vi.mock("@/live/features/proAccess", () => ({
 vi.mock("@/live/identityEntitlements", () => ({ fetchIcpEntitlements: (...args: unknown[]) => accessMocks.entitlements(...args) }));
 vi.mock("@/live/features/vault", () => ({ listLiveVaultFolders: (...args: unknown[]) => accessMocks.vaultFolders(...args) }));
 vi.mock("@/live/features/competitions", () => ({ isLiveCompetitionAdmin: (...args: unknown[]) => accessMocks.competitionAdmin(...args) }));
+
+vi.mock("@/live/domains", () => ({ connectLiveClubDomain: async () => ({ actor: { get_media_allowance: accessMocks.allowance } }) }));
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type Result = { data: unknown; error: unknown };
@@ -184,6 +187,7 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
       if (typeof mock === "function" && "mockReset" in mock) (mock as ReturnType<typeof vi.fn>).mockReset();
     }
     accessMocks.memberIds.mockResolvedValue(["club-a"]);
+    accessMocks.allowance.mockResolvedValue({ Ok: { premium: true } });
   });
 
   it("maps app-admin and caller role grants from ICP domains", async () => {
@@ -197,13 +201,13 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
     expect(calls).toEqual([]);
   });
 
-  it("maps accessible ICP clubs and caller Pro entitlement", async () => {
+  it("personal Pro does not mark an unpaid club as paid", async () => {
     accessMocks.clubs.mockResolvedValue([{ id: "club-a", name: "Club A" }]);
     accessMocks.clubSubscriptions.mockResolvedValue(new Map([["club-a", null]]));
     accessMocks.entitlements.mockResolvedValue({ isPro: true });
     const { client, calls } = scriptedClient({});
     await expect(fetchVaultAccessibleClubs("principal-a", false, client)).resolves.toEqual([
-      { id: "club-a", name: "Club A", is_pro: true, storage_used_bytes: 0 },
+      { id: "club-a", name: "Club A", is_pro: false, storage_used_bytes: 0 },
     ]);
     expect(accessMocks.clubSubscriptions).toHaveBeenCalledWith(icpContext, ["club-a"]);
     expect(calls).toEqual([]);
@@ -215,8 +219,8 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
     const { client, calls } = scriptedClient({});
     await expect(fetchVaultClubHasPro("club-a", client)).resolves.toBe(true);
     await expect(fetchVaultTeamHasPro("team-a", client)).resolves.toBe(true);
-    expect(accessMocks.resolvePro).toHaveBeenCalledWith(icpContext, { clubId: "club-a" });
-    expect(accessMocks.resolvePro).toHaveBeenCalledWith(icpContext, { teamId: "team-a", clubId: "club-a" });
+    expect(accessMocks.allowance).toHaveBeenCalledWith("club-a", []);
+    expect(accessMocks.allowance).toHaveBeenCalledWith("club-a", ["team-a"]);
     expect(calls).toEqual([]);
   });
 
@@ -266,8 +270,15 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
 
     expect(accessMocks.clubSubscriptions).toHaveBeenCalledWith(icpContext, []);
     expect(accessMocks.teamSubscriptions).toHaveBeenCalledWith(icpContext, []);
-    expect(accessMocks.entitlements).toHaveBeenCalled();
+    expect(accessMocks.entitlements).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
+  });
+
+  it("does not grant club capacity from an unrelated personal Pro purchase", async () => {
+    accessMocks.entitlements.mockResolvedValue({ isPro: true });
+    accessMocks.allowance.mockResolvedValue({ Ok: { premium: false } });
+    await expect(fetchVaultClubHasPro("club-a")).resolves.toBe(false);
+    expect(accessMocks.allowance).toHaveBeenCalledWith("club-a", []);
   });
 
   it("checks competition membership and admin status through ICP domains", async () => {
