@@ -823,6 +823,16 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_vault_chat_access: (subject: principal, chat_type: text, chat_id:
+    text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             can_manage: bool;
+             club: text;
+             team: opt text;
+           };
+     });
    recapTransform: (record {
                       context: blob;
                       response: HttpRequestResult;
@@ -989,6 +999,10 @@ type Main =
                                     Err: text;
                                     Ok;
                                   });
+   set_vault_domain_canister: (id: principal) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
    soft_delete_group: (conversation_id: text) -> (variant {
                                                     Err: text;
                                                     Ok;

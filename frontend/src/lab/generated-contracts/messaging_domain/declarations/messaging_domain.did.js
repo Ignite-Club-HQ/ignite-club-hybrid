@@ -1075,6 +1075,20 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
         [],
       ),
+    'read_vault_chat_access' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'can_manage' : IDL.Bool,
+              'club' : IDL.Text,
+              'team' : IDL.Opt(IDL.Text),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'recapTransform' : IDL.Func(
         [
           IDL.Record({
@@ -1254,6 +1268,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_user_messaging_settings' : IDL.Func(
         [IDL.Bool, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_vault_domain_canister' : IDL.Func(
+        [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

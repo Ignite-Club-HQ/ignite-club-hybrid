@@ -32,6 +32,11 @@ export interface BlobRef {
   'canister' : string,
 }
 export interface Main {
+  'begin_file_cleanup' : ActorMethod<
+    [string],
+    { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
   'clear_pinned_vault' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -261,6 +266,26 @@ export interface Main {
     { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
+  'read_vault_file_page' : ActorMethod<
+    [
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      boolean,
+      bigint,
+      [] | [bigint],
+    ],
+    {
+        'Ok' : {
+          'next' : [] | [bigint],
+          'items' : Array<VaultFileWithFolder>,
+          'revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'register_file' : ActorMethod<
     [
       string,
@@ -320,6 +345,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'set_gallery_media_authority' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_messaging_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }

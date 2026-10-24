@@ -741,6 +741,17 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_vault_chat_access' : ActorMethod<
+    [Principal, string, string],
+    {
+        'Ok' : {
+          'can_manage' : boolean,
+          'club' : string,
+          'team' : [] | [string],
+        }
+      } |
+      { 'Err' : string }
+  >,
   'recapTransform' : ActorMethod<
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult
@@ -902,6 +913,11 @@ export interface Main {
   >,
   'set_user_messaging_settings' : ActorMethod<
     [boolean, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_vault_domain_canister' : ActorMethod<
+    [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
