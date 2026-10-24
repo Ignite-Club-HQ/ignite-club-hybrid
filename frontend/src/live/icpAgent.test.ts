@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createMock = vi.hoisted(() => vi.fn());
+const createActorMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@icp-sdk/core/agent", () => ({
   HttpAgent: { create: createMock },
-  Actor: { createActor: vi.fn() },
+  Actor: { createActor: createActorMock },
 }));
 
-import { clearLiveAgentCache, createLiveAgent } from "./icpAgent";
+import { clearLiveAgentCache, createLiveActor, createLiveAgent, isIngressExpiryError } from "./icpAgent";
 import type { IcpTargetConfig } from "./targetRegistry";
 import type { Identity } from "@icp-sdk/core/agent";
 
