@@ -561,7 +561,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if (current != a or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery source changed");
       let folder_id = "gallery-uploads-" # a.club_id # (a.team_id ?? "");
       if (not folders.any(func f = f.id == folder_id)) {
-        let folder : Types.VaultFolder = { id = folder_id; club = a.club_id; team = a.team_id; parent_id = null; name = "Gallery Uploads"; restricted_roles = []; created_by = caller; created_at_ms = nowMs(); deleted_at_ms = null; deleted_by = null; competition_id = null };
+        let folder : Types.VaultFolder = { id = folder_id; club = a.club_id; team = a.team_id; parent_id = null; name = "Gallery Uploads"; restricted_roles = []; created_by = caller; created_at_ms = nowMs(); deleted_at_ms = null; deleted_by = null; mini_league_id = null; competition_id = null; sort_order = 0; description = null; color = null };
         folders := folders.concat([folder])
       };
       let file : Types.VaultFile = { id = "gallery-file-" # Nat.toText(files.size() + 1); folder_id; club = a.club_id; team = a.team_id; name; file_url; size; mime; uploaded_by = caller; created_at_ms = nowMs(); deleted_at_ms = null; deleted_by = null; mini_league_id = null; competition_id = null; is_external_link = false; blob_ref = ?blob_ref };
@@ -575,7 +575,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let file = files.find(func f = f.id == id and f.club == club) ?? return #Err("Gallery copy scope mismatch");
     if (not file.uploaded_by.equal(user) and not (await canWrite(user, club, file.team, file.competition_id))) return #Err("Gallery owner or scoped staff required");
     if (galleryMediaAuthority != ?caller or isFenced(club) or removalReceiver.denied(user) or files.find(func f = f.id == id) != ?file) return #Err("Gallery copy changed");
-    if (file.deleted_at_ms == null) { files := files.map(func f = if (f.id == id) { f with deleted_at_ms = ?nowMs(); deleted_by = ?user } else f); mediaEvidenceRevision += 1 };
+    if (file.deleted_at_ms == null) { files := files.map(func f = if (f.id == id) ({ f with deleted_at_ms = ?nowMs(); deleted_by = ?user }) else f); mediaEvidenceRevision += 1 };
     #Ok(true)
   };
 

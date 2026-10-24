@@ -726,7 +726,7 @@ persistent actor class Main(governorInit : Principal) = this {
       };
       if (assetFenced(asset_id) or removalReceiver.denied(caller) or assets.find(func a = a.id == asset_id) != ?asset) return #Err("Asset changed during deletion");
       hiddenGalleryAssets.add(asset_id, true); mediaEvidenceRevision += 1;
-      if (mode == "feed_and_vault") assets := assets.map(func a = if (a.id == asset_id) { a with deleted = true } else a);
+      if (mode == "feed_and_vault") assets := assets.map(func a = if (a.id == asset_id) ({ a with deleted = true }) else a);
       #Ok({ vault_updated })
     } finally { removalReceiver.leave(caller) }
   };
