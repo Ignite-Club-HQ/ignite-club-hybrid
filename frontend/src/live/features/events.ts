@@ -144,6 +144,11 @@ export async function getLiveMatchEventIds(
   }
 }
 
+export async function listLiveCompetitionEvents(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.read_competition_events(competitionId), "Read competition events");
+}
+
 export async function listLiveEventDutyTeams(
   ctx: FeatureBackendContext,
   eventIds: string[],
