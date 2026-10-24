@@ -163,7 +163,8 @@ export async function uploadBytesToBlobStore(
 ): Promise<BlobStoreUploadResult> {
   const keys = orderBlobStoresForPath(target, path);
   if (keys.length === 0) throw new Error("No photo store is configured.");
-  const candidates = keys.filter((k) => !knownFull(target.canisterIds[k]));
+  // Journaled private uploads never change their pinned store, even after a full refusal.
+  const candidates = beforeUpload ? keys.slice(0, 1) : keys.filter((k) => !knownFull(target.canisterIds[k]));
   let lastError: unknown = null;
   for (const key of candidates.length > 0 ? candidates : keys) {
     try {
@@ -172,6 +173,7 @@ export async function uploadBytesToBlobStore(
       const friendly = freeLimitMessage(error);
       if (friendly) throw new Error(friendly);
       if (!isStoreFullError(error)) throw error;
+      if (beforeUpload) throw error;
       fullStores.set(target.canisterIds[key], Date.now());
       lastError = error;
     }

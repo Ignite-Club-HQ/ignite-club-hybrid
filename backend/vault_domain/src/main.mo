@@ -17,6 +17,7 @@ import Map "mo:core/Map";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
+import Timer "mo:core/Timer";
 import Types "types";
 import PinScope "pinScope";
 import BackupPages "backupPages";
@@ -79,6 +80,9 @@ persistent actor class Main(governorInit : Principal) = this {
   type CleanupRecord = { club : Text; team : ?Text; competition : ?Text; blob_ref : Types.BlobRef; state : { #pending; #erased; #complete } };
   var cleanupRecords : Map.Map<Text, CleanupRecord>;
   var uploadIntents : Map.Map<Text, UploadJournal.Intent>;
+  var lifecycleFileCursor : Nat;
+  var lifecycleCleanupCursor : Text;
+  transient var lifecycleRunning = false;
   var backupRestoreProgress : Map.Map<Text, { next : Nat; restored : Nat; skipped : Nat; complete : Bool }>;
   transient let backupRestoreLocks = Map.empty<Text, Bool>();
 
@@ -1151,6 +1155,9 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok({ items; next = null })
   };
   public shared ({ caller }) func reconcile_erased_file(id : Text) : async { #Ok; #Err : Text } {
+    await reconcileErasedAs(caller, id)
+  };
+  func reconcileErasedAs(caller : Principal, id : Text) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor required");
     let record = cleanupRecords.get(id) ?? return #Err("Cleanup record unavailable");
@@ -1165,6 +1172,52 @@ persistent actor class Main(governorInit : Principal) = this {
     switch result { case (#Err(e)) return #Err(e); case (#Ok) {} };
     if (not isGovernor(caller) or vaultStores != pinned or cleanupRecords.get(id) != ?record or isFenced(record.club)) return #Err("Cleanup authority changed");
     cleanupRecords.add(id, { record with state = #complete }); mediaEvidenceRevision += 1; #Ok
+  };
+
+  // Bounded automatic retention runs entirely on-chain. A successful store reply
+  // proves exact expired-byte cleanup; unknown outcomes retain intent/provenance.
+  func sweepVaultLifecycle() : async () {
+    if (lifecycleRunning) return;
+    lifecycleRunning := true;
+    try {
+      let start = if (lifecycleFileCursor < files.size()) lifecycleFileCursor else 0;
+      let end = Nat.min(files.size(), start + 20);
+      let candidates = Array.tabulate<Types.VaultFile>(end - start, func i = files[start + i]);
+      lifecycleFileCursor := if (end < files.size()) end else 0;
+      for (f in candidates.values()) {
+        if (f.is_external_link or nowMs() <= f.created_at_ms or nowMs() - f.created_at_ms <= 15_552_000_000 or isFenced(f.club)) continue;
+        let ref = switch f.blob_ref { case (?r) r; case null continue };
+        if (not vaultStores.any(func s = s.toText() == ref.canister) or files.find(func row = row.id == f.id) != ?f or files.any(func other = other.id != f.id and (switch other.blob_ref { case (?r) r.canister == ref.canister and r.path == ref.path; case null false }))) continue;
+        // Persist the path lock before the remote delete. Do not hide a paid file
+        // merely because allowance/transport checks fail.
+        switch (deletionIntents.get(f.id)) { case (?hash) if (hash != ref.content_hash) continue; case null deletionIntents.add(f.id, ref.content_hash) };
+        cleanupRecords.add(f.id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #pending });
+        let pinned = vaultStores;
+        let store : actor { delete_expired_vault_blob : shared (Text, Text) -> async { #Ok; #Err : Text } } = actor(ref.canister);
+        let result = try { await (with timeout = 10) store.delete_expired_vault_blob(ref.path, ref.content_hash) } catch (_) { continue };
+        switch result { case (#Err(_)) continue; case (#Ok) {} };
+        if (vaultStores != pinned or isFenced(f.club) or files.find(func row = row.id == f.id) != ?f or deletionIntents.get(f.id) != ?ref.content_hash) continue;
+        files := files.filter(func row = row.id != f.id);
+        pinned_vaults := pinned_vaults.filter(func pin = pin.vault_file_id != ?f.id);
+        let sources = gallerySourceFiles.entries().filter(func e = e.1 == f.id).toArray();
+        for ((source, _) in sources.values()) gallerySourceFiles.remove(source);
+        cleanupRecords.add(f.id, { club = f.club; team = f.team; competition = f.competition_id; blob_ref = ref; state = #complete });
+        deletionIntents.add(f.id, "removed:" # ref.content_hash); mediaEvidenceRevision += 1
+      };
+      var page : [(Text, CleanupRecord)] = [];
+      for ((id, record) in cleanupRecords.entriesFrom(lifecycleCleanupCursor)) {
+        if (id == lifecycleCleanupCursor and lifecycleCleanupCursor != "") continue;
+        if (page.size() == 20) break;
+        page := page.concat([(id, record)])
+      };
+      lifecycleCleanupCursor := if (page.size() == 20) page[19].0 else "";
+      for ((id, record) in page.values()) { if (record.state == #erased) { ignore await reconcileErasedAs(governor, id) } }
+    } finally { lifecycleRunning := false }
+  };
+  transient let _lifecycleTimer = Timer.recurringTimer<system>(#seconds(900), sweepVaultLifecycle);
+  public shared ({ caller }) func sweep_vault_lifecycle() : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    await sweepVaultLifecycle(); #Ok
   };
   public shared ({ caller }) func delete_file_permanent(id : Text) : async { #Ok; #Err : Text } {
     if (not removalReceiver.enter(caller)) return #Err("Account fenced");

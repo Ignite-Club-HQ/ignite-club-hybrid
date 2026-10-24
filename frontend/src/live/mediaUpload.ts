@@ -93,7 +93,7 @@ export async function tryUploadMediaToBlobStore(args: {
   const localHash = await sha256Hex(ciphertext);
   // Vault intent must be durable before either bytes or access records leave the device.
   // The uploader repeats this exact idempotent binding before its first byte reservation.
-  const { orderBlobStoresForPath } = await import("./blobStoreUpload");
+  const { orderBlobStoresForPath } = await import("./mediaStorage");
   if (args.beforeUpload) {
     const key = orderBlobStoresForPath(target, args.storagePath)[0];
     const canister = key ? target.canisterIds[key] : undefined;

@@ -1344,6 +1344,32 @@ persistent actor MediaBlobStore {
   };
 
   // Only the configured Vault may delegate a human-authorized, exact-object delete.
+  // Timer-only Vault retention delegates no human. Recheck exact age, hash,
+  // current scoped allowance and configured authority before irreversible deletion.
+  public shared ({ caller }) func delete_expired_vault_blob(path : Text, expected_hash : Text) : async Result {
+    if (vaultAuthority != ?caller or categoryForPath(path) != ?"vault") return #Err("Vault authority required");
+    if (mediaFenced(path) or retainedBlocked() or quota_mode == #frozen or pathMutationPending(path)) return #Err("Media mutation pending");
+    let authority = vaultAuthority; let clubAuthority = club_domain_canister;
+    let record = metadata(path);
+    switch record {
+      case null {
+        if (deletionHashes.get(path) != ?expected_hash) return #Err("Expired cleanup receipt unavailable");
+        return await creditDeletion(path)
+      };
+      case (?r) {
+        if (r.content_hash != expected_hash) return #Err("Expired file hash changed");
+        let stamp = switch (stable_blobs.get(path)) { case (?s) s.uploaded_at; case null { switch (blob_uploaded_at.find(func e = e.0 == path)) { case (?e) e.1; case null return #Err("File age unavailable") } } };
+        if (Time.now() - stamp <= RETENTION_NS) return #Err("File retention not expired");
+        let allowance = await pathAllowance(path);
+        if (vaultAuthority != authority or club_domain_canister != clubAuthority or metadata(path) != record or mediaFenced(path) or retainedBlocked() or quota_mode == #frozen or pathMutationPending(path)) return #Err("Retention scope changed");
+        switch allowance { case (?a) if (a.premium) return #Err("Paid media is retained"); case null return #Err("Allowance unavailable") };
+        // Pin a local-mode receipt too, so a lost reply cannot turn mere absence into proof.
+        deletionHashes.add(path, expected_hash);
+        await deleteRetained(path)
+      }
+    }
+  };
+
   // The final hash comparison and creation of the retained deletion intent have no await between them.
   public shared ({ caller }) func delete_vault_blob(subject : Principal, path : Text, expected_hash : Text) : async Result {
     if (vaultAuthority != ?caller) return #Err("Vault authority required");
@@ -1540,6 +1566,7 @@ persistent actor MediaBlobStore {
     };
     retention_cursor := if (page.size() == 50) page[49].0 else "";
     for ((p, r) in page.values()) {
+      if (categoryForPath(p) == ?"vault" and vaultAuthority != null) continue;
       if (not mediaFenced(p) and Time.now() - r.uploaded_at > RETENTION_NS) {
         switch (categoryForPath(p), clubIdFromPath(p)) {
           case (?_, ?club) {
@@ -1561,6 +1588,7 @@ persistent actor MediaBlobStore {
     legacy_retention_cursor := if (blobs.size() == 0) 0 else (legacy_retention_cursor + indices.size()) % blobs.size();
     let paths = indices.map(func(index) { blobs[index].path });
     for (p in paths.values()) {
+      if (categoryForPath(p) == ?"vault" and vaultAuthority != null) continue;
       if (retainedBlocked() or quota_mode == #frozen) break;
       if (mediaFenced(p) or categoryForPath(p) == null or clubIdFromPath(p) == null) continue;
       let stamp = switch (blob_uploaded_at.find(func((path, _)) = path == p)) {
