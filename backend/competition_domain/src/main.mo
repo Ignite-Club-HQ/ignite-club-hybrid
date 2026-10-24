@@ -330,19 +330,6 @@ persistent actor class Main(governorInit : Principal) = this {
     for ((key, _) in recovery.broadcast_plans.values()) Map.remove(broadcastPlans, Text.compare, key);
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
-    let existingRecovery = clubRecovery(club);
-    if (s.recovery == null and (existingRecovery.email_jobs.size() > 0 or existingRecovery.fixture_receipts.size() > 0 or existingRecovery.broadcast_deliveries.size() > 0)) return #Err("Legacy snapshot omits existing recovery records");
-    let recovery = s.recovery ?? { email_jobs = []; fixture_receipts = []; broadcast_deliveries = []; broadcast_plans = [] };
-    let emailOwned = func(j : EmailOutbox.Job) : Bool {
-      if (j.kind == "eoi") return s.eoi.any(func e = e.id == j.resource);
-      if (j.kind == "official" or j.kind == "official_welcome") return s.official_invites.any(func i = i.token == j.resource);
-      if (j.kind == "member_welcome") return (s.member_welcome_jobs ?? []).any(func w = w.token == j.resource);
-      false
-    };
-    if (recovery.email_jobs.any(func pair = pair.0 != pair.1.id or not emailOwned(pair.1)) or recovery.fixture_receipts.any(func pair = not inC(pair.1.input.competition_id) or not s.matches.any(func m = m.id == pair.1.match_id and m.competition_id == pair.1.input.competition_id)) or recovery.broadcast_deliveries.any(func pair = not inC(pair.1.competition) or not s.broadcasts.any(func b = b.id == pair.1.broadcast_id and b.competition_id == pair.1.competition)) or recovery.broadcast_plans.any(func pair = not recovery.broadcast_deliveries.any(func d = d.0 == pair.0))) return #Err("Foreign recovery snapshot records");
-    // An unknown provider/queue commit cannot be moved to a different authority.
-    if (recovery.email_jobs.any(func pair = pair.1.state == "processing" or pair.1.state == "unknown") or existingRecovery.email_jobs.any(func pair = pair.1.state == "processing" or pair.1.state == "unknown") or recovery.broadcast_deliveries.any(func pair = pair.1.unknown != null) or existingRecovery.broadcast_deliveries.any(func pair = pair.1.unknown != null)) return #Err("Resolve original delivery outcomes before snapshot replacement");
-    if (recovery.email_jobs.any(func pair = switch (Map.get(emailJobs, Text.compare, pair.0)) { case (?j) not emailInClub(j, club); case null false }) or recovery.fixture_receipts.any(func pair = switch (Map.get(fixtureReceipts, Text.compare, pair.0)) { case (?r) not competitions.any(func c = c.id == r.input.competition_id and c.club_id == club); case null false }) or recovery.broadcast_deliveries.any(func pair = switch (Map.get(broadcastDeliveries, Text.compare, pair.0)) { case (?r) not competitions.any(func c = c.id == r.competition and c.club_id == club); case null false }) or recovery.broadcast_plans.any(func pair = Map.get(broadcastPlans, Text.compare, pair.0) != null and not existingRecovery.broadcast_plans.any(func old = old.0 == pair.0))) return #Err("Recovery key collides with another scope");
     scorePrivacySettings := scorePrivacySettings.filter(func(x) = not inC(x.competition_id));
     playhqMatchMetadata:=playhqMatchMetadata.filter(func(x)=not inC(x.competition_id));
     playhqStats:=playhqStats.filter(func(x)=not inC(x.competition_id));
@@ -383,6 +370,19 @@ persistent actor class Main(governorInit : Principal) = this {
     let c = club;
     let rootC = s.competitions;
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
+    let existingRecovery = clubRecovery(club);
+    if (s.recovery == null and (existingRecovery.email_jobs.size() > 0 or existingRecovery.fixture_receipts.size() > 0 or existingRecovery.broadcast_deliveries.size() > 0)) return #Err("Legacy snapshot omits existing recovery records");
+    let recovery : ClubSnapshot.Recovery = s.recovery ?? ({ email_jobs = []; fixture_receipts = []; broadcast_deliveries = []; broadcast_plans = [] });
+    let emailOwned = func(j : EmailOutbox.Job) : Bool {
+      if (j.kind == "eoi") return s.eoi.any(func e = e.id == j.resource);
+      if (j.kind == "official" or j.kind == "official_welcome") return s.official_invites.any(func i = i.token == j.resource);
+      if (j.kind == "member_welcome") return (s.member_welcome_jobs ?? []).any(func w = w.token == j.resource);
+      false
+    };
+    if (recovery.email_jobs.any(func pair = pair.0 != pair.1.id or not emailOwned(pair.1)) or recovery.fixture_receipts.any(func pair = not inC(pair.1.input.competition_id) or not s.matches.any(func m = m.id == pair.1.match_id and m.competition_id == pair.1.input.competition_id)) or recovery.broadcast_deliveries.any(func pair = not inC(pair.1.competition) or not s.broadcasts.any(func b = b.id == pair.1.broadcast_id and b.competition_id == pair.1.competition)) or recovery.broadcast_plans.any(func pair = not recovery.broadcast_deliveries.any(func d = d.0 == pair.0))) return #Err("Foreign recovery snapshot records");
+    // An unknown provider/queue commit cannot be moved to a different authority.
+    if (recovery.email_jobs.any(func pair = pair.1.state == "processing" or pair.1.state == "unknown") or existingRecovery.email_jobs.any(func pair = pair.1.state == "processing" or pair.1.state == "unknown") or recovery.broadcast_deliveries.any(func pair = pair.1.unknown != null) or existingRecovery.broadcast_deliveries.any(func pair = pair.1.unknown != null)) return #Err("Resolve original delivery outcomes before snapshot replacement");
+    if (recovery.email_jobs.any(func pair = switch (Map.get(emailJobs, Text.compare, pair.0)) { case (?j) not emailInClub(j, club); case null false }) or recovery.fixture_receipts.any(func pair = switch (Map.get(fixtureReceipts, Text.compare, pair.0)) { case (?r) not competitions.any(func c = c.id == r.input.competition_id and c.club_id == club); case null false }) or recovery.broadcast_deliveries.any(func pair = switch (Map.get(broadcastDeliveries, Text.compare, pair.0)) { case (?r) not competitions.any(func c = c.id == r.competition and c.club_id == club); case null false }) or recovery.broadcast_plans.any(func pair = Map.get(broadcastPlans, Text.compare, pair.0) != null and not existingRecovery.broadcast_plans.any(func old = old.0 == pair.0))) return #Err("Recovery key collides with another scope");
     if(phqMeta.any(func(x)=not inC(x.competition_id) or not s.matches.any(func(m)=m.id==x.match_id and m.competition_id==x.competition_id)) or phqStats.any(func(x)=not phqMeta.any(func(m)=m.match_id==x.match_id and m.game_id==x.game_id and m.tenant==x.tenant and m.competition_id==x.competition_id))) return #Err("Foreign PlayHQ snapshot records");
     if (privacy.any(func(x) = not inC(x.competition_id))
         or s.competitions.any(func(x) = not (x.club_id == c))
