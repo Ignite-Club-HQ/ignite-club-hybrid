@@ -1,3 +1,7 @@
+## Competition ICP audit — 24 October 2026
+- [ ] Audit competition pages, linked features and canister authority paths; record confirmed off-chain dependencies, parity gaps and release evidence limits without changing application behaviour or deploying.
+- [ ] Run focused dual-mode competition tests and isolation/contract checks; distinguish test-harness failures from live defects.
+
 ## File Vault ICP audit — 24 October 2026
 - [x] Current requested completion batch: owner-wide per-group scans and exact decrypted-marker/strict-grant/store acknowledgement recovery, reference-safe account-erasure hierarchy/principal scrub, and transactional writable-file JSONL export implemented. 76 tests pass per backend mode; real-canister owner/erasure/recovery/upgrade suite, compile/build, guards and 17-contract drift pass. Public Vault reaches auth without errors; no release or signed-in acceptance claim.
 - [x] Current continuation: opened-club owner recovery traverses/coalesces all bounded journal pages with failed-page cursor retention; a separate migration-backed permanent-erasure sweep removes unreferenced leaf folders/pins/backup folder rows. 37 ICP/40 Supabase focused checks and real disposable canister erasure/recovery/upgrade checks pass; canister compile/build, guards and 17-contract drift pass. No deployment or signed-in private UI claim.
