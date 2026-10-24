@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -99,7 +100,7 @@ export function LinkDriveFolderDialog({ open, onOpenChange, vaultFolderId, clubI
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || isFeatureRoutedToIcp("vault")) return;
     // Root-link mode: there's no single existing link to show — skip the lookup
     // and go straight to the connect/destination flow.
     if (!vaultFolderId) {
@@ -121,7 +122,7 @@ export function LinkDriveFolderDialog({ open, onOpenChange, vaultFolderId, clubI
 
   // Resume from OAuth redirect (uses keys distinct from import dialog)
   useEffect(() => {
-    if (!open) return;
+    if (!open || isFeatureRoutedToIcp("vault")) return;
     const stored = sessionStorage.getItem('driveLinkAccessToken');
     const storedRefresh = sessionStorage.getItem('driveLinkRefreshToken');
     const storedEmail = sessionStorage.getItem('driveLinkGoogleEmail');
@@ -430,6 +431,7 @@ export function LinkDriveFolderDialog({ open, onOpenChange, vaultFolderId, clubI
     onOpenChange(false);
   };
 
+  if (isFeatureRoutedToIcp("vault")) return null;
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
       <ResponsiveDialogContent className="sm:max-w-2xl" fullScreen={step === "browse" && !existing}>

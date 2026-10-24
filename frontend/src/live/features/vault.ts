@@ -356,6 +356,22 @@ export async function registerLivePiiText(
  * scopes folders/files to club + optional team; mini-league scoping is a
  * Supabase-only concept with no canister shape yet.
  */
+async function readVaultPages(ctx: FeatureBackendContext, clubId: string, teamId: string | null, leagueId: string | null, competitionId: string | null, folderId: string | null, trash: boolean) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  const items = [];
+  let offset = 0n;
+  let revision: [] | [bigint] = [];
+  for (;;) {
+    const page = await unwrapCandid(actor.read_vault_file_page(clubId, candidOpt(teamId), candidOpt(leagueId), candidOpt(competitionId), candidOpt(folderId), trash, offset, revision), "Read Vault page");
+    items.push(...page.items);
+    revision = [page.revision];
+    const next = page.next[0];
+    if (next === undefined) return items;
+    if (next <= offset) throw new Error("Invalid Vault continuation");
+    offset = next;
+  }
+}
+
 export async function listLiveVaultFolders(
   ctx: FeatureBackendContext,
   clubId: string,
@@ -388,9 +404,13 @@ export async function getLiveVaultFile(ctx: FeatureBackendContext, fileId: strin
 /** Single folder read; null when the folder is missing or the caller cannot view it. */
 export async function getLiveVaultFolder(ctx: FeatureBackendContext, folderId: string, competitionId: string | null = null) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  if (competitionId) return unwrapCandid(actor.get_competition_folder(folderId), "Get competition vault folder");
-  const row = await unwrapCandid(actor.get_folder(folderId), "Get vault folder");
-  return row.length ? row[0] : null;
+  const row = competitionId
+    ? await unwrapCandid(actor.get_competition_folder(folderId), "Get competition vault folder")
+    : await unwrapCandid(actor.get_folder(folderId), "Get vault folder");
+  if (row[0]) return row[0];
+  if (competitionId) return null;
+  const competitionRow = await unwrapCandid(actor.get_competition_folder(folderId), "Get competition vault folder");
+  return competitionRow[0] ?? null;
 }
 
 export async function listLiveVaultClubFiles(
@@ -400,10 +420,7 @@ export async function listLiveVaultClubFiles(
   miniLeagueId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
-    actor.list_club_files(clubId, teamId ? [teamId] : [], miniLeagueId ? [miniLeagueId] : []),
-    "List vault club files",
-  );
+  return (await readVaultPages(ctx, clubId, teamId, miniLeagueId, null, null, false)).map(entry => entry.file);
 }
 
 /**
@@ -437,20 +454,7 @@ export async function listLiveVaultClubFilesWithFolder(
   competitionId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  if (competitionId) {
-    return unwrapCandid(
-      actor.list_competition_files_with_folder("", competitionId),
-      "List competition vault root files",
-    );
-  }
-  return unwrapCandid(
-    actor.list_club_files_with_folder(
-      clubId,
-      teamId ? [teamId] : [],
-      miniLeagueId ? [miniLeagueId] : [],
-    ),
-    "List vault club files with folder",
-  );
+  return readVaultPages(ctx, clubId, teamId, miniLeagueId, competitionId, null, false);
 }
 
 export async function listLiveVaultTrashWithFolder(
@@ -458,15 +462,12 @@ export async function listLiveVaultTrashWithFolder(
   clubId: string,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
-    actor.list_trashed_files_with_folder(clubId),
-    "List vault trash with folder",
-  );
+  return readVaultPages(ctx, clubId, null, null, null, null, true);
 }
 
 export async function listLiveVaultTrash(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_trashed_files(clubId), "List vault trash");
+  return (await readVaultPages(ctx, clubId, null, null, null, null, true)).map(entry => entry.file);
 }
 
 /**
@@ -523,8 +524,7 @@ export async function updateLiveVaultFolder(
   // update_folder overwrites sort_order/description/color wholesale, so
   // fetch the current row first and preserve the fields this wrapper
   // doesn't expose (rename/role changes must not clobber ordering).
-  const current = await unwrapCandid(actor.get_folder(folderId), "Get vault folder");
-  const existing = current.length ? current[0] : null;
+  const existing = await getLiveVaultFolder(ctx, folderId);
   if (!existing) throw new Error("Update vault folder failed: folder not found");
   return unwrapCandid(
     actor.update_folder(
@@ -621,7 +621,25 @@ export async function moveLiveVaultFile(
  */
 export async function permanentlyDeleteLiveVaultFile(ctx: FeatureBackendContext, fileId: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.delete_file_permanent(fileId), "Permanently delete vault file");
+  const { listBlobStoreKeys } = await import("../mediaStorage");
+  const { connectLiveBlobStore, deleteBlobFromStore } = await import("../blobStoreUpload");
+  // The canister retains source-bound intent until confirmed byte absence.
+  // A second begin refuses ambiguous cleanup instead of repeating deletion.
+  const file = await getLiveVaultFile(ctx, fileId);
+  if (file?.is_external_link) return unwrapCandid(actor.delete_file_permanent(fileId), "Delete external link");
+  // Reconcile already-finished bytes without repeating a physical delete.
+  try { return await unwrapCandid(actor.delete_file_permanent(fileId), "Reconcile Vault cleanup"); }
+  catch (error) { if (!(error instanceof Error) || !error.message.includes("File cleanup required")) throw error; }
+  const pinned = await unwrapCandid(actor.begin_file_cleanup(fileId), "Begin Vault cleanup");
+  const ref = pinned.blob_ref[0];
+  if (!ref) throw new Error("Vault file provenance unavailable");
+  const key = listBlobStoreKeys(ctx.target).find(key => ctx.target.canisterIds[key] === ref.canister);
+  if (!key) throw new Error("Original Vault file store is not configured");
+  const { actor: store } = await connectLiveBlobStore(ctx.target, ctx.identity, key);
+  const hash = await store.get_content_hash(ref.path);
+  if (hash[0] !== ref.content_hash) throw new Error("Vault bytes changed; cleanup requires reconciliation");
+  await deleteBlobFromStore(ctx.target, ctx.identity, key, ref.path);
+  return unwrapCandid(actor.delete_file_permanent(fileId), "Confirm Vault cleanup");
 }
 
 /**
