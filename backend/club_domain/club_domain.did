@@ -1735,6 +1735,11 @@ type Main =
        err: text;
        ok: nat;
      });
+   relay_group_pitch_alert: (users: vec text, club: text, kind: text, body:
+    text, key: text, related: text) -> (variant {
+                                          Err: text;
+                                          Ok: nat16;
+                                        });
    remove_member: (club: text, user: principal) -> (variant {
                                                       Err: text;
                                                       Ok;
