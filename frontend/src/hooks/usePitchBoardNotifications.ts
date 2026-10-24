@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
+import { resolveAuthBackend } from '@/live/authBackendMode';
+import { readPitchNotificationPreference } from '@/lib/pitchBoardRepository';
 
 /**
  * Hook to check if pitch board notifications are enabled for the current user.
@@ -12,26 +13,18 @@ import { useAuth } from "./useAuth";
  * flag AND re-check the current user id before applying the result.
  */
 export function usePitchBoardNotifications() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  const icp = resolveAuthBackend() === 'icp';
   const [enabled, setEnabled] = useState(true); // Default to enabled
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || loading) return;
     const requestUserId = user.id;
     let cancelled = false;
 
     const loadPreference = async () => {
-      const { data } = await supabase
-        .from("notification_preferences")
-        .select("pitch_board_enabled")
-        .eq("user_id", requestUserId)
-        .single();
-
-      // Drop stale responses from a previous account.
-      if (cancelled) return;
-      if (data) {
-        setEnabled(data.pitch_board_enabled ?? true);
-      }
+      const preference = await readPitchNotificationPreference(requestUserId, icp).catch(() => true);
+      if (!cancelled) setEnabled(preference);
     };
 
     loadPreference();
@@ -39,7 +32,7 @@ export function usePitchBoardNotifications() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.id, loading, icp]);
 
   return { pitchBoardNotificationsEnabled: enabled };
 }
@@ -52,13 +45,7 @@ export async function checkPitchBoardNotificationsEnabled(userId: string): Promi
   if (!userId) return true; // Default to enabled if no user
 
   try {
-    const { data } = await supabase
-      .from("notification_preferences")
-      .select("pitch_board_enabled")
-      .eq("user_id", userId)
-      .single();
-
-    return data?.pitch_board_enabled ?? true;
+    return await readPitchNotificationPreference(userId, resolveAuthBackend() === 'icp');
   } catch {
     return true; // Default to enabled on error
   }

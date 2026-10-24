@@ -55,6 +55,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSwipeGesture } from "@/hooks/useSwipeGesture";
 import { usePitchBoardNotifications } from "@/hooks/usePitchBoardNotifications";
+import { pitchPlayerPositionsQuery, notifyIcpSubstitutionDue } from '@/lib/pitchBoardRepository';
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
@@ -185,7 +186,8 @@ const PitchBoardLoading = ({ message = "Loading..." }: { message?: string }) => 
 
 function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs = false, initialRotationSpeed = 1, initialDisablePositionSwaps = false, initialDisableBatchSubs = false, initialRotateGkAtHalftime = true, initialMinutesPerHalf = 10, initialMaxSpreadMinutes = 5, initialTeamSize, initialFormation, readOnly = false, isSubsManager = false, initialLinkedEventId, initialShowMatchHeader = true, initialShowLineupPicker = true, miniLeagueTeams, onUnlinkEvent }: PitchBoardProps) {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const icp = resolveAuthBackend() === 'icp';
   const { pitchBoardNotificationsEnabled } = usePitchBoardNotifications();
   const queryClient = useQueryClient();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -615,27 +617,6 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
       return () => clearTimeout(timer);
     }
   }, [isMobileLandscape]);
-  // Create database notification which triggers server-side push via database trigger
-  const createSubNotification = useCallback(async (message: string) => {
-    if (!user?.id) return;
-    if (!pitchBoardNotificationsEnabled) return; // Check preference
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: user.id,
-          type: 'substitution',
-          message,
-          related_id: null,
-        });
-      if (error) {
-        console.log('Failed to create notification:', error);
-      }
-    } catch (error) {
-      console.log('Notification creation failed:', error);
-    }
-  }, [user?.id, pitchBoardNotificationsEnabled]);
-
   // Open auto-sub plan dialog with minutes from pitch settings
   const openAutoSubPlanDialog = useCallback((editMode?: boolean) => {
     const isFinished = gameTimerRef.current?.isGameFinished();
@@ -654,30 +635,9 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
   const handleOpenNewPlan = useCallback(() => openAutoSubPlanDialog(false), [openAutoSubPlanDialog]);
   const handleOpenEditPlan = useCallback(() => openAutoSubPlanDialog(true), [openAutoSubPlanDialog]);
 
-  // Fetch team player positions from database with caching
   const { data: teamPlayerPositions } = useQuery({
-    queryKey: ["team-player-positions", teamId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("team_player_positions")
-        .select("*")
-        .eq("team_id", teamId);
-      if (error) throw error;
-      // DB stores preferred_positions as a free-text array; keep only the
-      // four canonical pitch positions so downstream consumers get a typed
-      // PitchPosition[] regardless of legacy row contents.
-      const validPositions: readonly string[] = ["GK", "DEF", "MID", "FWD"];
-      return (data || []).map((row) => ({
-        user_id: row.user_id,
-        child_id: row.child_id,
-        preferred_positions: (row.preferred_positions ?? []).filter(
-          (position): position is PitchPosition => validPositions.includes(position),
-        ),
-        jersey_number: row.jersey_number,
-      }));
-    },
-    staleTime: 30 * 1000, // Refetch after 30s to pick up jersey/position changes
-    gcTime: 10 * 60 * 1000,
+    ...pitchPlayerPositionsQuery(teamId, user?.id, icp),
+    enabled: !!user?.id && !authLoading && !teamId.startsWith('event-group-'),
   });
 
   // linkedEventDetails, opponentName, and the 24h auto-unlink effect now live
@@ -923,6 +883,20 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
     pushToUndoHistoryRef: pushToUndoHistoryRef_autoSubs,
     runSubAnimationRef: runSubAnimationRef_autoSubs,
   });
+
+  // A pending slot may render repeatedly; uncertain notification writes never replay.
+  const notifiedSubSlots = useRef(new Map<string, string>());
+  useEffect(() => {
+    if (!icp || authLoading || !user?.id || readOnly || !pitchBoardNotificationsEnabled || !pendingAutoSub) return;
+    const slot = JSON.stringify([user.id, teamId, linkedEventId, pendingAutoSub.half, pendingAutoSub.time,
+      pendingAutoSub.playerOut.id, pendingAutoSub.playerIn.id]);
+    if (notifiedSubSlots.current.has(slot)) return;
+    const key = `pitch-sub-${crypto.randomUUID()}`;
+    notifiedSubSlots.current.set(slot, key);
+    void notifyIcpSubstitutionDue(teamId, linkedEventId, user.id, key).catch(() => {
+      console.warn('Pitch-board reminder could not be queued');
+    });
+  }, [icp, authLoading, user?.id, readOnly, pitchBoardNotificationsEnabled, pendingAutoSub, teamId, linkedEventId]);
 
   // manualSubConfirmOpen + pendingManualSub now live in usePitchBoardManualSub (declared below).
 
