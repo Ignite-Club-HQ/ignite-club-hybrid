@@ -355,6 +355,11 @@ export interface Main {
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
+  'assign_returning_season_players' : ActorMethod<
+    [string, string, Array<{ 'team_id' : string, 'member_id' : string }>],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'begin_identity_link' : ActorMethod<
     [Principal],
     { 'Ok' : Challenge } |

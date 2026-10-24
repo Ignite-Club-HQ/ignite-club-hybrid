@@ -754,6 +754,15 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
         [],
       ),
+    'assign_returning_season_players' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(IDL.Record({ 'team_id' : IDL.Text, 'member_id' : IDL.Text })),
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
     'begin_identity_link' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : Challenge, 'Err' : IDL.Text })],

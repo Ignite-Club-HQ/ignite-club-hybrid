@@ -535,6 +535,14 @@ type Main =
                                   Err: text;
                                   Ok: ClubTeam;
                                 });
+   assign_returning_season_players: (source_id: text, target_id: text,
+    placements: vec record {
+                      member_id: text;
+                      team_id: text;
+                    }) -> (variant {
+                             Err: text;
+                             Ok: nat;
+                           });
    begin_identity_link: (target: principal) ->
     (variant {
        Err: text;

@@ -369,6 +369,16 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    assign_returning_season_players(source_id: string, target_id: string, placements: Array<{
+        team_id: string;
+        member_id: string;
+    }>): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     begin_identity_link(target: Principal): Promise<{
         __kind__: "Ok";
         Ok: Challenge;
@@ -3495,6 +3505,19 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.archive_team(arg0);
         return from_candid_variant_n33(result);
     }
+    async assign_returning_season_players(arg0: string, arg1: string, arg2: Array<{
+        team_id: string;
+        member_id: string;
+    }>): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.assign_returning_season_players(arg0, arg1, arg2);
+        return from_candid_variant_n36(result);
+    }
     async begin_identity_link(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: Challenge;
@@ -3503,7 +3526,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.begin_identity_link(arg0);
-        return from_candid_variant_n36(result);
+        return from_candid_variant_n37(result);
     }
     async bulk_add_team_members(arg0: string, arg1: string, arg2: string, arg3: Array<Principal>): Promise<{
         __kind__: "Ok";
@@ -3513,7 +3536,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.bulk_add_team_members(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n37(result);
+        return from_candid_variant_n36(result);
     }
     async can_accept_public_eoi(arg0: string, arg1: string): Promise<boolean> {
         const result = await this.actor.can_accept_public_eoi(arg0, arg1);
@@ -3539,7 +3562,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.carry_over_season_players(arg0, arg1, arg2);
-        return from_candid_variant_n37(result);
+        return from_candid_variant_n36(result);
     }
     async check_team_name_unique(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -5050,7 +5073,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_club_snapshot(arg0);
-        return from_candid_variant_n37(result);
+        return from_candid_variant_n36(result);
     }
     async purge_expired_deletions(): Promise<{
         __kind__: "Ok";
@@ -10847,12 +10870,12 @@ function from_candid_variant_n330(value: {
     } : value;
 }
 function from_candid_variant_n36(value: {
-    Ok: _Challenge;
+    Ok: bigint;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: Challenge;
+    Ok: bigint;
 } | {
     __kind__: "Err";
     Err: string;
@@ -10866,12 +10889,12 @@ function from_candid_variant_n36(value: {
     } : value;
 }
 function from_candid_variant_n37(value: {
-    Ok: bigint;
+    Ok: _Challenge;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: bigint;
+    Ok: Challenge;
 } | {
     __kind__: "Err";
     Err: string;
