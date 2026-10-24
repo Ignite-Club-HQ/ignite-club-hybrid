@@ -301,16 +301,17 @@ persistent actor class Main(governorInit : Principal) = this {
     competitionMatchLinks:=competitionMatchLinks.filter(func(l)=not evs.any(func(e)=e.id==l.event_id));
     gameResults:=gameResults.filter(func(r)=not evs.any(func(e)=r.event_id==?e.id));
     gamePlayerStats:=gamePlayerStats.filter(func(r)=not evs.any(func(e)=r.event_id==e.id));
+    for ((id, _) in Map.entries(gamePlayerDetails).toArray().values()) if (evs.any(func e = e.id == id)) Map.remove(gamePlayerDetails, Text.compare, id);
     gameSummaries:=gameSummaries.filter(func(r)=not evs.any(func(e)=r.event_id==e.id));
     competitionEventOperations:=competitionEventOperations.map(func(o)={o with event_ids=o.event_ids.filter(func(id)=not evs.any(func(e)=e.id==id))});
     #Ok(evs.size())
   };
-  type EventsSnapshot = { events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty]; match_links : ?[Types.CompetitionEventLink]; operations : ?[Types.CompetitionEventOperation]; results : ?[Types.GameResult]; summaries : ?[Types.GameSummary]; stats : ?[Types.GamePlayerStat] };
+  type EventsSnapshot = { player_details : ?[(Text, [Types.GamePlayerDetail])]; events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty]; match_links : ?[Types.CompetitionEventLink]; operations : ?[Types.CompetitionEventOperation]; results : ?[Types.GameResult]; summaries : ?[Types.GameSummary]; stats : ?[Types.GamePlayerStat] };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before export");
     let evs = events.filter(func(e) = e.club_id == club);
-    let snap : EventsSnapshot = { events = evs; rsvps = rsvps.filter(func(r) = evs.any(func(e) = e.id == r.event_id));
+    let snap : EventsSnapshot = { player_details = ?Map.entries(gamePlayerDetails).filter(func pair = evs.any(func e = e.id == pair.0)).toArray(); events = evs; rsvps = rsvps.filter(func(r) = evs.any(func(e) = e.id == r.event_id));
       series = series.filter(func(x) = evs.any(func(e) = e.series_id == ?x.id)); groups = ?eventGroups.filter(func(g) = evs.any(func(e) = e.id == g.event_id)); group_players = ?eventGroupPlayers.filter(func(p) = eventGroups.any(func(g) = g.id == p.group_id and evs.any(func(e) = e.id == g.event_id))); group_duties = ?eventGroupDuties.filter(func(d) = eventGroups.any(func(g) = g.id == d.group_id and evs.any(func(e) = e.id == g.event_id)));
       match_links=?competitionMatchLinks.filter(func(l)=evs.any(func(e)=e.id==l.event_id));
       operations=?competitionEventOperations.filter(func(o)=o.event_ids.any(func(id)=evs.any(func(e)=e.id==id))).map(func(o)={o with event_ids=o.event_ids.filter(func(id)=evs.any(func(e)=e.id==id))});
@@ -326,6 +327,9 @@ persistent actor class Main(governorInit : Principal) = this {
     if (snap.events.any(func(e) = e.club_id != club) or snap.rsvps.any(func(r) = not snap.events.any(func(e) = e.id == r.event_id))) return #Err("Snapshot contains foreign records");
     if (snap.events.any(func(e) = events.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
     let incomingGroups = snap.groups ?? [];
+    let incomingDetails = snap.player_details ?? [];
+    if (incomingDetails.any(func pair = not snap.events.any(func e = e.id == pair.0) or pair.1.size() != (snap.stats ?? []).filter(func s = s.event_id == pair.0).size())) return #Err("Foreign or misaligned player detail records");
+    if (snap.player_details == null and Map.entries(gamePlayerDetails).any(func pair = events.any(func e = e.id == pair.0 and e.club_id == club))) return #Err("Legacy snapshot omits existing player details");
     let incomingPlayers = snap.group_players ?? [];
     let incomingDuties = snap.group_duties ?? [];
     let incomingLinks=snap.match_links??[];let incomingResults=snap.results??[];let incomingSummaries=snap.summaries??[];let incomingStats=snap.stats??[];let incomingOperations=snap.operations??[];
@@ -339,6 +343,8 @@ persistent actor class Main(governorInit : Principal) = this {
     eventGroupPlayers := eventGroupPlayers.filter(func(p) = not oldGroups.any(func(id) = id == p.group_id)).concat(incomingPlayers);
     eventGroupDuties := eventGroupDuties.filter(func(d) = not oldGroups.any(func(id) = id == d.group_id)).concat(incomingDuties);
     let ids = events.filter(func(e) = e.club_id == club).map(func(e) = e.id);
+    for ((id, _) in Map.entries(gamePlayerDetails).toArray().values()) if (ids.any(func old = old == id)) Map.remove(gamePlayerDetails, Text.compare, id);
+    for ((id, details) in incomingDetails.values()) Map.add(gamePlayerDetails, Text.compare, id, details);
     competitionMatchLinks:=competitionMatchLinks.filter(func(l)=not ids.any(func(id)=id==l.event_id)).concat(incomingLinks);
     gameResults:=gameResults.filter(func(r)=not ids.any(func(id)=r.event_id==?id)).concat(incomingResults);
     gameSummaries:=gameSummaries.filter(func(r)=not ids.any(func(id)=r.event_id==id)).concat(incomingSummaries);
