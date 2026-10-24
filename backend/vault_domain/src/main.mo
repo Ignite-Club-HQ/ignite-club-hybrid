@@ -69,6 +69,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var transferFences : [Text];
   var nextBackupSeq : Nat64;
   var nextGalleryFileSeq : Nat;
+  var deletionIntents : Map.Map<Text, Text>;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -671,7 +672,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let ref = blob_ref ?? return #Err("Encrypted file provenance required");
       if (not Text.startsWith(ref.path, #text ("clubs/" # club # "/vault/"))) return #Err("Private Vault bytes required");
       let store : actor { get_content_hash : shared query (Text) -> async ?Text } = actor(ref.canister);
-      if (await (with timeout = 10) store.get_content_hash(ref.path) != ?ref.content_hash) return #Err("File bytes unavailable");
+      if ((await (with timeout = 10) store.get_content_hash(ref.path)) != ?ref.content_hash) return #Err("File bytes unavailable");
       if (not (await canWrite(caller, club, team, competition_id)) or files.any(func f = f.id == id)) return #Err("Registration scope changed");
     } else if (blob_ref != null or size != 0 or not Text.startsWith(file_url, #text "https://")) return #Err("Invalid external link");
     let file : Types.VaultFile = {
@@ -799,6 +800,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await admitAccount(caller);
+    if (deletionIntents.get(id) != null) return #Err("File cleanup pending");
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
@@ -824,6 +826,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await admitAccount(caller);
+    if (deletionIntents.get(id) != null) return #Err("File cleanup pending");
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms != null)) {
@@ -838,7 +841,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not file.is_external_link) {
           let ref = file.blob_ref ?? return #Err("File provenance unavailable");
           let store : actor { get_content_hash : shared query (Text) -> async ?Text } = actor(ref.canister);
-          if (await (with timeout = 10) store.get_content_hash(ref.path) != ?ref.content_hash) return #Err("File bytes unavailable");
+          if ((await (with timeout = 10) store.get_content_hash(ref.path)) != ?ref.content_hash) return #Err("File bytes unavailable");
           if (not (await canWrite(caller, file.club, file.team, file.competition_id)) or files.find(func f = f.id == id) != ?file) return #Err("Restore scope changed");
         };
         let updated : Types.VaultFile = { file with deleted_at_ms = null; deleted_by = null };
@@ -855,6 +858,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await admitAccount(caller);
+    if (deletionIntents.get(id) != null) return #Err("File cleanup pending");
     if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not validLong(name, 160)) return #Err("Invalid file name");
@@ -923,31 +927,37 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
-  // Hard delete — removes the metadata row outright. File bytes live outside
-  // this canister (Supabase storage today, the blob store later), so byte
-  // cleanup stays with the storage layer.
+  // Metadata finalization requires byte absence; unknown cleanup keeps the row and intent.
+  public shared ({ caller }) func begin_file_cleanup(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    await admitAccount(caller); auth(caller);
+    let f = files.find(func row = row.id == id) ?? return #Err("File not found");
+    if (not (await canWrite(caller, f.club, f.team, f.competition_id))) return #Err("Scoped staff required");
+    if (files.find(func row = row.id == id) != ?f or isFenced(f.club)) return #Err("File changed");
+    if (deletionIntents.get(id) != null) return #Err("Cleanup outcome requires reconciliation");
+    let ref = f.blob_ref ?? return #Err("File provenance unavailable");
+    deletionIntents.add(id, ref.content_hash);
+    let hidden = { f with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
+    files := files.map(func row = if (row.id == id) hidden else row); mediaEvidenceRevision += 1;
+    #Ok(hidden)
+  };
   public shared ({ caller }) func delete_file_permanent(id : Text) : async { #Ok; #Err : Text } {
-    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
     try {
-    await admitAccount(caller);
-    if (fileFenced(id)) return #Err("Club is temporarily locked for a transfer");
-    auth(caller);
-    switch (files.find(func(item) = item.id == id)) {
-      case null { #Err("File not found") };
-      case (?file) {
-        if (not (await canWrite(caller, file.club, file.team, file.competition_id))) return #Err("Club or competition admin required");
-        if (file.folder_id != "") {
-          let parent = folders.find(func f = f.id == file.folder_id and f.deleted_at_ms == null) ?? return #Err("Folder unavailable");
-          if (file.competition_id == null and not (await canAccessFolder(caller, parent))) return #Err("Folder access forbidden");
-        };
-        if (fileFenced(id) or files.find(func(f) = f.id == id) != ?file) return #Err("File changed during authorization");
-        mediaEvidenceRevision += 1;
-        files := files.filter(func(item) = item.id != id);
-        #Ok
+      await admitAccount(caller); auth(caller);
+      let f = files.find(func row = row.id == id) ?? return #Err("File not found");
+      if (not (await canWrite(caller, f.club, f.team, f.competition_id))) return #Err("Scoped staff required");
+      if (not f.is_external_link) {
+        let ref = f.blob_ref ?? return #Err("File provenance unavailable");
+        if (deletionIntents.get(id) != ?ref.content_hash) return #Err("File cleanup required");
+        let store : actor { get_content_hash : shared query (Text) -> async ?Text } = actor(ref.canister);
+        if ((await (with timeout = 10) store.get_content_hash(ref.path)) != null) return #Err("File bytes remain or changed; reconcile cleanup");
       };
-    }
-  
-    } finally { removalReceiver.leave(caller) };
+      if (not (await canWrite(caller, f.club, f.team, f.competition_id)) or files.find(func row = row.id == id) != ?f or isFenced(f.club)) return #Err("Cleanup scope changed");
+      files := files.filter(func row = row.id != id);
+      let sources = gallerySourceFiles.entries().filter(func entry = entry.1 == id).toArray();
+      for ((source, _) in sources.values()) gallerySourceFiles.remove(source);
+      deletionIntents.remove(id); mediaEvidenceRevision += 1; #Ok
+    } finally { removalReceiver.leave(caller) }
   };
 
   public query ({ caller }) func list_trashed_files(club : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
@@ -1126,9 +1136,9 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?backup) {
         var restored = 0;
         let missingFolders = backup.folders.filter(func(f : Types.VaultFolder) : Bool =
-          not folders.any(func(item : Types.VaultFolder) : Bool = item.id == f.id));
+          not folders.any(func(item : Types.VaultFolder) : Bool = item.id == f.id) and f.deleted_at_ms == null and f.parent_id == null);
         let missingFiles = backup.files.filter(func(f : Types.VaultFile) : Bool =
-          not files.any(func(item : Types.VaultFile) : Bool = item.id == f.id));
+          not files.any(func(item : Types.VaultFile) : Bool = item.id == f.id) and f.is_external_link and f.deleted_at_ms == null and deletionIntents.get(f.id) == null and (f.folder_id == "" or folders.any(func folder = folder.id == f.folder_id and folder.deleted_at_ms == null)));
         restored += missingFolders.size();
         restored += missingFiles.size();
         folders := folders.concat(missingFolders);
@@ -1282,17 +1292,52 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?folder) folder.club == file.club and folder.competition_id == file.competition_id and (await canAccessFolder(caller, folder))
     }
   };
+  func fileVisible(caller : Principal, file : Types.VaultFile, grants : [(Text, ?Text)]) : Bool {
+    if (isFenced(file.club)) return false;
+    switch (folders.find(func f = f.id == file.folder_id)) {
+      case null file.folder_id == "";
+      case (?f) f.club == file.club and f.competition_id == file.competition_id and f.team == file.team and f.mini_league_id == file.mini_league_id and folderVisible(caller, f, grants)
+    }
+  };
   func accountFiles(caller : Principal, candidates : [Types.VaultFile]) : async [Types.VaultFile] {
-    let authority = club_domain_canister;
-    var out : [Types.VaultFile] = [];
-    // Bound authorization work; unbounded club reads remain a release blocker.
     if (candidates.size() > 200) Runtime.trap("Use bounded vault pages");
-    for (file in candidates.values()) { if (await accountFileAccess(caller, file)) out := out.concat([file]) };
-    await admitAccount(caller);
-    if (authority != club_domain_canister) return [];
-    // Re-evaluate local permissions after the final remote await.
-    out.filter(func(file) = files.find(func(f) = f.id == file.id) == ?file and not isFenced(file.club) and
-      (switch (folders.find(func(f) = f.id == file.folder_id)) { case null file.folder_id == ""; case (?folder) canViewFolder(caller, folder) }))
+    var out : [Types.VaultFile] = [];
+    var clubs : [Text] = [];
+    for (f in candidates.values()) { if (not clubs.any(func c = c == f.club)) clubs := clubs.concat([f.club]) };
+    for (club in clubs.values()) {
+      if (await currentClubMember(caller, club)) {
+        let grants = await currentRoles(caller, club);
+        out := out.concat(candidates.filter(func f = f.club == club and files.find(func row = row.id == f.id) == ?f and fileVisible(caller, f, grants)))
+      }
+    };
+    out
+  };
+
+  public shared ({ caller }) func read_vault_file_page(club : Text, team : ?Text, league : ?Text, competition : ?Text, folder : ?Text, trash : Bool, offset : Nat, expected : ?Nat) : async { #Ok : { items : [Types.VaultFileWithFolder]; next : ?Nat; revision : Nat }; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      if (offset > files.size()) return #Err("Invalid cursor");
+      let access = switch (competition) { case (?id) await getCompetitionAccess(caller, id); case null null };
+      switch (competition) {
+        case (?_) { switch access { case (?a) { if (not a.is_member or a.club_id != club) return #Err("Competition membership required") }; case null return #Err("Competition access unavailable") } };
+        case null { if (not (await currentClubMember(caller, club))) return #Err("Club membership required") }
+      };
+      let grants = await currentRoles(caller, club);
+      let revision = mediaEvidenceRevision;
+      switch expected { case (?r) if (r != revision) return #Err("Vault inventory changed"); case null if (offset != 0) return #Err("Revision required") };
+      let end = Nat.min(files.size(), offset + 200);
+      var items : [Types.VaultFileWithFolder] = [];
+      for (i in Nat.range(offset, end)) {
+        let f = files[i];
+        if (f.club == club and f.competition_id == competition and (team == null or f.team == team or f.team == null) and (league == null or f.mini_league_id == league) and (folder == null or folder == ?f.folder_id) and (f.deleted_at_ms != null) == trash) {
+          let permission = switch access { case (?a) { isGovernor(caller) or folderVisible(caller, folders.find(func x = x.id == f.folder_id) ?? { id = ""; club; team = null; parent_id = null; name = ""; restricted_roles = []; created_by = caller; created_at_ms = 0; deleted_at_ms = null; deleted_by = null; mini_league_id = null; competition_id = competition; sort_order = 0; description = null; color = null }, if (a.can_manage) [("club_admin", null), ("committee_member", null), ("coach", null), ("team_admin", null)] else []) }; case null fileVisible(caller, f, grants) };
+          if (permission) items := items.concat([withFolderJoin(f)])
+        }
+      };
+      if (isFenced(club)) return #Err("Club locked");
+      #Ok({ items; next = if (end < files.size()) ?end else null; revision })
+    } finally { removalReceiver.leave(caller) }
   };
 
   // Protected consensus reads for the opt-in local account-removal rehearsal.
