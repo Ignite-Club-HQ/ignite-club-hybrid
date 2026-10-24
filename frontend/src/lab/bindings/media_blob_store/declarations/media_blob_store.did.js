@@ -160,6 +160,12 @@ export const idlFactory = ({ IDL }) => {
       ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_blob' : IDL.Func([IDL.Text], [Result], []),
+    'delete_erased_scope_vault_blob' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [Result],
+        [],
+      ),
+    'delete_expired_vault_blob' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
     'delete_vault_blob' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text],
         [Result],

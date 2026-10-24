@@ -12,7 +12,8 @@ import {
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { registerLiveVaultFile } from "@/live/features/vault";
+import { registerLiveVaultFile, beginLiveVaultUpload, acknowledgeLiveVaultUpload } from "@/live/features/vault";
+import { candidOpt } from "@/live/features/candid";
 import type { VaultFolderView } from "./types";
 import { uploadWithinClubMediaAllowance } from "./clubMediaAllowance";
 
@@ -120,24 +121,36 @@ export async function uploadVaultItem(
       options = { ...options, file: (await compressImage(options.file)).file };
     }
     const registrationId = crypto.randomUUID();
+    await withFeatureBackend("vault", {
+      supabase: () => { throw new Error("unreachable: vault routing checked above"); },
+      icp: async (ctx) => {
+    const privatePath = storagePath.replace(/^(clubs\/[^/]+\/)/, "$1vault/");
+    const name = (options.name.trim() || "Untitled").slice(0, 160);
+    const mime = (options.file.type || "application/octet-stream").slice(0, 128);
     const blobUpload = dependencies.tryBlobUpload
       ? await dependencies.tryBlobUpload({
+          context: ctx,
           // "vault/" segment lets the canister apply the vault free-plan cap.
-          storagePath: storagePath.replace(/^(clubs\/[^/]+\/)/, "$1vault/"),
+          storagePath: privatePath,
           file: options.file,
           mime: options.file.type || "application/octet-stream",
           lock: "own",
           competitionId: options.view.type === "competition" ? options.view.competitionId : undefined,
+          beforeUpload: async (ref) => beginLiveVaultUpload(ctx, {
+            id: registrationId, folder_id: options.folderId ?? "", club: clubId,
+            team: candidOpt(options.view.type === "team" ? options.view.teamId : null),
+            mini_league_id: candidOpt(options.view.type === "mini-league" ? options.view.miniLeagueId : null),
+            competition_id: candidOpt(options.view.type === "competition" ? options.view.competitionId : null),
+            name, mime, size: BigInt(options.file.size), uploaded_by: ctx.identity.getPrincipal(),
+            file_url: `https://${ref.canister}.raw.icp0.io/${ref.path}`, blob_ref: [ref],
+            is_external_link: false, created_at_ms: 0n, deleted_at_ms: [], deleted_by: [],
+          }),
         })
       : null;
     if (!blobUpload) {
       throw new Error("Vault uploads are not available for Internet Identity members until the media canisters are configured");
     }
-    await withFeatureBackend("vault", {
-      supabase: () => {
-        throw new Error("unreachable: vault routing checked above");
-      },
-      icp: async (ctx) => {
+        await acknowledgeLiveVaultUpload(ctx, registrationId);
         await registerLiveVaultFile(
           ctx,
           registrationId,

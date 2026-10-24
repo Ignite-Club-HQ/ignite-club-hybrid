@@ -30,6 +30,20 @@ describe("recoverable shared-quota uploads", () => {
     expect(mocks.begin_upload).toHaveBeenCalledTimes(2);
     expect(mocks.begin_upload.mock.calls[0]).toEqual(mocks.begin_upload.mock.calls[1]);
   });
+  it("persists the exact ciphertext hash before reserving byte storage", async () => {
+    const before = vi.fn(async ref => {
+      expect(mocks.begin_upload).not.toHaveBeenCalled();
+      expect(ref).toEqual({ canister: "store", path, content_hash: await sha256Hex(bytes) });
+    });
+    await uploadBytesToBlobStore(target, identity, path, bytes, "image/jpeg", before);
+    expect(before).toHaveBeenCalledOnce();
+  });
+  it("does not send bytes or abort anything when the durable intent result is unknown", async () => {
+    await expect(uploadBytesToBlobStore(target, identity, path, bytes, "image/jpeg", async () => { throw new Error("intent outcome unknown"); })).rejects.toThrow("intent outcome unknown");
+    expect(mocks.begin_upload).not.toHaveBeenCalled();
+    expect(mocks.put_chunk).not.toHaveBeenCalled();
+    expect(mocks.abort_upload).not.toHaveBeenCalled();
+  });
   it("retries the exact finalization after a lost commit response without aborting", async () => {
     mocks.finalize_upload.mockRejectedValueOnce(new Error("quota commit outcome unknown"));
     const result = await uploadBytesToBlobStore(target, identity, path, bytes, "image/jpeg");

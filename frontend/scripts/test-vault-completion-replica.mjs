@@ -73,6 +73,36 @@ try {
   ok(await store.actor.set_club_domain_canister(club.canisterId));
   ok(await store.actor.set_vault_authority(vault.canisterId));
   ok(await vault.actor.set_vault_stores([store.canisterId]));
+  const journalPath = 'clubs/club-a/vault/journal-document';
+  const { createHash } = await import('node:crypto');
+  const journalPayload = Uint8Array.from([2,4,6,8]);
+  const journalRef = { canister: store.canisterId.toText(), path: journalPath, content_hash: createHash('sha256').update(journalPayload).digest('hex') };
+  const journalFile = { id: 'journal-file', folder_id: '', club: 'club-a', team: [], name: 'journal.pdf', file_url: `https://${journalRef.canister}.raw.icp0.io/${journalPath}`, size: 4n, mime: 'application/pdf', uploaded_by: governor, created_at_ms: 0n, deleted_at_ms: [], deleted_by: [], mini_league_id: [], competition_id: [], is_external_link: false, blob_ref: [journalRef] };
+  ok(await vault.actor.begin_file_upload(journalFile));
+  ok(await vault.actor.begin_file_upload(journalFile));
+  assert.ok('Err' in await vault.actor.begin_file_upload({ ...journalFile, id: 'steal-path' }));
+  assert.ok('Err' in await vault.actor.begin_file_upload({ ...journalFile, team: ['foreign-team'] }));
+  assert.ok('Err' in await vault.actor.recover_file_upload(journalFile.id));
+  vault.actor.setPrincipal(outsider);
+  assert.ok('Err' in await vault.actor.begin_file_upload(journalFile));
+  vault.actor.setPrincipal(governor);
+  const journalToken = ok(await store.actor.begin_upload(journalPath, 'application/pdf', 4n, 1));
+  ok(await store.actor.put_chunk(journalToken, 0, journalPayload));
+  ok(await store.actor.finalize_upload(journalToken));
+  assert.ok('Err' in await vault.actor.recover_file_upload(journalFile.id));
+  ok(await vault.actor.acknowledge_file_upload(journalFile.id));
+  assert.deepEqual(ok(await vault.actor.read_my_upload_page('club-a', '')).ids, ['journal-file']);
+  await pic.upgradeCanister({ canisterId: vault.canisterId, wasm: resolve(root, 'backend/vault_domain/.mops/.build/vault_domain.wasm'), sender: governor, arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  assert.equal(ok(await vault.actor.recover_file_upload(journalFile.id)).id, journalFile.id);
+  assert.equal(ok(await vault.actor.recover_file_upload(journalFile.id)).id, journalFile.id);
+  assert.deepEqual(ok(await vault.actor.read_my_upload_page('club-a', '')).ids, []);
+  const freshLifecycleFile = ok(await vault.actor.read_account_get_file(journalFile.id))[0];
+  ok(await vault.actor.sweep_vault_lifecycle());
+  assert.equal(ok(await vault.actor.read_account_get_file(journalFile.id))[0].id, freshLifecycleFile.id);
+  assert.ok('Err' in await store.actor.delete_expired_vault_blob(journalPath, journalRef.content_hash));
+  // A permanent erasure receipt is not manufactured from absent identifiers.
+  assert.equal(await club.actor.read_vault_erasure_scope('unknown-club', []), false);
+  assert.equal(await club.actor.read_vault_erasure_scope('club-a', ['unknown-team']), false);
   const path = 'clubs/club-a/vault/private-document';
   const payload = Uint8Array.from([1,2,3,4]);
   const upload = ok(await store.actor.begin_upload(path, 'application/pdf', 4n, 1));
@@ -130,7 +160,7 @@ try {
   const retainedErasure = ok(await vault.actor.read_cleanup_page('')).items.find(([id]) => id === 'erase-proof');
   assert.equal(retainedErasure[1].blob_ref.path, erasedPath);
   assert.ok('erased' in retainedErasure[1].state);
-  ok(await vault.actor.reconcile_erased_file('erase-proof'));
+  for (let i = 0; i < 4; i++) ok(await vault.actor.sweep_vault_lifecycle());
   ok(await vault.actor.reconcile_erased_file('erase-proof'));
   assert.deepEqual(await store.actor.get_content_hash(erasedPath), []);
   assert.deepEqual(ok(await vault.actor.read_account_get_file('erase-proof')), []);
@@ -176,5 +206,54 @@ try {
   assert.deepEqual(ok(await vault.actor.read_account_get_file('restore-missing')), []);
   assert.deepEqual(ok(await vault.actor.restore_backup_page(backup.id, restoreReceipt.next)), restoreReceipt);
   assert.equal(ok(await vault.actor.read_account_get_file('new-file'))[0].id, 'new-file');
-  console.log('PASS: authorized cleanup resumes after upgrade/lost acknowledgement; unknown uploads and replacement hashes preserved; pending reference registration denied; erased provenance survives upgrade and governor-only exact cleanup is idempotent; outsider/direct-query denial, ancestor restrictions, 205-file paging, authorized pins, bounded backups and erased-file resurrection denial.');
+  // Concrete retention rules: Free expires at 180 days; paid/active trial survives.
+  const retentionCases = [['ret-free', false, false], ['ret-paid', true, false], ['ret-trial', false, true], ['ret-expired-trial', false, true]];
+  const fixtureNow = BigInt(await pic.getTime());
+  for (const [id, paid, trial] of retentionCases) {
+    ok(await club.actor.create_club(id, id, id, [], []));
+    ok(await club.actor.save_club_subscription({ club_id: id, is_pro: paid, is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false, is_trial: trial, trial_ends_at_ms: trial ? [fixtureNow + BigInt((id === 'ret-trial' ? 400 : 1) * 86_400_000)] : [], plan: paid ? 'pro' : 'free', team_limit: [], activated_at_ms: [], cancelled_at_ms: [], expires_at_ms: [] }));
+    const p = `clubs/${id}/vault/retention.pdf`;
+    const token = ok(await store.actor.begin_upload(p, 'application/pdf', 4n, 1));
+    ok(await store.actor.put_chunk(token, 0, payload));
+    const completed = ok(await store.actor.finalize_upload(token));
+    ok(await vault.actor.register_file(id, '', id, [], 'retention.pdf', `https://${ref.canister}.raw.icp0.io/${p}`, 4n, 'application/pdf', false, [{ canister: ref.canister, path: p, content_hash: completed.content_hash }], [], []));
+  }
+  await pic.advanceTime(180 * 86_400_000);
+  // At the boundary, not strictly expired yet.
+  assert.equal((await store.actor.get_content_hash('clubs/ret-free/vault/retention.pdf')).length, 1);
+  await pic.advanceTime(86_400_000);
+  for (let i = 0; i < 20; i++) ok(await vault.actor.sweep_vault_lifecycle());
+  for (const id of ['ret-free', 'ret-expired-trial']) {
+    assert.deepEqual(await store.actor.get_content_hash(`clubs/${id}/vault/retention.pdf`), []);
+    assert.deepEqual(ok(await vault.actor.read_account_get_file(id)), []);
+  }
+  for (const id of ['ret-paid', 'ret-trial']) {
+    assert.equal((await store.actor.get_content_hash(`clubs/${id}/vault/retention.pdf`)).length, 1);
+    assert.equal(ok(await vault.actor.read_account_get_file(id))[0].id, id);
+  }
+  const team = { id: 'erase-team', club_id: 'ret-trial', name: 'Erase team', archived: false, is_active: true, is_shell: false, playhq_auto_create_events: false, age_group: [], deleted_at_ms: [], description: [], division: [], folder_id: [], gender: [], logo_url: [], playhq_competition_id: [], playhq_team_id: [], shell_claim_token: [], shell_claimed_at_ms: [], shell_claimed_by: [], shell_contact_email: [], shell_contact_name: [], shell_invited_by: [], team_type: [] };
+  ok(await club.actor.save_team(team));
+  const teamPath = 'clubs/ret-trial/vault/teams/erase-team/team.pdf';
+  const teamUpload = ok(await store.actor.begin_upload(teamPath, 'application/pdf', 4n, 1));
+  ok(await store.actor.put_chunk(teamUpload, 0, payload));
+  const teamBytes = ok(await store.actor.finalize_upload(teamUpload));
+  ok(await vault.actor.register_file('team-erasure', '', 'ret-trial', [team.id], 'team.pdf', `https://${ref.canister}.raw.icp0.io/${teamPath}`, 4n, 'application/pdf', false, [{ canister: ref.canister, path: teamPath, content_hash: teamBytes.content_hash }], [], []));
+  ok(await club.actor.soft_delete_team(team.id));
+  assert.equal(await club.actor.read_vault_erasure_scope('ret-trial', [team.id]), false);
+  ok(await club.actor.delete_team_permanent(team.id));
+  assert.equal(await club.actor.read_vault_erasure_scope('ret-trial', [team.id]), true);
+  await pic.upgradeCanister({ canisterId: club.canisterId, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'), sender: governor, arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  assert.equal(await club.actor.read_vault_erasure_scope('ret-trial', [team.id]), true);
+  for (let i = 0; i < 20; i++) ok(await vault.actor.sweep_vault_lifecycle());
+  assert.deepEqual(await store.actor.get_content_hash(teamPath), []);
+  assert.deepEqual(ok(await vault.actor.read_account_get_file('team-erasure')), []);
+  assert.equal((await store.actor.get_content_hash('clubs/ret-trial/vault/retention.pdf')).length, 1);
+  // Explicit club erasure is authoritative even for paid retained content.
+  ok(await club.actor.soft_delete_club('ret-paid', true));
+  ok(await club.actor.delete_club_permanent('ret-paid'));
+  assert.equal(await club.actor.read_vault_erasure_scope('ret-paid', []), true);
+  for (let i = 0; i < 20; i++) ok(await vault.actor.sweep_vault_lifecycle());
+  assert.deepEqual(await store.actor.get_content_hash('clubs/ret-paid/vault/retention.pdf'), []);
+  assert.deepEqual(ok(await vault.actor.read_account_get_file('ret-paid')), []);
+  console.log('PASS: durable pre-byte intent/path locks; unresolved upload refusal; acknowledged upload recovered exactly once after upgrade; automatic Free/expired-trial retention removes bytes and metadata, paid/active-trial survives, permanent paid-club erasure cleans exact bytes; authorized cleanup/erasure retry, replacement preservation, 205-file paging, pins and backups.');
 } finally { await pic?.tearDown(); await server.stop(); }

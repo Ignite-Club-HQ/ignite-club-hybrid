@@ -13,10 +13,12 @@ type IgniteSupabaseClient = SupabaseClient<Database>;
 const uploadMocks = vi.hoisted(() => ({
   mode: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "icp" | "supabase",
   registerFile: vi.fn(),
+  beginUpload: vi.fn().mockResolvedValue(undefined),
+  acknowledgeUpload: vi.fn().mockResolvedValue(undefined),
 }));
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 vi.mock("./clubMediaAllowance", () => ({ uploadWithinClubMediaAllowance: (_club: unknown, _bytes: unknown, upload: () => Promise<unknown>) => upload() }));
-const icpContext = { identity: {}, target: { alias: "test" } };
+const icpContext = { identity: { getPrincipal: () => "principal-a" }, target: { alias: "test" } };
 
 vi.mock("@/live/loadBackendRouting", () => ({
   isFeatureRoutedToIcp: (feature: string) => feature === "vault" && uploadMocks.mode === "icp",
@@ -27,6 +29,8 @@ vi.mock("@/live/featureRouter", () => ({
 }));
 vi.mock("@/live/features/vault", () => ({
   registerLiveVaultFile: (...args: unknown[]) => uploadMocks.registerFile(...args),
+  beginLiveVaultUpload: (...args: unknown[]) => uploadMocks.beginUpload(...args),
+  acknowledgeLiveVaultUpload: (...args: unknown[]) => uploadMocks.acknowledgeUpload(...args),
 }));
 
 describe("Vault upload scope and storage paths", () => {
@@ -326,6 +330,40 @@ describe.runIf(supabaseMode)("Vault upload transaction — Supabase", () => {
 });
 
 describe.runIf(!supabaseMode)("Vault upload transaction — ICP", () => {
+  it("journals exact provenance before bytes and acknowledges before registering", async () => {
+    uploadMocks.mode = "icp";
+    const events: string[] = [];
+    uploadMocks.beginUpload.mockImplementation(async () => { events.push("intent"); });
+    uploadMocks.acknowledgeUpload.mockImplementation(async () => { events.push("acknowledge"); });
+    uploadMocks.registerFile.mockImplementation(async () => { events.push("register"); });
+    const ref = { canister: "store-a", path: "clubs/club-a/vault/document", content_hash: "cipher-hash" };
+    const tryBlobUpload = vi.fn(async (args) => {
+      await args.beforeUpload(ref);
+      events.push("bytes");
+      return { url: `https://${ref.canister}.raw.icp0.io/${ref.path}`, blobRef: ref };
+    });
+    const fake = uploadTransaction();
+    await uploadVaultItem({ kind: "file", file: new File(["x"], "x.pdf"), name: "x.pdf", userId: "principal-a", folderId: null, view: { type: "club", clubId: "club-a", clubName: "Club A" } }, fake.client, { ...fake.dependencies, tryBlobUpload });
+    expect(events).toEqual(["intent", "bytes", "acknowledge", "register"]);
+    const intent = uploadMocks.beginUpload.mock.calls.at(-1)?.[1];
+    expect(intent).toMatchObject({ club: "club-a", size: 1n, blob_ref: [ref], uploaded_by: "principal-a" });
+    expect(uploadMocks.acknowledgeUpload.mock.calls.at(-1)?.[1]).toBe(intent.id);
+    expect(uploadMocks.registerFile.mock.calls.at(-1)?.[1]).toBe(intent.id);
+    expect(fake.dependencies.compensateUpload).not.toHaveBeenCalled();
+    uploadMocks.beginUpload.mockReset().mockResolvedValue(undefined);
+    uploadMocks.acknowledgeUpload.mockReset().mockResolvedValue(undefined);
+    uploadMocks.registerFile.mockReset().mockResolvedValue(undefined);
+  });
+  it("stops before sending bytes when durable intent is refused", async () => {
+    uploadMocks.mode = "icp";
+    const denied = new Error("intent unavailable");
+    uploadMocks.beginUpload.mockRejectedValueOnce(denied);
+    const bytes = vi.fn(); const fake = uploadTransaction();
+    const tryBlobUpload = vi.fn(async args => { await args.beforeUpload({ canister: "store-a", path: "clubs/club-a/vault/x", content_hash: "hash" }); bytes(); return null; });
+    await expect(uploadVaultItem({ kind: "file", file: new File(["x"], "x.txt"), name: "x", userId: "principal-a", folderId: null, view: { type: "club", clubId: "club-a", clubName: "Club A" } }, fake.client, { ...fake.dependencies, tryBlobUpload })).rejects.toBe(denied);
+    expect(bytes).not.toHaveBeenCalled();
+    expect(fake.dependencies.compensateUpload).not.toHaveBeenCalled();
+  });
   it("uploads encrypted bytes and registers metadata without Supabase storage or quota calls", async () => {
     uploadMocks.mode = "icp";
     uploadMocks.registerFile.mockReset().mockResolvedValue(undefined);

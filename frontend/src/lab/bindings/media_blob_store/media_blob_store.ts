@@ -218,6 +218,8 @@ export interface media_blob_storeInterface {
      */
     cycles_balance(): Promise<bigint>;
     delete_blob(path: string): Promise<Result>;
+    delete_erased_scope_vault_blob(path: string, expected_hash: string): Promise<Result>;
+    delete_expired_vault_blob(path: string, expected_hash: string): Promise<Result>;
     delete_vault_blob(subject: Principal, path: string, expected_hash: string): Promise<Result>;
     enable_retained_media_quota(): Promise<Result>;
     enable_shared_media_quota(): Promise<Result>;
@@ -434,6 +436,14 @@ export class Media_blob_store implements media_blob_storeInterface {
     }
     async delete_blob(arg0: string): Promise<Result> {
         const result = await this.actor.delete_blob(arg0);
+        return from_candid_Result_n1(result);
+    }
+    async delete_erased_scope_vault_blob(arg0: string, arg1: string): Promise<Result> {
+        const result = await this.actor.delete_erased_scope_vault_blob(arg0, arg1);
+        return from_candid_Result_n1(result);
+    }
+    async delete_expired_vault_blob(arg0: string, arg1: string): Promise<Result> {
+        const result = await this.actor.delete_expired_vault_blob(arg0, arg1);
         return from_candid_Result_n1(result);
     }
     async delete_vault_blob(arg0: Principal, arg1: string, arg2: string): Promise<Result> {

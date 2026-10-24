@@ -84,10 +84,18 @@ type Page =
  };
 type Main = 
  service {
+   acknowledge_file_upload: (id: text) -> (variant {
+                                             Err: text;
+                                             Ok;
+                                           });
    begin_file_cleanup: (id: text) -> (variant {
                                         Err: text;
                                         Ok: VaultFile;
                                       });
+   begin_file_upload: (file: VaultFile) -> (variant {
+                                              Err: text;
+                                              Ok;
+                                            });
    clear_pinned_vault: (chat_type: text, chat_id: text) ->
     (variant {
        Err: text;
@@ -332,6 +340,14 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_my_upload_page: (club: text, after: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             ids: vec text;
+             next: opt text;
+           };
+     });
    read_resource_club: (kind: text, id: text) ->
     (variant {
        Err: text;
@@ -353,6 +369,10 @@ type Main =
                                            Err: text;
                                            Ok;
                                          });
+   recover_file_upload: (id: text) -> (variant {
+                                         Err: text;
+                                         Ok: VaultFile;
+                                       });
    register_file: (id: text, folder_id: text, club: text, team: opt text,
     name: text, file_url: text, size: nat64, mime: text, is_external_link:
     bool, blob_ref: opt BlobRef, mini_league_id: opt text, competition_id:
@@ -438,6 +458,10 @@ type Main =
                                                 Err: text;
                                                 Ok;
                                               });
+   sweep_vault_lifecycle: () -> (variant {
+                                   Err: text;
+                                   Ok;
+                                 });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;

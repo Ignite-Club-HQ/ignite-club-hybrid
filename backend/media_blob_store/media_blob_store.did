@@ -177,6 +177,9 @@ service : {
   /// Public: remaining cycles (shown in admin settings).
   cycles_balance: () -> (nat) query;
   delete_blob: (path: text) -> (Result);
+  delete_erased_scope_vault_blob: (path: text, expected_hash: text) ->
+   (Result);
+  delete_expired_vault_blob: (path: text, expected_hash: text) -> (Result);
   delete_vault_blob: (subject: principal, path: text, expected_hash: 
    text) -> (Result);
   enable_retained_media_quota: () -> (Result);

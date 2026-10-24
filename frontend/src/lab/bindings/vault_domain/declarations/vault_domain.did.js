@@ -126,9 +126,19 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat,
   });
   const Main = IDL.Service({
+    'acknowledge_file_upload' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'begin_file_cleanup' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'begin_file_upload' : IDL.Func(
+        [VaultFile],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'clear_pinned_vault' : IDL.Func(
@@ -438,6 +448,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
         [],
       ),
+    'read_my_upload_page' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'ids' : IDL.Vec(IDL.Text),
+              'next' : IDL.Opt(IDL.Text),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_resource_club' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
@@ -469,6 +492,11 @@ export const idlFactory = ({ IDL }) => {
     'reconcile_erased_file' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'recover_file_upload' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
         [],
       ),
     'register_file' : IDL.Func(
@@ -580,6 +608,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_vault_stores' : IDL.Func(
         [IDL.Vec(IDL.Principal)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'sweep_vault_lifecycle' : IDL.Func(
+        [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
