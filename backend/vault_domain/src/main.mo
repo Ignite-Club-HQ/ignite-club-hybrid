@@ -22,6 +22,7 @@ import Types "types";
 import PinScope "pinScope";
 import BackupPages "backupPages";
 import UploadJournal "uploadJournal";
+import ErasureFolders "erasureFolders";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
@@ -714,15 +715,23 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public shared ({ caller }) func read_my_upload_page(club : Text, after : Text) : async { #Ok : { ids : [Text]; next : ?Text }; #Err : Text } {
     auth(caller); await admitAccount(caller);
-    if (not (await currentClubMember(caller, club))) return #Err("Club membership required");
+    // Empty club scans only the caller's own journal, not club membership/data.
+    if (club != "" and not (await currentClubMember(caller, club))) return #Err("Club membership required");
     var scanned = 0; var ids : [Text] = []; var last = after;
     for ((id, intent) in uploadIntents.entriesFrom(after)) {
       if (id == after and after != "") continue;
       if (scanned == 40) return #Ok({ ids; next = ?last });
       scanned += 1; last := id;
-      if (intent.ready and intent.file.club == club and intent.file.uploaded_by.equal(caller) and deletionIntents.get(id) == null and not files.any(func f = f.id == id)) ids := ids.concat([id])
+      if ((club == "" or intent.file.club == club) and intent.file.uploaded_by.equal(caller) and deletionIntents.get(id) == null and not files.any(func f = f.id == id)) ids := ids.concat([id])
     };
     #Ok({ ids; next = null })
+  };
+
+  public shared ({ caller }) func read_my_upload_intent(id : Text) : async { #Ok : UploadJournal.Intent; #Err : Text } {
+    auth(caller); await admitAccount(caller);
+    let intent = uploadIntents.get(id) ?? return #Err("Upload intent unavailable");
+    if (not intent.file.uploaded_by.equal(caller) or deletionIntents.get(id) != null) return #Err("Upload owner required");
+    #Ok(intent)
   };
 
   public shared ({ caller }) func register_file(id : Text, folder_id : Text, club : Text, team : ?Text, name : Text, file_url : Text, size : Nat64, mime : Text, is_external_link : Bool, blob_ref : ?Types.BlobRef, mini_league_id : ?Text, competition_id : ?Text) : async { #Ok : Types.VaultFile; #Err : Text } {
@@ -1645,13 +1654,11 @@ persistent actor class Main(governorInit : Principal) = this {
     let keepBackups = backups.filter(func(b : Types.Backup) : Bool = not b.created_by.equal(caller));
     removed += backups.size() - keepBackups.size();
     // Other administrators' snapshots must not retain the erased person's metadata.
-    backups := keepBackups.map(func b = { b with
-      files = b.files.filter(func f = not f.uploaded_by.equal(caller));
-      folders = b.folders.filter(func f = not f.created_by.equal(caller)) });
-    let keepFolders = folders.filter(func(folder : Types.VaultFolder) : Bool =
-      not folder.created_by.equal(caller)
-      or files.any(func(f : Types.VaultFile) : Bool = f.folder_id == folder.id)
-      or folders.any(func(other : Types.VaultFolder) : Bool = other.parent_id == ?folder.id and not other.created_by.equal(caller)));
+    backups := keepBackups.map(func b {
+      let remaining = b.files.filter(func f = not f.uploaded_by.equal(caller));
+      { b with files = remaining; folders = ErasureFolders.scrub(caller, b.folders, remaining) }
+    });
+    let keepFolders = ErasureFolders.scrub(caller, folders, files);
     removed += folders.size() - keepFolders.size(); folders := keepFolders;
     let keepRoles = roles.filter(func r = not r.user.equal(caller));
     removed += roles.size() - keepRoles.size(); roles := keepRoles;
