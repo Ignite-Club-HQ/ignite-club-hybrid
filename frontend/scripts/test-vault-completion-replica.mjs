@@ -231,6 +231,23 @@ try {
     assert.equal((await store.actor.get_content_hash(`clubs/${id}/vault/retention.pdf`)).length, 1);
     assert.equal(ok(await vault.actor.read_account_get_file(id))[0].id, id);
   }
+  const team = { id: 'erase-team', club_id: 'ret-trial', name: 'Erase team', archived: false, is_active: true, is_shell: false, playhq_auto_create_events: false, age_group: [], deleted_at_ms: [], description: [], division: [], folder_id: [], gender: [], logo_url: [], playhq_competition_id: [], playhq_team_id: [], shell_claim_token: [], shell_claimed_at_ms: [], shell_claimed_by: [], shell_contact_email: [], shell_contact_name: [], shell_invited_by: [], team_type: [] };
+  ok(await club.actor.save_team(team));
+  const teamPath = 'clubs/ret-trial/vault/teams/erase-team/team.pdf';
+  const teamUpload = ok(await store.actor.begin_upload(teamPath, 'application/pdf', 4n, 1));
+  ok(await store.actor.put_chunk(teamUpload, 0, payload));
+  const teamBytes = ok(await store.actor.finalize_upload(teamUpload));
+  ok(await vault.actor.register_file('team-erasure', '', 'ret-trial', [team.id], 'team.pdf', `https://${ref.canister}.raw.icp0.io/${teamPath}`, 4n, 'application/pdf', false, [{ canister: ref.canister, path: teamPath, content_hash: teamBytes.content_hash }], [], []));
+  ok(await club.actor.soft_delete_team(team.id));
+  assert.equal(await club.actor.read_vault_erasure_scope('ret-trial', [team.id]), false);
+  ok(await club.actor.delete_team_permanent(team.id));
+  assert.equal(await club.actor.read_vault_erasure_scope('ret-trial', [team.id]), true);
+  await pic.upgradeCanister({ canisterId: club.canisterId, wasm: resolve(root, 'backend/club_domain/.mops/.build/club_domain.wasm'), sender: governor, arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+  assert.equal(await club.actor.read_vault_erasure_scope('ret-trial', [team.id]), true);
+  for (let i = 0; i < 20; i++) ok(await vault.actor.sweep_vault_lifecycle());
+  assert.deepEqual(await store.actor.get_content_hash(teamPath), []);
+  assert.deepEqual(ok(await vault.actor.read_account_get_file('team-erasure')), []);
+  assert.equal((await store.actor.get_content_hash('clubs/ret-trial/vault/retention.pdf')).length, 1);
   // Explicit club erasure is authoritative even for paid retained content.
   ok(await club.actor.soft_delete_club('ret-paid', true));
   ok(await club.actor.delete_club_permanent('ret-paid'));
