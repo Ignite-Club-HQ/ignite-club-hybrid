@@ -642,6 +642,24 @@ persistent actor class Main(governorInit : Principal) = this {
     };
     false
   };
+  public shared ({ caller }) func read_my_competition_cards() : async { #Ok : [{ competition : Types.Competition; entries : [Types.TeamEntry] }]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account unavailable");
+    try {
+      auth(caller); await admitAccount(caller);
+      if (competitions.size() > 500) return #Err("Competition inventory requires paging");
+      var rows : [{ competition : Types.Competition; entries : [Types.TeamEntry] }] = [];
+      for (item in competitions.values()) {
+        await syncForCompetition(caller, item.id);
+        let visible = await privateParticipant(caller, item.id);
+        let invited = if (visible) false else await invitedManager(caller, item.id);
+        if (removalReceiver.denied(caller)) return #Err("Account access changed");
+        if ((visible or invited) and not compFenced(item.id) and competitions.any(func current = current == item)) {
+          rows := rows.concat([{ competition = item; entries = entries.filter(func e = e.competition_id == item.id) }]);
+        }
+      };
+      #Ok(rows)
+    } finally { removalReceiver.leave(caller) }
+  };
   public shared ({ caller }) func read_resource_club(kind : Text, id : Text) : async { #Ok : ?Text; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
