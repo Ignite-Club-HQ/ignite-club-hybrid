@@ -675,7 +675,7 @@ function SupabaseCompetitionDetailPage() {
         />
       )}
 
-      {competition.status !== "draft" && <CompetitionEventsList competitionId={id!} />}
+      {competition.status !== "draft" && <><CompetitionWelcomeMessage competitionId={id ?? ""} /><CompetitionEventsList competitionId={id!} /></>}
 
 
       {isAdmin && !organizerHasPro && !proLoading && organizerClubId && (

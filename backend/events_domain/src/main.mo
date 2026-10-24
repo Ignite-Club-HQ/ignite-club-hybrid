@@ -2815,13 +2815,13 @@ persistent actor class Main(governorInit : Principal) = this {
           if(d.user_id!=stats[i].user_id or (d.user_id!=null and d.child_id!=null)) return #Err("Player identity mismatch");
           switch(d.child_id) { case (?id) { if(not valid(id)) return #Err("Invalid child identity") };case null {} };
           switch(d.position_seconds) { case (?positions) {
-            if(positions.size()>32) return #Err("Position detail exceeds limit");
+            if(positions.size() > 32) return #Err("Position detail exceeds limit");
             var total:Nat=0;var names:[Text]=[];
             for((pos,seconds) in positions.values()) {
-              if(pos.size()==0 or pos.size()>64 or names.any(func n = n==pos)) return #Err("Invalid position detail");
+              if(pos.size()==0 or pos.size() > 64 or names.any(func n = n==pos)) return #Err("Invalid position detail");
               names:=names.concat([pos]);total+=Nat32.toNat(seconds)
             };
-            if(total>Nat32.toNat(stats[i].minutes_played)) return #Err("Position time exceeds playing time")
+            if(total > Nat32.toNat(stats[i].minutes_played)) return #Err("Position time exceeds playing time")
           };case null {} };i+=1
         }
       };case null {};
