@@ -1,7 +1,7 @@
 import { EVENT_TOKEN_PATTERN } from "@/lib/chatEventToken";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { selectCachedProfilesByIds, fetchProfilesWithCache } from "@/lib/profileCache";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveLatestMessagesPage } from "@/live/features/messaging";
@@ -92,16 +92,23 @@ export function useChatSharedMedia(
       // ICP branch: conversation ids are the canister's native identifier
       // for every chat type here (club/team ids double as conversation ids
       // by the same convention the chat pages already use; group/dm ids are
-      // real conversation ids). There is no vault/file-token concept on the
-      // canister, so derived items are limited to attachment images and
-      // plain-text links — same derivation shape as the Supabase branch,
-      // minus what the canister genuinely has no equivalent for.
+      // real conversation ids). Vault tokens use the same parser as legacy
+      // messages, with destination-authorized metadata reads below.
       if (isFeatureRoutedToIcp("messaging") && chatId) {
         return withFeatureBackend("messaging", {
           supabase: async () => [],
           icp: async (ctx) => {
             const page = await listLiveLatestMessagesPage(ctx, chatId, null, Math.min(100, Math.max(60, limit)));
             const messages = page.messages;
+            // Full viewer scans a bounded recent window; previews use one page.
+            let cursor = page.next_sequence?.[0];
+            for (let i = 1; limit > 100 && cursor !== undefined && i < 6; i++) {
+              const older = await listLiveLatestMessagesPage(ctx, chatId, Number(cursor), 100);
+              messages.push(...older.messages);
+              const next = older.next_sequence?.[0];
+              if (next === cursor) break;
+              cursor = next;
+            }
             const items: SharedMediaItem[] = [];
             for (const m of messages) {
               const createdAt = new Date(Number(m.created_at_ms)).toISOString();
@@ -149,7 +156,24 @@ export function useChatSharedMedia(
               }
             }
             items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-            return [...new Map(items.map(item => [item.id, item])).values()].slice(0, limit);
+            const result = [...new Map(items.map(item => [item.id, item])).values()].slice(0, limit);
+            const profiles = await fetchProfilesWithCache([...new Set(result.map(item => item.author_id))]);
+            const { getLiveVaultFile, getLiveVaultFolder } = await import("@/live/features/vault");
+            await Promise.all(result.map(async item => {
+              const profile = profiles.get(item.author_id);
+              item.author_name = profile?.display_name ?? null;
+              item.author_avatar = profile?.avatar_url ?? null;
+              if (!item.vaultFileId && !item.vaultFolderId) return;
+              try {
+                const fileId = item.vaultFileId, folderId = item.vaultFolderId;
+                const metadata = await withFeatureBackend("vault", {
+                  supabase: async () => null,
+                  icp: vaultCtx => fileId ? getLiveVaultFile(vaultCtx, fileId) : folderId ? getLiveVaultFolder(vaultCtx, folderId, options?.competitionId) : Promise.resolve(null),
+                }, options?.clubId ? { clubId: options.clubId } : fileId ? { vaultFileId: fileId } : { vaultFolderId: folderId ?? "" });
+                if (metadata) item.label = metadata.name;
+              } catch { /* The token remains navigable; destination still checks access. */ }
+            }));
+            return result;
           }}, chatType === "dm" || chatType === "broadcast" ? { shared: "person" } : options?.clubId ? { clubId: options.clubId } : chatType === "team" ? { teamId: chatId } : chatType === "club" ? { clubId: chatId } : { conversationId: chatId });
       }
 
