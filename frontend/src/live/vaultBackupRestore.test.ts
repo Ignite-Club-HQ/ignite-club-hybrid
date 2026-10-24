@@ -5,13 +5,14 @@ import { restoreLiveVaultBackupWithMedia } from "./features/vault";
 const m = vi.hoisted(() => ({
   getBackup: vi.fn(),
   restoreBackup: vi.fn(),
+  restorePage: vi.fn(),
   grantClub: vi.fn(),
   fetch: vi.fn(),
 }));
 
 vi.mock("./domains", () => ({
   connectLiveVaultDomain: async () => ({
-    actor: { get_backup: m.getBackup, restore_backup: m.restoreBackup },
+    actor: { read_account_get_backup: m.getBackup, restore_backup: m.restoreBackup, restore_backup_page: m.restorePage },
   }),
   connectLivePiiAccessControl: async () => ({
     actor: { grant_pii_read_club: m.grantClub },
@@ -29,9 +30,10 @@ const file = (path: string | null) => ({
 
 describe("vault backup restore with media recovery", () => {
   beforeEach(() => {
-    m.getBackup.mockReset(); m.restoreBackup.mockReset(); m.grantClub.mockReset(); m.fetch.mockReset();
+    m.getBackup.mockReset(); m.restoreBackup.mockReset(); m.restorePage.mockReset(); m.grantClub.mockReset(); m.fetch.mockReset();
     vi.stubGlobal("fetch", m.fetch);
     m.restoreBackup.mockResolvedValue({ Ok: 2n });
+    m.restorePage.mockResolvedValue({ Ok: { next: 2n, restored: 2n, skipped: 0n, complete: true } });
     m.grantClub.mockResolvedValue({ Ok: null });
     m.fetch.mockResolvedValue({ ok: true });
   });

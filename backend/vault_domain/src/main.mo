@@ -1265,6 +1265,7 @@ persistent actor class Main(governorInit : Principal) = this {
         let total = backup.folders.size() + backup.files.size();
         let end = Nat.min(total, next + 40);
         while (next < end) {
+          let rowRevision = mediaEvidenceRevision;
           var inserted = false;
           if (next < backup.folders.size()) {
             let f = backup.folders[next];
@@ -1278,6 +1279,7 @@ persistent actor class Main(governorInit : Principal) = this {
                 }
               };
               await admitAccount(caller);
+              if (mediaEvidenceRevision != rowRevision) return #Err("Vault changed during restore; resume from acknowledged cursor");
               if (allowed and parentAllowed and isAppAdmin(caller) and transferFences.size() == 0 and not isFenced(f.club) and not folders.any(func row = row.id == f.id) and
                 (f.parent_id == null or folders.any(func p = ?p.id == f.parent_id and p.deleted_at_ms == null and p.club == f.club and p.team == f.team and p.competition_id == f.competition_id and p.mini_league_id == f.mini_league_id))) {
                 folders := folders.concat([f]); inserted := true; mediaEvidenceRevision += 1
@@ -1293,6 +1295,7 @@ persistent actor class Main(governorInit : Principal) = this {
               };
               let allowed = await canWrite(caller, f.club, f.team, f.competition_id);
               await admitAccount(caller);
+              if (mediaEvidenceRevision != rowRevision) return #Err("Vault changed during restore; resume from acknowledged cursor");
               if (available and destinationAllowed and allowed and isAppAdmin(caller) and transferFences.size() == 0 and not isFenced(f.club) and deletionIntents.get(f.id) == null and not files.any(func row = row.id == f.id) and
                 (f.folder_id == "" or folders.any(func p = p.id == f.folder_id and p.deleted_at_ms == null and p.club == f.club and p.team == f.team and p.competition_id == f.competition_id and p.mini_league_id == f.mini_league_id))) {
                 files := files.concat([f]); inserted := true; mediaEvidenceRevision += 1
@@ -1316,7 +1319,7 @@ persistent actor class Main(governorInit : Principal) = this {
     await admitAccount(caller);
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
-    if (backupRestoreLocks.entries().any(func entry = entry.0.endsWith(":" # id))) return #Err("Backup restore in progress");
+    if (backupRestoreLocks.entries().any(func entry = entry.0.endsWith(#text(":" # id)))) return #Err("Backup restore in progress");
     if (not backups.any(func(b : Types.Backup) : Bool = b.id == id)) return #Err("Backup not found");
     backups := backups.filter(func(b : Types.Backup) : Bool = b.id != id);
     #Ok

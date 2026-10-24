@@ -722,15 +722,28 @@ export async function createLiveVaultBackup(ctx: FeatureBackendContext, label: s
 }
 export async function listLiveVaultBackups(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_backups(), "List backups");
+  return unwrapCandid(actor.read_account_list_backups(), "List backups");
 }
 export async function getLiveVaultBackup(ctx: FeatureBackendContext, id: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_backup(id), "Get backup");
+  return unwrapCandid(actor.read_account_get_backup(id), "Get backup");
 }
 export async function restoreLiveVaultBackup(ctx: FeatureBackendContext, id: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.restore_backup(id), "Restore backup");
+  let cursor = 0n;
+  for (;;) {
+    let receipt;
+    try {
+      receipt = await unwrapCandid(actor.restore_backup_page(id, cursor), "Restore backup page");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (cursor !== 0n || !/has no (?:query |update |)method|method not found|IC0536|is not a function/i.test(message)) throw error;
+      return unwrapCandid(actor.restore_backup(id), "Restore legacy backup");
+    }
+    if (receipt.complete) return receipt.restored;
+    if (receipt.next <= cursor) throw new Error("Invalid backup restore continuation");
+    cursor = receipt.next;
+  }
 }
 export async function deleteLiveVaultBackup(ctx: FeatureBackendContext, id: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
@@ -746,13 +759,8 @@ export type LiveVaultBackupRestoreReport = {
 };
 
 /**
- * Restores a vault metadata backup, then repairs media access: every
- * restored file's blob keeps its immutable ciphertext in media_blob_store,
- * so recovery means re-granting the club read access on the matching
- * pii_access_control record and confirming the bytes still load. PII
- * records are never re-registered here — re-registration would need the
- * plaintext, which a backup deliberately does not hold. Grant and byte
- * problems are reported, never thrown, so a partial restore still completes.
+ * Restores metadata through durable bounded receipts and checks physical
+ * availability. This never widens decryption grants or recreates missing bytes.
  */
 export async function restoreLiveVaultBackupWithMedia(
   ctx: FeatureBackendContext,
