@@ -124,7 +124,7 @@ import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import { ensureLiveClubConversations, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { ensureLiveClubConversations, isLiveConversationAbsent, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
@@ -602,6 +602,7 @@ export default function TeamChatPage() {
             const page = await readIcpThreadPage(
               () => withReadDeadline(listLiveLatestMessagesPage(ctx, teamId, null, MESSAGES_PER_PAGE), 'Chat messages'),
               clubId ? () => ensureLiveClubConversations(ctx, clubId) : undefined,
+              () => isLiveConversationAbsent(ctx, teamId),
             );
             const messages = await mapLiveTeamRows(ctx, page.messages);
             const olderCursor =

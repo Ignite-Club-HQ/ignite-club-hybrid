@@ -1,11 +1,17 @@
 /** Existing conversations must open before optional provisioning or enrichment. */
-export async function readIcpThreadPage<T>(read: () => Promise<T>, provision?: () => Promise<unknown>): Promise<T> {
+export async function readIcpThreadPage<T>(read: () => Promise<T>, provision?: () => Promise<unknown>, confirmAbsent?: () => Promise<boolean>): Promise<T> {
   try { return await read(); }
   catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // Only an explicit missing conversation warrants one provisioning attempt.
     // Transport/admission failures must never manufacture a replacement room.
-    if (!provision || !/(?:Conversation|Chat) not found/i.test(message)) throw error;
+    if (!provision) throw error;
+    const explicitlyMissing = /(?:Conversation|Chat) not found/i.test(message);
+    // Current canisters also return "access forbidden" when there is no
+    // conversation. Never treat that refusal itself as proof of absence:
+    // ask the same caller-authorized, same-canister location reader first.
+    const ambiguousAbsence = /^(?:Open conversation|List latest messages|List messages) failed: Conversation access forbidden$/.test(message);
+    if (!explicitlyMissing && !(ambiguousAbsence && confirmAbsent && await confirmAbsent())) throw error;
     await provision();
     return read();
   }

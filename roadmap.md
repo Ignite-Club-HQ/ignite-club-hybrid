@@ -1,3 +1,7 @@
+## Chat threads after top-ups — 24 October 2026
+- [x] Live read-only health confirms router 5.28T, G2 club 5.71T and messaging 5.91T; earlier fuel-only diagnosis was unproven. Repair team/club missing-conversation recovery: current canisters return access forbidden for absence, so require same-context authorized location evidence before one provisioning attempt. Existing/denied threads and uncertain mutations must not trigger replacement/replay.
+- [ ] Signed-in failing-thread readback and live reciprocal wiring inspection: unavailable Internet Identity session and governor credentials; obtain affected club/thread and fresh error if it persists. No deployments or fuel purchases.
+
 ## Weekly multi-group health report
 - [x] Extended read-only weekly report to base mainnet/shared services and every group provision inventory, including dedicated photo stores, with principal deduplication and invalid-inventory/read-failure handling. All 11 tests pass; live report read all 32 canisters (13 per group, five shared services and frontend). Five low-balance warnings; no fuel purchases, canister changes or workflow dispatch. Existing 1T warning threshold is not proof of inter-canister call affordability or the cause of chat failures.
 

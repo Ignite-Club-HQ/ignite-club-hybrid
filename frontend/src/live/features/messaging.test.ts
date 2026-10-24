@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   my_unread_counts: vi.fn(),
   send_message: vi.fn(),
   submit_content_report: vi.fn(),
+  read_conversation_club: vi.fn(),
 }));
 
 vi.mock("../domains", () => ({
@@ -20,6 +21,7 @@ vi.mock("../domains", () => ({
       my_unread_counts: mocks.my_unread_counts,
       send_message: mocks.send_message,
       submit_content_report: mocks.submit_content_report,
+      read_conversation_club: mocks.read_conversation_club,
     },
   })),
 }));
@@ -32,10 +34,27 @@ import {
   myLiveUnreadCounts,
   sendLiveMessage,
   submitLiveContentReport,
+  isLiveConversationAbsent,
 } from "./messaging";
 
 const ctx = { target: {}, identity: {} } as never;
 const other = { toText: () => "aaaaa-aa" } as never;
+
+describe('conversation absence evidence', () => {
+  it('accepts only a successful empty owner option', async () => {
+    mocks.read_conversation_club.mockResolvedValueOnce({ Ok: [] });
+    expect(await isLiveConversationAbsent(ctx, 'missing-team')).toBe(true);
+    expect(mocks.read_conversation_club).toHaveBeenCalledWith('missing-team');
+    mocks.read_conversation_club.mockResolvedValueOnce({ Ok: ['club-a'] });
+    expect(await isLiveConversationAbsent(ctx, 'existing-team')).toBe(false);
+  });
+  it('preserves forbidden and transport failures', async () => {
+    mocks.read_conversation_club.mockResolvedValueOnce({ Err: 'Forbidden' });
+    await expect(isLiveConversationAbsent(ctx, 'private')).rejects.toThrow('Forbidden');
+    mocks.read_conversation_club.mockRejectedValueOnce(new Error('Remote call failed'));
+    await expect(isLiveConversationAbsent(ctx, 'unknown')).rejects.toThrow('Remote call failed');
+  });
+});
 
 describe("canLiveDmUser", () => {
   it("passes through the canister boolean unchanged", async () => {
