@@ -247,3 +247,12 @@ export async function announceLiveGalleryAsset(ctx: FeatureBackendContext, asset
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
   return unwrapCandid(actor.announce_gallery_asset(assetId), 'Queue gallery notification');
 }
+
+export async function recordLiveGalleryView(ctx: FeatureBackendContext, assetId: string) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return unwrapCandid(actor.record_gallery_view(assetId), 'Record gallery view');
+}
+export async function readLiveGalleryViewCounts(ctx: FeatureBackendContext, ids: string[]) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return unwrapCandid(actor.read_gallery_view_counts(ids), 'Read gallery views');
+}

@@ -561,7 +561,8 @@ persistent actor class Main(governorInit : Principal) = this {
       let original = a.blob_ref ?? return #Err("Gallery source has no configured store");
       if (blob_ref.canister != original.canister) return #Err("Gallery copy store mismatch");
       let store : actor { get_content_hash : shared query (Text) -> async ?Text } = actor(original.canister);
-      if (await (with timeout = 10) store.get_content_hash(blob_ref.path) != ?blob_ref.content_hash) return #Err("Private copy not acknowledged by source store");
+      let acknowledgedHash = await (with timeout = 10) store.get_content_hash(blob_ref.path);
+      if (acknowledgedHash != ?blob_ref.content_hash) return #Err("Private copy not acknowledged by source store");
       // Recheck source access after every external authorization await.
       let current = switch (await gallerySource(caller, source)) { case (#Err(e)) return #Err(e); case (#Ok(row)) row };
       if (current != a or isFenced(a.club_id) or removalReceiver.denied(caller)) return #Err("Gallery source changed");

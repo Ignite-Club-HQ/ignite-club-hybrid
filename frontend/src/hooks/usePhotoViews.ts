@@ -5,6 +5,9 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLivePhotoEngagement } from "@/live/features/insights";
 import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
+import { withFeatureBackend } from '@/live/featureRouter';
+import { writeOnce } from '@/live/clubScope';
+import { useAuth } from '@/hooks/useAuth';
 
 // Stable no-op ref callback used when no userId/photoId is available.
 const noopRef = (_el: HTMLElement | null) => {};
@@ -33,11 +36,19 @@ function makeIdsKey(photoIds: string[]): string {
  */
 export function usePhotoViewCounts(photoIds: string[]) {
   const idsKey = useMemo(() => makeIdsKey(photoIds), [photoIds]);
+  const { user, sessionRestoration } = useAuth();
 
   return useQuery({
-    queryKey: ["photo-view-counts", idsKey],
+    queryKey: ["photo-view-counts", user?.id, isFeatureRoutedToIcp("media"), idsKey],
     queryFn: async () => {
       if (photoIds.length === 0) return new Map<string, number>();
+      if (isFeatureRoutedToIcp('media')) {
+        const { readLiveGalleryViewCounts } = await import('@/live/features/media');
+        const counts = await Promise.all(photoIds.map(id => withFeatureBackend('media', {
+          supabase: async () => [], icp: ctx => readLiveGalleryViewCounts(ctx, [id]),
+        }, { photoId: id })));
+        return new Map(counts.flat().map(([id, count]) => [id, Number(count)]));
+      }
       const { data, error } = await supabase.rpc("get_photo_view_counts", {
         _photo_ids: photoIds,
       });
@@ -51,7 +62,7 @@ export function usePhotoViewCounts(photoIds: string[]) {
       }
       return counts;
     },
-    enabled: photoIds.length > 0,
+    enabled: photoIds.length > 0 && !!user && sessionRestoration === "authenticated",
     staleTime: 60 * 1000,
     refetchInterval: photoIds.length > 0 && isFeatureRoutedToIcp("media") ? 30_000 : false,
     // Keep previously-fetched counts visible while a new id set (e.g. next
@@ -77,6 +88,11 @@ export function useRecordPhotoView(userId: string | undefined) {
   const mutation = useMutation({
     mutationFn: async (photoId: string) => {
       if (!userId) return;
+      if (isFeatureRoutedToIcp('media')) {
+        const { recordLiveGalleryView } = await import('@/live/features/media');
+        return withFeatureBackend('media', { supabase: async () => undefined,
+          icp: ctx => recordLiveGalleryView(ctx, photoId) }, writeOnce({ photoId }));
+      }
       const { error } = await supabase
         .from("photo_views")
         .insert({ photo_id: photoId, user_id: userId });

@@ -73,6 +73,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var galleryVaultAuthority : ?Principal;
   var galleryNoticeAttempts : Map.Map<Text, Text>;
   var hiddenGalleryAssets : Map.Map<Text, Bool>;
+  var galleryViewCounts : Map.Map<Text, Nat>;
   var roles : [Types.RoleGrant];
   var bulkAccessPrincipals : [Principal];
   var galleryChatCards : [Types.GalleryChatCard];
@@ -246,7 +247,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   func canView(caller : Principal, asset : Types.Asset) : Bool {
-    asset.expires_at_ms > nowMs()
+    not asset.deleted and hiddenGalleryAssets.get(asset.id) != ?true and asset.expires_at_ms > nowMs()
       and (asset.owner.equal(caller) or isGovernor(caller) or asset.visibility == "public" or isClubMember(caller, asset.club_id))
   };
 
@@ -705,11 +706,31 @@ persistent actor class Main(governorInit : Principal) = this {
       #Ok(comment)
     } finally { removalReceiver.leave(caller) }
   };
+  public shared ({ caller }) func record_gallery_view(asset_id : Text) : async { #Ok : Nat; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try { await admitAccount(caller); auth(caller);
+      let asset = assets.find(func a = a.id == asset_id) ?? return #Err("Asset not found");
+      if (not canView(caller, asset) or assetFenced(asset_id)) return #Err("Asset access required");
+      let count = (galleryViewCounts.get(asset_id) ?? 0) + 1;
+      galleryViewCounts.add(asset_id, count); #Ok(count)
+    } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func read_gallery_view_counts(ids : [Text]) : async { #Ok : [(Text, Nat)]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account fenced");
+    try { await admitAccount(caller); auth(caller);
+      if (ids.size() > 300) return #Err("Too many assets");
+      var rows : [(Text, Nat)] = [];
+      for (id in ids.values()) { switch (assets.find(func a = a.id == id)) {
+        case (?a) { if (canView(caller, a) and not assetFenced(id)) rows := rows.concat([(id, galleryViewCounts.get(id) ?? 0)]) };
+        case null {};
+      } }; #Ok(rows)
+    } finally { removalReceiver.leave(caller) }
+  };
   public shared ({ caller }) func read_gallery_asset_for_service(user : Principal, asset_id : Text) : async { #Ok : Types.Asset; #Err : Text } {
     if (galleryVaultAuthority != ?caller) return #Err("Vault authority required");
     await admitAccount(user);
     let asset = assets.find(func a = a.id == asset_id and not a.deleted) ?? return #Err("Asset not found");
-    if (not canView(user, asset) or assetFenced(asset_id) or galleryVaultAuthority != ?caller) return #Err("Asset access required");
+    if (not (asset.expires_at_ms > nowMs() and (asset.owner.equal(user) or isGovernor(user) or asset.visibility == "public" or isClubMember(user, asset.club_id))) or assetFenced(asset_id) or galleryVaultAuthority != ?caller) return #Err("Asset access required");
     #Ok(asset)
   };
   public shared ({ caller }) func remove_gallery_asset(asset_id : Text, mode : Text) : async { #Ok : { vault_updated : Bool }; #Err : Text } {

@@ -192,6 +192,8 @@ export function IcpUploadPhotoSheet({
     const albumId = files.length > 1 ? crypto.randomUUID() : null;
     const trimmedCaption = caption.trim() || null;
     let scopePending = false;
+    let vaultCopyFailed = false;
+    let noticeFailed = false;
     const registeredAssetIds: string[] = [];
     try {
       await withFeatureBackend("media", {
@@ -258,7 +260,7 @@ export function IcpUploadPhotoSheet({
             if (!scopePending) {
               const { copyGalleryAssetToVault } = await import('./galleryVaultCopy');
               await copyGalleryAssetToVault(ctx, { assetId: asset.id, clubId, teamId: teamId || null,
-                file: prepared.file, name: raw.name || 'Gallery photo' });
+                file: prepared.file, name: raw.name || 'Gallery photo' }).catch(() => { vaultCopyFailed = true; });
               registeredAssetIds.push(asset.id);
             }
             done += 1;
@@ -269,7 +271,10 @@ export function IcpUploadPhotoSheet({
             while (nextIndex < files.length) await uploadOne(nextIndex++);
           };
           await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
-          if (registeredAssetIds[0]) await announceLiveGalleryAsset(ctx, registeredAssetIds[0]);
+          if (registeredAssetIds[0]) {
+            const notice = await announceLiveGalleryAsset(ctx, registeredAssetIds[0]).catch(() => "unknown");
+            noticeFailed = notice !== "queued";
+          }
         },
       }, writeOnce({ clubId }));
       if (scopePending) {
@@ -277,6 +282,8 @@ export function IcpUploadPhotoSheet({
           "Tags and captions will appear after the media backend update is deployed.",
         );
       }
+      if (vaultCopyFailed) toast.warning('Photos published; some Vault copies could not be saved.');
+      if (noticeFailed) toast.warning('Photos published; the notification could not be confirmed.');
       // Keep the local copies on screen until the refreshed feed has them.
       await Promise.resolve(onUploaded()).catch(() => undefined);
     } catch (err) {
