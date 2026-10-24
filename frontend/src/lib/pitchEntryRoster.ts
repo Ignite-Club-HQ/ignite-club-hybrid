@@ -18,13 +18,13 @@ export async function readIcpPitchRoster(teamId: string) {
         readContentInScope(ctx, 'events', { clubId: team.club_id }, scoped => listLiveChildTeamAssignments(scoped, team.club_id, teamId)),
       ]);
       const [profiles, names] = await Promise.all([
-        listLiveProfilesByIds(ctx, [...new Set(grants.map(g => g.user.toText()))]),
+        listLiveProfilesByIds(ctx, [...new Set(grants.map(g => g.account_id.replace(/^principal:/, '')))]),
         readMembershipInScope(ctx, { clubId: team.club_id }, scoped => resolveLivePiiTextBatch(scoped, assignments.map(a => a.child_id), 'name', 'Read pitch roster', 'Team player names')),
       ]);
       const byUser = new Map(profiles.map(p => [p.account_id, p]));
       return {
-        members: grants.map(g => ({ id: `${teamId}:${g.user.toText()}:${g.role}`, user_id: g.user.toText(), role: g.role,
-          profiles: { display_name: byUser.get(g.user.toText())?.display_name ?? 'Member', avatar_url: byUser.get(g.user.toText())?.avatar_ref[0] ?? null } })),
+        members: grants.map(g => ({ id: `${teamId}:${g.account_id.replace(/^principal:/, '')}:${g.role}`, user_id: g.account_id.replace(/^principal:/, ''), role: g.role,
+          profiles: { display_name: byUser.get(g.account_id.replace(/^principal:/, ''))?.display_name ?? 'Member', avatar_url: byUser.get(g.account_id.replace(/^principal:/, ''))?.avatar_ref[0] ?? null } })),
         children: assignments.map(a => ({ child_id: a.child_id, child_name: names.get(a.child_id) ?? 'Player' })),
       };
     },

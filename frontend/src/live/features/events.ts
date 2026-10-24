@@ -2064,7 +2064,7 @@ export async function deactivateLiveActiveGame(
 
 export async function getLiveActiveGame(ctx: FeatureBackendContext, teamId?: string | null) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  const result = unwrapCandid(actor.get_active_game(candidOpt(teamId)), "Get active game") as unknown as
+  const result = await unwrapCandid(actor.get_active_game(candidOpt(teamId)), "Get active game") as unknown as
     | []
     | [{ pitch_state_json?: string; [key: string]: unknown }];
   if (result.length === 0) return result;
@@ -2090,7 +2090,7 @@ export async function getLiveActiveGame(ctx: FeatureBackendContext, teamId?: str
     ...(doc as Record<string, unknown>),
     players: resolveNameRefsInDoc(players, PITCH_NAME_REF_PREFIX, names),
   };
-  return [{ ...row, pitch_state_json: JSON.stringify(resolved) }];
+  return [{ ...row, pitch_state_json: JSON.stringify(resolved) }] as [{ pitch_state_json?: string; [key: string]: unknown }];
 }
 
 /**

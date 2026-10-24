@@ -151,6 +151,8 @@ interface Event {
   club_id: string;
   team_id: string | null;
   competition_match_id?: string | null;
+  is_competition_fixture?: boolean;
+  competition_id?: string | null;
   duty_team_id?: string | null;
   mini_league_id: string | null;
   is_cancelled: boolean;
@@ -1560,7 +1562,7 @@ export default function EventsPage() {
               </Card>
             ) : (
               <>
-                {upcomingEvents?.slice(0, 10).map((event, idx) => event.is_competition_fixture
+                {upcomingEvents?.slice(0, 10).map((event, idx) => ("is_competition_fixture" in event && event.is_competition_fixture)
                   ? <CompetitionFixtureCard key={event.id} event={event} />
                   : <EventCard key={event.id} event={event} isAdmin={isAdminForEvent(event)} hasViewed={viewedEventIds?.has(event.id) ?? true} stackIndex={idx} />)}
                 {(upcomingEvents?.length || 0) > 10 && (
@@ -1589,7 +1591,7 @@ export default function EventsPage() {
               </Card>
             ) : (
               <>
-                {pastEvents?.map((event, idx) => event.is_competition_fixture
+                {pastEvents?.map((event, idx) => ("is_competition_fixture" in event && event.is_competition_fixture)
                   ? <CompetitionFixtureCard key={event.id} event={event} />
                   : <EventCard key={event.id} event={event} isAdmin={isAdminForEvent(event)} hasViewed={viewedEventIds?.has(event.id) ?? true} stackIndex={idx} />)}
                 {pastDaysBack < 365 && (

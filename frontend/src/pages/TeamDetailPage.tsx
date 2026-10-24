@@ -772,7 +772,7 @@ export default function TeamDetailPage() {
           icp: async (ctx) => {
             let grants: Array<{ account_id: string; role: string }>;
             try {
-              grants = (await listLiveTeamRoleGrants(ctx, id ?? "")).map(g => ({ account_id: g.user.toText(), role: g.role }));
+              grants = (await listLiveTeamRoleGrants(ctx, id ?? "")).map(g => ({ account_id: g.account_id.replace(/^principal:/, ""), role: g.role }));
             } catch {
               // Pre-deploy canisters lack list_team_role_grants; fall back to
               // the caller's own grants so they at least see themselves.
