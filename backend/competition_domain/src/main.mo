@@ -1499,6 +1499,15 @@ persistent actor class Main(governorInit : Principal) = this {
   
     } finally { removalReceiver.leave(caller) };
   };
+  public shared ({caller}) func read_competition_welcome_message(competition_id : Text) : async {#Ok:?{subject:Text;message:Text};#Err:Text} {
+    if(not removalReceiver.enter(caller))return #Err("Account unavailable");
+    try {
+      auth(caller);await admitAccount(caller);await syncForCompetition(caller,competition_id);
+      if(not(await privateParticipant(caller,competition_id)) or removalReceiver.denied(caller) or compFenced(competition_id))return #Err("Competition participation required");
+      let settings=competitionWelcomeSettings.find(func s = s.competition_id==competition_id and s.enabled);
+      #Ok(switch settings {case (?s)?{subject=s.subject;message=s.message};case null null})
+    } finally {removalReceiver.leave(caller)}
+  };
 
   func findChatSettings(competition_id : Text) : ?Types.ChatSettings {
     chatSettings.find(func(item) = item.competition_id == competition_id)

@@ -29,6 +29,7 @@ import { CompetitionFixturesPanel, CompetitionLadderPanel } from "@/components/C
 import CompetitionPlayerStatsPanel from "@/components/competitions/CompetitionPlayerStatsPanel";
 import { CreateCompetitionEventButton } from "@/components/competitions/CreateCompetitionEventButton";
 import { CompetitionEventsList } from "@/components/competitions/CompetitionEventsList";
+import { CompetitionWelcomeMessage } from "@/components/competitions/CompetitionWelcomeMessage";
 import { CompetitionShareJoinLink } from "@/components/CompetitionShareJoinLink";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
@@ -1649,8 +1650,12 @@ function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen
   // (Supabase only — the canister has no saved invite message).
   const { data: savedInviteMessage } = useQuery({
     queryKey: ["competition-invite-message", competitionId],
-    enabled: open && !isIcp,
+    enabled: open,
     queryFn: async () => {
+      if(isIcp)return withFeatureBackend("competitions",{supabase:async()=>"",icp:async ctx=>{
+        const {getLiveCompetitionWelcomeEmail}=await import("@/live/features/competitions");
+        return (await getLiveCompetitionWelcomeEmail(ctx,competitionId)).message;
+      }},{competitionId});
       const { data } = await supabase
         .from("competitions")
         .select("invite_email_message")
