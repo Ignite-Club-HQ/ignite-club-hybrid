@@ -147,6 +147,7 @@ import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { resolveChatMetadataState } from "@/lib/chatMetadataGate";
 import { ChatUnreachable } from "@/components/chat/ChatUnreachable";
+import { groupChatReadScope } from '@/features/messaging/thread/groupChatScope';
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 const PinVaultSheet = lazyWithRetry(() => import("@/components/chat/PinVaultSheet").then(m => ({ default: m.PinVaultSheet })));
@@ -404,7 +405,7 @@ export default function GroupChatPage() {
                 join_policy: null,
               } as ChatGroup;
           },
-        }, { conversationId: groupId ?? "" });
+        }, groupChatReadScope(queryClient, user?.id, groupId ?? ""));
       }
 
       const { data, error } = await supabase
@@ -415,7 +416,7 @@ export default function GroupChatPage() {
       if (error) throw error;
       return (data as ChatGroup) ?? null;
     },
-    enabled: !!groupId,
+    enabled: !!groupId && authReady,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -577,6 +578,7 @@ export default function GroupChatPage() {
     openedFromNotificationRef,
     pageSize: MESSAGES_PER_PAGE,
     supabaseClient: supabase,
+    clubId: group?.club_id,
   });
 
   // Scope key for the realtime edit/soft-delete reconciliation registry.

@@ -7,6 +7,7 @@ import { getCachedMessages, cacheMessages } from "@/lib/messageCache";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { isUsableCachedThread } from "@/lib/chatThreadLoadState";
 import { assertReadNotAborted } from "@/live/readDeadline";
+import { groupChatReadScope } from './groupChatScope';
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
@@ -30,6 +31,7 @@ export interface GroupMessagesQueryData {
 
 interface UseGroupMessagesQueryOptions {
   groupId?: string;
+  clubId?: string | null;
   userId?: string;
   useIcpLab: boolean;
   isOnline: boolean;
@@ -125,6 +127,7 @@ export const mapLiveGroupRows = async (
 const fetchGroupMessages = async ({
 
   groupId,
+  clubId,
   userId,
   useIcpLab,
   isOnline,
@@ -307,7 +310,7 @@ const fetchGroupMessages = async ({
       };
     },
 
-  }, { conversationId: groupId });
+  }, groupChatReadScope(queryClient, userId, groupId, clubId));
 };
 
 const getGroupMessagesPlaceholderData = (
