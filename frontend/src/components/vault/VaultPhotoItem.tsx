@@ -62,7 +62,7 @@ export function VaultPhotoItem({
   }
   
   // Show loading state while fetching signed URL or loading image
-  if (isLoadingSignedUrl || (!isLoaded && !hasError)) {
+  if (isLoadingSignedUrl || (photoUrl && !isLoaded && !hasError)) {
     return (
       <>
         {/* Only start preloading once we have a signed URL */}
