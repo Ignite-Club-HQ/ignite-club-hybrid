@@ -1788,12 +1788,14 @@ function AddMatchButton({ competitionId, entries, divisions, defaultOpen = false
   const [arrival, setArrival] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [fixtureOperation, setFixtureOperation] = useState(() => crypto.randomUUID());
 
   const accepted = entries.filter((e: any) => e.status === "accepted");
 
   const reset = () => {
     setHomeId(""); setAwayId(""); setDivisionId(""); setScheduledAt("");
     setVenue(""); setPitch(""); setRound(""); setDuration(""); setArrival(""); setNotes("");
+    setFixtureOperation(crypto.randomUUID());
   };
 
   const submit = async () => {
@@ -1823,7 +1825,7 @@ function AddMatchButton({ competitionId, entries, divisions, defaultOpen = false
       arrival,
       notes,
       createdBy: user?.id ?? null,
-    }));
+    }), fixtureOperation);
     setSaving(false);
     if (error) {
       toast({ title: "Could not add match", description: error.message, variant: "destructive" });

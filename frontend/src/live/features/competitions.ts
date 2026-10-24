@@ -225,6 +225,18 @@ export interface LiveMatchDetailsInput {
   expectedRevision: number;
 }
 
+export async function createLiveFixture(ctx: FeatureBackendContext, operation: string, competitionId: string, input: Omit<LiveMatchDetailsInput, "expectedRevision">) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  const match = await unwrapCandid(actor.create_fixture(operation, {
+    competition_id: competitionId, home_team: input.homeTeamId, away_team: input.awayTeamId,
+    division_id: candidOpt(input.divisionId), scheduled_at_ms: candidOpt(input.scheduledAtMs == null ? null : toNat64(input.scheduledAtMs)),
+    venue: candidOpt(input.venue), pitch_number: candidOpt(input.pitchNumber), round_number: candidOpt(input.roundNumber),
+    duration_minutes: candidOpt(input.durationMinutes), arrival_minutes_before: candidOpt(input.arrivalMinutesBefore), notes: candidOpt(input.notes),
+  }), "Create fixture");
+  if (match.scheduled_at_ms.length) await unwrapCandid(actor.materialize_match_events(match.id), "Synchronize existing fixture events");
+  return match;
+}
+
 /**
  * Fixture detail edit (teams, schedule, venue, division, notes) — the
  * counterpart of the edit-match dialog's Supabase update. Scores stay under

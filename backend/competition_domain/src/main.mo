@@ -1295,7 +1295,7 @@ persistent actor class Main(governorInit : Principal) = this {
       switch(input.pitch_number) { case (?v) { if(v.size()>64) return #Err("Pitch too long") }; case null {} };
       switch(input.division_id) { case (?v) { if(not divisionSettings.any(func d = d.id == v and d.competition_id == input.competition_id)) return #Err("Division unavailable") }; case null {} };
       let id = "fixture-" # input.competition_id # "-" # Nat.toText(matches.size()+1) # "-" # Nat64.toText(nowMs());
-      let game : Types.Match = { id; competition_id=input.competition_id; home_team=input.home_team; away_team=input.away_team; division_id=input.division_id; scheduled_at_ms=input.scheduled_at_ms; venue=input.venue; pitch_number=input.pitch_number; round_number=input.round_number; duration_minutes=input.duration_minutes; arrival_minutes_before=input.arrival_minutes_before; notes=input.notes; home_score=null; away_score=null; status="scheduled"; referee_id=null; revision=0 };
+      let game : Types.Match = { id; competition_id=input.competition_id; home_team=input.home_team; away_team=input.away_team; division_id=input.division_id; scheduled_at_ms=input.scheduled_at_ms; venue=input.venue; pitch_number=input.pitch_number; round_number=input.round_number; duration_minutes=input.duration_minutes; arrival_minutes_before=input.arrival_minutes_before; notes=input.notes; home_score=0; away_score=0; status="scheduled"; revision=1 };
       matches := matches.concat([game]); Map.add(fixtureReceipts,Text.compare,key,{creator=caller;input;match_id=id}); #Ok(game)
     } finally { removalReceiver.leave(caller) }
   };

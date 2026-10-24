@@ -1,7 +1,7 @@
 import { writeOnce } from "@/live/clubScope";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { recordLiveMatch, updateLiveMatchDetails } from "@/live/features/competitions";
+import { createLiveFixture } from "@/live/features/competitions";
 
 export interface ManualMatchInput {
   competitionId: string;
@@ -65,7 +65,7 @@ export function buildManualMatchRow({
   };
 }
 
-export async function createManualMatch(row: ManualMatchRow) {
+export async function createManualMatch(row: ManualMatchRow, operation = crypto.randomUUID()) {
   return withFeatureBackend("competitions", {
     supabase: async () => {
       const { error } = await supabase
@@ -75,13 +75,12 @@ export async function createManualMatch(row: ManualMatchRow) {
     },
     icp: async (ctx) => {
       try {
-        const match = await recordLiveMatch(ctx, row.competition_id, row.home_team_id, row.away_team_id);
-        await updateLiveMatchDetails(ctx, match.id, {
+        await createLiveFixture(ctx, operation, row.competition_id, {
           homeTeamId: row.home_team_id, awayTeamId: row.away_team_id,
           divisionId: row.division_id, scheduledAtMs: new Date(row.scheduled_at),
           venue: row.venue, pitchNumber: row.pitch_number, roundNumber: row.round_number,
           durationMinutes: row.duration_minutes, arrivalMinutesBefore: row.arrival_minutes_before,
-          notes: row.notes, expectedRevision: Number(match.revision),
+          notes: row.notes,
         });
         return { error: null };
       } catch (e) {
