@@ -897,6 +897,13 @@ export interface MainInterface {
     }>;
     my_children(): Promise<Array<Child>>;
     my_rsvps(): Promise<Array<Rsvp>>;
+    notify_group_pitch(group_id: string, action: string, detail: string, key: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     playhqTransform(arg0: {
         context: Uint8Array;
         response: HttpRequestResult;
@@ -1320,6 +1327,13 @@ export interface MainInterface {
         Err: string;
     }>;
     read_group_opening_configuration(): Promise<Array<[string, string]>>;
+    read_shared_board(club: string, team: string): Promise<{
+        __kind__: "Ok";
+        Ok: ActiveGame | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     record_event_view(event_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1723,6 +1737,13 @@ export interface MainInterface {
     sync_group_state(group_id: string, expected_revision: bigint, timer_json: string | null, pitch_json: string | null): Promise<{
         __kind__: "Ok";
         Ok: EventGroup;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    sync_shared_board(club: string, team: string, expected: bigint | null, pitch: string, session: string): Promise<{
+        __kind__: "Ok";
+        Ok: ActiveGame;
     } | {
         __kind__: "Err";
         Err: string;
@@ -3266,6 +3287,16 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.my_rsvps();
         return from_candid_vec_n90(result);
     }
+    async notify_group_pitch(arg0: string, arg1: string, arg2: string, arg3: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.notify_group_pitch(arg0, arg1, arg2, arg3);
+        return from_candid_variant_n29(result);
+    }
     async playhqTransform(arg0: {
         context: Uint8Array;
         response: HttpRequestResult;
@@ -3898,6 +3929,16 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.read_group_opening_configuration();
         return result;
     }
+    async read_shared_board(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: ActiveGame | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_shared_board(arg0, arg1);
+        return from_candid_variant_n97(result);
+    }
     async record_event_view(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -4471,6 +4512,16 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.sync_group_state(arg0, arg1, to_candid_opt_n3(arg2), to_candid_opt_n3(arg3));
         return from_candid_variant_n32(result);
+    }
+    async sync_shared_board(arg0: string, arg1: string, arg2: bigint | null, arg3: string, arg4: string): Promise<{
+        __kind__: "Ok";
+        Ok: ActiveGame;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.sync_shared_board(arg0, arg1, to_candid_opt_n36(arg2), arg3, arg4);
+        return from_candid_variant_n220(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";

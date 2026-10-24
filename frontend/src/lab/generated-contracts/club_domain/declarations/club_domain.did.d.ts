@@ -1554,6 +1554,11 @@ export interface Main {
     { 'ok' : bigint } |
       { 'err' : string }
   >,
+  'relay_group_pitch_alert' : ActorMethod<
+    [Array<string>, string, string, string, string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'remove_member' : ActorMethod<
     [string, Principal],
     { 'Ok' : null } |

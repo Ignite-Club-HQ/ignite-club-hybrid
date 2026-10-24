@@ -1235,6 +1235,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'my_children' : IDL.Func([], [IDL.Vec(Child)], ['query']),
     'my_rsvps' : IDL.Func([], [IDL.Vec(Rsvp)], ['query']),
+    'notify_group_pitch' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
     'playhqTransform' : IDL.Func(
         [
           IDL.Record({
@@ -1636,6 +1641,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
         [],
       ),
+    'read_shared_board' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ActiveGame), 'Err' : IDL.Text })],
+        [],
+      ),
     'record_event_view' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -1973,6 +1983,11 @@ export const idlFactory = ({ IDL }) => {
     'sync_group_state' : IDL.Func(
         [IDL.Text, IDL.Nat64, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : EventGroup, 'Err' : IDL.Text })],
+        [],
+      ),
+    'sync_shared_board' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Nat64), IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : ActiveGame, 'Err' : IDL.Text })],
         [],
       ),
     'transfer_governorship' : IDL.Func(

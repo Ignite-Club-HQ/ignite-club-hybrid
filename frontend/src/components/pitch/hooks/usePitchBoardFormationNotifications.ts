@@ -81,6 +81,11 @@ export function usePitchBoardFormationNotifications({
         await withFeatureBackend("membership", {
           supabase: async () => {},
           icp: async (ctx) => {
+            if (teamId.startsWith('event-group-')) {
+              const { notifyLiveGroupPitch } = await import('@/live/features/events');
+              await notifyLiveGroupPitch(ctx, teamId.slice('event-group-'.length), changeType, detail, crypto.randomUUID());
+              return;
+            }
             const recipients = await livePitchRecipients(ctx, teamId, linkedEventId, userId, true, false);
             await fanOutLiveNotifications(ctx, {
               userIds: recipients.userIds,
@@ -92,7 +97,7 @@ export function usePitchBoardFormationNotifications({
               relatedId: teamId,
             });
           },
-        }, writeOnce({ teamId: teamId! }));
+        }, writeOnce(teamId.startsWith('event-group-') ? { eventGroupId: teamId.slice('event-group-'.length) } : { teamId }));
       } catch (error) {
         console.error("Failed to send ICP formation change notification:", error);
       }

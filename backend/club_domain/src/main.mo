@@ -5378,6 +5378,19 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok
   };
 
+  // Only the already configured events authority can supply its verified
+  // match-duty audience. The queue sees its existing trusted club authority,
+  // rather than trying to admit a service principal as a human account.
+  public shared ({ caller }) func relay_group_pitch_alert(users : [Text], club : Text, kind : Text, body : Text, key : Text, related : Text) : async { #Ok : Nat16; #Err : Text } {
+    if (eventsDomainCanister != ?caller) return #Err("Events authority required");
+    if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
+    if (users.size() == 0 or users.size() > 500 or body.size() > 128 or key.size() > 512 or not Text.startsWith(related, #text "event-group-")) return #Err("Invalid pitch alert");
+    if (kind != "pitch_board_formation" and kind != "pitch_board_team_size" and kind != "pitch_board_substitution") return #Err("Invalid pitch kind");
+    let id = notificationQueueCanister ?? return #Err("Notification queue not configured");
+    let queue : actor { fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text } } = actor(id.toText());
+    await (with timeout = 10) queue.fan_out(users, club, kind, body, key, ?related)
+  };
+
   public shared ({ caller }) func set_messaging_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor only");

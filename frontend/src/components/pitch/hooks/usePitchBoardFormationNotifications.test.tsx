@@ -9,7 +9,7 @@ import type { Player } from "../types";
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(),
-  recipients: vi.fn(), fan: vi.fn(),
+  recipients: vi.fn(), fan: vi.fn(), matchNotify: vi.fn(),
 }));
 const icpMode = process.env.IGNITE_TEST_BACKEND_MODE === "icp";
 
@@ -23,6 +23,7 @@ vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => icpMode ? "
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: async (_: string, providers: { icp: (ctx: unknown) => unknown }) => providers.icp({}) }));
 vi.mock("./livePitchNotifications", () => ({ livePitchRecipients: mocks.recipients }));
 vi.mock("@/live/features/notifications", () => ({ fanOutLiveNotifications: mocks.fan }));
+vi.mock('@/live/features/events', () => ({ notifyLiveGroupPitch: mocks.matchNotify }));
 
 function queryReturning(data: unknown[]) {
   const query: Record<string, ReturnType<typeof vi.fn>> = {};
@@ -71,6 +72,14 @@ describe("buildFormationNotificationMessage", () => {
 });
 
 describe("usePitchBoardFormationNotifications", () => {
+  it.runIf(icpMode)('mini-league alerts use authoritative duty selection, including an unlinked board', async () => {
+    const hook = renderHook(() => usePitchBoardFormationNotifications({ userId: 'u', teamId: 'event-group-g', readOnly: false, linkedEventId: null, isGameFinished: () => false }));
+    await act(async () => hook.result.current('formation', '2-3-1'));
+    expect(mocks.matchNotify).toHaveBeenCalledWith({}, 'g', 'formation', '2-3-1', expect.any(String));
+    expect(mocks.recipients).not.toHaveBeenCalled();
+    expect(mocks.fan).not.toHaveBeenCalled();
+    hook.unmount();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rpc.mockResolvedValue({ error: null });

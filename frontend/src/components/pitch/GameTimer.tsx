@@ -9,6 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { sendTimerEvent, readServerTimer, deriveElapsedSeconds, shouldAcceptServerSnapshot, isServerAnchoredTimer, shouldPreferLocalOnFirstHydrate, type ServerTimer } from "@/lib/serverTimer";
 import { getPitchStateKey, PITCH_STATE_KEY } from "./types";
+import { resolveAuthBackend } from '@/live/authBackendMode';
 
 /**
  * Read the current pitch board localStorage snapshot for this team so we can
@@ -370,6 +371,42 @@ const GameTimer = forwardRef<GameTimerRef, GameTimerProps>(({
     // Note: tick anchor is reset by the running-tick effect when isRunning flips true.
     console.info('[TimerAudit] server-hydrate', { teamId, reason: decision.reason, t, elapsed });
   }, [externalMinutesPerHalf, teamId]);
+
+  // Poll the canister-owned anchored clock while the board is visible, rather
+  // than waiting until foreground recovery. Spectators only read this path.
+  useEffect(() => {
+    if (resolveAuthBackend() !== 'icp' || !teamId || teamId.startsWith('event-group-')) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function refresh() {
+      try {
+        if (document.visibilityState !== 'hidden' && navigator.onLine) {
+          const res = await readServerTimer(teamId ?? null);
+          if (!cancelled && res.found && isServerAnchoredTimer(res.timer_state)) applyServerSnapshot(res.timer_state, res.server_now);
+        }
+      } catch (error) { console.warn('[GameTimer] Clock refresh failed', error); }
+      finally { if (!cancelled) timer = setTimeout(refresh, 5000); }
+    }
+    timer = setTimeout(refresh, 5000);
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [teamId, applyServerSnapshot]);
+
+  // Group clocks share revisioned state instead of the team event timer.
+  useEffect(() => {
+    function remote(event: Event) {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.source !== 'icp-remote' || detail.teamId !== teamId || !detail.timer) return;
+      const state = detail.timer;
+      if (!Number.isFinite(state.elapsedSeconds) || !Number.isFinite(state.minutesPerHalf)) return;
+      if (externalMinutesPerHalf === undefined) setInternalMinutesPerHalf(state.minutesPerHalf);
+      setCurrentHalf(state.currentHalf === 2 ? 2 : 1);
+      setElapsedSeconds(Math.min(state.minutesPerHalf * 60, state.elapsedSeconds + (state.isRunning ? getSecondsSinceUpdateUncapped(state.lastUpdateTime) : 0)));
+      setIsRunning(state.isRunning === true);
+      setIsGameFinished(state.isGameFinished === true);
+    }
+    window.addEventListener('game-state-changed', remote);
+    return () => window.removeEventListener('game-state-changed', remote);
+  }, [teamId, externalMinutesPerHalf]);
 
   useEffect(() => {
     let cancelled = false;

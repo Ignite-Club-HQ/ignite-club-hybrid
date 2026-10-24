@@ -128,7 +128,7 @@ export function useEventGroupSync(
           localStorage.setItem(getTeamTimerStorageKey(teamId), value);
           localStorage.setItem("pitch-board-timer-state", value);
         }
-        if (force) window.dispatchEvent(new CustomEvent("game-state-changed"));
+        if (changed || force) window.dispatchEvent(new CustomEvent("game-state-changed", { detail: { source: 'icp-remote', teamId, pitch, timer } }));
       } catch (error) {
         if (error instanceof Error && /forbidden|not visible|not found/i.test(error.message)) clearCanisterState();
         console.error("[EventGroupSync] Canister read failed", error);

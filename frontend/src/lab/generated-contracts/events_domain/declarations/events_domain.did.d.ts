@@ -924,6 +924,11 @@ export interface Main {
   >,
   'my_children' : ActorMethod<[], Array<Child>>,
   'my_rsvps' : ActorMethod<[], Array<Rsvp>>,
+  'notify_group_pitch' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'playhqTransform' : ActorMethod<
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult
@@ -1257,6 +1262,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_shared_board' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [ActiveGame] } |
+      { 'Err' : string }
+  >,
   'record_event_view' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -1583,6 +1593,11 @@ export interface Main {
   'sync_group_state' : ActorMethod<
     [string, bigint, [] | [string], [] | [string]],
     { 'Ok' : EventGroup } |
+      { 'Err' : string }
+  >,
+  'sync_shared_board' : ActorMethod<
+    [string, string, [] | [bigint], string, string],
+    { 'Ok' : ActiveGame } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<

@@ -6,6 +6,7 @@ import { batched, groupBy } from "./batching";
 type EventsActor = Awaited<ReturnType<typeof connectLiveEventsDomain>>["actor"];
 const eventsConn = (ctx: FeatureBackendContext) => () => connectLiveEventsDomain(ctx.target, ctx.identity);
 import { grantLiveClubPiiRead, registerLivePiiText, resolveLivePiiTextBatch } from "./vault";
+import { maskSharedPitchNames, sharedPitchNameRefs, resolveSharedPitchNames } from '@/lib/sharedPitchPrivacy';
 
 // Team ids are canister-generated as "team-<club_id>-<n>-<ns>", so the club
 // id can be recovered by stripping the two trailing segments. Used to seed
@@ -1971,12 +1972,26 @@ export async function syncLiveActiveGame(
     timerStateJson: string;
     pitchStateJson: string;
     boardSessionId: string;
+    sharedBoard?: { clubId: string; expected: bigint | null };
   },
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   // Player names embedded in the pitch-state JSON are PII: mask them with
   // opaque references before they cross to events_domain.
   let pitchStateJson = input.pitchStateJson;
+  if (input.sharedBoard && input.teamId) {
+    const masked = maskSharedPitchNames(JSON.parse(pitchStateJson), `${PITCH_NAME_REF_PREFIX}${input.teamId}:`);
+    const account = ctx.identity?.getPrincipal().toText() ?? '';
+    const namespace = `${account}:${JSON.stringify(ctx.target.canisterIds)}`;
+    await Promise.all([...masked.names].map(async ([ref, name]) => {
+      const cacheKey = `${namespace}:${ref}`;
+      if (pitchNameRegistrations.get(cacheKey) === name) return;
+      await registerLivePiiText(ctx, ref, 'name', name);
+      await grantLiveClubPiiRead(ctx, ref, 'name', input.sharedBoard?.clubId ?? '');
+      pitchNameRegistrations.set(cacheKey, name);
+    }));
+    pitchStateJson = JSON.stringify(masked.pitch);
+  } else {
   try {
     const doc = JSON.parse(input.pitchStateJson) as { players?: Array<{ id?: unknown; name?: unknown }> };
     const players = Array.isArray(doc?.players) ? doc.players : [];
@@ -1985,7 +2000,7 @@ export async function syncLiveActiveGame(
         typeof p?.id === "string" && typeof p?.name === "string" && p.name.trim().length > 0,
     );
     if (named.length > 0 && input.teamId) {
-      const clubId = clubIdFromTeamId(input.teamId);
+      const clubId = input.sharedBoard?.clubId ?? clubIdFromTeamId(input.teamId);
       const refs = new Map<string, string>();
       await Promise.all(
         named.map(async (p) => {
@@ -2000,11 +2015,13 @@ export async function syncLiveActiveGame(
       );
       pitchStateJson = JSON.stringify({ ...doc, players: substituteNameRefs(players, refs) });
     }
-  } catch {
+  } catch (error) {
+    if (input.sharedBoard) throw error;
     // Non-JSON or unexpected shape: pass through untouched (legacy behavior).
   }
+  }
   return unwrapCandid(
-    actor.sync_active_game(
+    input.sharedBoard ? actor.sync_shared_board(input.sharedBoard.clubId, input.teamId ?? '', candidOpt(input.sharedBoard.expected), pitchStateJson, input.boardSessionId) : actor.sync_active_game(
       candidOpt(input.teamId),
       input.timerStateJson,
       pitchStateJson,
@@ -2012,6 +2029,29 @@ export async function syncLiveActiveGame(
     ),
     "Sync active game",
   );
+}
+
+export async function readLiveSharedBoard(ctx: FeatureBackendContext, clubId: string, teamId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const [row] = await unwrapCandid(actor.read_shared_board(clubId, teamId), 'Read shared pitch board');
+  if (!row) return null;
+  let pitch = JSON.parse(row.pitch_state_json) as Record<string, unknown>;
+  const refs = sharedPitchNameRefs(pitch);
+  if (refs.length) {
+    const names = await resolveNameRefs(ctx, refs, 'Read shared pitch board');
+    pitch = resolveSharedPitchNames(pitch, names) as Record<string, unknown>;
+  }
+  return { revision: row.updated_at_ms, pitch };
+}
+
+export async function writeLiveSharedBoard(ctx: FeatureBackendContext, clubId: string, teamId: string, expected: bigint | null, pitch: Record<string, unknown>, session: string) {
+  const row = await syncLiveActiveGame(ctx, { teamId, timerStateJson: '{}', pitchStateJson: JSON.stringify(pitch), boardSessionId: session, sharedBoard: { clubId, expected } });
+  return { revision: row.updated_at_ms, pitch };
+}
+
+export async function notifyLiveGroupPitch(ctx: FeatureBackendContext, groupId: string, action: string, detail: string, key: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.notify_group_pitch(groupId, action, detail, key), 'Notify match duty holders');
 }
 
 export async function deactivateLiveActiveGame(
