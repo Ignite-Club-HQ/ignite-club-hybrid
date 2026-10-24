@@ -179,16 +179,29 @@ export const idlFactory = ({ IDL }) => {
     'Err' : IDL.Text,
   });
   const Result_21 = IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text });
-  const RoutingApproval = IDL.Record({
-    'target_alias' : IDL.Text,
+  const PublicGroupTarget = IDL.Record({
+    'id' : IDL.Text,
+    'domains' : IDL.Vec(DomainCanister),
+  });
+  const PublicGroupPage = IDL.Record({
+    'groups' : IDL.Vec(PublicGroupTarget),
     'configuration_revision' : IDL.Nat64,
-    'approved_configuration_sha256' : IDL.Text,
-    'removal_wiring_group_ids' : IDL.Vec(IDL.Text),
+    'next_cursor' : IDL.Opt(IDL.Text),
+  });
+  const Result_22 = IDL.Variant({ 'Ok' : PublicGroupPage, 'Err' : IDL.Text });
+  const RoutingApproval = IDL.Record({
+    'configuration_revision' : IDL.Nat64,
     'removal_checked_at_ms' : IDL.Nat64,
+    'approved_configuration_sha256' : IDL.Text,
+    'target_alias' : IDL.Text,
+    'removal_wiring_group_ids' : IDL.Vec(IDL.Text),
     'evidence_sha256' : IDL.Text,
   });
-  const Result_22 = IDL.Variant({ 'Ok' : RoutingApproval, 'Err' : IDL.Text });
-  const Result_23 = IDL.Variant({ 'Ok' : IDL.Opt(RoutingApproval), 'Err' : IDL.Text });
+  const Result_23 = IDL.Variant({
+    'Ok' : IDL.Opt(RoutingApproval),
+    'Err' : IDL.Text,
+  });
+  const Result_24 = IDL.Variant({ 'Ok' : RoutingApproval, 'Err' : IDL.Text });
   
   return IDL.Service({
     'abort_domain_migration' : IDL.Func(
@@ -294,11 +307,20 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_owner_test_deletion_required' : IDL.Func([IDL.Text], [Result_21], []),
+    'read_public_group_targets' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Nat64), IDL.Opt(IDL.Text), IDL.Nat32],
+        [Result_22],
+        [],
+      ),
     'read_routing_approval' : IDL.Func([IDL.Text], [Result_23], []),
-    'record_routing_approval' : IDL.Func([RoutingApproval, IDL.Nat64], [Result_22], []),
     'record_group_health' : IDL.Func(
         [IDL.Text, IDL.Nat64, IDL.Nat64, IDL.Nat64],
         [Result],
+        [],
+      ),
+    'record_routing_approval' : IDL.Func(
+        [RoutingApproval, IDL.Nat64],
+        [Result_24],
         [],
       ),
     'register_group' : IDL.Func([ShardGroup, IDL.Nat64], [Result], []),

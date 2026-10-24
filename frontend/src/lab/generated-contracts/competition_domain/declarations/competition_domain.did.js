@@ -125,19 +125,17 @@ export const idlFactory = ({ IDL }) => {
     'competition_id' : IDL.Text,
     'expires_at_ms' : IDL.Nat64,
   });
-  const RoleLink = IDL.Record({
-    'token' : IDL.Text,
-    'revoked' : IDL.Bool,
-    'role' : IDL.Text,
-    'created_by' : IDL.Principal,
-    'created_at_ms' : IDL.Nat64,
-    'competition_id' : IDL.Text,
-  });
-  const Season = IDL.Record({
-    'status' : IDL.Text,
-    'name' : IDL.Text,
-    'divisions' : IDL.Vec(IDL.Text),
-    'revision' : IDL.Nat64,
+  const Input = IDL.Record({
+    'round_number' : IDL.Opt(IDL.Nat16),
+    'venue' : IDL.Opt(IDL.Text),
+    'duration_minutes' : IDL.Opt(IDL.Nat16),
+    'home_team' : IDL.Text,
+    'notes' : IDL.Opt(IDL.Text),
+    'pitch_number' : IDL.Opt(IDL.Text),
+    'scheduled_at_ms' : IDL.Opt(IDL.Nat64),
+    'away_team' : IDL.Text,
+    'division_id' : IDL.Opt(IDL.Text),
+    'arrival_minutes_before' : IDL.Opt(IDL.Nat16),
     'competition_id' : IDL.Text,
   });
   const Match = IDL.Record({
@@ -156,6 +154,21 @@ export const idlFactory = ({ IDL }) => {
     'home_score' : IDL.Nat16,
     'revision' : IDL.Nat64,
     'arrival_minutes_before' : IDL.Opt(IDL.Nat16),
+    'competition_id' : IDL.Text,
+  });
+  const RoleLink = IDL.Record({
+    'token' : IDL.Text,
+    'revoked' : IDL.Bool,
+    'role' : IDL.Text,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'competition_id' : IDL.Text,
+  });
+  const Season = IDL.Record({
+    'status' : IDL.Text,
+    'name' : IDL.Text,
+    'divisions' : IDL.Vec(IDL.Text),
+    'revision' : IDL.Nat64,
     'competition_id' : IDL.Text,
   });
   const JoinToken = IDL.Record({
@@ -288,6 +301,11 @@ export const idlFactory = ({ IDL }) => {
     'request' : Request,
     'receiver' : IDL.Principal,
   });
+  const Receipt__1 = IDL.Record({
+    'creator' : IDL.Principal,
+    'input' : Input,
+    'match_id' : IDL.Text,
+  });
   const PlayHQStat = IDL.Record({
     'player_id' : IDL.Text,
     'team_id' : IDL.Text,
@@ -401,6 +419,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'compact_email_jobs' : IDL.Func(
+        [IDL.Opt(IDL.Text), IDL.Nat],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'scanned' : IDL.Nat,
+              'next_cursor' : IDL.Opt(IDL.Text),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'competition_engagement_summary' : IDL.Func(
         [IDL.Vec(IDL.Text), IDL.Int, IDL.Int],
         [
@@ -458,6 +489,11 @@ export const idlFactory = ({ IDL }) => {
     'create_competition_official_link' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_fixture' : IDL.Func(
+        [IDL.Text, Input],
+        [IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text })],
         [],
       ),
     'create_personal_competition' : IDL.Func(
@@ -905,6 +941,23 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
         [],
       ),
+    'read_competition_welcome_message' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(
+              IDL.Record({ 'subject' : IDL.Text, 'message' : IDL.Text })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_fixture_operation' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Receipt__1), 'Err' : IDL.Text })],
+        [],
+      ),
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
@@ -978,6 +1031,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'reconcile_email_job' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
       ),
     'record_match' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],

@@ -595,6 +595,14 @@ type Main =
      });
    commit_media_quota: (token: text) -> (Result);
    commit_retained_media: (token: text) -> (Result__1);
+   compact_email_jobs: (cursor: opt text, limit: nat) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             next_cursor: opt text;
+             scanned: nat;
+           };
+     });
    configure_media_growth: (usable: nat, unassigned: nat, free_bytes: 
     nat, clubs: vec text) -> (variant {
                                 Err: text;
@@ -1764,6 +1772,16 @@ type Main =
        Ok: vec ClubTeam;
      });
    read_vault_erasure_scope: (club: text, team: opt text) -> (bool) query;
+   reconcile_competition_broadcast: (club: text, key: text) ->
+    (variant {
+       Err: text;
+       Ok: opt nat16;
+     });
+   reconcile_email_job: (id: text, attempt: nat, provider_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    record_presence_heartbeat: () -> (variant {
                                        Err: text;
                                        Ok;

@@ -85,6 +85,12 @@ type Request =
    inventory_digest: blob;
    subjects: vec principal;
  };
+type Receipt__1 = 
+ record {
+   creator: principal;
+   input: Input;
+   match_id: text;
+ };
 type Receipt = 
  record {
    outstanding: nat;
@@ -236,6 +242,14 @@ type Main =
                 Err: text;
                 Ok;
               });
+   compact_email_jobs: (cursor: opt text, limit: nat) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             next_cursor: opt text;
+             scanned: nat;
+           };
+     });
    competition_engagement_summary: (competition_ids: vec text, since_ms: 
     int, until_ms: int) ->
     (variant {
@@ -281,6 +295,11 @@ type Main =
                        Err: text;
                        Ok: CompetitionJoinLink;
                      });
+   create_fixture: (operation: text, input: Input) ->
+    (variant {
+       Err: text;
+       Ok: Match;
+     });
    create_personal_competition: (name: text, season: text) ->
     (variant {
        Err: text;
@@ -677,6 +696,19 @@ type Main =
                                            Err: text;
                                            Ok: opt text;
                                          });
+   read_competition_welcome_message: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt record {
+                 message: text;
+                 subject: text;
+               };
+     });
+   read_fixture_operation: (operation: text) ->
+    (variant {
+       Err: text;
+       Ok: opt Receipt__1;
+     });
    read_group_opening_configuration: () -> (vec record {
                                                   text;
                                                   text;
@@ -735,6 +767,11 @@ type Main =
        Err: text;
        Ok: opt text;
      }) query;
+   reconcile_email_job: (id: text, attempt: nat, provider_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    record_match: (competition_id: text, home_team: text, away_team: text) ->
     (variant {
        Err: text;
@@ -987,6 +1024,20 @@ type Job =
    resource: text;
    state: text;
    worker: opt principal;
+ };
+type Input = 
+ record {
+   arrival_minutes_before: opt nat16;
+   away_team: text;
+   competition_id: text;
+   division_id: opt text;
+   duration_minutes: opt nat16;
+   home_team: text;
+   notes: opt text;
+   pitch_number: opt text;
+   round_number: opt nat16;
+   scheduled_at_ms: opt nat64;
+   venue: opt text;
  };
 type EoiTeamSuggestion = 
  record {

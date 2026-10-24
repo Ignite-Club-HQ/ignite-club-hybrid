@@ -106,6 +106,15 @@ export interface Page {
   'routes' : Array<Route>,
   'revision' : bigint,
 }
+export interface PublicGroupPage {
+  'groups' : Array<PublicGroupTarget>,
+  'configuration_revision' : bigint,
+  'next_cursor' : [] | [string],
+}
+export interface PublicGroupTarget {
+  'id' : string,
+  'domains' : Array<DomainCanister>,
+}
 export type Result = { 'Ok' : bigint } |
   { 'Err' : string };
 export type Result_1 = { 'Ok' : DeletionLock } |
@@ -134,19 +143,13 @@ export type Result_2 = { 'Ok' : AssignResult } |
   { 'Err' : string };
 export type Result_20 = { 'Ok' : [] | [OwnerOpening] } |
   { 'Err' : string };
-export interface RoutingApproval {
-  'target_alias' : string,
-  'configuration_revision' : bigint,
-  'approved_configuration_sha256' : string,
-  'removal_wiring_group_ids' : Array<string>,
-  'removal_checked_at_ms' : bigint,
-  'evidence_sha256' : string,
-}
-export type Result_22 = { 'Ok' : RoutingApproval } |
+export type Result_21 = { 'Ok' : boolean } |
+  { 'Err' : string };
+export type Result_22 = { 'Ok' : PublicGroupPage } |
   { 'Err' : string };
 export type Result_23 = { 'Ok' : [] | [RoutingApproval] } |
   { 'Err' : string };
-export type Result_21 = { 'Ok' : boolean } |
+export type Result_24 = { 'Ok' : RoutingApproval } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : AssignDomainResult } |
   { 'Err' : string };
@@ -166,6 +169,26 @@ export interface Route {
   'shard' : Principal,
   'revision' : bigint,
   'club_id' : string,
+}
+export interface RoutingApproval {
+  /**
+   * Exact configuration revision the governor verified.
+   */
+  'configuration_revision' : bigint,
+  'removal_checked_at_ms' : bigint,
+  /**
+   * Lowercase hex SHA-256 of the canonical approved configuration text.
+   */
+  'approved_configuration_sha256' : string,
+  'target_alias' : string,
+  /**
+   * Every registered group for the target, all with verified removal wiring.
+   */
+  'removal_wiring_group_ids' : Array<string>,
+  /**
+   * Lowercase hex SHA-256 of the full off-chain evidence report.
+   */
+  'evidence_sha256' : string,
 }
 export interface ShardGroup {
   'id' : string,
@@ -278,9 +301,24 @@ export interface _SERVICE {
    * the complete group inventory, even when they have no test-club membership.
    */
   'read_owner_test_deletion_required' : ActorMethod<[string], Result_21>,
+  /**
+   * Anonymous infrastructure discovery only: never memberships, placements,
+   * controller details or a grant to read/write any destination resource.
+   */
+  'read_public_group_targets' : ActorMethod<
+    [string, [] | [bigint], [] | [string], number],
+    Result_22
+  >,
+  /**
+   * Consensus read for signed-in clients; infrastructure metadata only.
+   */
   'read_routing_approval' : ActorMethod<[string], Result_23>,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
-  'record_routing_approval' : ActorMethod<[RoutingApproval, bigint], Result_22>,
+  /**
+   * Governor-only. Binds the exact configuration revision and approved digest;
+   * any later group/placement/policy change makes clients fail closed again.
+   */
+  'record_routing_approval' : ActorMethod<[RoutingApproval, bigint], Result_24>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
   'register_group_placement' : ActorMethod<[GroupPlacement, bigint], Result>,
   'release_deletion_lock' : ActorMethod<[string, bigint], Result_7>,
@@ -289,6 +327,10 @@ export interface _SERVICE {
     Result
   >,
   'set_deletion_authority' : ActorMethod<[Principal], Result_7>,
+  /**
+   * Governor-only stop for general and trial admission. Never removes assignments
+   * or changes membership, service endpoints, media, or opening authorization.
+   */
   'stop_group_new_placements' : ActorMethod<[string, string, bigint], Result>,
   'stop_owner_test_group' : ActorMethod<[string, bigint], Result_15>,
   'version' : ActorMethod<[], bigint>,
