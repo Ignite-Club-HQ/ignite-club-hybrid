@@ -611,25 +611,15 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
     retry: isIcp ? false : 3,
     initialData: snapshot?.items,
     initialDataUpdatedAt: snapshotWithTs?.timestamp,
-    queryFn: async ({ signal }) => {
+    queryFn: async () => {
       if (!user) return [];
 
       if (isIcp) {
         return withFeatureBackend("competitions", {
           // Unreachable: this branch only runs when ICP mode is active.
           supabase: async () => [] as TeamOrLeague[],
-          icp: async (ctx) => {
-            incompleteItemsRef.current = true;
-            const key = ["my-teams-premium-v2", user.id, activeClubFilter];
-            const previous = queryClient.getQueryData<TeamOrLeague[]>(key) ?? [];
-            const mergeProgress = (ready: TeamOrLeague[]) => [...new Map([...previous, ...ready].map(item => [`${item.type}:${item.id}`, item])).values()];
-            const result = await fetchIcpCarouselItems(ctx, activeClubFilter ?? null, ready => {
-              if (!signal.aborted) queryClient.setQueryData(key, mergeProgress(ready));
-            }, signal);
-            incompleteItemsRef.current = result.incomplete;
-            return result.incomplete ? mergeProgress(result.items) : result.items;
-          },
-        }, { shared: "person" });
+          icp: (ctx) => fetchIcpCarouselItems(ctx, activeClubFilter ?? null),
+        }, activeClubFilter ? { clubId: activeClubFilter } : { everyGroup: true, merge: mergeLists });
       }
 
       const { data: roles, error: rolesError } = await supabase
