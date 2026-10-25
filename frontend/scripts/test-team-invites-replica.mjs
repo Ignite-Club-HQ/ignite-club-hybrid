@@ -27,8 +27,27 @@ try {
   a.setPrincipal(owner);assert.ok('Err'in await a.resend_pending_invite(pending.id));ok(await a.revoke_team_invite_link(link.id));assert.ok('Err'in await a.rotate_team_invite_link(link.id));
   a.setPrincipal(member);assert.ok('Err'in await a.accept_team_invite_link(link.token));
   a.setPrincipal(owner);const retry=ok(await a.create_pending_invite('team',club,[team],[],'opaque',['player'])).invite;ok(await a.resend_pending_invite(retry.id));a.setPrincipal(other);ok(await a.accept_pending_invite(retry.id));
+  a.setPrincipal(owner);
+  const childIds=[`child-${g}-one`,`child-${g}-two`];
+  const request=`family-request-${g}-001`;
+  const children=childIds.map(id=>({id,existing:false}));
+  assert.ok('Err' in await a.create_family_invite(request,club,team,[children[0],{id:'missing-child',existing:true}],true,[other]));
+  const family=ok(await a.create_family_invite(request,club,team,children,true,[other]));
+  assert.deepEqual(family.child_ids,childIds);
+  assert.equal(ok(await a.create_family_invite(request,club,team,children,true,[other])).invite.id,family.invite.id);
+  const second=family.secondary[0];assert.ok(second);
+  a.setPrincipal(other);assert.ok('Err' in await a.accept_pending_invite(second.id));
+  a.setPrincipal(member);ok(await a.accept_pending_invite(family.invite.id));
+  assert.deepEqual(ok(await a.read_family_invite_receipt(family.invite.id)).child_ids,childIds);
+  const firstReceipt=ok(await a.read_family_invite_receipt(family.invite.id));
+  ok(await a.accept_pending_invite(family.invite.id));
+  assert.equal(ok(await a.read_family_invite_receipt(family.invite.id)).accepted_at_ms,firstReceipt.accepted_at_ms);
+  a.setPrincipal(coach);assert.ok('Err' in await a.accept_pending_invite(second.id));
+  a.setPrincipal(other);ok(await a.accept_pending_invite(second.id));
+  assert.deepEqual(ok(await a.read_family_invite_receipt(second.id)).child_ids,childIds);
   await pic.upgradeCanister({canisterId:f.canisterId,wasm:process.env.CLUB_DOMAIN_WASM,sender:owner,arg:IDL.encode([IDL.Principal],[owner]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
   a.setPrincipal(member);ok(await a.accept_pending_invite(pending.id));
+  assert.deepEqual(ok(await a.read_family_invite_receipt(family.invite.id)).child_ids,childIds);
  }
  // Wrong authority never accepts a token owned by another group.
  fixtures[0].actor.setPrincipal(owner);const token=ok(await fixtures[0].actor.create_pending_invite('team','club-a',['team-a'],[],'opaque',['player'])).invite.id;

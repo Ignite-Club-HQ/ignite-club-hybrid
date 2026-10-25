@@ -1898,6 +1898,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?invite) {
         if (not isAdmin(caller, invite.club_id)) return #Err("Club admin required");
         if (invite.status == "accepted" or invite.status == "revoked") return #Err("Invite no longer pending");
+        if (familyInvites.any(func f = f.primary == id or f.secondary == ?id)) return #Err("Family invite scope is immutable; revoke and reissue");
         let updated : Types.PendingInvite = { invite with role };
         pendingInvites := pendingInvites.map(func(i) = if (i.id == id) updated else i);
         #Ok(updated)
