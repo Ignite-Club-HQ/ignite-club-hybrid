@@ -28,6 +28,7 @@ import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveUserActivity } from "@/live/features/insights";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { useAuth } from "@/hooks/useAuth";
 
 type TimePeriod = "7d" | "14d" | "30d" | "90d";
 
@@ -41,6 +42,7 @@ function formatDuration(seconds: number): string {
 }
 
 export default function UserAnalyticsTab() {
+  const { user } = useAuth();
   const { isAppAdmin } = useIsAppAdmin();
   const [period, setPeriod] = useState<TimePeriod>("7d");
   const [search, setSearch] = useState("");
@@ -51,7 +53,7 @@ export default function UserAnalyticsTab() {
 
   // Fetch clubs for filter
   const { data: clubs } = useQuery({
-    queryKey: ["admin-clubs-list"],
+    queryKey: ["admin-clubs-list", user?.id],
     enabled: isAppAdmin,
     queryFn: async () => {
       return withFeatureBackend("membership", {
@@ -83,10 +85,10 @@ export default function UserAnalyticsTab() {
   // (admin-gated, capped at 500 most-recent rows per call) instead of the
   // Supabase user_activity_logs table.
   const { data: activityData, isLoading } = useQuery({
-    queryKey: ["admin-user-analytics", period, clubFilter],
+    queryKey: ["admin-user-analytics", user?.id, period, clubFilter],
     enabled: isAppAdmin,
     queryFn: async () =>
-      withFeatureBackend("admin", {
+      withFeatureBackend("analytics", {
         supabase: async () => {
           let query = supabase
             .from("user_activity_logs" as any)
@@ -119,7 +121,7 @@ export default function UserAnalyticsTab() {
             club_id: row.club_id[0] ?? null,
           }));
         },
-      }),
+      }, clubFilter !== "all" ? { clubId: clubFilter } : { everyGroup: true, requireComplete: true, merge: parts => (parts as Array<Array<Record<string, unknown>>>).flat() }),
   });
 
   // Fetch profiles for all users in the activity data
@@ -129,7 +131,7 @@ export default function UserAnalyticsTab() {
   );
 
   const { data: profiles } = useQuery({
-    queryKey: ["admin-activity-profiles", userIds],
+    queryKey: ["admin-activity-profiles", user?.id, userIds],
     queryFn: async () => {
       if (userIds.length === 0) return {};
       const { data } = await selectCachedProfilesByIds(userIds);
@@ -139,7 +141,7 @@ export default function UserAnalyticsTab() {
       });
       return map;
     },
-    enabled: userIds.length > 0,
+    enabled: isAppAdmin && userIds.length > 0,
   });
 
   // Aggregate per-user stats

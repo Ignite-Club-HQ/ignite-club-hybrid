@@ -2606,11 +2606,7 @@ fn revoke_role_scoped(
 fn set_account_status(account_id: String, status: AccountStatus) -> Outcome<Account> {
     let caller = ic_cdk::api::msg_caller();
     let state = state();
-    let caller_account = account_for(caller)?;
-    let is_app_admin = account_has_role(&state, &caller_account.id, "app_admin", None, None, None);
-    if state.governor != caller && !is_app_admin {
-        return Err("Forbidden".into());
-    }
+    admin_accounts::authorize(&state, caller)?;
     let mut account = get_account(&account_id).ok_or("Unknown account")?;
     if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)) { return Err("Deletion reservation pending".into()); }
     if status == AccountStatus::Suspended && account.principals.contains(&state.governor) {
