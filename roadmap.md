@@ -1,3 +1,7 @@
+## Team-page blocked ICP reads — 25 October 2026
+- [x] Replaced team roster/request/invite-card auth-screen predicates with actual feature routing; restored manager-authorized owning-club pending invitation reads and labels, preserving acknowledgement-only self-request state without the admin-only request directory. 47 unique focused checks pass per configuration (including mounted country/provider mismatch regression), ICP guards pass and preview build OK. No deployment or live timing claim.
+- [ ] Signed-in U10 Hawks acceptance requires Paul's Internet Identity session; screenshots establish blocked requests, not current deployed code.
+
 ## Bottom navigation response — 25 October 2026
 - [x] Activated previously unused idle main-page code warming and focus/pointer intent prefetch; tab clicks never await imports. All 11 navigation/native scroll/safe-area checks pass in each mode and preview build OK; no deployment or signed-in timing claim.
 - [ ] Real signed-in phone timing remains unverified without Paul's Internet Identity session.
