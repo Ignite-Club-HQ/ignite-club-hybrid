@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ admin: true, health: vi.fn(), settings: vi.fn(), save: vi.fn(), cleanup: vi.fn() }));
 vi.mock("@/hooks/useIsAppAdmin", () => ({ useIsAppAdmin: () => ({ isAppAdmin: m.admin, isLoading: false }) }));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "admin-1" } }) }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: async (_: string, h: { icp: (ctx: unknown) => Promise<unknown> }, scope: { everyGroup?: boolean; merge?: (parts: unknown[]) => unknown }) => { const value = await h.icp({ target: { canisterIds: { notification_queue: "queue-1" } } }); return scope.everyGroup ? scope.merge?.([value]) : value; } }));
 vi.mock("@/live/features/notifications", () => ({ getLivePushDeliveryHealth: m.health, getLivePushAlertSettings: m.settings, upsertLivePushAlertSettings: m.save, cleanupLiveStaleDeviceTokens: m.cleanup }));
 import Page from "./IcpPushAnalyticsPage";

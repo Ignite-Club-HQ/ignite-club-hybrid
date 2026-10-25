@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ admin: true, read: vi.fn(), status: vi.fn(), erase: vi.fn() }));
 vi.mock("@/hooks/useIsAppAdmin", () => ({ useIsAppAdmin: () => ({ isAppAdmin: m.admin, isLoading: false }) }));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "admin-1" } }) }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, h: { icp: (ctx: unknown) => unknown }) => h.icp({ identity: "signed-in", target: "mainnet" }) }));
 vi.mock("@/live/adminUserDirectory", () => ({ readAdminUserDirectory: m.read, updateAdminAccountStatus: m.status }));
 vi.mock("@/live/adminAccountDeletion", () => ({ eraseIcpAccountAsAdmin: m.erase }));

@@ -35,19 +35,24 @@ pub fn page(core: &CoreState, query: String, after: Option<String>, limit: u16) 
     use std::ops::Bound::{Excluded, Unbounded};
     let accounts: Vec<Account> = ACCOUNTS.with(|m| m.borrow()
         .range((after.map(Excluded).unwrap_or(Unbounded), Unbounded))
-        .take(usize::from(limit)).map(|entry| decode(&entry.value())).collect());
-    let next = (accounts.len() == usize::from(limit)).then(|| accounts.last().map(|a| a.id.clone())).flatten();
+        .take(1001).map(|entry| decode(&entry.value())).collect());
     let search = query.trim().to_lowercase();
-    let items = accounts.into_iter().filter_map(|account| {
+    let mut items = Vec::new();
+    let mut next = None;
+    for (index, account) in accounts.iter().take(1000).enumerate() {
         let profile = get_profile_entry(&account.id);
         let matches = search.is_empty() || account.id.to_lowercase().contains(&search)
             || account.principals.iter().any(|p| p.to_text().contains(&search))
             || profile.as_ref().is_some_and(|p| p.display_name.to_lowercase().contains(&search));
-        matches.then(|| AdminAccountRow {
+        if matches { items.push(AdminAccountRow {
             roles: core.roles.iter().filter(|r| r.account_id == account.id).cloned().collect(),
-            account_id: account.id, principals: account.principals, status: account.status, profile,
-        })
-    }).collect();
+            account_id: account.id.clone(), principals: account.principals.clone(), status: account.status.clone(), profile,
+        }); }
+        if items.len() == usize::from(limit) || index == 999 {
+            if index + 1 < accounts.len() { next = Some(account.id.clone()); }
+            break;
+        }
+    }
     Ok(AdminAccountPage { items, next })
 }
 
@@ -90,5 +95,7 @@ mod tests {
         assert_eq!(second.items[0].account_id, "directory-test-2");
         assert!(page(&core, "".into(), None, 101).is_err());
         assert!(page(&core, "".into(), None, 0).is_err());
+        let found = page(&core, "directory-test-2".into(), Some("directory-test-".into()), 1).unwrap();
+        assert_eq!(found.items[0].account_id, "directory-test-2");
     }
 }

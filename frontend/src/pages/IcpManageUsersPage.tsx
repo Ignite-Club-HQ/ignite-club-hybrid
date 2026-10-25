@@ -16,9 +16,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import UserAnalyticsTab from "@/components/admin/UserAnalyticsTab";
+import { useAuth } from "@/hooks/useAuth";
 
 const unavailable = async (): Promise<never> => { throw new Error("Internet Identity connection required"); };
 export default function IcpManageUsersPage() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { isAppAdmin, isLoading } = useIsAppAdmin();
@@ -29,22 +31,23 @@ export default function IcpManageUsersPage() {
   const [team, setTeam] = useState("");
   const [role, setRole] = useState("team_member");
   const directory = useInfiniteQuery({
-    queryKey: ["icp-admin-users", query], enabled: isAppAdmin,
+    queryKey: ["icp-admin-users", user?.id, query], enabled: isAppAdmin,
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => withFeatureBackend("admin", { supabase: unavailable, icp: ctx => readAdminUserDirectory(ctx, query, pageParam) }, { shared: "app" }),
     getNextPageParam: page => page.next[0] ?? undefined,
   });
-  const audit = useQuery({ queryKey: ["icp-admin-user-audit"], enabled: isAppAdmin && tab === "audit",
+  const audit = useQuery({ queryKey: ["icp-admin-user-audit", user?.id], enabled: isAppAdmin && tab === "audit",
     queryFn: () => withFeatureBackend("admin", { supabase: unavailable, icp: ctx => listLiveAuditLogs(ctx, { limit: 100 }) }, { shared: "app" }),
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ["icp-admin-users"] });
   const change = useMutation({ mutationFn: async (input: { id: string; action: "Active" | "Suspended" | "delete" }) => {
-    if (input.action === "delete" && !confirm("Permanently remove this account and its club access? Existing shared club content is retained.")) return;
+    if (input.action === "delete" && !confirm(`Permanently remove account ${input.id} and its club access? Existing shared club content is retained.`)) return false;
     await withFeatureBackend("admin", { supabase: unavailable, icp: async ctx => {
       if (input.action === "delete") await eraseIcpAccountAsAdmin(ctx.identity, ctx.target, input.id);
       else await updateAdminAccountStatus(ctx, input.id, input.action);
     } }, writeOnce({ shared: "app" }));
-  }, onSuccess: () => { refresh(); toast.success("Account action completed"); }, onError: (e: Error) => { refresh(); toast.error(e.message); } });
+    return true;
+  }, onSuccess: completed => { if (completed) { refresh(); toast.success("Account action completed"); } }, onError: (e: Error) => { refresh(); toast.error(e.message); } });
   const grant = useMutation({ mutationFn: async (principal: string) => {
     if (!club.trim()) throw new Error("Choose the owning club");
     const { Principal } = await import("@icp-sdk/core/principal");
