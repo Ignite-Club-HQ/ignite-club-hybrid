@@ -1,3 +1,7 @@
+## Team invitations ICP audit — 25 October 2026
+- [ ] Audit team/parent/staff/season invitation creation, delivery, token resolution, acceptance and revocation across both groups; record concrete remaining off-chain dependencies and authorization gaps without modifying app behaviour or activating deferred Resend delivery.
+- [ ] Run focused existing invite checks and save findings with source evidence and live-verification limits.
+
 ## Competition ICP audit — 24 October 2026
 - [x] Saved owner-facing competition status and exact both-group upgrade checklist to Files, including deferred Resend setup and the distinction between local code closure and live acceptance.
 - [ ] Deferred by owner 21:29 UTC: connect existing Resend to ICP emails later; reuse working sender/credentials and complete worker/queue setup without disrupting existing mail. Connection cancelled before execution; nothing activated.
