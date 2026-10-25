@@ -190,7 +190,7 @@ export function useLatestClubNews(clubId?: string | null) {
   return { ...feed, latest: feed.data?.[0] ?? null };
 }
 
-export function useClubNewsPost(newsId?: string | null) {
+export function useClubNewsPost(newsId?: string | null, clubIdHint?: string | null) {
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const queryClient = useQueryClient();
   return useQuery<ClubNewsRow | null>({
@@ -198,11 +198,13 @@ export function useClubNewsPost(newsId?: string | null) {
     queryFn: async () => {
       if (!newsId) return null;
       if (useIcpLab) return getLocalLabNewsPost(newsId) as ClubNewsRow | null;
-      // Home/archive already know the actual post's club. Use it as a routing
-      // hint, not as authorization: the owning canister still checks the audience.
+      // Home/archive already know the actual post's club, and share tokens may
+      // carry one ([news:clubId:newsId]). Use either as a routing hint, not as
+      // authorization: the owning canister still checks the audience.
       const knownPost = queryClient.getQueriesData<ClubNewsRow[]>({ queryKey: ["club-news"] })
         .flatMap(([, rows]) => rows ?? [])
         .find((row) => row.id === newsId);
+      const routeClubId = knownPost?.club_id ?? clubIdHint ?? null;
       return withFeatureBackend("news", {
         supabase: async () => {
           const { data, error } = await supabase
@@ -214,8 +216,8 @@ export function useClubNewsPost(newsId?: string | null) {
           return (data as ClubNewsRow | null) ?? null;
         },
         icp: async (ctx) => {
-          if (knownPost?.club_id) {
-            const posts = await listLiveNews(ctx, knownPost.club_id);
+          if (routeClubId) {
+            const posts = await listLiveNews(ctx, routeClubId);
             const post = posts.find((row) => row.id === newsId);
             return post ? liveNewsPostToRow(post) : null;
           }
@@ -238,7 +240,7 @@ export function useClubNewsPost(newsId?: string | null) {
             .find((p) => p.id === newsId);
           return post ? liveNewsPostToRow(post) : null;
         },
-      }, knownPost?.club_id ? { clubId: knownPost.club_id } : { newsId });
+      }, routeClubId ? { clubId: routeClubId } : { newsId });
     },
     enabled: !!newsId,
   });
