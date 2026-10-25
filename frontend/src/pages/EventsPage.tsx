@@ -947,12 +947,26 @@ export default function EventsPage() {
       const memberEvents = eventsData ?? offlineCachedEvents;
       const fixtures = isIcpAuthBackend ? fixtureQuery.data?.events : undefined;
       if (!memberEvents && !fixtures) return undefined;
-      return [...new Map([...(memberEvents ?? []), ...(fixtures ?? [])].map(event => [event.id, event])).values()]
+      // Events publish before their labels; fill team names from data we
+      // already hold (team filter list, last cached schedule) so names don't pop in late.
+      const knownTeamNames = new Map<string, string>();
+      for (const t of userTeams ?? []) if (t?.id && t?.name) knownTeamNames.set(t.id, t.name);
+      for (const e of offlineCachedEvents ?? []) {
+        const tid = (e as any).team_id; const nm = (e as any).teams?.name;
+        if (tid && nm && !knownTeamNames.has(tid)) knownTeamNames.set(tid, nm);
+      }
+      const withName = (event: Event): Event => {
+        const tid = (event as any).team_id as string | undefined;
+        if ((event as any).teams?.name || !tid) return event;
+        const nm = knownTeamNames.get(tid);
+        return nm ? ({ ...event, teams: { ...((event as any).teams ?? {}), name: nm } } as Event) : event;
+      };
+      return [...new Map([...(memberEvents ?? []), ...(fixtures ?? [])].map(event => [event.id, withName(event)])).values()]
         .filter(hasValidScheduleDate)
         .filter(event => filter === 'all' || event.type === filter)
         .sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id));
     },
-    [eventsData, offlineCachedEvents, fixtureQuery.data?.events, isIcpAuthBackend, filter],
+    [eventsData, offlineCachedEvents, fixtureQuery.data?.events, isIcpAuthBackend, filter, userTeams],
   );
   const showingOfflineCache = !isOnline && !eventsData && !!offlineCachedEvents;
   const offlineNoCache = !isOnline && !events;
