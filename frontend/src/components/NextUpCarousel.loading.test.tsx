@@ -19,6 +19,11 @@ vi.mock('@/live/features/events', () => ({ setLiveEventRsvp: vi.fn(), adminUpser
   getLiveEventRosterDetailed: async () => ({ rsvps: [] }),
 }));
 vi.mock('@/live/features/homeFeed', () => ({ fetchLiveHomeChildren: vi.fn() }));
+// The card statically imports the events module as well as lazily reading it;
+// stub its batch transport too so either module evaluation stays offline.
+vi.mock('@/live/features/batching', () => ({ batched: async () => [
+  { event_id: 'icp-event', account_id: 'account-1', duty: 'Referee', completed: true },
+] }));
 vi.mock('@/live/features/miniLeagues', () => ({ listLivePlayers: vi.fn() }));
 vi.mock('@/lib/resolveEventChildScope', () => ({ resolveRsvpChildren: () => new Promise(() => {}) }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { from: (table: string) => {
