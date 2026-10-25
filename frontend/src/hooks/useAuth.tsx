@@ -1366,6 +1366,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     localStorage.removeItem("ignite_icp_internet_identity_session");
     clearIcpIdentityProfileCache();
     queryClient.clear();
+    void import("@/live/features/events").then((m) => m.clearListedLiveEvents()).catch(() => undefined);
     const { clearPersistedIcpQueryCache } = await import('@/lib/icpQueryCachePersist');
     await clearPersistedIcpQueryCache();
     setSession(null);
@@ -1594,6 +1595,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       setIiWarmGeneration((g) => g + 1);
       localStorage.removeItem("ignite_icp_internet_identity_session");
       queryClient.clear();
+      void import("@/live/features/events").then((m) => m.clearListedLiveEvents()).catch(() => undefined);
       const { clearIcpIdentityProfileCache } = await import("@/live/identityProfileCache");
       clearIcpIdentityProfileCache();
       const { clearPersistedIcpQueryCache } = await import("@/lib/icpQueryCachePersist");

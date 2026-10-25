@@ -11,7 +11,7 @@ import { useLocalAttendanceMutation } from "@/hooks/useLocalAttendanceMutation";
 import { useParentLeaguePlayerRsvpMutation } from "@/hooks/useParentLeaguePlayerRsvpMutation";
 import { useEventAttendanceViewModel } from "@/hooks/useEventAttendanceViewModel";
 import { resolveEventCapabilities } from "@/features/events/eventCapabilities";
-import { fetchEventDetail } from "@/features/events/eventDetailRepository";
+import { fetchEventDetail, listedEventDetailPreview } from "@/features/events/eventDetailRepository";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 import { Share } from "@capacitor/share";
@@ -231,6 +231,8 @@ export default function EventDetailPage() {
       return fetchEventDetail(supabase, id, signal);
     },
     enabled: !!id,
+    // Show an event already seen in Schedule/Next Up straight away while it refreshes.
+    placeholderData: () => (!useIcpLab && id ? listedEventDetailPreview(id) : undefined),
     retry: (failureCount, err: any) => {
       // Telemetry: log every retry so we can quantify how often the transient
       // failure path (resume-race / 5xx / token rotation) is hit in the wild.
