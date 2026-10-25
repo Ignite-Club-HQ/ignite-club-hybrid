@@ -3,6 +3,8 @@ import { writeOnce } from "./clubScope";
 import { listLiveClubs } from "./features/club";
 import { listLiveClubSubscriptionsStrict } from "./features/proAccess";
 import { listLiveAllClubDmSettings, setLiveClubAiCatchUp, enableLiveAiCatchUpForAllMembers } from "./features/messaging";
+import { getLiveClubSubscription } from "./features/club";
+import { readMembershipInScope } from "./membershipRouting";
 const unavailable = async (): Promise<never> => { throw new Error("Internet Identity required"); };
 export async function readAdminProCatchUpClubs() {
   return withFeatureBackend("membership", { supabase: unavailable, icp: async ctx => {
@@ -19,7 +21,8 @@ export async function readAdminProCatchUpClubs() {
     return clubs.flatMap(club => {
       const sub = subs.get(club.id);
       if (!sub || !(sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override) || (sub.expires_at_ms[0] !== undefined && Number(sub.expires_at_ms[0]) <= Date.now())) return [];
-      return [{ ...club, ai_catch_up_enabled: settings.find(s => s.clubId === club.id)?.aiCatchUpEnabled ?? false, is_pro_football: sub.is_pro_football || sub.admin_pro_football_override }];
+      // messaging_domain's absent-row default is enabled, not disabled.
+      return [{ ...club, ai_catch_up_enabled: settings.find(s => s.clubId === club.id)?.aiCatchUpEnabled ?? true, is_pro_football: sub.is_pro_football || sub.admin_pro_football_override }];
     });
   } }, { everyGroup: true, requireComplete: true, merge: parts => {
     const rows = (parts as Array<Array<{ id: string; name: string; ai_catch_up_enabled: boolean; is_pro_football: boolean }>>).flat();
@@ -34,7 +37,11 @@ export async function enableAdminProCatchUpClubs(ids: string[], all: boolean) {
   if (reviewed.some(id => !fresh.has(id)) || (all && reviewed.length !== fresh.size)) throw new Error("Eligible clubs changed. Refresh and confirm the selection again.");
   let flags = 0; let completed = 0; let members = 0;
   try { for (const id of reviewed) {
-    await withFeatureBackend("messaging", { supabase: unavailable, icp: ctx => setLiveClubAiCatchUp(ctx, id, true) }, writeOnce({ clubId: id })); flags++;
+    await withFeatureBackend("messaging", { supabase: unavailable, icp: async ctx => {
+      const sub = await readMembershipInScope(ctx, { clubId: id }, scoped => getLiveClubSubscription(scoped, id));
+      if (!sub || !(sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override) || (sub.expires_at_ms[0] !== undefined && Number(sub.expires_at_ms[0]) <= Date.now())) throw new Error("Club eligibility changed");
+      return setLiveClubAiCatchUp(ctx, id, true);
+    } }, writeOnce({ clubId: id })); flags++;
     members += await withFeatureBackend("messaging", { supabase: unavailable, icp: ctx => enableLiveAiCatchUpForAllMembers(ctx, id) }, writeOnce({ clubId: id })); completed++;
   } } catch { throw new Error(`Acknowledged ${flags} club flags and ${completed} member updates (${members} members); the attempted step is unconfirmed. Do not retry the whole batch.`); }
   return { clubs_updated: flags, members_updated: members, total_pro_clubs: reviewed.length };

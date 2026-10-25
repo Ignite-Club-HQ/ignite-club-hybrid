@@ -54,7 +54,7 @@ export function AssignTeamAdminSection({
             import("@/live/features/membership"), import("@/live/features/identityAccessClient"),
           ]);
           const roles = teamId ? await listLiveTeamRoleGrants(ctx, teamId) : await listLiveRoleGrants(ctx, clubId);
-          const ids = [...new Set(roles.map(role => role.user.toText()))];
+          const ids = [...new Set(roles.map(role => role.account_id))];
           const profiles = await listLiveProfilesByIds(ctx, ids);
           return profiles.filter(p => p.display_name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
             .map(p => ({ id: p.account_id, display_name: p.display_name, avatar_url: p.avatar_ref ?? null }));

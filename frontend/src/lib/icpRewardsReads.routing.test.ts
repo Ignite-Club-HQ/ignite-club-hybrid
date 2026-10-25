@@ -6,6 +6,7 @@ vi.mock('@/live/features/membership', () => ({ getLiveMyRoleGrants: async () => 
 vi.mock('@/live/features/club', () => ({
   getLiveClubProfile: async (ctx: { club: string }, id: string) => ctx.club === id ? [{ name: id, logo_url: [] }] : [],
   getLiveTeam: vi.fn(), isLiveClubPro: async () => true,
+  listLiveSponsors: async (ctx: { club: string }, id: string) => [{ id: `sponsor-${id}`, club_id: id, name: ctx.club, logo_url: [] }],
 }));
 vi.mock('@/live/features/points', () => ({
   getLiveClubPointsSettings: async () => ({}), listLiveClubRewards: state.rewards,
