@@ -44,6 +44,7 @@ import { withFeatureBackend } from "./featureRouter";
 
 describe("withFeatureBackend", () => {
   beforeEach(() => {
+    localStorage.clear();
     mocks.getEffectiveBackendForFeature.mockReset();
     mocks.getCurrentInternetIdentity.mockReset();
     mocks.tryGetActiveIcpTarget.mockReturnValue(null);
@@ -59,6 +60,14 @@ describe("withFeatureBackend", () => {
     const icpFn = vi.fn(async () => "icp-result");
     expect(await withFeatureBackend("messaging", { supabase: supabaseFn, icp: icpFn })).toBe("supabase-result");
     expect(icpFn).not.toHaveBeenCalled();
+  });
+
+  it("never falls back to Supabase for a restored II session with missing canisters", async () => {
+    localStorage.setItem("ignite_icp_internet_identity_session", JSON.stringify({ principal: "aaaaa-aa" }));
+    mocks.getEffectiveBackendForFeature.mockReturnValue("supabase");
+    const supabase = vi.fn();
+    await expect(withFeatureBackend("events", { supabase, icp: vi.fn() }, { clubId: "club" })).rejects.toThrow("not configured");
+    expect(supabase).not.toHaveBeenCalled();
   });
 
   it("keeps an Internet Identity user on the canister when routing momentarily says Supabase", async () => {

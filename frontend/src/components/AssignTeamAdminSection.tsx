@@ -50,10 +50,10 @@ export function AssignTeamAdminSection({
       if (!searchQuery.trim()) return [];
       return withFeatureBackend("membership", {
         icp: async ctx => {
-          const [{ listLiveRoleGrants }, { listLiveProfilesByIds }] = await Promise.all([
+          const [{ listLiveRoleGrants, listLiveTeamRoleGrants }, { listLiveProfilesByIds }] = await Promise.all([
             import("@/live/features/membership"), import("@/live/features/identityAccessClient"),
           ]);
-          const roles = await listLiveRoleGrants(ctx, clubId);
+          const roles = teamId ? await listLiveTeamRoleGrants(ctx, teamId) : await listLiveRoleGrants(ctx, clubId);
           const ids = [...new Set(roles.map(role => role.user.toText()))];
           const profiles = await listLiveProfilesByIds(ctx, ids);
           return profiles.filter(p => p.display_name.toLowerCase().includes(searchQuery.trim().toLowerCase()))

@@ -12,7 +12,7 @@ describe("ICP exact-event report details",()=>{
   it("uses optional scores, exact child honours and recorded position seconds",async()=>{
     mocks.result.mockResolvedValue([{home_score:[2],away_score:[1],scores_hidden:false,mvp_player_name:[],period_scores_json:'[{"home":2,"away":1}]',player_stats_json:'[{"id":"child","name":"Private name","goals":2}]'}]);
     const result=await fetchReportExtras("team",{eventId:"game"});
-    expect(result.matches[0].homeScore).toBe(2);expect(result.matches[0].captainNames).toEqual(["Private name"]);expect(result.honours["c:child"].gkSeconds).toBe(120);expect(result.scorersByPlayer.child.goals).toBe(2);
+    expect(result.matches[0].homeScore).toBe(2);expect(result.matches[0].captainNames).toEqual(["Private name"]);expect(result.honours["c:child"].gkSeconds).toBe(120);expect(result.honours["c:child"].gkMatches).toBe(1);expect(result.scorersByPlayer.child.goals).toBe(2);
   });
   it("does not reconstruct protected scores or scorer totals",async()=>{
     mocks.result.mockResolvedValue([{home_score:[],away_score:[],scores_hidden:true,mvp_player_name:[],period_scores_json:'[{"home":2,"away":1}]',player_stats_json:'[{"id":"child","name":"Private name","goals":2}]'}]);
