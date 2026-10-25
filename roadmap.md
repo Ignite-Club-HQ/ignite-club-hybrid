@@ -1,3 +1,7 @@
+## Event Captain spinner — 25 October 2026
+- [ ] Repair known-club routing, independent ICP name hydration, bounded reads and retryable assignment failures; run focused tests in both modes.
+- [ ] Live signed-in Captain acceptance requires Paul's Internet Identity session and the updated frontend; no deployment requested.
+
 ## Attendance name lost after Going — 25 October 2026
 - [x] ICP roster reads now hydrate adult profiles through the shared identity service; attendance buckets reuse known authorized roster/self names without changing RSVP wire identities or child names. Actual No Response → Going/name render and status/profile regressions pass (34 unique focused checks per mode); ICP guards and preview build OK. No deployment/live readback claim.
 - [ ] Signed-in phone RSVP readback requires Paul's Internet Identity session.
