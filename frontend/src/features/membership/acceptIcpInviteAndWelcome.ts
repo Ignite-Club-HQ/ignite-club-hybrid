@@ -15,7 +15,10 @@ export async function acceptIcpInviteAndWelcome(inviteId: string) {
       for (const id of receipt.child_ids) {
         try {
           await addLiveGuardianRelationship(ctx, ctx.identity.getPrincipal(), id);
-          await grantLivePiiRead(ctx, id, "name", ctx.identity.getPrincipal());
+          for (const field of ["name", "year_of_birth", "jersey_number"]) {
+            try { await grantLivePiiRead(ctx, id, field, ctx.identity.getPrincipal()); }
+            catch (error) { if (field === "name") throw error; }
+          }
         } catch (error) {
           console.warn("Accepted invitation; encrypted child-name access needs retry", error);
         }

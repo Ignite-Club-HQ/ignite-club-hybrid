@@ -74,7 +74,7 @@ export function useAddPendingTeamMemberMutation({
   setCustomEmail,
   setIsSendingNotification,
 }: Args) {
-  const familyOperation = useRef<{ fingerprint: string; requestId: string; children: { id: string; existing: boolean; name: string }[] } | null>(null);
+  const familyOperation = useRef<{ fingerprint: string; requestId: string; children: { id: string; existing: boolean; name: string; yearOfBirth?: string; jerseyNumber?: string }[] } | null>(null);
   /**
    * ICP path: composes what club_domain actually supports —
    * `bulk_add_team_members` (role grant) for an existing-user match, or
@@ -115,7 +115,7 @@ export function useAddPendingTeamMemberMutation({
       const fingerprint = JSON.stringify({ clubId, teamId, childInputs, email: inviteEmail, second: selectedSecondParent?.id, secondParentEmail, hasSecond });
       if (!familyOperation.current || familyOperation.current.fingerprint !== fingerprint) {
         familyOperation.current = { fingerprint, requestId: crypto.randomUUID(), children: childInputs.map(c => ({
-          id: c.existingChildId || `child-${crypto.randomUUID()}`, existing: !!c.existingChildId, name: c.name.trim(),
+          id: c.existingChildId || `child-${crypto.randomUUID()}`, existing: !!c.existingChildId, name: c.name.trim(), yearOfBirth: c.yearOfBirth, jerseyNumber: c.jerseyNumber,
         })) };
       }
       const { createLiveFamilyInvite } = await import("@/live/features/club");

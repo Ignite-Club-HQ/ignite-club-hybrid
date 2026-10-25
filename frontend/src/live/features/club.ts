@@ -686,7 +686,7 @@ export async function listLivePendingInvitesByClub(ctx: FeatureBackendContext, c
 
 export async function createLiveFamilyInvite(ctx: FeatureBackendContext, input: {
   requestId: string; clubId: string; teamId: string;
-  children: { id: string; existing: boolean; name: string }[];
+  children: { id: string; existing: boolean; name: string; yearOfBirth?: string; jerseyNumber?: string }[];
   second: boolean; boundSecondary?: string | null; email: string; secondaryEmail?: string;
 }) {
   const { registerLivePii, grantLivePiiReadClub } = await import("./vault");
@@ -697,6 +697,12 @@ export async function createLiveFamilyInvite(ctx: FeatureBackendContext, input: 
       if (!child.name.trim()) throw new Error("Child name required");
       await registerLivePii(ctx, child.id, "name", new TextEncoder().encode(child.name), ctx.identity.getPrincipal());
       await grantLivePiiReadClub(ctx, child.id, "name", input.clubId);
+      for (const [field, value] of [["year_of_birth", child.yearOfBirth], ["jersey_number", child.jerseyNumber]]) {
+        if (value) {
+          await registerLivePii(ctx, child.id, field, new TextEncoder().encode(value), ctx.identity.getPrincipal());
+          await grantLivePiiReadClub(ctx, child.id, field, input.clubId);
+        }
+      }
     }
   }
   const { Principal } = await import("@icp-sdk/core/principal");
