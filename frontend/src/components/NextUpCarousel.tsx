@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { readHomeCardRsvp, readHomeCardDuties, readHomeCardIcpSummary } from "@/lib/homeEventCardReads";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { MapPin, Check, HelpCircle, X, Clock, ChevronRight, AlertCircle, Play, Eye, CheckCircle2 } from "lucide-react";
@@ -119,14 +120,20 @@ function WatchLiveCta({ event }: { event: EventItem }) {
   const { data: hasLive } = useQuery({
     queryKey: ["watch-live-active", event.team_id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("active_games")
-        .select("id")
-        .eq("team_id", event.team_id!)
-        .eq("is_active", true)
-        .limit(1)
-        .maybeSingle();
-      return !!data;
+      if (!event.team_id) return false;
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase.from("active_games").select("id")
+            .eq("team_id", event.team_id).eq("is_active", true).limit(1).maybeSingle();
+          if (error) throw error;
+          return !!data;
+        },
+        icp: async ctx => {
+          const { getLiveActiveGame } = await import("@/live/features/events");
+          const [row] = await getLiveActiveGame(ctx, event.team_id);
+          return !!row && row.is_active !== false;
+        },
+      }, { teamId: event.team_id });
     },
     enabled: eligible,
     staleTime: 15 * 1000,
@@ -377,6 +384,7 @@ function useRsvpSummary(eventId: string, eventType?: string) {
   return useQuery({
     queryKey: ["rsvp-summary", eventId, eventType],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") return readHomeCardIcpSummary(eventId, isSocial);
       // First get the total count
       let countQuery = supabase
         .from("rsvps")
@@ -560,15 +568,8 @@ function HeroCard({ event, fullWidth, onNeedsRsvpChange, onReadyChange }: { even
   const { data: myRsvp, isFetched: myRsvpFetched } = useQuery({
     queryKey: ["hero-rsvp", event.id, user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("rsvps")
-        .select("id, status")
-        .eq("event_id", event.id)
-        .eq("user_id", user!.id)
-        .is("child_id", null)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      if (!user) return null;
+      return readHomeCardRsvp(event.id, user.id);
     },
     enabled: !!user,
     staleTime: 30 * 1000,
@@ -580,13 +581,8 @@ function HeroCard({ event, fullWidth, onNeedsRsvpChange, onReadyChange }: { even
   const { data: myDuties, isFetched: myDutiesFetched } = useQuery({
     queryKey: ["hero-my-duties", event.id, user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("duties")
-        .select("id, name, start_time, end_time, status")
-        .eq("event_id", event.id)
-        .eq("assigned_to", user!.id);
-      if (error) throw error;
-      return data || [];
+      if (!user) return [];
+      return readHomeCardDuties(event.id, user.id);
     },
     enabled: !!user?.id && !event.is_cancelled,
     staleTime: 60 * 1000,
@@ -1108,15 +1104,8 @@ function CompactCard({ event }: { event: EventItem }) {
   const { data: myRsvp } = useQuery({
     queryKey: ["hero-rsvp", event.id, user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("rsvps")
-        .select("id, status")
-        .eq("event_id", event.id)
-        .eq("user_id", user!.id)
-        .is("child_id", null)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      if (!user) return null;
+      return readHomeCardRsvp(event.id, user.id);
     },
     enabled: !!user,
     staleTime: 30 * 1000,
@@ -1128,13 +1117,8 @@ function CompactCard({ event }: { event: EventItem }) {
   const { data: myDuties } = useQuery({
     queryKey: ["hero-my-duties", event.id, user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("duties")
-        .select("id, name, start_time, end_time, status")
-        .eq("event_id", event.id)
-        .eq("assigned_to", user!.id);
-      if (error) throw error;
-      return data || [];
+      if (!user) return [];
+      return readHomeCardDuties(event.id, user.id);
     },
     enabled: !!user?.id && !event.is_cancelled,
     staleTime: 60 * 1000,

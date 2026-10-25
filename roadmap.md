@@ -1,3 +1,7 @@
+## Home startup blocked requests — 25 October 2026
+- [x] Repair nested hero/compact Next Up RSVP/duty/role reads, Watch Live and Home policy-folder reads using existing owning-scope ICP APIs. Focused dual-mode regressions include mounted ICP cards with no Supabase reads; guards remain active. No canister changes/deployments.
+- [ ] Live phone acceptance requires the updated app and Paul's Internet Identity session; local checks do not certify his deployed Home flow.
+
 ## Fresh Supabase replacement comparison — 25 October 2026
 - [x] Owner-approved code fixes: restored competition Schedule visibility with explicit-filter isolation, shared native Drive callback, class-calendar details/waitlist actions and Supabase goalkeeper display/HTML/CSV counts. Added default-off explicit production Google login opt-in. 12 focused files / 89 tests pass in each mode; ICP guard and preview pass. No secrets, database, production repo or deployments changed.
 - [x] Compare current Supabase paths against independently GitHub-verified prod main `96642d0750e03d933b68957d61999de3ae983b9c`; exclude only drills/training pitch. Four source audits and 394 focused Supabase tests pass. Findings and acceptance checklist: docs/supabase-prod-parity-2026-10-25.md. No app changes, transfer, backend mutation or deployment.

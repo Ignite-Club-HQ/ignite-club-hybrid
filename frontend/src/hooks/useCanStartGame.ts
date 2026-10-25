@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from '@/live/authBackendMode';
+import { withFeatureBackend } from '@/live/featureRouter';
+import { readGameSubsDuty } from '@/lib/gameEventReads';
 
 interface EventLike {
   id: string;
@@ -30,6 +33,19 @@ export function useCanStartGame(event: EventLike | null | undefined) {
     queryKey: ["can-start-game", "role", event?.id, event?.team_id, user?.id],
     queryFn: async () => {
       if (!user || !event) return false;
+      if (resolveAuthBackend() === 'icp') {
+        const [hasTeamRole, isSubsManager] = await Promise.all([
+          event.team_id ? withFeatureBackend('membership', {
+            supabase: async () => { throw new Error('ICP role read required'); },
+            icp: async ctx => {
+              const { getLiveMyRoleGrants } = await import('@/live/features/membership');
+              return (await getLiveMyRoleGrants(ctx)).some(g => g.team[0] === event.team_id && ['team_admin', 'coach'].includes(g.role));
+            },
+          }, { teamId: event.team_id }) : false,
+          readGameSubsDuty(event.id, user.id),
+        ]);
+        return hasTeamRole || isSubsManager;
+      }
       const [roleRes, dutyRes] = await Promise.all([
         event.team_id
           ? supabase
@@ -48,6 +64,8 @@ export function useCanStartGame(event: EventLike | null | undefined) {
           .eq("assigned_to", user.id)
           .limit(1),
       ]);
+      if (roleRes.error) throw roleRes.error;
+      if (dutyRes.error) throw dutyRes.error;
       const hasTeamRole = !!(roleRes.data && roleRes.data.length > 0);
       const isSubsManager = !!(dutyRes.data && dutyRes.data.length > 0);
       return hasTeamRole || isSubsManager;

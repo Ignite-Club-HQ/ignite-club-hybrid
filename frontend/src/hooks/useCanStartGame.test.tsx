@@ -3,9 +3,13 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { from } = vi.hoisted(() => ({ from: vi.fn() }));
+const { from, state, grants, duty } = vi.hoisted(() => ({ from: vi.fn(), state: { icp: false }, grants: vi.fn(), duty: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from } }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "user-1" } }) }));
+vi.mock('@/live/authBackendMode', () => ({ resolveAuthBackend: () => state.icp ? 'icp' : 'supabase' }));
+vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: (_: string, handlers: { icp: (ctx: object) => unknown }) => handlers.icp({}) }));
+vi.mock('@/live/features/membership', () => ({ getLiveMyRoleGrants: grants }));
+vi.mock('@/lib/gameEventReads', () => ({ readGameSubsDuty: duty }));
 
 import { useCanStartGame } from "./useCanStartGame";
 
@@ -37,6 +41,7 @@ function game(minutesFromNow: number, overrides: Record<string, unknown> = {}) {
 describe("useCanStartGame", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    state.icp = false;
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-07-19T12:00:00Z"));
   });
@@ -63,6 +68,35 @@ describe("useCanStartGame", () => {
       .mockReturnValueOnce(resultQuery([{ id: "duty-1" }]));
     const { result } = renderHook(() => useCanStartGame(game(30)), { wrapper });
     await waitFor(() => expect(result.current).toEqual({ canStart: true, phase: "imminent" }));
+  });
+
+  it('allows an ICP coach on the exact team without old-system requests', async () => {
+    state.icp = true;
+    grants.mockResolvedValue([{ team: ['team-1'], role: 'coach' }]);
+    duty.mockResolvedValue(false);
+    const { result } = renderHook(() => useCanStartGame(game(30)), { wrapper });
+    await waitFor(() => expect(result.current.canStart).toBe(true));
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('does not use another ICP team role to grant start access', async () => {
+    state.icp = true;
+    grants.mockResolvedValue([{ team: ['other-team'], role: 'coach' }]);
+    duty.mockResolvedValue(false);
+    const { result } = renderHook(() => useCanStartGame(game(30)), { wrapper });
+    await waitFor(() => expect(grants).toHaveBeenCalled());
+    expect(result.current.canStart).toBe(false);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('allows an ICP assigned Subs Manager without a team role', async () => {
+    state.icp = true;
+    grants.mockResolvedValue([]);
+    duty.mockResolvedValue(true);
+    const { result } = renderHook(() => useCanStartGame(game(30)), { wrapper });
+    await waitFor(() => expect(result.current.canStart).toBe(true));
+    expect(duty).toHaveBeenCalledWith('event-1', 'user-1');
+    expect(from).not.toHaveBeenCalled();
   });
 
   it.each([
