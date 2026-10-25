@@ -1,5 +1,5 @@
 ## Home Vault club spinner — 25 October 2026
-- [ ] Bound the entire ICP club read including routing, retain member clubs while the wider admin directory loads, and test stalled reads and retry without granting access.
+- [x] Bound full ICP club reads including routing (12s member/selected, 35s wider admin directory), retain separately subscribed member clubs while admin discovery loads, and disable automatic retry loops. Stalled-read, explicit-retry and non-authorizing tests pass: 72 ICP / 66 Supabase checks, guards and preview build OK. No deployment.
 - [ ] Signed-in Home-to-Vault timing requires Paul's Internet Identity session and the updated frontend.
 
 ## Slow news post opening — 25 October 2026
