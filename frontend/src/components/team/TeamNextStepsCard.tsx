@@ -30,20 +30,43 @@ export function TeamNextStepsCard({ teamId, onInvite }: TeamNextStepsCardProps) 
   const { data: memberCount = 0, isLoading: loadingMembers } = useQuery({
     queryKey: ["team-next-steps-members", teamId],
     queryFn: async () => {
-      const [rolesRes, invitesRes] = await Promise.all([
-        supabase
-          .from("user_roles")
-          .select("user_id", { count: "exact", head: true })
-          .eq("team_id", teamId),
-        supabase
-          .from("pending_invites")
-          .select("id", { count: "exact", head: true })
-          .eq("team_id", teamId)
-          .eq("status", "pending"),
-      ]);
-      // Distinct member count is approximate (a user may hold multiple roles);
-      // for the "is just the creator" check this is good enough.
-      return (rolesRes.count ?? 0) + (invitesRes.count ?? 0);
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const [rolesRes, invitesRes] = await Promise.all([
+            supabase
+              .from("user_roles")
+              .select("user_id", { count: "exact", head: true })
+              .eq("team_id", teamId),
+            supabase
+              .from("pending_invites")
+              .select("id", { count: "exact", head: true })
+              .eq("team_id", teamId)
+              .eq("status", "pending"),
+          ]);
+          // Distinct member count is approximate (a user may hold multiple roles);
+          // for the "is just the creator" check this is good enough.
+          return (rolesRes.count ?? 0) + (invitesRes.count ?? 0);
+        },
+        icp: async (ctx) => {
+          // Internet Identity: role grants and outstanding invites live on the
+          // club canister.
+          const membership = await import("@/live/features/membership");
+          const grants = await membership.listLiveTeamRoleGrants(ctx, teamId);
+          const team = await membership.getLiveMembershipTeam(ctx, teamId);
+          const clubId = (team as any)?.club_id as string | undefined;
+          const invites = clubId
+            ? await membership.listLiveTeamInvites(ctx, clubId, teamId)
+            : [];
+          const pending = (invites as any[]).filter((i) => {
+            const status = i?.status;
+            if (typeof status === "string") return status === "pending";
+            if (status && typeof status === "object") return "pending" in status;
+            return true; // listed invites are outstanding by default
+          }).length;
+          return (grants as any[]).length + pending;
+        },
+      }, { teamId });
     },
     enabled: !!teamId,
     staleTime: 30 * 1000,
@@ -54,13 +77,26 @@ export function TeamNextStepsCard({ teamId, onInvite }: TeamNextStepsCardProps) 
   const { data: hasEvent = false, isLoading: loadingEvents } = useQuery({
     queryKey: ["team-next-steps-events", teamId],
     queryFn: async () => {
-      const { count } = await supabase
-        .from("events")
-        .select("id", { count: "exact", head: true })
-        .eq("team_id", teamId)
-        .eq("is_cancelled", false)
-        .gte("event_date", today);
-      return (count ?? 0) > 0;
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { count } = await supabase
+            .from("events")
+            .select("id", { count: "exact", head: true })
+            .eq("team_id", teamId)
+            .eq("is_cancelled", false)
+            .gte("event_date", today);
+          return (count ?? 0) > 0;
+        },
+        icp: async (ctx) => {
+          const { listLiveEvents } = await import("@/live/features/events");
+          const events = await listLiveEvents(ctx, null, teamId);
+          return (events as any[]).some(
+            (e) => !e.cancelled
+              && new Date(Number(e.starts_at_ms)).toISOString().slice(0, 10) >= today,
+          );
+        },
+      }, { teamId });
     },
     enabled: !!teamId,
     staleTime: 30 * 1000,

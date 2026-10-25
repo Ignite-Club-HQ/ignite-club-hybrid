@@ -134,15 +134,33 @@ export function TeamChatPreview({ teamId }: TeamChatPreviewProps) {
     queryKey: ["team-chat-preview-event-titles", eventIdsKey],
     queryFn: async () => {
       if (referencedEventIds.length === 0) return {} as Record<string, string>;
-      const { data } = await supabase
-        .from("events")
-        .select("id, title")
-        .in("id", referencedEventIds);
-      const map: Record<string, string> = {};
-      (data || []).forEach((e) => {
-        if (e?.id && e?.title) map[e.id.toLowerCase()] = e.title;
-      });
-      return map;
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("events")
+            .select("id, title")
+            .in("id", referencedEventIds);
+          const map: Record<string, string> = {};
+          (data || []).forEach((e) => {
+            if (e?.id && e?.title) map[e.id.toLowerCase()] = e.title;
+          });
+          return map;
+        },
+        icp: async (ctx) => {
+          // Internet Identity: resolve titles from the team's on-chain events.
+          const { listLiveEvents } = await import("@/live/features/events");
+          const events = await listLiveEvents(ctx, null, teamId);
+          const wanted = new Set(referencedEventIds.map((id) => id.toLowerCase()));
+          const map: Record<string, string> = {};
+          (events as any[]).forEach((e) => {
+            if (e?.id && e?.title && wanted.has(String(e.id).toLowerCase())) {
+              map[String(e.id).toLowerCase()] = e.title;
+            }
+          });
+          return map;
+        },
+      }, { teamId: teamId! });
     },
     enabled: referencedEventIds.length > 0,
     staleTime: 5 * 60 * 1000,

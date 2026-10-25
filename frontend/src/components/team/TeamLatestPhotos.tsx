@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Image } from "lucide-react";
 import { SecureImage } from "@/components/SecureImage";
+import { fetchMediaFeedPage } from "@/features/media/mediaReadRepository";
 
 interface TeamLatestPhotosProps {
   teamId: string;
@@ -13,17 +13,12 @@ export function TeamLatestPhotos({ teamId, clubId }: TeamLatestPhotosProps) {
   const navigate = useNavigate();
 
   const { data: photos = [], isLoading } = useQuery({
-    queryKey: ["team-latest-photos", teamId],
+    queryKey: ["team-latest-photos", teamId, clubId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("photos")
-        .select("id, file_url, image_url, title")
-        .eq("team_id", teamId)
-        .eq("show_in_feed", true)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(6);
-      return data || [];
+      // Routed reader: Supabase in email mode, the club's media canister in
+      // ICP mode (a direct photos read is blocked for Internet Identity).
+      const page = await fetchMediaFeedPage({ teamId, clubId, offset: 0, pageSize: 6 });
+      return page.photos;
     },
     enabled: !!teamId,
     staleTime: 5 * 60 * 1000,
