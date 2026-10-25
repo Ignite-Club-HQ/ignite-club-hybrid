@@ -44,8 +44,11 @@ const phoneSignInReturn = /[#&]message=/.test(window.location.hash) && /[#&]stat
       .catch(() => undefined)
   : Promise.resolve();
 
-// Bounded (≤ ~400ms) wait so cached ICP pages are in place for first paint.
-void Promise.all([appCacheReady, phoneSignInReturn]).finally(() => createRoot(root).render(
+// Hard-bounded wait so cached ICP pages are in place for first paint. The
+// restore itself is capped, but loading its code on a slow phone was not —
+// signed-in reopen sat on the loading screen for seconds. Never wait longer.
+const cacheFirstPaint = Promise.race([appCacheReady, new Promise<void>((resolve) => setTimeout(resolve, 500))]);
+void Promise.all([cacheFirstPaint, phoneSignInReturn]).finally(() => createRoot(root).render(
   <StrictMode>
     <App />
   </StrictMode>,
