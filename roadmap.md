@@ -1,3 +1,7 @@
+## Slow Vault page opening — 25 October 2026
+- [ ] Remove serial admin-to-member club discovery and unnecessary startup search/global subscription reads; preserve scoped access checks, add timing regressions and run both modes.
+- [ ] Signed-in mainnet opening timing requires Paul's Internet Identity session; no authenticated session is available locally.
+
 ## Vault attachment delays — 25 October 2026
 - [x] Warm scoped Vault picker reads when opening attachment choices, reveal folders independently of files, and reuse authorized selected-folder/root names in draft cards. Mounted delayed-file/picker-to-card regressions pass; focused suites pass in Supabase (36) and ICP (26), guards pass and preview build OK. No deployment or canister changes; cold inventories still require authorized network reads.
 - [ ] Signed-in phone timing/readback requires Paul's Internet Identity session; local tests cannot certify mainnet latency.

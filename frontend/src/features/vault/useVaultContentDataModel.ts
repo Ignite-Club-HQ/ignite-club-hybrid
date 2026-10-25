@@ -173,7 +173,7 @@ export function useVaultContentDataModel({
         isPrivilegedViewer: (isAppAdmin ?? false) || isClubAdmin,
         clubRoles: userClubRoleSet,
       }),
-    enabled: recursiveScope.type === "club" || recursiveScope.type === "team" || (recursiveScope.type === "competition" && !useIcpVault),
+    enabled: recursiveEnabled && (recursiveScope.type === "club" || recursiveScope.type === "team" || (recursiveScope.type === "competition" && !useIcpVault)),
     staleTime: 60_000,
   });
 

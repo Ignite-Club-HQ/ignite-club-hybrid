@@ -115,6 +115,7 @@ export function useVaultAccessModel({
       return roles;
     },
     enabled: !!userId,
+    staleTime: 60_000,
   });
 
   const hasVaultRoleAccess = useMemo(
@@ -125,9 +126,12 @@ export function useVaultAccessModel({
   // Each group is bounded inside the lookup, so a stuck group drops out on
   // its own instead of a whole-list cut-off failing every club.
   const { data: userClubs, isLoading: isLoadingClubs, error: clubsError, refetch: refetchClubs } = useQuery({
-    queryKey: vaultKeys.clubsForUser(userId, isAppAdmin),
+    queryKey: vaultKeys.clubsForUser(userId, !!isAppAdmin),
     queryFn: () => userId ? fetchVaultAccessibleClubs(userId, !!isAppAdmin) : [],
-    enabled: !!userId && isAppAdmin !== undefined,
+    // A member-scoped read is safe while the broader admin lookup runs.
+    // Resolving admin=true starts its own separately keyed directory read.
+    enabled: !!userId,
+    staleTime: 60_000,
   });
 
   // Auto-navigate to club view when theme filter is active - only on initial load
@@ -184,6 +188,7 @@ export function useVaultAccessModel({
     queryKey: vaultKeys.clubHasPro(contextClubId),
     queryFn: () => contextClubId ? withReadDeadline(fetchVaultClubHasPro(contextClubId), "Vault club subscription") : false,
     enabled: contextClubId !== null,
+    staleTime: 30_000,
   });
 
   const contextTeamId = currentView.type === "team" ? currentView.teamId : null;
@@ -193,6 +198,7 @@ export function useVaultAccessModel({
     queryKey: vaultKeys.teamHasPro(contextTeamId),
     queryFn: () => contextTeamId ? withReadDeadline(fetchVaultTeamHasPro(contextTeamId), "Vault team subscription") : false,
     enabled: contextTeamId !== null,
+    staleTime: 30_000,
   });
 
   // Determine if current context has Pro access for uploads
@@ -206,15 +212,11 @@ export function useVaultAccessModel({
   const { data: proAccessInfo, isLoading: isLoadingProClub, error: anyProError, refetch: retryAnyPro } = useQuery({
     queryKey: ["pro-access-info", userId],
     queryFn: () => userId ? withReadDeadline(fetchVaultAnyProAccess(userId), "Vault subscriptions") : false,
-    enabled: !!userId,
+    enabled: !!userId && currentView.type === "root",
+    staleTime: 30_000,
   });
 
   const hasProClub = proAccessInfo ?? false;
-
-  const isLoadingAccess =
-    isLoadingAppAdmin || isLoadingRoles || (!isAppAdmin && (currentView.type === "root"
-      ? isLoadingProClub
-      : ((!currentContextHasPro && (isLoadingClubHasPro || isLoadingTeamHasPro)) || isLoadingCompetitionAccess)));
 
   // Vault access requires: 1) Pro subscription in current context AND 2) Admin/coach role
   const vaultAccessContextHasPro = currentView.type === "root" ? hasProClub : currentContextHasPro;
@@ -230,6 +232,14 @@ export function useVaultAccessModel({
         currentContextHasPro,
         isRoot: currentView.type === "root",
       });
+
+  // An already-authorized scoped member does not need unrelated app-admin
+  // discovery to finish. Pending checks still gate any unestablished access.
+  const isLoadingAccess = !canAccessVault && (
+    isLoadingAppAdmin || isLoadingRoles || (!isAppAdmin && (currentView.type === "root"
+      ? isLoadingProClub
+      : ((!currentContextHasPro && (isLoadingClubHasPro || isLoadingTeamHasPro)) || isLoadingCompetitionAccess)))
+  );
 
   // Determine if it's a role issue or a Pro subscription issue
   const hasProButNoRole = currentView.type === "competition"
