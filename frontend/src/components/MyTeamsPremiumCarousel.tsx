@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { LogoImage } from "@/components/ui/logo-image";
 import { useQuery } from "@tanstack/react-query";
+import { withReadDeadline } from "@/live/readDeadline";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -608,18 +609,21 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   const { data: rawItems = snapshot?.items ?? [], isLoading, isFetching, isError } = useQuery({
     queryKey: ["my-teams-premium-v2", user?.id, activeClubFilter],
     meta: { persist: !isIcp },
-    retry: isIcp ? false : 3,
+    // Read-only: a stalled cold-start read is abandoned after its deadline and
+    // asked again, instead of leaving skeleton cards until the user leaves Home.
+    retry: isIcp ? 2 : 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
     initialData: snapshot?.items,
     initialDataUpdatedAt: snapshotWithTs?.timestamp,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!user) return [];
 
       if (isIcp) {
-        return withFeatureBackend("competitions", {
+        return withReadDeadline(withFeatureBackend("competitions", {
           // Unreachable: this branch only runs when ICP mode is active.
           supabase: async () => [] as TeamOrLeague[],
           icp: (ctx) => fetchIcpCarouselItems(ctx, activeClubFilter ?? null),
-        }, activeClubFilter ? { clubId: activeClubFilter } : { everyGroup: true, merge: mergeLists });
+        }, activeClubFilter ? { clubId: activeClubFilter } : { everyGroup: true, merge: mergeLists }), "My teams", 12_000, signal);
       }
 
       const { data: roles, error: rolesError } = await supabase
