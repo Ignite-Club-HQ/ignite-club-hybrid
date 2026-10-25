@@ -1,5 +1,6 @@
 ## Gallery notification warning — 25 October 2026
-- [ ] Preserve the actual notification outcome in the consolidated testing screen instead of a generic popup; verify regressions. Live refusal/wiring cause remains unverified without signed-in II evidence.
+- [x] Preserve sanitized notification outcomes (missing connection, refused, access changed, capacity, unknown) in the consolidated testing screen instead of a generic popup; 7 focused tests, ICP guards and preview build pass. No automatic notification replay or deployment.
+- [ ] Live notification cause and chat-loading acceptance require the updated frontend and signed-in II evidence; this screenshot does not identify the returned notification status or explain the chat skeleton.
 
 ## Gallery uploads across navigation — 25 October 2026
 - [x] Preserve pending uploads across gallery remounts in account/QueryClient-scoped session state; reconcile exact acknowledged asset IDs and invalidate inactive account feeds, including partial successes. Actual deferred-upload/remount regression and focused gallery tests pass in both modes (21 checks each); ICP guards and preview build OK. No deployment or canister changes.
