@@ -501,6 +501,11 @@ export interface Main {
     { 'Ok' : TeamEntry } |
       { 'Err' : string }
   >,
+  'link_playhq_competition' : ActorMethod<
+    [string, string, string, string, string, [] | [string]],
+    { 'Ok' : Competition } |
+      { 'Err' : string }
+  >,
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
@@ -579,6 +584,15 @@ export interface Main {
   'list_official_chats' : ActorMethod<
     [string],
     { 'Ok' : Array<OfficialChat> } |
+      { 'Err' : string }
+  >,
+  'list_playhq_competitions' : ActorMethod<
+    [string],
+    {
+        'Ok' : Array<
+          { 'link' : PlayHQCompetitionLink, 'competition' : Competition }
+        >
+      } |
       { 'Err' : string }
   >,
   'list_public_competitions' : ActorMethod<
@@ -1073,6 +1087,14 @@ export interface OfficialChat {
   'conversation_id' : string,
   'scope' : string,
   'competition_id' : string,
+}
+export interface PlayHQCompetitionLink {
+  'grade_id' : string,
+  'last_synced_at_ms' : [] | [bigint],
+  'sport' : [] | [string],
+  'tenant' : string,
+  'competition_id' : string,
+  'club_id' : string,
 }
 export interface PlayHQMatchMeta {
   'grade_id' : string,

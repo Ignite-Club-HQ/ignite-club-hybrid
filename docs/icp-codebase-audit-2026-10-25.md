@@ -2,11 +2,13 @@
 
 ## Verdict
 
-**The local repair batch isolates the identified ICP reads and repairs the reporting/administration paths; PlayHQ association linking remains unfinished.** The findings below describe the original audit evidence, not the current repaired line numbers.
+**The identified application-state gaps are now implemented locally, including PlayHQ association linking.** The findings below describe the original audit evidence, not the current repaired line numbers; this is not a certification of every deployed feature.
 
 Local changes cover member search, sponsor references, AI settings, legal refresh, GIF configuration, recap identity, board attachment discovery, team reward reports, goalkeeper counts, versioned feedback, durable fixture row receipts and complete administrative inventories. Restored II sessions and ICP-hosted/explicit ICP startup use on-chain configuration; an ICP session with missing services now refuses rather than using Supabase. General signed-out hybrid-origin bootstrap intentionally retains country-routing configuration precedence.
 
-Association PlayHQ linking is withheld in ICP rather than inserting incomplete records into Supabase. A durable, authorized on-chain link/configuration contract and its protected release are still required to restore that action; disabling it is not feature parity. Existing Supabase PlayHQ behavior is preserved.
+Association PlayHQ linking now creates the public competition and durable club/tenant/grade/sport record atomically on the owning competition canister. Repeated tuples return the same competition; sport changes conflict. Listing and sync use the owning group, sync rejects source mismatch and rechecks the binding after external awaits, and exact links survive upgrades and scoped snapshot round trips and are removed by authorized purge. Supabase PlayHQ behavior is preserved. The source PlayHQ service itself remains external; successful external feed delivery is not verified by a local link test.
+
+Additional verification: the competition migration compiles; two disposable group canisters passed authorization, tuple deduplication, immutable-sport refusal, wrong-source sync refusal, memory-preserving upgrade, snapshot and purge checks. Focused repository/link parsing tests cover exact owning-club calls. Deploy using **Upgrade backend (all mainnet groups)** scope **history**, action **check** then protected **upgrade** with the checked hash; release the app afterward. No live upgrades or signed-in live acceptance occurred. Resend and Drive remain deferred.
 
 Verification: 13 focused files / 86 tests pass in each backend mode; ICP guards and 17-contract drift pass. The public preview opened /auth with zero page errors; no signed-in Internet Identity session was available, so real-use acceptance remains unverified. No mainnet upgrade, credential change, email activation or repository transfer occurred.
 

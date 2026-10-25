@@ -181,6 +181,7 @@ module {
   // ("referees" | "committee" | "coordinators" | "all_members").
   public type OfficialChat = { competition_id : Text; scope : Text; conversation_id : Text };
   public type PlayHQMatchMeta = { match_id : Text; competition_id : Text; tenant : Text; grade_id : Text; game_id : Text; home_id : Text; away_id : Text; home_name : Text; away_name : Text; synced_revision : Nat64 };
+  public type PlayHQCompetitionLink = { competition_id : Text; club_id : Text; tenant : Text; grade_id : Text; sport : ?Text; last_synced_at_ms : ?Nat64 };
   public type PlayHQStat = { competition_id : Text; match_id : Text; tenant : Text; game_id : Text; team_id : Text; player_id : Text; player_name : Text; stats_json : Text };
   public type PlayHQClaim = { tenant : Text; player_id : Text; user : Principal };
   public type PlayHQGame = { game_id : Text; home_id : Text; away_id : Text; home_name : Text; away_name : Text; home_score : ?Nat16; away_score : ?Nat16; starts_at_ms : ?Nat64; status : Text; venue : ?Text };

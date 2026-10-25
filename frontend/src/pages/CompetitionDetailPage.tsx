@@ -288,6 +288,8 @@ function SupabaseCompetitionDetailPage() {
         const comps = (await listLiveCompetitionsMulti(ctx, clubs.map((c: any) => c.id))) as any[];
         const found = comps.find((c) => c.id === id);
         if (!found) return null;
+        const { readIcpAssociationPlayhq } = await import("@/lib/associationPlayhqRepository");
+        const linked = (await readIcpAssociationPlayhq(found.club_id)).find(c => c.id === found.id);
         const clubName = await icpGetClubName(found.club_id).catch(() => null);
         return {
           id: found.id,
@@ -298,7 +300,11 @@ function SupabaseCompetitionDetailPage() {
           points_win: Number(found.points_win ?? 3),
           points_draw: Number(found.points_draw ?? 1),
           points_loss: Number(found.points_loss ?? 0),
-          source: "icp",
+          source: linked ? "playhq" : "icp",
+          sport: linked?.sport ?? null,
+          external_tenant: linked?.external_tenant ?? null,
+          external_id: linked?.external_id ?? null,
+          last_synced_at: linked?.last_synced_at ?? null,
           clubs: { id: found.club_id, name: clubName, kind: null },
         };
       }

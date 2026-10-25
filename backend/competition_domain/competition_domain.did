@@ -121,6 +121,15 @@ type PlayHQMatchMeta =
    synced_revision: nat64;
    tenant: text;
  };
+type PlayHQCompetitionLink = 
+ record {
+   club_id: text;
+   competition_id: text;
+   grade_id: text;
+   last_synced_at_ms: opt nat64;
+   sport: opt text;
+   tenant: text;
+ };
 type OfficialChat = 
  record {
    competition_id: text;
@@ -487,6 +496,12 @@ type Main =
                     Err: text;
                     Ok: TeamEntry;
                   });
+   link_playhq_competition: (club_id: text, name: text, season: text, tenant:
+    text, grade_id: text, sport: opt text) ->
+    (variant {
+       Err: text;
+       Ok: Competition;
+     });
    listBulkAccessPrincipals: () ->
     (variant {
        Err: text;
@@ -567,6 +582,14 @@ type Main =
        Err: text;
        Ok: vec OfficialChat;
      }) query;
+   list_playhq_competitions: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 competition: Competition;
+                 link: PlayHQCompetitionLink;
+               };
+     });
    list_public_competitions: () ->
     (variant {
        Err: text;
