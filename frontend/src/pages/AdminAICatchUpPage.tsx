@@ -91,7 +91,12 @@ function IcpAdminAICatchUpPage() {
   // messaging_domain's club DM settings.
   const { data: clubs = [], isLoading: isLoadingClubs, error: clubsError, refetch } = useQuery({
     queryKey: ["icp-admin-pro-clubs-ai-catchup"],
-    queryFn: readAdminProCatchUpClubs,
+    queryFn: () => Promise.race([
+      readAdminProCatchUpClubs(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("the club list took too long to load")), 30_000)),
+    ]),
+    staleTime: 60_000,
+    retry: 1,
   });
 
   const filtered = useMemo(() => {
@@ -228,7 +233,10 @@ function IcpAdminAICatchUpPage() {
 
           {unconfirmed && <p role="alert" className="text-destructive">An update is unconfirmed. Further batch changes are paused.</p>}
           {clubsError ? (
-            <p role="alert" className="text-destructive">Could not load Pro clubs: {clubsError.message}</p>
+            <div className="py-6 text-center space-y-3">
+              <p className="text-sm text-muted-foreground">Could not load Pro clubs right now ({clubsError.message}).</p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>Try again</Button>
+            </div>
           ) : isLoadingClubs ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
