@@ -21,10 +21,11 @@ import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
 import { placementOperatorEvidenceIdl, normalizePlacementOperatorEvidence } from '../../scripts/placement-upgrade-evidence.mjs';
 import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement } from '../../scripts/all-group-wiring-policy.mjs';
-import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades, requireCompletedRecovery, galleryAuthorities, verifyCompletedRecovery } from '../../scripts/all-group-upgrade-policy.mjs';
+import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades, requireCompletedRecovery, galleryAuthorities, verifyCompletedRecovery, normalizePlan } from '../../scripts/all-group-upgrade-policy.mjs';
 
 const [action, scope, artifacts, pem, directory] = process.argv.slice(2);
-const services = validateRequest(action, scope, process.env.CONFIRMATION, process.env.CHECKED_PLAN);
+const CHECKED_PLAN = process.env.CHECKED_PLAN ? normalizePlan(process.env.CHECKED_PLAN) : process.env.CHECKED_PLAN;
+const services = validateRequest(action, scope, process.env.CONFIRMATION, CHECKED_PLAN);
 if (!artifacts || !pem || !directory) throw Error('Artifacts, existing key and report directory required');
 const root = new URL('../../', import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), 'utf8'));
@@ -44,7 +45,7 @@ if (!repo || !/^[a-f0-9]{40}$/.test(source ?? '')) throw Error('GitHub source re
 const api=createJournalApi(repo,JSON.stringify);
 const recoveryStored=action==='recover'?api('contents/all-group-upgrade.json?ref=all-group-upgrade-receipts'):null;
 const recoveryJournal=recoveryStored?JSON.parse(Buffer.from(recoveryStored.content,'base64').toString()):null;
-const recovery=action==='recover'?requireCompletedRecovery(recoveryJournal,{repo,scope,checkedPlan:process.env.CHECKED_PLAN,source,branch:process.env.GITHUB_REF}):null;
+const recovery=action==='recover'?requireCompletedRecovery(recoveryJournal,{repo,scope,checkedPlan:CHECKED_PLAN,source,branch:process.env.GITHUB_REF}):null;
 const release=recovery?.release??source;
 const hashes=recovery?.hashes??Object.fromEntries(services.map((name:string)=>[name,wasmHash(readFileSync(resolve(artifacts,name)))]));
 const inventory=planInventory(shared,provisions,initial,scope,hashes);
@@ -173,7 +174,7 @@ const saveReport=(name:string,data:unknown)=>writeFileSync(join(directory,name),
 saveReport('check.json',{planHash,binding,targets:observations,liveAcceptance:false});
 console.log(`Checked ${inventory.groups.length} groups, ${targets.length} targets. Checked plan hash: ${planHash}`);
 if(action==='check'){await gate();process.exit(0);}
-assertCheckedPlan(process.env.CHECKED_PLAN,planHash);
+assertCheckedPlan(CHECKED_PLAN,planHash);
 if(!branchExists(branch))api('git/refs','POST',{ref:`refs/heads/${branch}`,sha:release});
 if(!journal){
   if(stored){

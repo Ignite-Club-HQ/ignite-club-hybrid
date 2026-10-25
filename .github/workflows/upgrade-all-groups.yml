@@ -49,9 +49,9 @@ jobs:
       - name: Validate reviewed scope and exact confirmation
         run: |
           node --input-type=module <<'JS'
-          import {validateRequest} from './scripts/all-group-upgrade-policy.mjs';
-          if(process.env.ACTION==='upgrade'&&process.env.SCOPE==='full_backend'&&!process.env.CHECKED_PLAN){
-            if(process.env.CONFIRMATION?.trim()!=='UPGRADE ALL MAINNET GROUPS')throw Error('Type UPGRADE ALL MAINNET GROUPS');
+          import {validateRequest,normalizeConfirmation,normalizePlan} from './scripts/all-group-upgrade-policy.mjs';
+          if(process.env.ACTION==='upgrade'&&process.env.SCOPE==='full_backend'&&!normalizePlan(process.env.CHECKED_PLAN)){
+            if(normalizeConfirmation(process.env.CONFIRMATION)!=='UPGRADE ALL MAINNET GROUPS')throw Error('Type UPGRADE ALL MAINNET GROUPS');
             validateRequest('check',process.env.SCOPE);
           }else validateRequest(process.env.ACTION,process.env.SCOPE,process.env.CONFIRMATION,process.env.CHECKED_PLAN);
           JS

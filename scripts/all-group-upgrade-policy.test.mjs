@@ -165,3 +165,10 @@ test('gallery authorities use planned G1 inventory without a provision file and 
   assert.throws(()=>galleryAuthorities(inventory,{...t,canisterId:'foreign-cai'},[]));
   assert.throws(()=>galleryAuthorities(inventory,t,[{groupId:'g1',canisters:{club_domain:'foreign-cai',vault_domain:shared.vault_domain}}]));
 });
+test('recover accepts pasted hash/wording with stray spaces, quotes or line breaks', async () => {
+  const { validateRequest } = await import('./all-group-upgrade-policy.mjs');
+  const plan = 'eac3e577bb4e5998cad15271ef868e50a623a6e4c5b2eb7b54843ad709940b5c';
+  assert.ok(validateRequest('recover', 'full_backend', ' “RECOVER  COMPLETED MAINNET RELEASE”\n', `\`${plan.toUpperCase()}\` \n`).length);
+  assert.throws(() => validateRequest('recover', 'full_backend', 'UPGRADE ALL MAINNET GROUPS', plan), /Confirmation box must say RECOVER/);
+  assert.throws(() => validateRequest('recover', 'full_backend', 'RECOVER COMPLETED MAINNET RELEASE', plan.slice(1)), /received 63 characters/);
+});

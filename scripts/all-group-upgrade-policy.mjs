@@ -15,10 +15,18 @@ export const SCOPES = Object.freeze({
   events_pitch: ['notification_queue', 'club_domain', 'events_domain'],
   gallery_vault: ['club_domain', 'media_blob_store', 'media_metadata', 'vault_domain', 'messaging_domain', 'notification_queue'],
 });
+/** Copy/paste from chat or phones can add spaces, line breaks, quotes or invisible characters. */
+export const normalizePlan = v => String(v ?? '').replace(/[\s"'`\u200b-\u200d\u2060\ufeff\u2018\u2019\u201c\u201d]/g, '').toLowerCase();
+export const normalizeConfirmation = v => String(v ?? '').replace(/[\u200b-\u200d\u2060\ufeff"'`\u2018\u2019\u201c\u201d]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
 export function validateRequest(action, scope, confirmation, checkedPlan) {
+  action = String(action ?? '').trim(); scope = String(scope ?? '').trim();
   if (!['check', 'upgrade', 'recover'].includes(action) || !Object.hasOwn(SCOPES, scope)) throw Error('Choose a reviewed scope and check, upgrade or recover');
-  if (action === 'recover' && (confirmation?.trim() !== 'RECOVER COMPLETED MAINNET RELEASE' || !/^[a-f0-9]{64}$/.test(checkedPlan ?? ''))) throw Error('Type RECOVER COMPLETED MAINNET RELEASE and provide the original checked plan hash');
-  if (action === 'upgrade' && (confirmation?.trim() !== 'UPGRADE ALL MAINNET GROUPS' || !/^[a-f0-9]{64}$/.test(checkedPlan ?? ''))) throw Error('Type UPGRADE ALL MAINNET GROUPS and provide the checked plan hash');
+  const words = { recover: 'RECOVER COMPLETED MAINNET RELEASE', upgrade: 'UPGRADE ALL MAINNET GROUPS' }[action];
+  if (words) {
+    const c = normalizeConfirmation(confirmation), plan = normalizePlan(checkedPlan);
+    if (c !== words) throw Error(`Confirmation box must say ${words} (received ${c.length} characters${c ? ` starting "${c.slice(0, 12)}"` : ''})`);
+    if (!/^[a-f0-9]{64}$/.test(plan)) throw Error(`Checked plan box must be the 64-character plan hash (received ${plan.length} characters after removing spaces)`);
+  }
   return SCOPES[scope];
 }
 const text = p => typeof p === 'string' ? p : p?.toText();
