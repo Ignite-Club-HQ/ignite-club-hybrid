@@ -1,4 +1,5 @@
 ## Fresh Supabase replacement comparison — 25 October 2026
+- [ ] Owner-approved code fixes: restore competition Schedule visibility, native Drive callback, class-calendar details and goalkeeper report/export counts together; retain payment/provider safeguards and defer secret-dependent production acceptance until cutover.
 - [x] Compare current Supabase paths against independently GitHub-verified prod main `96642d0750e03d933b68957d61999de3ae983b9c`; exclude only drills/training pitch. Four source audits and 394 focused Supabase tests pass. Findings and acceptance checklist: docs/supabase-prod-parity-2026-10-25.md. No app changes, transfer, backend mutation or deployment.
 - [ ] Replacement readiness: repair competition-wide Schedule visibility, native Drive callbacks and class-calendar details; resolve goalkeeper-count difference; reconcile paid provider/catalog fulfillment and Google login setup; verify retained production SQL/services and authenticated/native flows. These repairs/activation and live checks were not part of the audit-only request; do not claim drop-in parity.
 
