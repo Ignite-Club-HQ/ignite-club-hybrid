@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveUserActivity } from "@/live/features/insights";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 type TimePeriod = "7d" | "14d" | "30d" | "90d";
 
@@ -40,6 +41,7 @@ function formatDuration(seconds: number): string {
 }
 
 export default function UserAnalyticsTab() {
+  const { isAppAdmin } = useIsAppAdmin();
   const [period, setPeriod] = useState<TimePeriod>("7d");
   const [search, setSearch] = useState("");
   const [clubFilter, setClubFilter] = useState<string>("all");
@@ -50,12 +52,30 @@ export default function UserAnalyticsTab() {
   // Fetch clubs for filter
   const { data: clubs } = useQuery({
     queryKey: ["admin-clubs-list"],
+    enabled: isAppAdmin,
     queryFn: async () => {
+      return withFeatureBackend("membership", {
+        icp: async ctx => {
+          const { listLiveClubs } = await import("@/live/features/club");
+          const rows: Array<{ id: string; name: string }> = [];
+          let cursor: string | null = null;
+          for (let i = 0; i < 10000; i++) {
+            const page = await listLiveClubs(ctx, cursor, 50);
+            rows.push(...page.map(row => ({ id: row.id, name: row.name })));
+            if (page.length < 50) return rows;
+            const last = page.at(-1); if (!last) return rows;
+            cursor = last.id;
+          }
+          throw new Error("Club inventory exceeds page budget");
+        },
+        supabase: async () => {
       const { data } = await supabase
         .from("clubs")
         .select("id, name")
         .order("name");
       return data || [];
+        },
+      }, { everyGroup: true, requireComplete: true, merge: parts => [...new Map((parts as Array<Array<{ id: string; name: string }>>).flat().map(row => [row.id, row])).values()] });
     },
   });
 
@@ -64,6 +84,7 @@ export default function UserAnalyticsTab() {
   // Supabase user_activity_logs table.
   const { data: activityData, isLoading } = useQuery({
     queryKey: ["admin-user-analytics", period, clubFilter],
+    enabled: isAppAdmin,
     queryFn: async () =>
       withFeatureBackend("admin", {
         supabase: async () => {

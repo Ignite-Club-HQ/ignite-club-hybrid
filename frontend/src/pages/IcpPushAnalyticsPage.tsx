@@ -26,7 +26,7 @@ export default function IcpPushAnalyticsPage() {
     queryFn: () => withFeatureBackend("notifications", {
       supabase: unavailable,
       icp: async ctx => ({ queue: ctx.target.canisterIds.notification_queue, ...await getLivePushDeliveryHealth(ctx, Date.now()) }),
-    }, { everyGroup: true, merge: (parts: unknown[]) => {
+    }, { everyGroup: true, requireComplete: true, merge: (parts: unknown[]) => {
       const rows = parts as Array<Awaited<ReturnType<typeof getLivePushDeliveryHealth>> & { queue: string }>;
       return [...new Map(rows.map(row => [row.queue, row])).values()];
     } }),
@@ -43,7 +43,7 @@ export default function IcpPushAnalyticsPage() {
     // The read above returns exact approved contexts; writes are explicit and
     // execute once per queue, never mutation fanout through readAcross.
     const contexts = await withFeatureBackend("notifications", { supabase: unavailable, icp: async ctx => ctx }, {
-      everyGroup: true, merge: parts => [...new Map((parts as Parameters<typeof getLivePushDeliveryHealth>[0][]).map(ctx => [ctx.target.canisterIds.notification_queue, ctx])).values()],
+      everyGroup: true, requireComplete: true, merge: parts => [...new Map((parts as Parameters<typeof getLivePushDeliveryHealth>[0][]).map(ctx => [ctx.target.canisterIds.notification_queue, ctx])).values()],
     });
     let count = 0;
     for (const ctx of contexts) count += await cleanupLiveStaleDeviceTokens(ctx, Date.now(), ageDays * 86400000);

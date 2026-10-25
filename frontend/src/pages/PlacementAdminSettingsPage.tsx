@@ -247,7 +247,7 @@ export default function PlacementAdminSettingsPage() {
               cursor = batch[batch.length - 1]!.id;
             }
           },
-        }, { shared: 'app' });
+        }, { everyGroup: true, requireComplete: true, merge: () => undefined });
       } catch {
         // canister list is best-effort too
       }
