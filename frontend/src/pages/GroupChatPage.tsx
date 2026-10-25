@@ -32,6 +32,7 @@ import { useNativeKeyboardBottomInset } from "@/hooks/useNativeKeyboardBottomIns
 import { useChatVaultDeliverySync } from "@/hooks/useChatVaultDeliverySync";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { buildNewsShareToken } from "@/features/news/newsShareToken";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMiniLeague } from "@/live/features/miniLeagues";
