@@ -253,8 +253,8 @@ persistent actor class Main(governorInit : Principal) = this {
     switch (clubDomainCanister) {
       case null { #Err("club_domain canister not configured") };
       case (?cd) {
-        let clubDomain = actor (Principal.toText(cd)) : actor { is_app_admin : shared query (Principal) -> async Bool };
-        let isAdmin = try { await clubDomain.is_app_admin(caller) } catch (_) { false };
+        let clubDomain = actor (Principal.toText(cd)) : actor { read_account_is_app_admin : shared (Principal) -> async Bool };
+        let isAdmin = try { await (with timeout = 20) clubDomain.read_account_is_app_admin(caller) } catch (_) { false };
         if (isAdmin) { #Ok } else { #Err("App admin required") };
       };
     };
@@ -1429,7 +1429,12 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
 
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
-    governorOnly(caller);
+    switch (await appAdminOnly(caller)) {
+      case (#Err(e)) throw Error.reject(e);
+      case (#Ok) {};
+    };
+    if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
+    if (input.failure_threshold_percent > 100 or input.check_window_hours == 0 or input.cooldown_hours > 8760) throw Error.reject("Invalid alert settings");
     let updated : Types.PushAlertSettings = {
       input with
       updated_at_ms = Nat64.fromIntWrap(Time.now() / 1_000_000);
@@ -1539,6 +1544,19 @@ persistent actor class Main(governorInit : Principal) = this {
     let end = Nat.min(start + Nat32.toNat(boundedLimit), preferences.size());
     let page = Array.tabulate<Types.Preferences>(end - start, func(i) = preferences[start + i]);
     #Ok({ items = page; total = Nat.toNat32(preferences.size()) })
+  };
+
+  public shared ({ caller }) func list_admin_preferences(limit : Nat32, offset : Nat32) : async Types.PreferencesPageResult {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced");
+    try {
+      await admitAccount(caller);
+      switch (await appAdminOnly(caller)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
+      if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced");
+      if (limit == 0 or limit > 500) return #Err("Invalid page size");
+      let start = Nat.min(Nat32.toNat(offset), preferences.size());
+      let end = Nat.min(start + Nat32.toNat(limit), preferences.size());
+      #Ok({ items = Array.tabulate<Types.Preferences>(end - start, func i = preferences[start + i]); total = Nat.toNat32(preferences.size()) })
+    } finally { removalReceiver.leave(caller) }
   };
 
   // ======================================================================

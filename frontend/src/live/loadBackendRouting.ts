@@ -243,7 +243,7 @@ export function isFeatureRoutedToIcp(feature: FeatureArea): boolean {
   return !!target && isFeatureCanisterConfigured(target, feature);
 }
 
-function hasStoredInternetIdentitySession(): boolean {
+export function hasStoredInternetIdentitySession(): boolean {
   try {
     const raw = typeof localStorage !== "undefined" ? localStorage.getItem("ignite_icp_internet_identity_session") : null;
     const parsed = raw ? (JSON.parse(raw) as { principal?: unknown }) : null;

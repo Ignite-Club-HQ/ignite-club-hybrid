@@ -60,6 +60,7 @@ type StatusFilter = "all" | FeedbackStatus;
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveFeedback, updateLiveFeedbackStatus, deleteLiveFeedback } from "@/live/features/insights";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { readAdminPages } from "@/live/adminPaging";
 
 export default function ManageFeedbackPage() {
   return <SupabaseManageFeedbackPage />;
@@ -90,7 +91,7 @@ function SupabaseManageFeedbackPage() {
   const { isAppAdmin } = useIsAppAdmin();
 
   const { data: feedback, isLoading } = useQuery({
-    queryKey: ["all-feedback"],
+    queryKey: ["all-feedback", user?.id],
     queryFn: async () => {
       return withFeatureBackend("admin", {
         supabase: async () => {
@@ -104,7 +105,10 @@ function SupabaseManageFeedbackPage() {
         icp: async (ctx) => {
           // Provisional mapping: canister has no profile join, so `profiles`
           // falls back to the caller's principal text for display.
-          const { items } = await listLiveFeedback(ctx, null, 0, 200);
+          const items = await readAdminPages(async (offset, limit) => {
+            const page = await listLiveFeedback(ctx, null, offset, limit);
+            return { items: page.items, total: Number(page.total) };
+          }, item => item.id);
           return items.map((item) => ({
             id: item.id,
             type: item.kind,

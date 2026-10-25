@@ -2,7 +2,25 @@
 
 ## Conclusion
 
-**App administration is not fully on-chain or feature-complete in ICP mode.** Confirmed remaining dependencies and missing live paths are listed below. This was a source audit with existing local tests, not signed-in mainnet acceptance. No application logic, credentials, settings, canisters or workflows were changed.
+**The confirmed ICP Supabase dependencies below have been repaired locally; live completion is not yet verified.** The numbered findings preserve the original audit evidence, not the current repaired status.
+
+## Repair status — 25 October 2026
+
+- Live User Management now uses a narrow, paginated identity directory rather than disabled local connectors or governor exports. Directory and status actions require an active, globally authorized identity administrator. Search scans at most 1,000 accounts per response and returns a continuation cursor.
+- ICP Push Analytics uses real notification queue counts, canister-authorized settings and explicit per-queue device cleanup. Complete registered-group reads precede writes; partial writes report partial completion rather than success. These counts are queue acknowledgements, not proof of phone receipt.
+- Internet Identity canister overrides load/save through club_domain app configuration; email-mode Supabase behavior remains. Placement club choices and GIPHY reads skip Supabase in ICP mode and surface failed canister reads.
+- ICP Active Games no longer opens Supabase realtime. Feedback and notification preference displays page their canister inventories. Administrator query keys introduced here include the signed-in user.
+- User analytics club choices now read the registered canister groups, activity queries use the owning club or group aggregation, and profile lookup uses the existing routed cache.
+- Local validation: eight focused test files passed with 55 tests in each backend mode; the final four-file UI/queue regression pass completed with 18 tests per mode. Rust directory authorization/search tests passed; notification_queue Motoko check passed; ICP guards and all 17 Candid contracts passed. Preview reports build OK.
+
+### Remaining acceptance and limits
+
+- No canister upgrade, app deployment, credential change or live admin mutation occurred. Release the shared identity_access changes and both groups' notification_queue changes through exact-target protected upgrade tooling, then the matching app. Do not use a broad all-service deployment as a substitute.
+- Signed-in Internet Identity admin acceptance in both groups remains required. No usable Internet Identity session was available here; mocked page tests are not live acceptance.
+- Existing administrator grants live in multiple canister role stores. The new directory/status endpoints validate identity_access grants independently; inconsistent grants fail closed and need operator verification. Do not authorize by the page's insights-only role check or grant global administrator roles through the directory UI.
+- Platform engagement still uses individual club reports rather than a full platform rollup. Activity reads remain capped at 500 rows per canister/time window. These are reporting-parity limits, not evidence of Supabase use.
+- Full multi-domain/media-byte disaster recovery and external website synchronization remain outside this repair batch. Resend connection remains intentionally deferred; payment and push-provider boundaries remain external by policy.
+- Preference rows from different queues remain queue-specific; cross-group effective-preference reconciliation needs verification before treating their aggregate as unique-person totals.
 
 ## Confirmed remaining gaps
 

@@ -94,12 +94,13 @@ import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabUserDirectory } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
+import IcpManageUsersPage from "./IcpManageUsersPage";
 
 export default function ManageUsersPage() {
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const isIcp = useIcpLab || resolveAuthBackend() === "icp";
   if (isIcp) {
-    return <IcpLabManageUsersPage />;
+    return useIcpLab ? <IcpLabManageUsersPage /> : <IcpManageUsersPage />;
   }
   return <SupabaseManageUsersPage />;
 }

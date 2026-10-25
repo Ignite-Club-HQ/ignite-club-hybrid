@@ -44,6 +44,7 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLivePreferencesByClub } from "@/live/features/notifications";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { readAdminPages } from "@/live/adminPaging";
 
 export default function NotificationPreferencesPage() {
   if (isFeatureRoutedToIcp("notifications")) {
@@ -71,20 +72,26 @@ interface IcpUserNotificationData {
  * registered column/stat is hidden rather than shown as empty.
  */
 function IcpNotificationPreferencesPage() {
+  const { user } = useAuth();
   const { isAppAdmin, isLoading: adminLoading } = useIsAppAdmin();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["icp-notification-preferences"],
+    queryKey: ["icp-notification-preferences", user?.id],
     queryFn: async () =>
       withFeatureBackend("notifications", {
         supabase: async () => null,
         icp: async (ctx) => {
-          const page = await listLivePreferencesByClub(ctx, "", 500, 0);
-          const items = page.items ?? [];
+          const { adminQueueContexts } = await import("@/live/adminQueueOperations");
+          const contexts = await adminQueueContexts();
+          const pages = await Promise.all(contexts.map(queueCtx => readAdminPages(async (offset, limit) => {
+            const page = await listLivePreferencesByClub(queueCtx, "app", limit, offset);
+            return { items: page.items, total: Number(page.total) };
+          }, item => item.user, 500)));
+          const items = pages.flat();
           const ids = items.map((p) => p.user);
           const profiles = await listLiveProfilesByIds(ctx, ids).catch(() => []);
           const nameMap = new Map<string, string | null>(
-            (profiles as any[]).map((p) => [p.id, p.display_name ?? null]),
+            profiles.map(p => [p.account_id, p.display_name ?? null]),
           );
           const users: IcpUserNotificationData[] = items.map((p) => ({
             id: p.user,
@@ -97,7 +104,7 @@ function IcpNotificationPreferencesPage() {
             pushMediaEnabled: p.media_enabled,
           }));
           return {
-            total: Number(page.total),
+            total: items.length,
             usersWithEmailEnabled: users.filter((u) => u.emailMessagesEnabled).length,
             users,
           };

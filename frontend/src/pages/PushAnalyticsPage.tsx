@@ -73,6 +73,8 @@ interface AlertSettings {
 }
 
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import IcpPushAnalyticsPage from "./IcpPushAnalyticsPage";
 import {
   getLivePushAlertSettings,
   upsertLivePushAlertSettings,
@@ -80,6 +82,7 @@ import {
 } from "@/live/features/notifications";
 
 export default function PushAnalyticsPage() {
+  if (resolveAuthBackend() === "icp") return <IcpPushAnalyticsPage />;
   return <SupabasePushAnalyticsPage />;
 }
 

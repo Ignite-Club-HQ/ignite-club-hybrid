@@ -33,7 +33,7 @@ import {
   isFeatureCanisterConfigured,
   resolveFeatureBackend,
 } from "@/live/featureBackend";
-import { fetchStoredBackendRoutingConfig, getEffectiveBackend, getEffectiveTarget } from "@/live/loadBackendRouting";
+import { fetchStoredBackendRoutingConfig, getEffectiveBackend, getEffectiveTarget, isSignedInWithEmail } from "@/live/loadBackendRouting";
 import { getLiveAppSetting, setLiveAppSetting } from "@/live/features/appSettings";
 import { GIPHY_API_KEY_CONFIG_KEY, decodeStoredConfigText } from "@/live/appConfig";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -207,6 +207,7 @@ export default function PlacementAdminSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { isAppAdmin, isLoading: isLoadingAuth } = useIsAppAdmin();
+  const isIcp = !isSignedInWithEmail();
 
   const [rows, setRows] = useState<CanisterRow[]>([]);
   const [wsGatewayUrl, setWsGatewayUrl] = useState("");
@@ -218,13 +219,13 @@ export default function PlacementAdminSettingsPage() {
   const [routingTouched, setRoutingTouched] = useState(false);
 
   const { data: clubs } = useQuery({
-    queryKey: ["admin-clubs-for-backend-overrides"],
+    queryKey: ["admin-clubs-for-backend-overrides", user?.id, isIcp],
     queryFn: async () => {
       const merged = new Map<string, string>();
       // Supabase clubs — best-effort: an Internet Identity app admin has no
       // Supabase session, so in ICP mode this read fails and must not blank
       // the override picker.
-      try {
+      if (!isIcp) try {
         const { data, error } = await supabase.from("clubs").select("id, name").order("name");
         if (!error) for (const c of (data ?? []) as { id: string; name: string }[]) merged.set(c.id, c.name);
       } catch {
@@ -237,18 +238,21 @@ export default function PlacementAdminSettingsPage() {
           supabase: async () => undefined,
           icp: async (ctx) => {
             let cursor: string | null = null;
-            for (let i = 0; i < 20; i++) {
+            for (let i = 0; i < 10000; i++) {
               const batch = await listLiveClubs(ctx, cursor, 50);
               for (const c of batch) {
                 if (c.is_active && c.deleted_at_ms.length === 0) merged.set(c.id, c.name);
               }
-              if (batch.length < 50) break;
-              cursor = batch[batch.length - 1]!.id;
+              if (batch.length < 50) return;
+              const last = batch.at(-1);
+              if (!last || last.id === cursor) throw new Error("Club inventory changed; refresh to retry");
+              cursor = last.id;
             }
+            throw new Error("Club inventory exceeds page budget");
           },
-        }, { shared: 'app' });
-      } catch {
-        // canister list is best-effort too
+        }, { everyGroup: true, requireComplete: true, merge: () => undefined });
+      } catch (error) {
+        if (isIcp) throw error;
       }
       return [...merged.entries()]
         .map(([id, name]) => ({ id, name }))
@@ -264,8 +268,15 @@ export default function PlacementAdminSettingsPage() {
   }, [profileCountry]);
 
   const { data: savedOverrides, isLoading: isLoadingSettings } = useQuery({
-    queryKey: ["app-setting", ICP_CANISTER_CONFIG_KEY],
+    queryKey: ["app-setting", ICP_CANISTER_CONFIG_KEY, user?.id, isIcp],
     queryFn: async () => {
+      if (isIcp) return withFeatureBackend("membership", {
+        supabase: async () => { throw new Error("Internet Identity connection required"); },
+        icp: async ctx => {
+          const raw = await getLiveAppSetting(ctx, ICP_CANISTER_CONFIG_KEY);
+          return parseIcpAdminOverrides(raw ? JSON.parse(raw) : null);
+        },
+      }, { shared: "app" });
       const { data, error } = await supabase
         .from("app_settings")
         .select("value")
@@ -285,7 +296,7 @@ export default function PlacementAdminSettingsPage() {
   }, [savedOverrides, touched]);
 
   const { data: savedRouting, isLoading: isLoadingRouting } = useQuery({
-    queryKey: ["app-setting", BACKEND_ROUTING_CONFIG_KEY],
+    queryKey: ["app-setting", BACKEND_ROUTING_CONFIG_KEY, user?.id, isIcp],
     queryFn: () => fetchStoredBackendRoutingConfig(),
     enabled: !!user && isAppAdmin,
   });
@@ -296,10 +307,10 @@ export default function PlacementAdminSettingsPage() {
   const [giphyKey, setGiphyKey] = useState("");
   const [giphyTouched, setGiphyTouched] = useState(false);
   const { data: savedGiphyKey } = useQuery({
-    queryKey: ["app-setting", GIPHY_API_KEY_CONFIG_KEY],
+    queryKey: ["app-setting", GIPHY_API_KEY_CONFIG_KEY, user?.id, isIcp],
     queryFn: async () => {
       let value: string | null = null;
-      try {
+      if (!isIcp) try {
         const { data, error } = await supabase
           .from("app_settings")
           .select("value")
@@ -317,8 +328,8 @@ export default function PlacementAdminSettingsPage() {
             if (fromCanister) value = fromCanister;
           },
         }, { shared: 'app' });
-      } catch {
-        // canister read is best-effort
+      } catch (error) {
+        if (isIcp) throw error;
       }
       return decodeStoredConfigText(value);
     },
@@ -411,8 +422,7 @@ export default function PlacementAdminSettingsPage() {
     }) => {
       icpRoutingSaveRef.current = false;
       const stamped = { ...config, savedAtMs: Date.now() };
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
+      if (isIcp) {
         // Internet Identity admin: no Supabase session, so the app_settings
         // row is read-only here (RLS). Save the stamped copy on club_domain's
         // app config instead; loaders pick whichever copy is newer.
@@ -641,6 +651,13 @@ export default function PlacementAdminSettingsPage() {
     mutationFn: async (canisterIds: Record<string, string>) => {
       const trimmedGateway = wsGatewayUrl.trim();
       const value = trimmedGateway ? { canisterIds, wsGatewayUrl: trimmedGateway } : { canisterIds };
+      if (isIcp) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Internet Identity connection required"); },
+          icp: ctx => setLiveAppSetting(ctx, ICP_CANISTER_CONFIG_KEY, value),
+        }, writeOnce({ shared: "app" }));
+        return canisterIds;
+      }
       const { data: existing, error: readError } = await supabase
         .from("app_settings")
         .select("id")

@@ -159,17 +159,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'prepare_my_broadcast_erasure' : ActorMethod<
-    [],
-    { 'Ok' : null } |
-      { 'Err' : string }
-  >,
   'purge_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
-  'purge_my_data' : ActorMethod<[], { 'Ok' : bigint } | { 'Err' : string }>,
   'read_account_get_digest' : ActorMethod<
     [DigestSource, string, bigint, number],
     DigestResults
@@ -243,11 +237,6 @@ export interface Main {
   'remove_device_tokens' : ActorMethod<
     [string, Array<string>],
     DeviceTokenCountResult
-  >,
-  'retire_competition_broadcast' : ActorMethod<
-    [string, string, Array<string>, number],
-    { 'Ok' : null } |
-      { 'Err' : string }
   >,
   'schedule_message' : ActorMethod<
     [

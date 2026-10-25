@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import {
   isChatVirtDebugEnabled,
   setChatVirtDebugEnabled,
@@ -53,6 +54,13 @@ function readBuffer(): DebugEvent[] {
 }
 
 export default function AdminChatVirtDebugPage() {
+  const { isAppAdmin, isLoading } = useIsAppAdmin();
+  if (isLoading) return null;
+  if (!isAppAdmin) return <p className="p-6 text-muted-foreground">App admins only.</p>;
+  return <ChatVirtDebugContent />;
+}
+
+function ChatVirtDebugContent() {
   const navigate = useNavigate();
   const [enabled, setEnabled] = useState<boolean>(() => isChatVirtDebugEnabled());
   const [paused, setPaused] = useState(false);
