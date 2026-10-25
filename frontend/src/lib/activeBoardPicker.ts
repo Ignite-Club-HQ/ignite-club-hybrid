@@ -4,6 +4,8 @@ export async function readIcpActiveBoards(teamId?: string) {
   const ids = teamId ? [teamId] : await withFeatureBackend("membership", {
     supabase: async (): Promise<string[]> => { throw new Error("Internet Identity required"); },
     icp: async ctx => {
+      const { listLiveTeamRoleGrants } = await import("@/live/features/membership");
+      await listLiveTeamRoleGrants(ctx, id);
       const { getLiveMyRoleGrants } = await import("@/live/features/membership");
       return [...new Set((await getLiveMyRoleGrants(ctx)).flatMap(role => role.team))];
     },
