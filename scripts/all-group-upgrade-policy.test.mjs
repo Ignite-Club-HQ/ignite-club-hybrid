@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { planInventory, SCOPES, PRIMARY_SUBNET, validateRequest, installArgs, digest, assertCheckedPlan, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, executeUpgrades } from './all-group-upgrade-policy.mjs';
+import { planInventory, SCOPES, PRIMARY_SUBNET, validateRequest, installArgs, digest, assertCheckedPlan, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, executeUpgrades, requireCompletedRecovery, galleryAuthorities, verifyCompletedRecovery } from './all-group-upgrade-policy.mjs';
 import { GROUP_BUILD_SERVICES } from './stage-group-wasm.mjs';
 const shared=JSON.parse(readFileSync(new URL('../deploy/mainnet/.icp/data/mappings/ic.ids.json',import.meta.url)));
 const original=JSON.parse(readFileSync(new URL('../deploy/groups/g2/provision.json',import.meta.url)));
@@ -122,4 +122,46 @@ test('unknown journal acknowledgement stops before install and unknown old modul
   const j=make();let installs=0;
   const t={gate:async()=>{},observe:async s=>({moduleHash:s.oldHash,settingsHash:s.settingsHash}),verifyKeys:async()=>{},persist:async()=>{throw Error('unknown journal');},install:async()=>{installs++;}};
   await assert.rejects(executeUpgrades(j,t));assert.equal(installs,0);assert.equal(j.steps[0].phase,'pending');t.persist=async()=>{};await assert.rejects(executeUpgrades(j,t));assert.equal(installs,0);
+});
+function recoverable(){
+  const j=make();j.binding.repo='Ignite-Club-HQ/ignite-club-hybrid';j.binding.scope='app_admin';j.binding.release='a'.repeat(40);
+  j.modulesComplete=true;j.steps.forEach(s=>s.phase='complete');return j;
+}
+const recoveryOptions=j=>({repo:j.binding.repo,scope:j.binding.scope,checkedPlan:digest(j.binding),source:'b'.repeat(40),branch:'refs/heads/main'});
+test('recovery preserves original release and saved artifacts without rebinding',()=>{
+  const j=recoverable(),before=JSON.stringify(j),r=requireCompletedRecovery(j,recoveryOptions(j));
+  assert.equal(r.release,'a'.repeat(40));assert.equal(r.hashes.notification_queue,hash(2));assert.equal(JSON.stringify(j),before);
+  validateRequest('recover','app_admin','RECOVER COMPLETED MAINNET RELEASE',digest(j.binding));
+  assert.throws(()=>validateRequest('recover','app_admin','UPGRADE ALL MAINNET GROUPS',digest(j.binding)));
+});
+test('recovery rejects unknown or unacknowledged installs, foreign plans and changed recovery source',()=>{
+  for(const mutate of [j=>{j.modulesComplete=false;},j=>{j.steps[0].phase='pending';j.steps[0].oldHash=j.steps[0].newHash;},j=>{j.steps[0].phase='ready';},j=>{j.keys.pop();},j=>{j.binding.release='invalid';},j=>{j.recovery={source:'c'.repeat(40),branch:'refs/heads/main'};}]){
+    const j=recoverable(),options=recoveryOptions(j);mutate(j);assert.throws(()=>requireCompletedRecovery(j,options));
+  }
+  const j=recoverable();assert.throws(()=>requireCompletedRecovery(j,{...recoveryOptions(j),checkedPlan:hash(9)}));
+  assert.throws(()=>requireCompletedRecovery(null,recoveryOptions(j)));
+});
+test('recovery verifies every saved module/settings twice and never installs',async()=>{
+  const j=recoverable();let reads=0,keys=0,gates=0,installs=0;
+  await verifyCompletedRecovery(j,{gate:async()=>{gates++;},observe:async s=>{reads++;return{moduleHash:s.newHash,settingsHash:s.settingsHash};},verifyKeys:async()=>{keys++;},install:async()=>{installs++;}});
+  assert.equal(reads,j.steps.length*2);assert.equal(keys,2);assert.equal(gates,4);assert.equal(installs,0);
+});
+test('recovery stops on module/settings/wiring/key drift without mutating receipts',async()=>{
+  for(const drift of ['module','settings','wiring','key']){
+    const j=recoverable(),before=JSON.stringify(j);
+    await assert.rejects(verifyCompletedRecovery(j,{gate:async()=>{if(drift==='wiring')throw Error('wiring changed');},observe:async s=>({moduleHash:drift==='module'?hash(8):s.newHash,settingsHash:drift==='settings'?hash(8):s.settingsHash}),verifyKeys:async()=>{if(drift==='key')throw Error('key changed');}}));
+    assert.equal(JSON.stringify(j),before);
+  }
+});
+test('gallery authorities use planned G1 inventory without a provision file and exact future-group pairs',()=>{
+  const f=fixture(3),inventory=planInventory(shared,f.provisions,f.registry,'gallery_vault',f.hashes);
+  for(const groupId of ['g1','g2','g3']){
+    const t=inventory.targets.find(t=>t.groupId===groupId&&t.name==='media_metadata');
+    const pair=galleryAuthorities(inventory,t,f.provisions),group=inventory.groups.find(g=>g.id===groupId);
+    assert.equal(pair.club,group.services.find(s=>s.name==='club_domain').canisterId);assert.equal(pair.vault,group.services.find(s=>s.name==='vault_domain').canisterId);
+  }
+  const t=inventory.targets.find(t=>t.groupId==='g1'&&t.name==='media_metadata');
+  assert.deepEqual(galleryAuthorities(inventory,t,[]),{club:shared.club_domain,vault:shared.vault_domain});
+  assert.throws(()=>galleryAuthorities(inventory,{...t,canisterId:'foreign-cai'},[]));
+  assert.throws(()=>galleryAuthorities(inventory,t,[{groupId:'g1',canisters:{club_domain:'foreign-cai',vault_domain:shared.vault_domain}}]));
 });

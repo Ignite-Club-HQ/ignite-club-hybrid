@@ -122,3 +122,15 @@ export function galleryAuthorities(inventory, target, provisions) {
   if (provision && (provision.canisters?.club_domain !== club || provision.canisters?.vault_domain !== vault)) throw Error(`Gallery authority inventory disagrees for ${target.groupId}; stop without rewiring`);
   return {club, vault};
 }
+/** Two complete evidence sweeps; deliberately exposes no install capability. */
+export async function verifyCompletedRecovery(journal, {gate, observe, verifyKeys}) {
+  if(journal.modulesComplete!==true || journal.steps.some(s=>s.phase!=='complete'))throw Error('Unacknowledged modules cannot recover');
+  for(let pass=0;pass<2;pass++){
+    await gate();
+    for(const step of journal.steps){
+      const actual=await observe(step);
+      if(actual.moduleHash!==step.newHash || actual.settingsHash!==step.settingsHash)throw Error('Recovery module/settings drift; no writes permitted');
+    }
+    await verifyKeys();await gate();
+  }
+}

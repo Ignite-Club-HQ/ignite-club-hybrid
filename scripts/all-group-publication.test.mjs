@@ -30,3 +30,12 @@ test('complete backend manifest is the only additional allowed publication path'
   const other=[{path:'deploy/mainnet/other.json',content:'verified'}];
   assert.throws(()=>publishVerifiedFiles(f.api,{branch,release,journal:{...journal,snapshotFiles:other,snapshotFilesHash:digest(other)},files:other}),/allowlisted/);
 });
+test('recovery publishes against pinned repair source without rewriting original release binding',()=>{
+  const f=fixture(),journal=verified();journal.binding={release:'f'.repeat(40)};
+  journal.recovery={source:release,branch,planHash:digest(journal.binding)};
+  const before=JSON.stringify(journal.binding),options={branch,release,journal,files};
+  journal.publication=publishVerifiedFiles(f.api,options);publishVerifiedFiles(f.api,options);
+  assert.equal(JSON.stringify(journal.binding),before);
+  assert.equal(f.calls.find(c=>c.path==='git/commits'&&c.method==='POST').body.parents[0],release);
+  assert.throws(()=>publishVerifiedFiles(f.api,{...options,release:'e'.repeat(40)}),/recovery binding/);
+});

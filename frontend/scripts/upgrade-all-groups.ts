@@ -21,7 +21,7 @@ import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
 import { placementOperatorEvidenceIdl, normalizePlacementOperatorEvidence } from '../../scripts/placement-upgrade-evidence.mjs';
 import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement } from '../../scripts/all-group-wiring-policy.mjs';
-import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades, requireCompletedRecovery, galleryAuthorities } from '../../scripts/all-group-upgrade-policy.mjs';
+import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades, requireCompletedRecovery, galleryAuthorities, verifyCompletedRecovery } from '../../scripts/all-group-upgrade-policy.mjs';
 
 const [action, scope, artifacts, pem, directory] = process.argv.slice(2);
 const services = validateRequest(action, scope, process.env.CONFIRMATION, process.env.CHECKED_PLAN);
@@ -186,11 +186,14 @@ if(!journal){
 validateJournal(journal,binding);
 const persist=async()=>{stored=persistGroup2Journal(api,path,branch,stored,journal,'all-groups');saveReport('progress.json',journal);};
 const verifyKeys=async()=>{for(const k of journal.keys)keyGate(k.groupId,'after');};
-if(recovery)journal.recovery=recovery.recovery;
+if(recovery){
+  await verifyCompletedRecovery(journal,{gate,observe,verifyKeys});
+  journal.recovery=recovery.recovery;
+}
 await persist();await verifyKeys();
 // Installation completion is not release completion; backfill/snapshot must also pass.
 const moduleJournal={...journal,complete:false};
-await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend',gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
+if(!recovery)await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend',gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
   if(recovery)throw Error('Recovery cannot install any module');
   const r=spawnSync('icp',installArgs(t,resolve(artifacts,t.name)),{cwd:directory,stdio:'inherit'});
   if(r.status!==0)throw Error('Install reply failed/unknown; pending journal retained, no replay');
@@ -203,8 +206,12 @@ for(const t of targets.filter(t=>t.name==='media_metadata')){
   const factory=()=>IDL.Service({set_gallery_authorities:IDL.Func([IDL.Principal,IDL.Principal],[IDL.Variant({Ok:IDL.Null,Err:IDL.Text})],[])});
   const actor=Actor.createActor(factory,{agent,canisterId:t.canisterId}) as unknown as {set_gallery_authorities(c:Principal,v:Principal):Promise<{Ok:null}|{Err:string}>};
   await gate();
+  // This setter atomically assigns the same exact pair; repeating it is idempotent.
+  journal.galleryAuthorities??={};
+  journal.galleryAuthorities[t.canisterId]={club,vault,phase:'pending'};await persist();
   const r=await actor.set_gallery_authorities(Principal.fromText(club),Principal.fromText(vault));
   if('Err'in r)throw Error(`Gallery authority wiring refused for ${t.groupId}: ${r.Err}`);
+  journal.galleryAuthorities[t.canisterId]={club,vault,phase:'complete'};await persist();
 }
 if(journal.publication || journal.published){validateJournal(journal,binding);console.log('Exact saved snapshot retained for publication resume; modules reverified without reinstall.');process.exit(0);}
 // Metadata's ordered page index is a required, idempotent release prerequisite.
