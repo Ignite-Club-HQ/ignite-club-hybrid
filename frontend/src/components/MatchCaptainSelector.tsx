@@ -106,7 +106,9 @@ export default function MatchCaptainSelector({
           children,
         };
       },
-    }, { eventId: eventId }),
+    }, clubId ? { clubId } : { eventId: eventId }),
+    staleTime: 60_000,
+    retry: 1,
   });
 
   // Player-role eligibility is routed: Supabase reads user_roles, ICP reads
@@ -170,6 +172,8 @@ export default function MatchCaptainSelector({
         };
       },
     }, { teamId: teamId! }),
+    staleTime: 5 * 60_000,
+    retry: 1,
   });
 
   const assignMutation = useMutation({
