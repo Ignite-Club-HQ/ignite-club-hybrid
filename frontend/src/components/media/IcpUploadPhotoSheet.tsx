@@ -217,6 +217,7 @@ export function IcpUploadPhotoSheet({
         icp: async (ctx) => {
           let done = 0;
           let nextIndex = 0;
+          const vaultCopies: Promise<unknown>[] = [];
           const uploadOne = async (i: number) => {
             const raw = files[i];
             const isVideo = raw.type.startsWith("video/");
@@ -274,10 +275,13 @@ export function IcpUploadPhotoSheet({
               }
             }
             if (!scopePending) {
-              const { copyGalleryAssetToVault } = await import('./galleryVaultCopy');
-              await copyGalleryAssetToVault(ctx, { assetId: asset.id, clubId, teamId: teamId || null,
-                file: prepared.file, name: raw.name || 'Gallery photo' }).catch(() => { vaultCopyFailed = true; });
+              // The photo is published now; show it in the feed straight away
+              // and let the Vault copy finish behind the scenes.
               registeredAssetIds.push(asset.id);
+              void queryClient.invalidateQueries({ queryKey: ['icp-media-feed', principal], exact: true });
+              vaultCopies.push(import('./galleryVaultCopy').then(({ copyGalleryAssetToVault }) =>
+                copyGalleryAssetToVault(ctx, { assetId: asset.id, clubId, teamId: teamId || null,
+                  file: prepared.file, name: raw.name || 'Gallery photo' })).catch(() => { vaultCopyFailed = true; }));
             }
             done += 1;
             setProgress({ done, total: files.length });
@@ -289,6 +293,11 @@ export function IcpUploadPhotoSheet({
           const results = await Promise.allSettled(Array.from({ length: Math.min(3, files.length) }, worker));
           const failed = results.find(result => result.status === 'rejected');
           if (failed?.status === 'rejected') throw failed.reason;
+          // Every photo is published: end the "Uploading" state before the
+          // chat card, notifications and Vault copies run.
+          void finishGalleryUpload(queryClient, principal, batchId).catch(() => undefined);
+          onPendingChange?.([]);
+          await Promise.all(vaultCopies);
           if (teamId && registeredAssetIds.length) {
             const { publishLiveGalleryChatCard } = await import('@/live/features/media');
 
