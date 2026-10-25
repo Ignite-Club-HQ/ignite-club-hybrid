@@ -18,11 +18,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubProfile, getLiveClubKind } from "@/live/features/club";
 import { readIcpAssociationPlayhq, linkIcpAssociationPlayhq, syncIcpAssociationPlayhq } from "@/lib/associationPlayhqRepository";
 
-const isIcpPageMode = () => resolveAuthBackend() === "icp";
+const isIcpPageMode = () => isFeatureRoutedToIcp("competitions") || resolveAuthBackend() === "icp";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { AssociationEventsPanel } from "@/components/AssociationEventsPanel";
 
