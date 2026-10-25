@@ -747,7 +747,7 @@ export async function listLivePreferencesByClub(
 ) {
   const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.list_preferences_by_club(clubId, limit, offset),
+    actor.list_admin_preferences(limit, offset),
     "List preferences by club",
   );
 }
