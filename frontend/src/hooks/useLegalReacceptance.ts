@@ -111,10 +111,11 @@ export function useLegalReacceptance(): UseLegalReacceptanceResult {
   const acceptanceQuery = useQuery({
     queryKey: ["legal-acceptance", userId],
     queryFn: async () => {
+      if (!userId || resolveAuthBackend() === "icp") return null;
       const { data, error } = await supabase
         .from("profiles")
         .select("terms_accepted_at, privacy_accepted_at")
-        .eq("id", userId!)
+        .eq("id", userId)
         .maybeSingle();
       if (error) throw error;
       return data ?? null;
@@ -182,8 +183,8 @@ export function useLegalReacceptance(): UseLegalReacceptanceResult {
       (setting.required && (isIcp ? icpAcceptanceQuery.isPending : acceptanceQuery.isPending)),
     refresh: () => {
       void settingQuery.refetch();
-      void acceptanceQuery.refetch();
-      void icpAcceptanceQuery.refetch();
+      if (isIcp) void icpAcceptanceQuery.refetch();
+      else void acceptanceQuery.refetch();
     },
     acceptCurrentTerms,
   };

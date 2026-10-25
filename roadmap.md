@@ -1,4 +1,5 @@
 ## Codebase-wide ICP dependency audit — 25 October 2026
+- [ ] Owner-approved closure: repair seven Supabase paths, pitchboard attachment discovery, six correctness/completeness findings and ICP-only bootstrap/no-fallback safeguards; preserve external/deferred integrations, validate focused flows and record exact remaining live prerequisites. No deployment requested in this closure.
 - [x] Four parallel current-code audits and central source verification found seven reachable Supabase paths, missing ICP pitchboard attachment discovery, six related reporting/completeness defects and two bootstrap/config fallback boundaries. Recorded evidence, external/deferred distinctions, guard blind spots and live limits in docs/icp-codebase-audit-2026-10-25.md. Routing/sentinel checks pass (36 Supabase, 58 ICP; mode skips), exception markers pass (9), guards/17-contract drift pass; invite/legal reproduction has 16 passed/3 invite test failures, not proof of deployed failure. Audit only; no app/canister changes or deployment requested.
 
 ## All-group mainnet release — 25 October 2026

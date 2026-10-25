@@ -205,6 +205,16 @@ describe("useLegalReacceptance (ICP branch)", () => {
     expect(mocks.reads).not.toContain("profiles");
   });
 
+  it("refreshes accepted ICP terms without reading Supabase", async () => {
+    mocks.setting = firstActivation;
+    const { result } = renderHook(() => useLegalReacceptance(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    mocks.icpAcceptance = { termsVersion: icpTermsVersionFromSetting(firstActivation) };
+    result.current.refresh();
+    await waitFor(() => expect(result.current.mustAccept).toBe(false));
+    expect(mocks.reads).toEqual([]);
+  });
+
   it("requires acceptance when the accepted version predates the derived required version", async () => {
     mocks.setting = firstActivation;
     const requiredVersion = icpTermsVersionFromSetting(firstActivation);
