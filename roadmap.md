@@ -1,3 +1,6 @@
+## Poll composer keyboard clipping — 25 October 2026
+- [ ] Keep poll drawer within the visible keyboard-free area and disable competing automatic input repositioning; verify heading, options and action remain scrollable.
+
 ## Gallery inbox preview — 25 October 2026
 - [x] Format ICP gallery-card identifiers as readable photo previews instead of raw codes; shared parser regressions pass in both modes (20 checks each), ICP guards and preview build pass. No chat data, notification permissions or deployment changed; signed-in inbox acceptance remains unverified.
 
