@@ -4,6 +4,12 @@
 
 **Not yet safe to claim drop-in production parity.** Most retained functionality is represented, but this fresh source comparison found concrete regressions and deliberate purchase/provider restrictions beyond the retired drills and training pitch mode. No application code, database, deployment or production repository was changed during this review.
 
+### Approved code repair — 25 October, 07:18 UTC
+
+The subsequent approved repair fixes competition-wide Supabase Schedule visibility (including explicit-filter isolation), all three native Drive callback sites through one helper, class-calendar capacity/fullness/duration/age details and full-class waitlist actions, and production goalkeeper appointment counts in display/HTML/CSV. ICP goalkeeper behavior is unchanged. Google login now has an explicit default-off production build setting, `IGNITE_LIVE_GOOGLE_SIGN_IN_ENABLED=true`, to enable only after the retained production provider/callbacks are verified.
+
+Fresh repair verification: **12 focused files / 89 tests pass in each backend mode**, including mocked member Schedule rendering and calendar waitlist submission; ICP isolation guard and preview compilation pass. No authenticated live Supabase or native OAuth flow was verified. No secrets were added or requested, no SQL/services deployed, no repository transfer performed, and no paid catalog safety check bypassed. The earlier table is the original audit finding, not the post-fix status.
+
 ## Exact comparison
 
 - Current hybrid revision: `1934796440e299080c34ddb2eb7f841fd2328998`.
@@ -56,13 +62,13 @@ These existing tests pass despite the identified gaps: they do not cover every r
 
 ## Replacement acceptance checklist
 
-- [ ] Repair competition-wide Schedule visibility with a regression check for an entered-team member outside the host club.
-- [ ] Restore the registered native Drive callback consistently across authorization and code exchange.
-- [ ] Restore class-calendar information while retaining current enrolment actions.
-- [ ] Resolve goalkeeper-count parity without silently redefining reports.
+- [x] Repair competition-wide Schedule visibility with policy and rendered-member regression checks for an entered-team member outside the host club.
+- [x] Restore the registered native Drive callback consistently across authorization and code exchange; real provider/device acceptance remains below.
+- [x] Restore class-calendar information while retaining current enrolment actions and full-class waitlist behavior.
+- [x] Restore production goalkeeper-count parity in Supabase report display and both exports, without altering ICP's recorded-appearance metric.
 - [ ] Reconcile provider catalog/fulfillment and approve paid purchase activation; preserve existing subscriptions.
 - [ ] Verify production Google provider/callbacks before restoring its login button.
 - [ ] Verify incremental SQL and deployed service compatibility on the retained production backend, without resetting data or replacing unknown existing setup.
 - [ ] Run signed-in member/admin acceptance and native/provider staging checks before cutover.
 
-No code transfer, merge, automation activation or backend cutover is authorized by this audit.
+No code transfer, merge, automation activation or backend cutover was performed. As instructed, secret-dependent production verification waits until this code is moved into the other repository. Moving code does not itself certify SQL migration application, USD/v2 provider catalog readiness or verified fulfillment; paid activation remains blocked until those checks pass. Existing backend data/services/secrets must be retained.
