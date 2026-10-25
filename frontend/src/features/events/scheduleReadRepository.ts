@@ -2,7 +2,7 @@
 const scheduleColumns = `
   id, title, type, event_date, start_time, end_time, description,
   address, suburb, state, postcode, location_name, club_id, team_id,
-  competition_match_id, mini_league_id, target_team_ids, is_cancelled,
+  competition_id, competition_match_id, mini_league_id, target_team_ids, is_cancelled,
   is_bye, is_recurring, parent_event_id, opponent, arrival_minutes_before,
   rsvp_audience, adults_only, updated_at,
   teams!events_team_id_fkey (name, default_match_arrival_minutes, default_rsvp_audience),

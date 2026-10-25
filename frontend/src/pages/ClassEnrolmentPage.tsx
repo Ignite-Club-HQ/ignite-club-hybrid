@@ -878,6 +878,8 @@ function SupabaseClassEnrolmentPage() {
               <p className="text-sm text-muted-foreground px-1 italic">No classes scheduled for this day.</p>
             ) : (
               classesForSelectedDate.map((cls) => {
+                const currentCount = enrolmentCounts[cls.id] || 0;
+                const isFull = !!cls.class_capacity && currentCount >= cls.class_capacity;
                 const activeChild = selectedChildId || children[0]?.id || "";
                 const childEnrolment = activeChild ? getChildEnrolment(activeChild, cls.id) : null;
                 const selfEnrolment = getSelfEnrolment(cls.id);
@@ -889,8 +891,8 @@ function SupabaseClassEnrolmentPage() {
                 return (
                   <Card key={cls.id} className={isEnrolled ? "border-primary/50 bg-primary/5" : ""}>
                     <CardContent className="p-3">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
                           <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
                             {cls.logo_url ? (
                               <img src={cls.logo_url} alt="" className="h-6 w-6 object-contain" />
@@ -898,15 +900,19 @@ function SupabaseClassEnrolmentPage() {
                               <Users className="h-4 w-4 text-muted-foreground" />
                             )}
                           </div>
-                          <div>
-                            <h4 className="text-sm font-semibold">{cls.name}</h4>
-                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-semibold break-words">{cls.name}</h4>
+                            <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1">
                               <Clock className="h-3 w-3" />
                               {cls.class_time?.slice(0, 5)}
+                              {cls.class_duration_minutes ? ` (${cls.class_duration_minutes}m)` : null}
                             </div>
+                            {cls.level_age && <p className="text-xs text-muted-foreground break-words">{cls.level_age}</p>}
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          {cls.class_capacity ? <span className="text-xs font-medium">{currentCount} / {cls.class_capacity}</span> : null}
+                          {isFull && !isEnrolled && <Badge variant="secondary" className="text-[10px] px-1.5 h-5">Full</Badge>}
                           {childEnrolment && (
                             <Badge variant={childEnrolment.status === "enrolled" ? "default" : "outline"} className="text-[10px] px-1.5 h-5">
                               {childEnrolment.status === "enrolled" ? "Enrolled" : "Waitlisted"}
@@ -920,6 +926,8 @@ function SupabaseClassEnrolmentPage() {
                           {(canStillEnrolChild || canStillEnrolSelf) && (
                             <Button
                               size="sm"
+                              variant={isFull ? "outline" : "default"}
+                              disabled={enrolChildMutation.isPending || enrolSelfMutation.isPending}
                               className="h-7 text-xs px-2"
                               onClick={() => {
                                 // Enrol the child when their side is open, otherwise self.
@@ -932,7 +940,7 @@ function SupabaseClassEnrolmentPage() {
                                 }
                               }}
                             >
-                              Enrol
+                              {isFull ? "Join Waitlist" : "Enrol"}
                             </Button>
                           )}
                         </div>

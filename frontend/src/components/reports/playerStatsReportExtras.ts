@@ -78,6 +78,11 @@ export interface PlayerHonours {
   gkSeconds: number;
 }
 
+/** Production reports count appointments when recorded goalkeeper appearances are absent. */
+export function reportedGoalkeeperMatches(honours: Pick<PlayerHonours, "gkMatches" | "gkAppointed">): number {
+  return Math.max(honours.gkMatches, honours.gkAppointed);
+}
+
 export interface ReportExtras {
   matches: ReportMatch[];
   honours: Record<PlayerKey, PlayerHonours>;

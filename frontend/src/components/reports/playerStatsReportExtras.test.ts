@@ -6,7 +6,15 @@ vi.mock("@/live/features/club",()=>({getLiveTeam:async()=>[{club_id:"club"}]}));
 vi.mock("@/live/features/events",()=>({listLiveEvents:async()=>[{id:"game",title:"Game",event_type:"game",deleted:false,starts_at_ms:1n,opponent:[]}],getLiveGameResult:mocks.result,getLivePlayerStatsReport:async()=>[],listLiveDetailedGamePlayerStats:mocks.stats,readLiveEventHonours:async()=>({captains:[{ref_kind:"child",ref_id:"child"}],goalkeepers:[]})}));
 vi.mock("@/live/features/identityAccessClient",()=>({listLiveProfilesByIds:async()=>[]}));
 vi.mock("@/live/features/vault",()=>({resolveLivePiiTextBatch:async()=>new Map([["child","Private name"]])}));
-import {fetchReportExtras} from "./playerStatsReportExtras";
+import {fetchReportExtras,reportedGoalkeeperMatches} from "./playerStatsReportExtras";
+describe("production goalkeeper report parity",()=>{
+  it("counts appointments when position tracking was not recorded",()=>{
+    expect(reportedGoalkeeperMatches({gkMatches:0,gkAppointed:3})).toBe(3);
+  });
+  it("does not add appointment and appearance counts for the same report",()=>{
+    expect(reportedGoalkeeperMatches({gkMatches:4,gkAppointed:3})).toBe(4);
+  });
+});
 describe("ICP exact-event report details",()=>{
   beforeEach(()=>{vi.clearAllMocks();mocks.stats.mockResolvedValue([{user_id:[],child_id:"child",positions_played:["GK"],position_minutes:{GK:120},goals_scored:2}]);});
   it("uses optional scores, exact child honours and recorded position seconds",async()=>{

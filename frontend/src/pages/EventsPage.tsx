@@ -61,6 +61,7 @@ import { ClubDaySummary } from "@/components/events/ClubDaySummary";
 import { SponsorOrAdCarousel } from "@/components/SponsorOrAdCarousel";
 import { fetchViewableCompetitionMatchIds, makeCompetitionFixtureVisibility } from "@/features/events/competitionFixtureVisibility";
 import { readScheduleEvents } from "@/features/events/scheduleReadRepository";
+import { filterVisibleScheduleEvents } from "@/features/events/scheduleVisibilityPolicy";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { getLiveAccountRosterScope } from "@/live/features/events";
@@ -893,20 +894,11 @@ export default function EventsPage() {
         viewableCompetitionMatchIds,
         filteredData,
       );
-      filteredData = filteredData.filter(event => {
-        if (event.mini_league_id) {
-          // When explicitly filtering by a mini-league, the SQL `eq` already restricted us.
-          if (selectedMiniLeagueId) return event.mini_league_id === selectedMiniLeagueId;
-          return miniLeagueIds.includes(event.mini_league_id);
-        } else if (event.team_id) {
-          if (selectedTeamIdFilter && selectedTeamIdFilter === event.team_id && clubAdminClubIds.includes(event.club_id)) {
-            return true;
-          }
-          return isVisibleTeamEvent(event);
-        } else {
-          return clubIds.includes(event.club_id);
-        }
-      });
+      filteredData = filterVisibleScheduleEvents(filteredData,
+        { teamIds, clubIds, miniLeagueIds, clubAdminClubIds },
+        selectedTeamIdFilter, selectedMiniLeagueId,
+        { includeReadableCompetitionEvents: true, selectedClubId: clubFilter, isVisibleTeamEvent },
+      );
 
       const finalEvents = filteredData as Event[];
 

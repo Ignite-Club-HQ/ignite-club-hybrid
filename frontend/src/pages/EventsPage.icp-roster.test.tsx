@@ -181,6 +181,25 @@ beforeEach(() => {
 });
 
 describe("EventsPage roster-derived team scope routing", () => {
+  it("Supabase retains competition-wide events outside the member's host-club membership", async () => {
+    supabaseRoleRows = [{ role: "player", club_id: "member-club", team_id: "member-team" }];
+    const tomorrow = new Date(Date.now() + 86400000).toISOString();
+    supabaseEventRows = [
+      { id: "cup-social", title: "Cup presentation", type: "social", event_date: tomorrow,
+        club_id: "organizer-club", team_id: null, competition_id: "cup", mini_league_id: null,
+        is_cancelled: false, is_recurring: false, clubs: { name: "Host", sport: null } },
+      { id: "host-social", title: "Private host social", type: "social", event_date: tomorrow,
+        club_id: "organizer-club", team_id: null, competition_id: null, mini_league_id: null,
+        is_cancelled: false, is_recurring: false, clubs: { name: "Host", sport: null } },
+    ];
+    const client = renderPage();
+    await screen.findByText("Cup presentation");
+    expect(screen.queryByText("Private host social")).toBeNull();
+    await waitFor(() => {
+      const query = client.getQueryCache().getAll().find(q => q.queryKey[0] === "events" && q.queryKey[1] === "supabase" && Array.isArray(q.state.data));
+      expect((query?.state.data as Array<{id:string}> | undefined)?.map(row => row.id)).toEqual(["cup-social"]);
+    });
+  });
   it('starts the event query without resolving teams whose grants already identify their club', async () => {
     eventsRoutedToIcp = true;
     getLiveAccountRosterScopeMock.mockResolvedValue({ teamIds: [], clubIds: [], childIds: [] });

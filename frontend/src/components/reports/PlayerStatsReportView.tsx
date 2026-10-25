@@ -9,7 +9,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { readReportPlayerStats, readReportSummary } from "@/features/competitions/history/reportRepository";
 import { useToast } from "@/hooks/use-toast";
 import { openHtmlReport, downloadTextReport } from "@/lib/reportExport";
-import { useReportExtras, playerKey, type PlayerHonours } from "./playerStatsReportExtras";
+import { useReportExtras, playerKey, reportedGoalkeeperMatches, type PlayerHonours } from "./playerStatsReportExtras";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface PlayerStatsReportViewProps {
   teamId: string;
@@ -160,7 +161,7 @@ export default function PlayerStatsReportView({
 
   const honoursFor = (stat: PlayerStat): PlayerHonours => {
     const key = playerKey(stat.user_id, stat.child_id);
-    return (
+    const honours = (
       extras?.honours?.[key] ?? {
         captain: 0,
         pom: 0,
@@ -169,6 +170,9 @@ export default function PlayerStatsReportView({
         gkSeconds: 0,
       }
     );
+    return resolveAuthBackend() === "supabase"
+      ? { ...honours, gkMatches: reportedGoalkeeperMatches(honours) }
+      : honours;
   };
 
   const playerName = (stat: PlayerStat) =>

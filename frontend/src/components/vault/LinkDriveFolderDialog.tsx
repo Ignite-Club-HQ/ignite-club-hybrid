@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
+import { googleDriveRedirectUri } from "@/lib/googleDriveRedirect";
 import { HardDrive, Folder, Loader2, ChevronRight, ArrowLeft, Check, Link as LinkIcon, RefreshCw, Trash2, Power, AlertTriangle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -87,8 +88,7 @@ export function LinkDriveFolderDialog({ open, onOpenChange, vaultFolderId, clubI
   const [retrying, setRetrying] = useState(false);
 
   const getRedirectUri = useCallback(() => {
-    if (Capacitor.isNativePlatform()) return 'https://reference.invalid';
-    return `${window.location.origin}/vault`;
+    return googleDriveRedirectUri(Capacitor.isNativePlatform(), window.location.origin);
   }, []);
 
   // Check for existing link when opened
