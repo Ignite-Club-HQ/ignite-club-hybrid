@@ -1,3 +1,6 @@
+## Codebase-wide ICP dependency audit — 25 October 2026
+- [ ] Audit current reachable ICP paths across clubs/members, messaging/media/Vault/news, events/competitions, admin/shared services; record evidence-ranked remaining off-chain dependencies separately from intentional providers, device processing and release prerequisites. Audit only; no feature changes or deployment requested.
+
 ## All-group mainnet release — 25 October 2026
 - [x] Added Upgrade backend (all mainnet groups): eight reviewed scopes, complete saved/consensus inventory plus original Group 1, shared identity once, exact checked plan, original keys/settings/wiring, durable pending no-replay journals and immutable snapshot CAS publication. Future-group, interruption and publication tests pass (43); runner syntax and workflow YAML validated. Generic full-service scope refused after independent safety review. Instructions: docs/all-group-backend-upgrades.md.
 - [ ] Live workflow acceptance waits on source sync and an owner-approved protected check/upgrade; no mainnet run or mutation was requested/performed. Matching app release and signed-in acceptance remain separate.
