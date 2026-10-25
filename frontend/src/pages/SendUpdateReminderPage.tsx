@@ -109,6 +109,32 @@ function IcpSendUpdateReminderPage() {
       }, acrossLists),
   });
 
+  const { data: versionRows, isLoading: versionsLoading, error: versionsError } = useQuery({
+    queryKey: ["icp-club-app-versions", selectedClubId],
+    enabled: isAppAdmin && selectedClubId !== "all",
+    staleTime: 60_000,
+    queryFn: () => withFeatureBackend("notifications", {
+      supabase: async () => { throw new Error("ICP-only page"); },
+      icp: async (ctx) => {
+        const grants = await listLiveRoleGrants(ctx, selectedClubId);
+        const ids = Array.from(new Set(grants.map((g: { account_id: string }) =>
+          g.account_id.startsWith("principal:") ? g.account_id.slice("principal:".length) : g.account_id)));
+        const { getLiveUpdateReminderAudience } = await import("@/live/features/notifications");
+        const devices: Array<{ user: string; platform: string; app_version: string[]; build_number: string[] }> = [];
+        for (const batch of batchRecipientIds(ids)) devices.push(...(await getLiveUpdateReminderAudience(ctx, batch, selectedClubId)) as any);
+        const counts = new Map<string, Set<string>>();
+        for (const d of devices) {
+          const name = d.platform === "ios" ? "iOS" : d.platform === "android" ? "Android" : d.platform === "web" ? "Web" : d.platform;
+          const v = d.platform === "android" ? (d.build_number[0] ? `build ${d.build_number[0]}` : "unknown build") : (d.app_version[0] ?? "unknown version");
+          const label = `${name} ${v}`;
+          if (!counts.has(label)) counts.set(label, new Set());
+          counts.get(label)!.add(d.user);
+        }
+        return [...counts].map(([label, users]) => ({ label, count: users.size })).sort((a, b) => b.count - a.count);
+      },
+    }, { clubId: selectedClubId }),
+  });
+
   const sendMutation = useMutation({
     mutationFn: async (testOnly: boolean = false) => {
       if (!isAppAdmin) throw new Error("App admin role required");
@@ -233,6 +259,32 @@ function IcpSendUpdateReminderPage() {
           </Button>
           <Button variant="outline" disabled={sendMutation.isPending || clubsLoading || !!clubsError} onClick={() => sendMutation.mutate(true)}><TestTube className="h-4 w-4 mr-2" />Send test to me</Button>
           {lastResult && <p className="text-sm text-muted-foreground">{lastResult}</p>}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2"><Smartphone className="h-5 w-5" />App versions in use</CardTitle>
+          <CardDescription>Devices registered by members of the selected club.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {selectedClubId === "all" ? (
+            <p className="text-sm text-muted-foreground">Choose a club above to see which app versions its members use.</p>
+          ) : versionsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading app versions…</p>
+          ) : versionsError ? (
+            <p className="text-sm text-muted-foreground">Couldn't load app versions right now. Try again shortly.</p>
+          ) : !versionRows?.length ? (
+            <p className="text-sm text-muted-foreground">No members of this club have registered a phone with the app yet.</p>
+          ) : (
+            <div className="divide-y rounded-md border">
+              {versionRows.map((r) => (
+                <div key={r.label} className="flex items-center justify-between p-3 text-sm">
+                  <span>{r.label}</span>
+                  <Badge variant="secondary">{r.count} {r.count === 1 ? "member" : "members"}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
       <section className="space-y-3">
