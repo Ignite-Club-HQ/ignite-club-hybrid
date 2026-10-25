@@ -1212,7 +1212,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
 
   // Persist snapshot for instant cold-start on next visit
   useEffect(() => {
-    if (!user?.id || scopedItems.length === 0 || (isIcp && (isFetching || incompleteItemsRef.current))) return;
+    if (!user?.id || scopedItems.length === 0 || (isIcp && isFetching)) return;
     setCachedCarousel<CarouselSnapshot>(user.id, activeClubFilter, {
       items: scopedItems,
       nextEvents,
