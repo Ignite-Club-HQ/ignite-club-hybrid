@@ -1,3 +1,6 @@
+## Gallery inbox preview — 25 October 2026
+- [ ] Format ICP gallery-card identifiers as readable photo previews instead of raw codes; verify shared preview parsing without changing chat data or notification permissions.
+
 ## Gallery notification warning — 25 October 2026
 - [x] Preserve sanitized notification outcomes (missing connection, refused, access changed, capacity, unknown) in the consolidated testing screen instead of a generic popup; 7 focused tests, ICP guards and preview build pass. No automatic notification replay or deployment.
 - [ ] Live notification cause and chat-loading acceptance require the updated frontend and signed-in II evidence; this screenshot does not identify the returned notification status or explain the chat skeleton.

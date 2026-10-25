@@ -11,7 +11,8 @@ const EVENT_TOKEN_RE = new RegExp(EVENT_TOKEN_PATTERN, "gi");
 const POLL_TOKEN_RE = new RegExp(POLL_TOKEN_PATTERN, "gi");
 const BOARD_TOKEN_RE = /\[board:([0-9a-f-]{36})\]/gi;
 const NEWS_TOKEN_RE = /\[news:([A-Za-z0-9-]+)\]/gi;
-const GALLERY_TOKEN_RE = /\[gallery:([0-9a-f-]{36})\]/gi;
+// ICP card IDs include a gallery-card prefix and sequence, not just a UUID.
+const GALLERY_TOKEN_RE = /\[gallery:([A-Za-z0-9-]+)\]/gi;
 const GALLERY_PROMPT_TOKEN_RE = /\[galleryprompt:([0-9a-f-]{36})\]/gi;
 const PUBLISH_TOKEN_RE = /\[publish:([0-9a-f-]{36})\]/gi;
 const VAULT_FILE_TOKEN_RE = /\[vault:([0-9a-f-]{36})\]/gi;
