@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Hand, Loader2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   setLiveMatchGoalkeeper,
   removeLiveMatchGoalkeeper,
 } from "@/live/features/events";
+import { readProfileSummaries } from "@/lib/playerOfMatchReads";
 
 interface Props {
   eventId: string;
@@ -89,8 +90,11 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
           let profile = null;
           let children = null;
           if (isChild) {
-            const { data: kid } = await supabase.from("children").select("id, name").eq("id", row.ref_id).maybeSingle();
-            children = kid;
+            // Child names are PII and already decrypted into the event roster
+            // passed in as `rsvps`; reuse that instead of a Supabase children
+            // read, which strict ICP transport blocks.
+            const match = (rsvps || []).find((r: any) => r.child_id === row.ref_id);
+            children = match?.children ?? null;
           } else {
             const { data: profileData } = await selectCachedProfileById(row.ref_id);
             profile = profileData;
@@ -185,6 +189,23 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
   const goingMembers = goingPlayers.filter(
     (r) => !r.child_id && r.user_id && (isIcp || playerUserIds.includes(r.user_id))
   );
+
+  // ICP rosters carry no profile enrichment, so hydrate adult names/avatars
+  // on-chain for the pick list instead of showing "Unknown".
+  const goingAdultIds = useMemo(
+    () => goingMembers.map((r) => r.user_id as string),
+    [goingMembers],
+  );
+  const { data: adultProfiles } = useQuery({
+    queryKey: ["roster-profile-names", eventId, goingAdultIds.join(",")],
+    queryFn: () => readProfileSummaries(goingAdultIds),
+    enabled: isIcp && goingAdultIds.length > 0,
+    staleTime: 60_000,
+  });
+  const adultName = (userId: string | null | undefined) =>
+    (userId ? adultProfiles?.get(userId)?.display_name : null) || null;
+  const adultAvatar = (userId: string | null | undefined) =>
+    (userId ? adultProfiles?.get(userId)?.avatar_url : null) || null;
 
   const assignedUserIds = new Set(keepers.filter((k: any) => k.user_id).map((k: any) => k.user_id));
   const assignedChildIds = new Set(keepers.filter((k: any) => k.child_id).map((k: any) => k.child_id));
@@ -288,12 +309,12 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
                     }}
                   >
                     <Avatar className="h-9 w-9 mr-3">
-                      <AvatarImage src={rsvp.profiles?.avatar_url} />
+                      <AvatarImage src={rsvp.profiles?.avatar_url || adultAvatar(rsvp.user_id) || undefined} />
                       <AvatarFallback>
-                        {rsvp.profiles?.display_name?.charAt(0)?.toUpperCase() || "?"}
+                        {(rsvp.profiles?.display_name || adultName(rsvp.user_id))?.charAt(0)?.toUpperCase() || "?"}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="text-sm">{rsvp.profiles?.display_name || "Unknown"}</span>
+                    <span className="text-sm">{rsvp.profiles?.display_name || adultName(rsvp.user_id) || "Unknown"}</span>
                     {isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin ml-auto" />
                     ) : already ? (
