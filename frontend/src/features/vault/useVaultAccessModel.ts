@@ -126,8 +126,10 @@ export function useVaultAccessModel({
   // Each group is bounded inside the lookup, so a stuck group drops out on
   // its own instead of a whole-list cut-off failing every club.
   const { data: userClubs, isLoading: isLoadingClubs, error: clubsError, refetch: refetchClubs } = useQuery({
-    queryKey: vaultKeys.clubsForUser(userId, !!isAppAdmin),
-    queryFn: () => userId ? fetchVaultAccessibleClubs(userId, !!isAppAdmin) : [],
+    queryKey: [...vaultKeys.clubsForUser(userId, !!isAppAdmin), activeClubFilter ?? null],
+    queryFn: () => userId ? (activeClubFilter
+      ? fetchVaultAccessibleClubs(userId, !!isAppAdmin, undefined, activeClubFilter)
+      : fetchVaultAccessibleClubs(userId, !!isAppAdmin)) : [],
     // A member-scoped read is safe while the broader admin lookup runs.
     // Resolving admin=true starts its own separately keyed directory read.
     enabled: !!userId,
@@ -262,7 +264,7 @@ export function useVaultAccessModel({
 
   return {
     accessError, retryAccess,
-    clubsError: userClubs ? null : clubsError,
+    clubsError: userClubs?.length ? null : clubsError,
     retryClubs: () => { void refetchClubs(); },
     isAppAdmin,
     userRoles,

@@ -26,6 +26,7 @@ const accessMocks = vi.hoisted(() => ({
   memberIds: vi.fn(),
   scopes: vi.fn(),
   allowance: vi.fn(),
+  profile: vi.fn(),
 }));
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 const icpContext = { identity: { getPrincipal: () => ({ toText: () => "principal-a" }) }, target: { alias: "test" } };
@@ -42,6 +43,7 @@ vi.mock("@/live/features/membership", () => ({ getLiveMyRoleGrants: (...args: un
 vi.mock("@/live/features/club", () => ({
   listLiveClubs: (...args: unknown[]) => accessMocks.clubs(...args),
   getLiveTeam: (...args: unknown[]) => accessMocks.team(...args),
+  getLiveClubProfile: (...args: unknown[]) => accessMocks.profile(...args),
 }));
 vi.mock("@/live/features/proAccess", () => ({
   listLiveClubSubscriptions: (...args: unknown[]) => accessMocks.clubSubscriptions(...args),
@@ -194,6 +196,23 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
     }
     accessMocks.memberIds.mockResolvedValue(["club-a"]);
     accessMocks.allowance.mockResolvedValue({ Ok: { premium: true } });
+  });
+
+  it("reads the known selected club directly without an unrelated directory or membership inventory", async () => {
+    accessMocks.profile.mockResolvedValue([{ id: "goat", name: "Giddy Goat", deleted_at_ms: [] }]);
+    const clubs = await fetchVaultAccessibleClubs("principal-a", true, undefined, "goat");
+    expect(clubs).toEqual([{ id: "goat", name: "Giddy Goat", is_pro: true, storage_used_bytes: 0 }]);
+    expect(accessMocks.scopes).toHaveBeenCalledWith({ clubId: "goat" });
+    expect(accessMocks.clubs).not.toHaveBeenCalled();
+    expect(accessMocks.memberIds).not.toHaveBeenCalled();
+    expect(accessMocks.allowance).toHaveBeenCalledWith("goat", []);
+  });
+
+  it("does not report an unreadable selected club as an empty successful inventory", async () => {
+    accessMocks.profile.mockResolvedValue([]);
+    await expect(fetchVaultAccessibleClubs("principal-a", false, undefined, "goat")).rejects.toThrow("selected club could not be loaded");
+    accessMocks.profile.mockRejectedValue(new Error("Club access temporarily unavailable"));
+    await expect(fetchVaultAccessibleClubs("principal-a", false, undefined, "goat")).rejects.toThrow("Club access temporarily unavailable");
   });
 
   it("maps app-admin and caller role grants from ICP domains", async () => {

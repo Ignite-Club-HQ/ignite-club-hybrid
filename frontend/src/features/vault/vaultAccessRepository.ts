@@ -78,7 +78,33 @@ export async function fetchVaultAccessibleClubs(
   userId: string,
   isAppAdmin: boolean,
   client: IgniteSupabaseClient = supabase,
+  selectedClubId?: string | null,
 ): Promise<VaultClubSummary[]> {
+  // A known theme club is a location hint, not an access grant. Read it
+  // through its exact owning group; the destination still checks the caller.
+  if (selectedClubId) {
+    return withFeatureBackend("vault", {
+      supabase: async () => {
+        const { data, error } = await client.from("clubs")
+          .select("id, name, is_pro, storage_used_bytes").eq("id", selectedClubId).maybeSingle();
+        if (error) throw error;
+        if (!data) throw new Error("The selected club could not be loaded. Please try again.");
+        return [data];
+      },
+      icp: async (ctx) => {
+        const { getLiveClubProfile } = await import("@/live/features/club");
+        const { withReadDeadline } = await import("@/live/readDeadline");
+        return withReadDeadline((async () => {
+          const [clubs, premium] = await Promise.all([
+            getLiveClubProfile(ctx, selectedClubId), scopedVaultPro(ctx, selectedClubId),
+          ]);
+          const club = clubs[0];
+          if (!club || club.deleted_at_ms?.length) throw new Error("The selected club could not be loaded. Please try again.");
+          return [{ id: club.id, name: club.name, is_pro: premium, storage_used_bytes: 0 }];
+        })(), "Selected Vault club", VAULT_GROUP_READ_MS);
+      },
+    }, { clubId: selectedClubId });
+  }
   // Asked once per lookup, not once per group: membership comes from the
   // already-open routing session and the IAP entitlement lives on identity.
   let memberIdsOnce: Promise<string[] | null> | undefined;
