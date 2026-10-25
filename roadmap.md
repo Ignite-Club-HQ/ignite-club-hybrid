@@ -1,5 +1,5 @@
 ## Existing theme club missing from Vault — 25 October 2026
-- [ ] Read the selected club directly from its owning group instead of waiting for an all-club directory; treat failed/missing selected-club reads as retryable, not an empty Vault.
+- [x] Read the selected club directly from its owning group with exact media allowance instead of an all-club directory; missing/rejected selected-club reads stay retryable, not empty successes. 45 Supabase/50 ICP focused checks pass, guards pass and preview build OK; no deployment or live readback claim.
 - [ ] Giddy Goat live readback requires Paul's signed-in Internet Identity session; screenshot alone cannot prove the precise failed service.
 
 ## Slow Vault page opening — 25 October 2026
