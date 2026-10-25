@@ -61,4 +61,26 @@ describe("News details owning-club reads", () => {
     expect(mocks.multi).toHaveBeenCalledWith({ group: "owning-group" }, []);
     expect(result.current.data?.id).toBe("post-g1");
   });
+  it("uses a share-token club hint to open the post without membership discovery", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const hook = renderHook(() => useClubNewsPost("post-g1", "giddy-goat"), {
+      wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    });
+    await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+    expect(mocks.dispatch.mock.calls[0][2]).toEqual({ clubId: "giddy-goat" });
+    expect(mocks.news).toHaveBeenCalledWith({ group: "owning-group" }, "giddy-goat");
+    expect(mocks.clubs).not.toHaveBeenCalled();
+    expect(mocks.multi).not.toHaveBeenCalled();
+    expect(hook.result.current.data?.id).toBe("post-g1");
+  });
+  it("keeps a hinted read unauthorized when the owning club omits the post", async () => {
+    mocks.news.mockResolvedValue([]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const hook = renderHook(() => useClubNewsPost("post-g1", "giddy-goat"), {
+      wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    });
+    await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+    expect(hook.result.current.data).toBeNull();
+    expect(mocks.multi).not.toHaveBeenCalled();
+  });
 });
