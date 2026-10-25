@@ -148,6 +148,11 @@ export function markMountedAuthProvider(provider: BackendProvider): void {
   mountedAuthProvider = provider;
 }
 
+/** True when the mounted auth provider is Internet Identity. */
+export function isIcpProviderMounted(): boolean {
+  return mountedAuthProvider === "icp";
+}
+
 export function isSignedInWithEmail(): boolean {
   if (mountedAuthProvider === "icp") return false;
   if (!hasSupabaseSessionStored()) return false;

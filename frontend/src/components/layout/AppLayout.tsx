@@ -26,6 +26,8 @@ import { sweepStaleDeletedTeams } from "@/lib/staleDeletedTeamSweep";
 import { useLaunchIntentPending } from "@/hooks/useLaunchIntentPending";
 import { useInviteFlowSweeper } from "@/hooks/useInviteFlowSweeper";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { KeptTabsOutlet } from "./KeptTabsOutlet";
+import { isIcpProviderMounted } from "@/live/authBackendMode";
 
 const LazyDeepLinkGate = lazyWithRetry(() => import("@/components/DeepLinkGate"));
 
@@ -374,7 +376,7 @@ export function AppLayout() {
             </div>
           }
         >
-          <Outlet />
+          {isIcpProviderMounted() && user ? <KeptTabsOutlet ownerId={user.id} prewarm /> : <Outlet />}
         </Suspense>
       </main>
       <BottomNav />
