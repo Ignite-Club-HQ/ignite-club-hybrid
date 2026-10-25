@@ -345,6 +345,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
     let oldText = Principal.toText(old);
     let newText = Principal.toText(new);
+    if (familyInvites.any(func f = f.created_by == old and familyInvites.any(func g = g.created_by == new and g.request_id == f.request_id and g.primary != f.primary))) return #err("Family invitation request conflict");
     let oldTag = "principal:" # oldText;
     let newTag = "principal:" # newText;
     let cloneUpdates=Map.entries(seasonCloneReceipts).toArray();
@@ -4225,6 +4226,7 @@ persistent actor class Main(governorInit : Principal) = this {
       await admitAccount(caller); auth(caller);
       let invite = pendingInvites.find(func i = i.id == id) ?? return #Err("Invite not found");
       if (invite.status != "accepted" or invite.accepted_by != ?caller or isExcluded(caller, invite.club_id)) return #Err("Accepted invitation required");
+      if (invite.kind != "guardian" and not acl.roles.any(func g = g.user == caller and g.club == ?invite.club_id and g.team == invite.team_id and ?g.role == invite.role)) return #Err("Membership access changed");
       let family = familyInvites.find(func f = f.primary == id or f.secondary == ?id);
       let ids = switch (family) { case (?f) f.children; case null switch (invite.child_id) { case (?cid) [cid]; case null [] } };
       if (ids.any(func cid = not parentInviteScopeValid(invite.club_id, invite.team_id, cid) or not acl.guardians.any(func g = g.child == cid and g.user == caller))) return #Err("Family access changed");

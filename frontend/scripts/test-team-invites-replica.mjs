@@ -45,6 +45,13 @@ try {
   a.setPrincipal(coach);assert.ok('Err' in await a.accept_pending_invite(second.id));
   a.setPrincipal(other);ok(await a.accept_pending_invite(second.id));
   assert.deepEqual(ok(await a.read_family_invite_receipt(second.id)).child_ids,childIds);
+  a.setPrincipal(owner);assert.ok('Err' in await a.move_pending_invite_team(family.invite.id,[]));
+  assert.ok('Err' in await a.update_pending_invite_role(family.invite.id,['player']));
+  const mixed=ok(await a.create_family_invite(`family-mixed-${g}-request`,club,team,[{id:childIds[0],existing:true},{id:`child-${g}-three`,existing:false}],false,[]));
+  a.setPrincipal(coach);ok(await a.accept_pending_invite(mixed.invite.id));
+  assert.deepEqual(ok(await a.read_family_invite_receipt(mixed.invite.id)).child_ids,[childIds[0],`child-${g}-three`]);
+  a.setPrincipal(owner);ok(await a.unlink_guardian(childIds[1],other));
+  a.setPrincipal(other);assert.ok('Err' in await a.accept_pending_invite(second.id));
   await pic.upgradeCanister({canisterId:f.canisterId,wasm:process.env.CLUB_DOMAIN_WASM,sender:owner,arg:IDL.encode([IDL.Principal],[owner]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
   a.setPrincipal(member);ok(await a.accept_pending_invite(pending.id));
   assert.deepEqual(ok(await a.read_family_invite_receipt(family.invite.id)).child_ids,childIds);
