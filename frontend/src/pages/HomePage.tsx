@@ -1954,8 +1954,13 @@ export default function HomePage() {
 
   // Pending elevated-access requests so buttons reflect state instead of re-submitting.
   const { data: pendingTeamRequests } = useQuery({
-    queryKey: ["pending-role-requests-for-team", user?.id, selectedTeam],
+    queryKey: ["pending-role-requests-for-team", user?.id, selectedTeam, resolveAuthBackend()],
     queryFn: async () => {
+      // ICP has no caller-own request list; never fall back to the old database.
+      // Requests sent this session are remembered in the cache (see onSuccess).
+      if (resolveAuthBackend() === "icp") {
+        return queryClient.getQueryData<TeamRole[]>(["pending-role-requests-for-team", user?.id, selectedTeam, "icp"]) ?? [];
+      }
       const { data, error } = await supabase
         .from("role_requests")
         .select("role")
@@ -2106,7 +2111,11 @@ export default function HomePage() {
         title: "Request sent",
         description: `Your ${teamRoleLabel(role)} access request has been sent to the team admins.`,
       });
-      queryClient.invalidateQueries({ queryKey: ["pending-role-requests-for-team", user?.id, selectedTeam] });
+      if (resolveAuthBackend() === "icp") {
+        queryClient.setQueryData<TeamRole[]>(["pending-role-requests-for-team", user?.id, selectedTeam, "icp"], (prev) => Array.from(new Set([...(prev ?? []), role])));
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["pending-role-requests-for-team", user?.id, selectedTeam] });
+      }
       queryClient.invalidateQueries({ queryKey: ["role-requests"] });
     },
     onError: (error: Error) => {
