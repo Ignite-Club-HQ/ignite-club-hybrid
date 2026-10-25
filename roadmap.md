@@ -1,4 +1,5 @@
 ## Home startup blocked requests — 25 October 2026
+- [ ] Repair screenshot-confirmed nested Player of the Match catalog/player-role requests on event details; verify focused reads in both modes. Live phone acceptance needs updated app and Paul's session.
 - [x] Repair nested hero/compact Next Up RSVP/duty/role reads, Watch Live and Home policy-folder reads using existing owning-scope ICP APIs. Focused dual-mode regressions include mounted ICP cards with no Supabase reads; guards remain active. No canister changes/deployments.
 - [ ] Live phone acceptance requires the updated app and Paul's Internet Identity session; local checks do not certify his deployed Home flow.
 
