@@ -290,6 +290,14 @@ export const idlFactory = ({ IDL }) => {
     'scope' : IDL.Text,
     'competition_id' : IDL.Text,
   });
+  const PlayHQCompetitionLink = IDL.Record({
+    'grade_id' : IDL.Text,
+    'last_synced_at_ms' : IDL.Opt(IDL.Nat64),
+    'sport' : IDL.Opt(IDL.Text),
+    'tenant' : IDL.Text,
+    'competition_id' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
   const Request = IDL.Record({
     'account_id' : IDL.Text,
     'inventory_digest' : IDL.Vec(IDL.Nat8),
@@ -710,6 +718,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamEntry, 'Err' : IDL.Text })],
         [],
       ),
+    'link_playhq_competition' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : Competition, 'Err' : IDL.Text })],
+        [],
+      ),
     'listBulkAccessPrincipals' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
@@ -794,6 +807,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(OfficialChat), 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'list_playhq_competitions' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'link' : PlayHQCompetitionLink,
+                'competition' : Competition,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
       ),
     'list_public_competitions' : IDL.Func(
         [],
