@@ -24,8 +24,8 @@ export default function ClubNewsPostPage() {
   const navigate = useNavigate();
   const isLocalLab = resolveLocalAuthMode(window.location.search, true);
   const { data: post, isLoading, isError, refetch } = useClubNewsPost(newsId);
-  const { data: teams = [] } = useClubTeamsForNews(post?.club_id ?? null);
-  const { data: targetTeams = [] } = useTeamNamesByIds(post?.target_team_ids);
+  const { data: teams = [] } = useClubTeamsForNews(post?.target_team_ids?.length ? post.club_id : null);
+  const { data: targetTeams = [] } = useTeamNamesByIds(post?.target_team_ids, post?.club_id);
   const teamNameMap = useMemo(() => {
     const map = new Map<string, string>();
     teams.forEach((t) => map.set(t.id, t.name));

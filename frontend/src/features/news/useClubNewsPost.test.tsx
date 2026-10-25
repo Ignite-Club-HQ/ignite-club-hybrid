@@ -10,6 +10,7 @@ vi.mock("@/live/features/membership", () => ({ listLiveMembershipClubs: mocks.cl
 vi.mock("@/live/features/miniLeagues", () => ({ listMyLiveMiniLeagues: mocks.leagues }));
 vi.mock("@/lab/localRuntimeMode", () => ({ resolveLocalAuthMode: () => false }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "reader" } }) }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => true }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
 import { useClubNewsPost, type ClubNewsRow } from "./useClubNews";
 
@@ -40,6 +41,42 @@ describe("News details owning-club reads", () => {
     expect(mocks.news).toHaveBeenCalledWith({ group: "owning-group" }, "giddy-goat");
     expect(mocks.clubs).not.toHaveBeenCalled();
     expect(mocks.multi).not.toHaveBeenCalled();
+  });
+  it("renders a fresh authorized feed post immediately without repeating the news call", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["club-news", "giddy-goat", 1, "reader", true], [cachedPost]);
+    mocks.news.mockImplementation(() => new Promise(() => {}));
+    const { result } = renderHook(() => useClubNewsPost("post-g1"), {
+      wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    });
+    expect(result.current.data?.content).toBe("Existing full article");
+    expect(result.current.isLoading).toBe(false);
+    expect(mocks.news).not.toHaveBeenCalled();
+  });
+  it("reuses an authorized chat card on reopening the article without a second read", async () => {
+    const { result, client, unmount } = setup(false);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const calls = mocks.dispatch.mock.calls.length;
+    unmount();
+    const reopened = renderHook(() => useClubNewsPost("post-g1"), {
+      wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    });
+    expect(reopened.result.current.data?.id).toBe("post-g1");
+    expect(mocks.dispatch).toHaveBeenCalledTimes(calls);
+  });
+  it.each(["other-account", "other-provider", "stale", "invalidated"])("rechecks %s feed data instead of using it as audience evidence", async (kind) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const key = ["club-news", "giddy-goat", 1, kind === "other-account" ? "other" : "reader", kind !== "other-provider"];
+    client.setQueryData(key, [cachedPost], { updatedAt: Date.now() - (kind === "stale" ? 61_000 : 0) });
+    if (kind === "invalidated") await client.invalidateQueries({ queryKey: key, refetchType: "none" });
+    mocks.news.mockResolvedValue([]);
+    const { result } = renderHook(() => useClubNewsPost("post-g1"), {
+      wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    });
+    expect(result.current.data).toBeUndefined();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
+    expect(mocks.news).toHaveBeenCalled();
   });
   it("does not authorize a cached post when the audience-checked reply omits it", async () => {
     mocks.news.mockResolvedValue([]);
