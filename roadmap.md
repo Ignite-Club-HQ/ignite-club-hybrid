@@ -1,3 +1,6 @@
+## Full dual-mode test suite — 25 October 2026
+- [x] Complete configured frontend suites finished: Supabase 6,624 passed / 15 failed / 376 skipped; ICP 6,243 passed / 11 failed / 761 skipped (805 files, 7,015 tests per mode). Exact failures and logs saved in docs/test-results/2026-10-25/full-suite; separate ICP guard passes, latest preview build OK. No application fixes or deployment performed. Native/e2e/backend suites and live signed-in acceptance are not covered.
+
 ## Codebase-wide ICP dependency audit — 25 October 2026
 - [x] Friendly missing-coverage warning offers Report a problem; prefilled reports save on-chain then call the existing send-feedback-email transport with no recipient override. 28 tests pass in each mode; browser verifies alert-to-dialog and preview builds pass. Unrelated deferred email jobs unchanged.
 - [ ] Live support email acceptance: send-feedback-email implementation is absent from this checkout, so its configured Ignite recipient, ICP caller acceptance and actual delivery remain unverified; requires the existing deployed support endpoint to accept these reports. No live email sent or endpoint deployed.
