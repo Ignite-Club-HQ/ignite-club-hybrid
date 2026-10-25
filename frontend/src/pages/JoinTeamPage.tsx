@@ -38,6 +38,7 @@ import { getLiveTeamInvite, acceptLiveTeamInvite } from "@/live/features/members
 import { getLivePlayerInvitePreview, claimLiveInvite, getLiveJoinLinkByToken, getLiveMiniLeague, claimLiveAdminJoinLink, joinLiveMiniLeagueByToken } from "@/live/features/miniLeagues";
 import { getLivePendingInvite, getLiveTeamInviteLinkByToken, acceptLiveTeamInviteLink, getLiveClubProfile, getLiveTeam } from "@/live/features/club";
 import { acceptIcpInviteAndWelcome } from "@/features/membership/acceptIcpInviteAndWelcome";
+import { needsInviteChildEntry } from "@/features/membership/inviteFlowRules";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -1623,12 +1624,9 @@ function SupabaseJoinTeamPage() {
         (pendingInviteData?.metadata as any)?.kind === "mini_league_parent_join_link";
       // A reconciled named invite may have already created/linked children —
       // don't ask the parent to add a child that now exists.
-      const childrenAlreadyProvisioned = provisionedChildIdsRef.current.length > 0;
       if (
         ((!isPendingInvite || (pendingInviteData?.metadata as { icp_pending_invite?: boolean } | null)?.icp_pending_invite) &&
-          rolesToAdd.includes("parent") &&
-          !(teamInvite?.metadata as { child_name?: string } | null)?.child_name &&
-          !childrenAlreadyProvisioned) ||
+          needsInviteChildEntry(rolesToAdd, !!(teamInvite?.metadata as { child_name?: string } | null)?.child_name, provisionedChildIdsRef.current.length)) ||
         (isLeagueParentLink && rolesToAdd.includes("parent"))
       ) {
         setShowChildStep(true);
@@ -1746,9 +1744,7 @@ function SupabaseJoinTeamPage() {
         toast({ title: `Successfully joined as ${roleNames}!` });
         if (
           !isPendingInvite &&
-          result.includes("parent") &&
-          !(teamInvite?.metadata as { child_name?: string } | null)?.child_name &&
-          provisionedChildIdsRef.current.length === 0
+          needsInviteChildEntry(result, !!(teamInvite?.metadata as { child_name?: string } | null)?.child_name, provisionedChildIdsRef.current.length)
         ) {
           setShowChildStep(true);
         } else {
