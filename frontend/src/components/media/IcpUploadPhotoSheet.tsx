@@ -253,6 +253,7 @@ export function IcpUploadPhotoSheet({
               contentLength: prepared.file.size,
               blobRef: uploaded.blobRef,
             });
+            acknowledgeGalleryUpload(queryClient, principal, previews[i].id, asset.id);
             try {
               await setLiveAssetScope(ctx, asset.id, {
                 teamId: teamId || null,
@@ -271,7 +272,6 @@ export function IcpUploadPhotoSheet({
                 throw err;
               }
             }
-            acknowledgeGalleryUpload(queryClient, principal, previews[i].id, asset.id);
             if (!scopePending) {
               const { copyGalleryAssetToVault } = await import('./galleryVaultCopy');
               await copyGalleryAssetToVault(ctx, { assetId: asset.id, clubId, teamId: teamId || null,
