@@ -34,10 +34,11 @@ test('future Group 3 and Group 4 cannot be silently skipped',()=>{
   assert.throws(()=>planInventory(shared,f.provisions.slice(0,1),f.registry,'messaging',f.hashes));
   assert.throws(()=>planInventory(shared,f.provisions,{...f.registry,groups:f.registry.groups.slice(0,1),placements:f.registry.placements.slice(0,1)},'messaging',f.hashes));
 });
-test('full backend expands all thirteen group services and one shared identity, no router',()=>{
-  const f=fixture(3),plan=planInventory(shared,f.provisions,f.registry,'full_backend',f.hashes);
-  assert.equal(plan.targets.length,40);assert.equal(plan.targets.filter(t=>t.name==='shard_router').length,0);
-  for(const g of ['g1','g2','g3'])assert.equal(plan.targets.filter(t=>t.groupId===g).length,13);
+test('unreviewed full-service scope is refused while gallery/vault covers all groups',()=>{
+  const f=fixture(3);assert.throws(()=>planInventory(shared,f.provisions,f.registry,'full_backend',f.hashes));
+  const plan=planInventory(shared,f.provisions,f.registry,'gallery_vault',f.hashes);
+  assert.equal(plan.targets.length,18);assert.equal(plan.targets.filter(t=>t.name==='shard_router').length,0);
+  for(const g of ['g1','g2','g3'])assert.equal(plan.targets.filter(t=>t.groupId===g).length,6);
 });
 test('collisions, wrong placement, incomplete domain inventory and registry overflow fail closed',()=>{
   for(const mutate of [f=>{f.provisions[1].canisters.club_domain=f.provisions[0].canisters.club_domain;},f=>{f.registry.placements[0].host='https://wrong.invalid';},f=>{f.registry.groups[0].domains.pop();},f=>{f.registry.placements[0].domains[0].subnet=p('foreign-subnet');},f=>{f.registry.groups=Array(100).fill(f.registry.groups[0]);},f=>{f.registry.configurationRevision=undefined;},f=>{f.registry.placements[0].approved_subnets=[];}]){
@@ -47,6 +48,9 @@ test('collisions, wrong placement, incomplete domain inventory and registry over
 test('every scope uses the same artifact hash across all group instances',()=>{
   const f=fixture(3);for(const scope of Object.keys(SCOPES)){const plan=planInventory(shared,f.provisions,f.registry,scope,f.hashes);for(const t of plan.targets)assert.equal(t.newHash,hash(2));}
   delete f.hashes.notification_queue;assert.throws(()=>planInventory(shared,f.provisions,f.registry,'app_admin',f.hashes));
+});
+test('unexpected or duplicated saved domain names fail before target creation',()=>{
+  for(const mutate of [p=>{p.canisters.extra=p.canisters.club_domain;delete p.canisters.club_domain;},p=>{p.installedDomains[0]=p.installedDomains[1];}]){const f=fixture();mutate(f.provisions[0]);assert.throws(()=>planInventory(shared,f.provisions,f.registry,'app_admin',f.hashes));}
 });
 test('Rust identity and timer omit Motoko persistence while stores preserve memory',()=>{
   const identity=installArgs({name:'identity_access',canisterId:shared.identity_access},'/tmp/identity');assert.equal(identity.includes('--wasm-memory-persistence'),false);assert.match(identity[identity.indexOf('--args')+1],/^\(record \{ governor/);
@@ -62,6 +66,11 @@ test('journal pins every group key and target; incomplete or foreign receipts fa
 });
 test('different release cannot bypass unsettled or unpublished predecessor',()=>{
   const j=make();assert.throws(()=>requireSettledPredecessor(j));j.complete=true;j.steps.forEach(s=>s.phase='complete');assert.throws(()=>requireSettledPredecessor(j));j.published=true;requireSettledPredecessor(j);
+});
+test('module completion alone cannot claim release completion before snapshot/backfill',()=>{
+  const j=make();j.complete=true;j.steps.forEach(s=>s.phase='complete');assert.throws(()=>validateJournal(j,j.binding));
+  j.snapshotVerified=true;j.snapshotFiles=[{path:'frontend/src/live/generated/routingGates.ts',content:'verified'}];j.snapshotFilesHash=digest(j.snapshotFiles);validateJournal(j,j.binding);
+  j.snapshotFiles[0].content='tampered';assert.throws(()=>validateJournal(j,j.binding));
 });
 test('partial installs resume only exact intended modules without replay',async()=>{
   const j=make(),modules=new Map(j.steps.map(s=>[s.canisterId,s.oldHash])),installed=[];
