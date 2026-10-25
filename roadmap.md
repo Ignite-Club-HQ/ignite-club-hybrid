@@ -1,6 +1,6 @@
 ## Team invitations ICP audit — 25 October 2026
-- [ ] Audit team/parent/staff/season invitation creation, delivery, token resolution, acceptance and revocation across both groups; record concrete remaining off-chain dependencies and authorization gaps without modifying app behaviour or activating deferred Resend delivery.
-- [ ] Run focused existing invite checks and save findings with source evidence and live-verification limits.
+- [x] Three read-only audits covered team/parent/staff/season/mini-league creation, sharing, acceptance, role requests, revocation, PII and email jobs. Saved confirmed off-chain calls, invalid share origins/path/API mismatch, group short-code/guardian routing, stale authority/role/scope, privacy and receipt recovery findings in docs/team-invites-icp-audit-2026-10-25.md. No application/canister changes or delivery activation.
+- [x] Consolidated 23 existing frontend files pass in both modes (Supabase 160/13 skipped; ICP 127/46 skipped); three external worker tests and ICP guard pass. Two parent guard files are excluded and not executed. Browser reproduced /i 404 and native-only long/short invite gates; no runtime errors. Signed-in/native two-group acceptance and real-canister security reproduction remain unverified, not audit completion claims.
 
 ## Competition ICP audit — 24 October 2026
 - [x] Saved owner-facing competition status and exact both-group upgrade checklist to Files, including deferred Resend setup and the distinction between local code closure and live acceptance.
