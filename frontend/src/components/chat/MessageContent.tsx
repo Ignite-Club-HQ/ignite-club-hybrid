@@ -131,11 +131,11 @@ export const MessageContent = memo(function MessageContent({ text, imageUrl, sea
   const parts = useMemo(() => {
     if (!text) return [];
     
-    const result: { type: "text" | "link" | "mention" | "markdown-link" | "event-link" | "poll-link" | "board-link" | "vault-file" | "vault-folder" | "vault-root" | "gallery-link" | "news-link"; content: string; userId?: string; linkText?: string; rootScope?: "team" | "club" }[] = [];
+    const result: { type: "text" | "link" | "mention" | "markdown-link" | "event-link" | "poll-link" | "board-link" | "vault-file" | "vault-folder" | "vault-root" | "gallery-link" | "news-link"; content: string; userId?: string; linkText?: string; rootScope?: "team" | "club"; clubId?: string }[] = [];
     let lastIndex = 0;
     
     // Combined regex. Order: vault root, vault file/folder, poll, board, event, gallery, markdown links, event URLs, plain URLs, mentions
-    const combinedRegex = new RegExp(String.raw`(\[vaultroot:(team|club):([0-9a-f-]{36})\])|(\[vault:([0-9a-f-]{36})\])|(\[vaultfolder:([0-9a-f-]{36})\])|(${POLL_TOKEN_PATTERN})|(\[board:([0-9a-f-]{36})\])|(${EVENT_TOKEN_PATTERN})|(\[(?:gallery|galleryprompt):([0-9a-f-]{36})\])|(\[news:([A-Za-z0-9-]+)\])|(\[([^\]]+)\]\((https?:\/\/[^)]+)\))|(${EVENT_URL_PATTERN})|((?:https?:\/\/|www\.)[^\s\]]+)|(@\[([^\]]+)\]\(([^)]+)\))`, "gi");
+    const combinedRegex = new RegExp(String.raw`(\[vaultroot:(team|club):([0-9a-f-]{36})\])|(\[vault:([0-9a-f-]{36})\])|(\[vaultfolder:([0-9a-f-]{36})\])|(${POLL_TOKEN_PATTERN})|(\[board:([0-9a-f-]{36})\])|(${EVENT_TOKEN_PATTERN})|(\[(?:gallery|galleryprompt):([0-9a-f-]{36})\])|(\[news:([A-Za-z0-9:-]+)\])|(\[([^\]]+)\]\((https?:\/\/[^)]+)\))|(${EVENT_URL_PATTERN})|((?:https?:\/\/|www\.)[^\s\]]+)|(@\[([^\]]+)\]\(([^)]+)\))`, "gi");
     let match;
     
     while ((match = combinedRegex.exec(text)) !== null) {
@@ -172,8 +172,16 @@ export const MessageContent = memo(function MessageContent({ text, imageUrl, sea
         // Gallery token: [gallery:uuid] - match[15] is the gallery_chat_cards ID
         result.push({ type: "gallery-link", content: match[15] || "" });
       } else if (match[16]) {
-        // News token: [news:uuid] - match[17] is the club_news ID
-        result.push({ type: "news-link", content: match[17] || "" });
+        // News token: [news:uuid] or [news:clubId:uuid] - match[17] holds the
+        // inner payload; an optional club prefix is a routing hint only (the
+        // owning canister still authorizes the read).
+        const rawNews = match[17] || "";
+        const newsSep = rawNews.indexOf(":");
+        result.push({
+          type: "news-link",
+          content: newsSep >= 0 ? rawNews.slice(newsSep + 1) : rawNews,
+          clubId: newsSep >= 0 ? rawNews.slice(0, newsSep) : undefined,
+        });
       } else if (match[18]) {
         // Markdown link match: [text](url) - match[19] is text, match[20] is URL
         result.push({ 
@@ -222,7 +230,14 @@ export const MessageContent = memo(function MessageContent({ text, imageUrl, sea
     const vaultFiles = [...new Set(parts.filter(p => p.type === "vault-file").map(p => p.content))];
     const vaultFolders = [...new Set(parts.filter(p => p.type === "vault-folder").map(p => p.content))];
     const galleries = [...new Set(parts.filter(p => p.type === "gallery-link").map(p => p.content))];
-    const news = [...new Set(parts.filter(p => p.type === "news-link").map(p => p.content))];
+    const newsSeen = new Set<string>();
+    const news: { id: string; clubId?: string }[] = [];
+    for (const p of parts) {
+      if (p.type === "news-link" && p.content && !newsSeen.has(p.content)) {
+        newsSeen.add(p.content);
+        news.push({ id: p.content, clubId: p.clubId });
+      }
+    }
     const rootSeen = new Set<string>();
     const roots: { scope: "team" | "club"; id: string }[] = [];
     for (const p of parts) {
@@ -355,8 +370,8 @@ export const MessageContent = memo(function MessageContent({ text, imageUrl, sea
         {/* Club news link cards */}
         {newsIds.length > 0 && (
           <div className="space-y-2 min-w-0 max-w-full">
-            {newsIds.map((nid) => (
-              <NewsLinkCard key={nid} newsId={nid} />
+            {newsIds.map((n) => (
+              <NewsLinkCard key={n.id} newsId={n.id} clubId={n.clubId} />
             ))}
           </div>
         )}
@@ -656,8 +671,8 @@ export const MessageContent = memo(function MessageContent({ text, imageUrl, sea
       {/* Club news link cards */}
       {showPreviews && newsIds.length > 0 && (
         <div className="space-y-2 mt-1 min-w-0 max-w-full">
-          {newsIds.map((nid) => (
-            <NewsLinkCard key={nid} newsId={nid} />
+          {newsIds.map((n) => (
+            <NewsLinkCard key={n.id} newsId={n.id} clubId={n.clubId} />
           ))}
         </div>
       )}

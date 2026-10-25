@@ -8,6 +8,8 @@ import { stripAttachmentTokens } from "@/features/news/newsAttachments";
 
 interface NewsLinkCardProps {
   newsId: string;
+  /** Owning-club routing hint from a [news:clubId:newsId] token, when present. */
+  clubId?: string | null;
 }
 
 /**
@@ -15,9 +17,9 @@ interface NewsLinkCardProps {
  * Visibility is enforced by club_news RLS — members who are not in the
  * post's audience simply see the "not available" placeholder.
  */
-export const NewsLinkCard = memo(function NewsLinkCard({ newsId }: NewsLinkCardProps) {
+export const NewsLinkCard = memo(function NewsLinkCard({ newsId, clubId }: NewsLinkCardProps) {
   const navigate = useNavigate();
-  const { data: post, isLoading } = useClubNewsPost(newsId);
+  const { data: post, isLoading } = useClubNewsPost(newsId, clubId);
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {

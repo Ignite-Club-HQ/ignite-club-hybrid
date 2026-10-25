@@ -35,6 +35,7 @@ import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
 import { useNativeKeyboardBottomInset } from "@/hooks/useNativeKeyboardBottomInset";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { buildNewsShareToken } from "@/features/news/newsShareToken";
 import { ChatBackButton } from "@/components/chat/ChatBackButton";
 import { useSwipeBack } from "@/hooks/useSwipeBack";
 import { SecureAvatar } from "@/components/SecureAvatar";
@@ -1726,7 +1727,7 @@ export default function TeamChatPage() {
             : (() => {
                 const poll = /\[poll:([^\]]+)\]/.exec(text);
                 if (poll) return { kind: "poll", refId: poll[1], url: null };
-                const news = /\[news:([^\]]+)\]/.exec(text);
+                const news = /\[news:(?:[0-9a-fA-F-]{36}:)?([^\]]+)\]/.exec(text);
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
@@ -1926,7 +1927,8 @@ export default function TeamChatPage() {
       ? (baseText ? `${baseText} [poll:${pendingPollId}]` : `[poll:${pendingPollId}]`)
       : baseText;
     if (pendingNewsId) {
-      finalText = finalText ? `${finalText} [news:${pendingNewsId}]` : `[news:${pendingNewsId}]`;
+      const newsToken = buildNewsShareToken(queryClient, pendingNewsId);
+      finalText = finalText ? `${finalText} ${newsToken}` : newsToken;
     }
     const hadImage = !!imageUrl;
     sendMessageMutation.mutate({ text: finalText, image_url: imageUrl, reply_to_id: replyingTo?.id || null });

@@ -18,6 +18,7 @@ import { keepComposerFocusedThroughSend } from "@/lib/chatComposerFocus";
 import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
 import { useNativeKeyboardBottomInset } from "@/hooks/useNativeKeyboardBottomInset";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { buildNewsShareToken } from "@/features/news/newsShareToken";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { liveMessageRow } from "@/features/messaging/thread/liveMessageRow";
@@ -1197,7 +1198,7 @@ export default function DirectMessagePage() {
             : (() => {
                 const poll = /\[poll:([^\]]+)\]/.exec(text);
                 if (poll) return { kind: "poll", refId: poll[1], url: null };
-                const news = /\[news:([^\]]+)\]/.exec(text);
+                const news = /\[news:(?:[0-9a-fA-F-]{36}:)?([^\]]+)\]/.exec(text);
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
@@ -1405,8 +1406,9 @@ export default function DirectMessagePage() {
     }
     stopTyping();
     const baseText = message.trim();
-    const finalText = pendingNewsId
-      ? (baseText ? `${baseText} [news:${pendingNewsId}]` : `[news:${pendingNewsId}]`)
+    const newsToken = pendingNewsId ? buildNewsShareToken(queryClient, pendingNewsId) : null;
+    const finalText = newsToken
+      ? (baseText ? `${baseText} ${newsToken}` : newsToken)
       : baseText;
     sendMessageMutation.mutate({
       text: finalText,
