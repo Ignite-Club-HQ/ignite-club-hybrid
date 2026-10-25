@@ -7,9 +7,23 @@ import App, { appCacheReady } from "./App";
 import { initWebVitalsTelemetry } from "./lib/observability/webVitals";
 import { installSupabaseAuthRetry } from "./lib/supabaseAuthRetry";
 import { initDeepLinkHandler } from "./lib/deepLinkHandler";
+import { ICP_FALLBACK_BLOCKED_EVENT, installStrictIcpTransport } from "./live/strictIcpTransport";
+import { toast } from "./hooks/use-toast";
 import "./index.css";
 
 installSupabaseAuthRetry();
+// Installed outside auth retry, so refused fallback requests never refresh/retry.
+installStrictIcpTransport();
+let lastBlocked = "";
+let lastBlockedAt = 0;
+window.addEventListener(ICP_FALLBACK_BLOCKED_EVENT, event => {
+  const message = (event as CustomEvent<unknown>).detail;
+  if (typeof message !== "string") return;
+  if (message === lastBlocked && Date.now() - lastBlockedAt < 5000) return;
+  lastBlocked = message;
+  lastBlockedAt = Date.now();
+  toast({ title: "ICP fallback blocked", description: message, variant: "destructive" });
+});
 initWebVitalsTelemetry();
 // Native only: resolves the cold-start launch URL and releases the startup
 // boundary. Without this the gate stays "pending" forever and the app hangs
