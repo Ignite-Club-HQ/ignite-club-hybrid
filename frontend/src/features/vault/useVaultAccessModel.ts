@@ -28,6 +28,9 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 export type { VaultClubSummary } from "./vaultAccessRepository";
 
 const VAULT_OPEN_READ_MS = 12_000;
+// The wider admin inventory has a 25s per-group aggregate bound; allow it
+// to return healthy partial results before the outer bootstrap deadline.
+const VAULT_ADMIN_DIRECTORY_MS = 35_000;
 
 export interface VaultAdminUpgradeInfo {
   clubId: string | undefined;
@@ -153,7 +156,8 @@ export function useVaultAccessModel({
         ? fetchVaultAccessibleClubs(userId, !!isAppAdmin, undefined, activeClubFilter)
         : fetchVaultAccessibleClubs(userId, !!isAppAdmin);
       // Include routing/session opening, not only the provider callback.
-      return isIcpVault ? withReadDeadline(read, "Vault clubs", VAULT_OPEN_READ_MS, signal) : read;
+      return isIcpVault ? withReadDeadline(read, "Vault clubs",
+        !activeClubFilter && isAppAdmin === true ? VAULT_ADMIN_DIRECTORY_MS : VAULT_OPEN_READ_MS, signal) : read;
     },
     enabled: !!userId && (!memberDirectoryEnabled || isAppAdmin === true),
     staleTime: 60_000,

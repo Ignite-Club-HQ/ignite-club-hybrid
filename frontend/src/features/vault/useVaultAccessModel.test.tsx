@@ -348,6 +348,21 @@ describe("useVaultAccessModel — root auto-navigation", () => {
 });
 
 describe("useVaultAccessModel — eligible clubs query", () => {
+  it("ends a stalled admin directory after 35 seconds even when no member clubs exist", async () => {
+    vi.useFakeTimers();
+    featureRouting.icp = true;
+    fetchVaultAppAdmin.mockResolvedValue(true);
+    fetchVaultAccessibleClubs.mockImplementation(async (_user, admin) => admin ? new Promise(() => {}) : []);
+    const { result } = renderAccessModel();
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    expect(result.current.canAccessVault).toBe(true);
+    expect(result.current.isLoadingClubs).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(35_100); });
+    expect(result.current.isLoadingClubs).toBe(false);
+    expect(result.current.clubsError).toBeInstanceOf(Error);
+    expect(fetchVaultAccessibleClubs).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps returned ICP member clubs visible while the wider admin directory stalls", async () => {
     featureRouting.icp = true;
     fetchVaultAppAdmin.mockResolvedValue(true);
