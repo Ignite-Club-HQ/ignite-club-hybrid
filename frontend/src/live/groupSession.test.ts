@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { FeatureBackendContext } from './featureRouter';
 import { GROUP_DOMAINS } from './groupRouting';
-import { openGroupSession, type GroupRegistry, type GroupSessionTransport } from './groupSession';
+import { openGroupSession, READ_RECHECK_WINDOW_MS, type GroupRegistry, type GroupSessionTransport } from './groupSession';
 
 function fixture() {
   const ctx = { identity: { getPrincipal: () => ({ toText: () => 'person' }) }, target: {
