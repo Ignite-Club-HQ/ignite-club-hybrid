@@ -140,8 +140,19 @@ export default function IcpChildrenPage() {
       const { ctx, club } = await load();
       await club.deleteMyLiveChild(ctx, id);
     },
-    onSuccess: () => { invalidate(); setDeleteId(null); toast({ title: "Child removed" }); },
-    onError: (e: any) => toast({ title: "Failed to remove child", description: e?.message, variant: "destructive" }),
+    // Hide the child immediately and close the dialog; restore on failure.
+    onMutate: async (id: string) => {
+      setDeleteId(null);
+      await qc.cancelQueries({ queryKey: KEY });
+      const previous = qc.getQueryData<IcpChild[]>(KEY);
+      qc.setQueryData<IcpChild[]>(KEY, (prev) => prev?.filter((c) => c.id !== id));
+      return { previous };
+    },
+    onSuccess: () => { invalidate(); toast({ title: "Child removed" }); },
+    onError: (e: any, _id, context) => {
+      if (context?.previous) qc.setQueryData(KEY, context.previous);
+      toast({ title: "Failed to remove child", description: e?.message, variant: "destructive" });
+    },
   });
 
   const setTeam = useMutation({
