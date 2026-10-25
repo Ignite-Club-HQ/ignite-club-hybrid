@@ -77,13 +77,26 @@ export function TeamNextStepsCard({ teamId, onInvite }: TeamNextStepsCardProps) 
   const { data: hasEvent = false, isLoading: loadingEvents } = useQuery({
     queryKey: ["team-next-steps-events", teamId],
     queryFn: async () => {
-      const { count } = await supabase
-        .from("events")
-        .select("id", { count: "exact", head: true })
-        .eq("team_id", teamId)
-        .eq("is_cancelled", false)
-        .gte("event_date", today);
-      return (count ?? 0) > 0;
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { count } = await supabase
+            .from("events")
+            .select("id", { count: "exact", head: true })
+            .eq("team_id", teamId)
+            .eq("is_cancelled", false)
+            .gte("event_date", today);
+          return (count ?? 0) > 0;
+        },
+        icp: async (ctx) => {
+          const { listLiveEvents } = await import("@/live/features/events");
+          const events = await listLiveEvents(ctx, null, teamId);
+          return (events as any[]).some(
+            (e) => !e.cancelled
+              && new Date(Number(e.starts_at_ms)).toISOString().slice(0, 10) >= today,
+          );
+        },
+      }, { teamId });
     },
     enabled: !!teamId,
     staleTime: 30 * 1000,
