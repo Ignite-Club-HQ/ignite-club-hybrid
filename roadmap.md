@@ -1,5 +1,5 @@
 ## Gallery uploads across navigation — 25 October 2026
-- [x] Preserve pending uploads across gallery remounts in account/QueryClient-scoped session state; reconcile exact acknowledged asset IDs and invalidate inactive account feeds, including partial successes. Actual deferred-upload/remount regression and focused gallery tests pass in ICP mode (21 checks); preview build OK. Supabase verification follows below; no deployment or canister changes.
+- [x] Preserve pending uploads across gallery remounts in account/QueryClient-scoped session state; reconcile exact acknowledged asset IDs and invalidate inactive account feeds, including partial successes. Actual deferred-upload/remount regression and focused gallery tests pass in both modes (21 checks each); ICP guards and preview build OK. No deployment or canister changes.
 - [ ] Live gallery upload/navigation acceptance needs Paul's Internet Identity session and an updated app; local mocked upload tests do not establish mainnet readback.
 
 ## Home startup blocked requests — 25 October 2026
