@@ -92,14 +92,16 @@ async function fetchUtilization(groups: GroupSpec[], globalCanisters: { key: str
   const unique = [...new Map(all.map((c) => [c.canisterId, c])).values()];
 
   const readings = new Map<string, CanisterReading>();
-  await Promise.allSettled(
+  // Each canister gets a short deadline so one slow service can't hold the page.
+  const within = <V,>(p: Promise<V>) => Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("No answer in time")), 10_000))]);
+  const fuelAndMemory = Promise.allSettled(
     unique.map(async (c) => {
       try {
         const actor = Actor.createActor<{
           cycles_balance: () => Promise<bigint>;
           memory_stats: () => Promise<{ heap_bytes: bigint; memory_bytes: bigint; stable_bytes: bigint }>;
         }>(statsIdl, { agent, canisterId: Principal.fromText(c.canisterId) });
-        const [balance, mem] = await Promise.all([actor.cycles_balance(), actor.memory_stats().catch(() => null)]);
+        const [balance, mem] = await Promise.all([within(actor.cycles_balance()), within(actor.memory_stats()).catch(() => null)]);
         readings.set(c.canisterId, {
           key: c.key,
           canisterId: c.canisterId,
@@ -122,7 +124,8 @@ async function fetchUtilization(groups: GroupSpec[], globalCanisters: { key: str
   );
 
   // Club counts from each group's club_domain (public counts, no PII).
-  await Promise.allSettled(
+  const clubCounts = new Map<string, number>();
+  const clubCountReads = Promise.allSettled(
     groups.map(async (g) => {
       const club = g.canisters.find((c) => c.key === "club_domain");
       if (!club) return;
@@ -131,9 +134,8 @@ async function fetchUtilization(groups: GroupSpec[], globalCanisters: { key: str
           agent,
           canisterId: Principal.fromText(club.canisterId),
         });
-        const stats = await actor.usage_stats();
-        const row = readings.get(club.canisterId);
-        if (row) row.clubs = Number(stats.clubs);
+        const stats = await within(actor.usage_stats());
+        clubCounts.set(club.canisterId, Number(stats.clubs));
       } catch {
         // Club count stays unknown; the row still shows memory and fuel.
       }
@@ -142,7 +144,7 @@ async function fetchUtilization(groups: GroupSpec[], globalCanisters: { key: str
 
   // Photo stores: one per group, queried directly by canister ID.
   const photoStores = new Map<string, PhotoStoreReading>();
-  await Promise.allSettled(
+  const photoReads = Promise.allSettled(
     groups
       .filter((g) => g.photoStoreId)
       .map(async (g) => {
@@ -151,7 +153,7 @@ async function fetchUtilization(groups: GroupSpec[], globalCanisters: { key: str
           const actor = Actor.createActor<{
             get_usage: () => Promise<{ total_bytes: bigint; capacity_limit_bytes: bigint; accepting_uploads: boolean }>;
           }>(storeUsageIdl, { agent, canisterId: Principal.fromText(id) });
-          const usage = await actor.get_usage();
+          const usage = await within(actor.get_usage());
           photoStores.set(id, {
             totalBytes: Number(usage.total_bytes),
             limitBytes: Number(usage.capacity_limit_bytes),
@@ -167,17 +169,21 @@ async function fetchUtilization(groups: GroupSpec[], globalCanisters: { key: str
   // Web-app canister fuel via the shared club_domain proxy.
   let frontendCyclesT: number | null = null;
   const sharedClubDomain = DEPLOYED_MAINNET_CANISTER_IDS["club_domain"];
-  if (sharedClubDomain) {
+  const frontendRead = (async () => { if (sharedClubDomain) {
     try {
       const proxy = Actor.createActor<{ canister_cycles: (id: Principal) => Promise<bigint> }>(proxyIdl, {
         agent,
         canisterId: Principal.fromText(sharedClubDomain),
       });
-      frontendCyclesT = Number(await proxy.canister_cycles(Principal.fromText(FRONTEND_CANISTER_ID))) / 1e12;
+      frontendCyclesT = Number(await within(proxy.canister_cycles(Principal.fromText(FRONTEND_CANISTER_ID)))) / 1e12;
     } catch {
       frontendCyclesT = null;
     }
-  }
+  } })();
+
+  // All four kinds of reading run at the same time instead of one after another.
+  await Promise.all([fuelAndMemory, clubCountReads, photoReads, frontendRead]);
+  for (const [id, clubs] of clubCounts) { const row = readings.get(id); if (row) row.clubs = clubs; }
 
   return { readings, photoStores, frontendCyclesT };
 }
