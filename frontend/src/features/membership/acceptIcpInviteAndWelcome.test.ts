@@ -31,17 +31,15 @@ describe("acceptIcpInviteAndWelcome", () => {
     });
   });
 
-  it("accepts the invite before requesting its welcome email", async () => {
+  it("accepts on ICP without touching Supabase", async () => {
     await acceptIcpInviteAndWelcome("invite-1");
 
     expect(mocks.acceptPendingLiveInvite).toHaveBeenCalledWith(
       { identity: {}, target: {} },
       "invite-1",
     );
-    expect(mocks.invoke).toHaveBeenCalledWith("send-welcome-email-icp", {
-      body: { inviteId: "invite-1" },
-    });
-    expect(mocks.calls).toEqual(["accepted", "email-requested"]);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.calls).toEqual(["accepted"]);
   });
 
   it("keeps the accepted invite successful when Edge Function delivery fails", async () => {
@@ -50,7 +48,7 @@ describe("acceptIcpInviteAndWelcome", () => {
 
     await expect(acceptIcpInviteAndWelcome("invite-1")).resolves.toBeUndefined();
     expect(mocks.acceptPendingLiveInvite).toHaveBeenCalledOnce();
-    expect(logError).toHaveBeenCalled();
+    expect(mocks.invoke).not.toHaveBeenCalled();
     logError.mockRestore();
   });
 });

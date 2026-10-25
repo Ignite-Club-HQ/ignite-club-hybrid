@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import {
   getInviteFlowContext,
   clearInviteFlowContext,
@@ -24,14 +25,29 @@ export function useInviteFlowSweeper(
   hasDisplayName: boolean,
 ) {
   const shouldCheck = !!userId && hasDisplayName && !!getInviteFlowContext();
+  const isIcp = resolveAuthBackend() === "icp";
 
   const { data: hasMembership } = useQuery({
-    queryKey: ["invite-flow-sweep-membership", userId],
+    queryKey: ["invite-flow-sweep-membership", userId, isIcp, getInviteFlowContext()?.inviteToken],
     queryFn: async () => {
+      if (!userId) return false;
+      if (isIcp) {
+        const token = getInviteFlowContext()?.inviteToken;
+        if (!token) return false;
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Internet Identity required"); },
+          icp: async ctx => {
+            const { getLivePendingInvite } = await import("@/live/features/club");
+            const invite = await getLivePendingInvite(ctx, token);
+            return invite?.status === "accepted" && invite.accepted_by[0]?.toText() === ctx.identity.getPrincipal().toText();
+          },
+        }, { inviteToken: token });
+      }
       const { data, error } = await supabase
         .from("user_roles")
         .select("id")
-        .eq("user_id", userId!)
+        .eq("user_id", userId)
         .limit(1);
       if (error) throw error;
       return (data?.length ?? 0) > 0;

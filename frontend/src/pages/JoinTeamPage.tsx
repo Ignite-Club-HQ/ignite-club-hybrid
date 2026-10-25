@@ -1568,13 +1568,14 @@ function SupabaseJoinTeamPage() {
 
       // If parent role is selected, check if we need to show consent dialog
       if (rolesToAdd.includes("parent")) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("photo_consent_given_at")
-          .eq("id", user.id)
-          .single();
-
-        if (!profile?.photo_consent_given_at) {
+        const hasConsent = membershipIcpRouted
+          ? await (await import("@/features/membership/invitePhotoConsent")).icpInvitePhotoConsent()
+          : await (async () => {
+              const { data: profile, error } = await supabase.from("profiles").select("photo_consent_given_at").eq("id", user.id).single();
+              if (error) throw error;
+              return !!profile?.photo_consent_given_at;
+            })();
+        if (!hasConsent) {
           setPendingJoinRoles(rolesToAdd);
           setShowPhotoConsent(true);
           return null;
@@ -1708,10 +1709,12 @@ function SupabaseJoinTeamPage() {
   const handlePhotoConsentGiven = async () => {
     if (!user) return;
     
-    await supabase
-      .from("profiles")
-      .update({ photo_consent_given_at: new Date().toISOString() })
-      .eq("id", user.id);
+    if (isFeatureRoutedToIcp("membership")) {
+      await (await import("@/features/membership/invitePhotoConsent")).icpInvitePhotoConsent(true);
+    } else {
+      const { error } = await supabase.from("profiles").update({ photo_consent_given_at: new Date().toISOString() }).eq("id", user.id);
+      if (error) throw error;
+    }
 
     setShowPhotoConsent(false);
 

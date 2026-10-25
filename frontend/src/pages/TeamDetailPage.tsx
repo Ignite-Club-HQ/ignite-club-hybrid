@@ -172,7 +172,7 @@ export default function TeamDetailPage() {
   const [selectedChild, setSelectedChild] = useState<{ childId: string; childName: string; parentDisplay: string | null; isPending: boolean; linkInviteIds?: string[] } | null>(null);
   
   // Handle admin invite dialog from team creation flow
-  const locationState = location.state as { showAdminInvite?: boolean; inviteName?: string; inviteEmail?: string; teamName?: string } | null;
+  const locationState = location.state as { showAdminInvite?: boolean; inviteName?: string; inviteEmail?: string; teamName?: string; inviteLink?: string } | null;
   const [showAdminInviteDialog, setShowAdminInviteDialog] = useState(!!locationState?.showAdminInvite);
   const adminInviteName = locationState?.inviteName || "";
   const adminInviteEmail = locationState?.inviteEmail || "";
@@ -2062,6 +2062,7 @@ export default function TeamDetailPage() {
         teamName={adminInviteTeamName || team?.name || ""}
         inviteName={adminInviteName}
         inviteEmail={adminInviteEmail}
+        inviteLink={locationState?.inviteLink}
         onDone={() => {
           setShowAdminInviteDialog(false);
           navigate(location.pathname, { replace: true, state: {} });
