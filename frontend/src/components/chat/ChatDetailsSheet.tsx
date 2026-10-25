@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -90,12 +90,21 @@ export function ChatDetailsSheet({
   const mediaType: ChatSharedMediaType =
     chatType === "support" ? "dm" : (chatType as ChatSharedMediaType);
 
+  // Start loading details a moment after the chat opens (idle warm-up), so
+  // tapping the header shows photos and participants without a long spinner.
+  const [warm, setWarm] = useState(false);
+  useEffect(() => {
+    if (!chatId) return;
+    const t = setTimeout(() => setWarm(true), 1200);
+    return () => clearTimeout(t);
+  }, [chatId]);
+
   const { data: sharedMedia = [], isLoading: mediaLoading } = useChatSharedMedia(
     mediaType,
     chatId,
     // Scan a wider window of recent messages so the preview strip can show
     // up to 8 photos even when recent messages are mostly text/links.
-    { limit: 80, enabled: open, clubId, teamId, miniLeagueId, competitionId },
+    { limit: 80, enabled: open || warm, clubId, teamId, miniLeagueId, competitionId },
   );
 
   const close = () => onOpenChange(false);
@@ -115,7 +124,7 @@ export function ChatDetailsSheet({
   const resolvedTeamIdForClub = chatType === "team" ? chatId : teamId;
   const { data: derivedClubId } = useQuery({
     queryKey: ["chat-details-sheet-club-id", resolvedTeamIdForClub, clubId, chatType, chatId, user?.id, useIcpLab],
-    enabled: open && initialized && !!user && !clubId && (chatType === "team" || (chatType === "group" && !!resolvedTeamIdForClub)),
+    enabled: (open || warm) && initialized && !!user && !clubId && (chatType === "team" || (chatType === "group" && !!resolvedTeamIdForClub)),
     staleTime: 60_000,
     queryFn: async () => {
       if (!resolvedTeamIdForClub) return null;
@@ -140,6 +149,25 @@ export function ChatDetailsSheet({
 
   return (
     <>
+      {/* Warm participant data shortly after the chat opens so the details
+          sheet shows names immediately. Hidden, read-only, same queries. */}
+      {warm && !open && showParticipants && (
+        <div hidden aria-hidden="true">
+          <ChatParticipantsList
+            chatType={chatType as "team" | "club" | "group"}
+            chatId={chatId}
+            chatName={name}
+            teamId={teamId}
+            clubId={clubId}
+            miniLeagueId={miniLeagueId}
+            groupAllowedRoles={groupAllowedRoles}
+            groupCreatedBy={groupCreatedBy}
+            groupMembershipMode={groupMembershipMode}
+            enabled
+            inline
+          />
+        </div>
+      )}
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side={isMobile ? "bottom" : "right"}
