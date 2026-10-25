@@ -20,6 +20,7 @@ import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
 import { placementOperatorEvidenceIdl, normalizePlacementOperatorEvidence } from '../../scripts/placement-upgrade-evidence.mjs';
+import { legacyClubLifecycleDisabled, validateClubIdentityWiring } from '../../scripts/all-group-wiring-policy.mjs';
 import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades } from '../../scripts/all-group-upgrade-policy.mjs';
 
 const [action, scope, artifacts, pem, directory] = process.argv.slice(2);
@@ -77,7 +78,7 @@ const observe=async(t:Target)=>{
   const subnet=certified.get('subnet') as {subnetId?:Principal}|undefined;
   const actual={moduleHash:Buffer.from(status.module_hash[0]??[]).toString('hex'),controllers:status.settings.controllers.map((p:Principal)=>p.toText()),running:'running' in status.status,cycles:status.cycles,subnetId:String(subnet?.subnetId??''),environment:status.settings.environment_variables};
   verifyUpgradeStatus(t,actual,GROUP2_GOVERNOR);
-  return {moduleHash:actual.moduleHash,settingsHash:digest({...status.settings,controllers:actual.controllers,environment_variables:[...actual.environment].sort((a,b)=>a.name.localeCompare(b.name))}),cycles:String(actual.cycles)};
+  return {moduleHash:actual.moduleHash,settingsHash:digest({...status.settings,controllers:actual.controllers,environment_variables:[...actual.environment].sort((a,b)=>a.name.localeCompare(b.name))}),cycles:String(actual.cycles),legacyLifecycleDisabled:legacyClubLifecycleDisabled(actual.environment)};
 };
 const readConfig=async(t:Target)=>{
   const rows=IDL.Vec(IDL.Tuple(IDL.Text,IDL.Text));
@@ -114,7 +115,15 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
   const requireRow=(name:string,expected:string|undefined)=>{if(!expected||rows.filter(r=>r[0]===name&&r[1]===expected).length!==1)throw Error(`Owning-group wiring differs: ${t.groupId}/${t.name}/${name}; expected ${expected??'missing inventory'}, reported ${JSON.stringify(rows.filter(r=>r[0]===name))}. Full readback saved in ${t.groupId}-${t.name}-wiring.json; no authority changes applied.`);};
   if(!['timer_jobs','insights_domain'].includes(t.name))requireRow('club_domain',own('club_domain'));
   if(t.name==='insights_domain')requireRow('permission_source','local_club_roles');
-  if(t.name==='club_domain'){requireRow('identity_access',shared.identity_access);requireRow('notification_queue',own('notification_queue'));requireRow('events_domain',own('events_domain'));}
+  if(t.name==='club_domain'){
+    // The original G1 authority predates group lifecycle wiring. Its empty
+    // singleton must be preserved, never configured by an upgrade. Verify
+    // disabled settings via controller readback, not a guessed group label.
+    const legacy=rows.some(r=>r[0]==='identity_access'&&r[1]==='');
+    const disabled=legacy?(await observe(t)).legacyLifecycleDisabled:false;
+    validateClubIdentityWiring(t,rows,shared.identity_access,disabled);
+    requireRow('notification_queue',own('notification_queue'));requireRow('events_domain',own('events_domain'));
+  }
   if(t.name==='notification_queue'){requireRow('identity_access',shared.identity_access);requireRow('messaging_domain',own('messaging_domain'));}
   if(t.name==='events_domain'){requireRow('notification_queue',own('notification_queue'));requireRow('competition_domain',own('competition_domain'));}
   if(t.name==='competition_domain')requireRow('events_domain',own('events_domain'));
