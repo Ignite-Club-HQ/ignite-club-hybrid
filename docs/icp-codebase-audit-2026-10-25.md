@@ -2,9 +2,13 @@
 
 ## Verdict
 
-**Further gaps remain in current code.** This audit found seven reachable Supabase dependency paths, one missing ICP chat action, and six related correctness/completeness findings. Two additional startup/configuration boundaries prevent a strict “ICP never touches Supabase” claim. These counts group related symptoms by repair area, not by individual call site.
+**The local repair batch isolates the identified ICP reads and repairs the reporting/administration paths; PlayHQ association linking remains unfinished.** The findings below describe the original audit evidence, not the current repaired line numbers.
 
-This is an audit, not a repair or deployment. No application/canister code, credentials, GitHub repositories or mainnet services were changed. Earlier focused closure statements do not certify the whole app or the deployed versions.
+Local changes cover member search, sponsor references, AI settings, legal refresh, GIF configuration, recap identity, board attachment discovery, team reward reports, goalkeeper counts, versioned feedback, durable fixture row receipts and complete administrative inventories. Restored II sessions and ICP-hosted/explicit ICP startup use on-chain configuration; an ICP session with missing services now refuses rather than using Supabase. General signed-out hybrid-origin bootstrap intentionally retains country-routing configuration precedence.
+
+Association PlayHQ linking is withheld in ICP rather than inserting incomplete records into Supabase. A durable, authorized on-chain link/configuration contract and its protected release are still required to restore that action; disabling it is not feature parity. Existing Supabase PlayHQ behavior is preserved.
+
+Verification: 13 focused files / 86 tests pass in each backend mode; ICP guards and 17-contract drift pass. The public preview opened /auth with zero page errors; no signed-in Internet Identity session was available, so real-use acceptance remains unverified. No mainnet upgrade, credential change, email activation or repository transfer occurred.
 
 ## A. Confirmed Supabase paths needing isolation
 

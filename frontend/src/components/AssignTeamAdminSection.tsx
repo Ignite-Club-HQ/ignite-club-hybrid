@@ -45,15 +45,21 @@ export function AssignTeamAdminSection({
 
   // Fetch club members who could become team admins
   const { data: clubMembers = [], error: membersError } = useQuery({
-    queryKey: ['club-members-for-admin', backend, user?.id, clubId, searchQuery],
+    queryKey: ['club-members-for-admin', backend, user?.id, clubId, teamId, searchQuery],
     queryFn: async () => {
       if (!searchQuery.trim()) return [];
       return withFeatureBackend("membership", {
         icp: async ctx => {
-          const [{ listLiveRoleGrants, listLiveTeamRoleGrants }, { listLiveProfilesByIds }] = await Promise.all([
+          const [{ listLiveRoleGrants, listLiveTeamRoleGrants, getLiveMyRoleGrants }, { listLiveProfilesByIds }] = await Promise.all([
             import("@/live/features/membership"), import("@/live/features/identityAccessClient"),
           ]);
-          const roles = teamId ? await listLiveTeamRoleGrants(ctx, teamId) : await listLiveRoleGrants(ctx, clubId);
+          const mine = await getLiveMyRoleGrants(ctx);
+          const isAdmin = mine.some(role => role.role === "app_admin" || (role.role === "club_admin" && role.club[0] === clubId));
+          const roles = teamId ? await listLiveTeamRoleGrants(ctx, teamId) : isAdmin ? await listLiveRoleGrants(ctx, clubId) : await (async () => {
+            const { listLiveTeams } = await import("@/live/features/club");
+            const teams = await listLiveTeams(ctx, clubId);
+            return (await Promise.all(teams.map(team => listLiveTeamRoleGrants(ctx, team.id)))).flat();
+          })();
           const ids = [...new Set(roles.map(role => role.account_id))];
           const profiles = await listLiveProfilesByIds(ctx, ids);
           return profiles.filter(p => p.display_name.toLowerCase().includes(searchQuery.trim().toLowerCase()))

@@ -55,6 +55,7 @@ function IcpAdminAICatchUpPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [scope, setScope] = useState<"all" | "selected">("selected");
+  const [unconfirmed, setUnconfirmed] = useState(false);
 
   const { data: enabled, isLoading, error: settingError } = useQuery({
     queryKey: ["icp-ai-catch-up-rollout-setting"],
@@ -110,7 +111,7 @@ function IcpAdminAICatchUpPage() {
       setSelected(new Set());
       refetch();
     },
-    onError: (e: Error) => toast.error("Failed: " + e.message),
+    onError: (e: Error) => { if (e.message.includes("unconfirmed")) setUnconfirmed(true); toast.error("Failed: " + e.message); },
   });
 
   const toggle = (id: string) => {
@@ -132,6 +133,7 @@ function IcpAdminAICatchUpPage() {
   };
 
   const openConfirm = (s: "all" | "selected") => {
+    if (unconfirmed || clubsError || isLoadingClubs) return;
     if (s === "selected" && selected.size === 0) {
       toast.error("Select at least one club");
       return;
@@ -201,14 +203,14 @@ function IcpAdminAICatchUpPage() {
           <div className="flex gap-2">
             <Button
               onClick={() => openConfirm("all")}
-              disabled={enableMutation.isPending || clubs.length === 0}
+              disabled={enableMutation.isPending || clubs.length === 0 || unconfirmed || !!clubsError}
             >
               Enable for ALL Pro clubs ({clubs.length})
             </Button>
             <Button
               variant="outline"
               onClick={() => openConfirm("selected")}
-              disabled={enableMutation.isPending || selected.size === 0}
+              disabled={enableMutation.isPending || selected.size === 0 || unconfirmed || !!clubsError}
             >
               Enable for selected ({selected.size})
             </Button>
@@ -224,6 +226,7 @@ function IcpAdminAICatchUpPage() {
             />
           </div>
 
+          {unconfirmed && <p role="alert" className="text-destructive">An update is unconfirmed. Further batch changes are paused.</p>}
           {clubsError ? (
             <p role="alert" className="text-destructive">Could not load Pro clubs: {clubsError.message}</p>
           ) : isLoadingClubs ? (
