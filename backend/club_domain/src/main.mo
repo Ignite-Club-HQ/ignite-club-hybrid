@@ -3791,8 +3791,6 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public query ({ caller }) func get_team_invite(id : Text) : async { #Ok : Types.TeamInvite; #Err : Text } {
-    denyLegacyAccountQuery();
-    auth(caller);
     switch (teamInvites.find(func(i) = i.id == id)) {
       case null { #Err("Invite not found") };
       case (?invite) {
@@ -4049,8 +4047,6 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public query ({ caller }) func get_team_invite_link_by_token(token : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
-    denyLegacyAccountQuery();
-    auth(caller);
     switch (teamInviteLinks.find(func(l) = l.token == token)) {
       case null { #Err("Invite link not found") };
       case (?link) {
@@ -4139,6 +4135,7 @@ persistent actor class Main(governorInit : Principal) = this {
       };
       case null { if (not isAdmin(caller, club_id)) return #Err("Club admin required") };
     };
+    switch (team_id, role) { case (?team, ?value) { if (kind == "team" and (value == "coach" or value == "team_admin") and not localInviteRoleAllowed(caller, club_id, team, value)) return #Err("Team administrator required for staff invites") }; case _ {} };
     let epoch = membershipEpoch();
     let token = "pinv-" # (await randomHex(16));
     if (epoch != membershipEpoch() or pendingInvites.any(func i = i.id == token)) return #Err("Invite authorization changed; retry");
