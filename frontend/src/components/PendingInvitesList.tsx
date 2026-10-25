@@ -306,7 +306,7 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
               clubId={clubId}
             />
           )}
-          {isAdmin && invitesWithEmail.length > 1 && (
+          {isAdmin && !isFeatureRoutedToIcp("membership") && invitesWithEmail.length > 1 && (
             <Button
               variant="outline"
               size="sm"

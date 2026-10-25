@@ -75,8 +75,8 @@ export function useAddPendingTeamMemberMutation({
   /**
    * ICP path: composes what club_domain actually supports —
    * `bulk_add_team_members` (role grant) for an existing-user match, or
-   * `create_pending_invite` for a fresh invite. Invite email delivery works
-   * here too (the send-email edge function is anon-key callable). Second-
+   * `create_pending_invite` for a fresh invite. Manual sharing is independent
+   * of the separately deferred email transport. Second-
    * parent linking uses `create_pending_invite` with kind "guardian" against
    * the first existing child id, so the invite itself always lands on the
    * canister. In-app notifications stay Supabase-only (push/notifications
@@ -153,45 +153,11 @@ export function useAddPendingTeamMemberMutation({
     let shareLink = link;
     try {
       const shortCode = await createLiveInviteShortCode(ctx, invite.id);
-      shareLink = `${window.location.origin}/i/${shortCode}`;
+      shareLink = `${window.location.origin}/j/${shortCode}`;
     } catch (err) {
       console.warn("[ICP invite] short code creation failed:", err);
     }
 
-    // icp-guard: allow email delivery stays off-chain by design (send-email)
-    // Email delivery routes through the send-email edge function, which is
-    // anon-key callable so Internet Identity sessions can send too. Failure
-    // degrades to manual link sharing — the link is returned either way.
-    if (inviteEmail) {
-      try {
-        const { data: emailResult, error: funcError } = await supabase.functions.invoke("send-email", {
-          body: {
-            to: inviteEmail,
-            subject: `${clubBranding?.name || "Your club"}: You're invited to join ${teamName || "the team"}`,
-            template: "team-invite",
-            senderName: clubBranding?.name || undefined,
-            replyTo: clubBranding?.contact_email || undefined,
-            templateData: {
-              recipientName: nameInput.trim(),
-              invitedEmail: inviteEmail,
-              teamName: teamName || "",
-              clubName: clubBranding?.name || "",
-              roleName: selectedRole,
-              inviteLink: link,
-              clubLogoUrl: clubBranding?.logo_url || undefined,
-            },
-          },
-        });
-        if (funcError || !(emailResult?.verified && emailResult?.success)) {
-          console.warn(
-            "[ICP invite] email send failed:",
-            funcError?.message || emailResult?.error || "not verified",
-          );
-        }
-      } catch (err) {
-        console.warn("[ICP invite] email send threw:", err);
-      }
-    }
     // Second-parent invite: club_domain has no dedicated "second parent" op,
     // but a "guardian" kind pending invite against the (first) child id is
     // the closest real equivalent — it lands a real, acceptable invite on
@@ -220,6 +186,7 @@ export function useAddPendingTeamMemberMutation({
     }
 
     return {
+      backend: "icp" as const,
       link,
       shareLink,
       email: customEmail.trim(),
@@ -520,6 +487,12 @@ export function useAddPendingTeamMemberMutation({
       });
 
       secondParentOutcomeToast();
+
+      if (result.backend === "icp") {
+        setInviteSent(false);
+        void toastInviteSuccess({ title: "Invite created", description: "Share the invitation link." });
+        return;
+      }
 
       // Auto-send email notification if email was provided
       if (email) {

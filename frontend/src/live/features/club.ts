@@ -649,7 +649,7 @@ export async function createLivePendingInvite(
       input.clubId,
       candidOpt(input.teamId),
       candidOpt(input.childId),
-      input.email,
+      "pii:email",
       candidOpt(input.role),
     ),
     "Create pending invite",

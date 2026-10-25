@@ -24,9 +24,9 @@ import { useToast } from "@/hooks/use-toast";
 import { getCachedRoles } from "@/lib/rolesCache";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import { createLiveTeamInviteLink, listLiveTeamInviteLinks, rotateLiveTeamInviteLink, revokeLiveTeamInviteLink, getLiveTeam } from "@/live/features/club";
+import { createLiveTeamInviteLink, listLiveTeamInviteLinks, listLivePendingInvitesByClub, rotateLiveTeamInviteLink, revokeLiveTeamInviteLink, getLiveTeam } from "@/live/features/club";
 
-const APP_URL = "https://reference.invalid";
+const APP_URL = "https://ignite-canister-connect.lovable.app";
 const DEFAULT_EXPIRY_DAYS = 30;
 const TOKEN_METADATA_KIND = "team_join_link";
 
@@ -123,9 +123,9 @@ export default function TeamJoinLinkCard({
     return roles.some(
       (r) =>
         ["app_admin", "club_admin", "team_admin", "coach"].includes(r.role) &&
-        (r.team_id === teamId || (r.club_id && !r.team_id)),
+        (r.team_id === teamId || (r.club_id === clubId && !r.team_id) || r.role === "app_admin"),
     );
-  }, [teamId]);
+  }, [teamId, clubId]);
   const isAdmin = managerOverride || hasCachedTeamAdmin;
 
   const queryKey = ["team-join-links", teamId];
@@ -191,7 +191,11 @@ export default function TeamJoinLinkCard({
         if (error) throw error;
         return count ?? 0;
       },
-      icp: async () => 0,
+      icp: async ctx => {
+        const owner = clubId ?? (await getLiveTeam(ctx, teamId))[0]?.club_id;
+        if (!owner) throw new Error("Team not found");
+        return (await listLivePendingInvitesByClub(ctx, owner)).filter(i => i.team_id[0] === teamId && (i.status === "pending" || i.status === "resent")).length;
+      },
     }, { teamId }),
     staleTime: 30_000,
   });
@@ -279,6 +283,7 @@ export default function TeamJoinLinkCard({
   const autoCreateTriedRef = useRef<RoleVariant | null>(null);
   useEffect(() => {
     if (!autoCreateLink || isLoading || !links || !isAdmin) return;
+    if (SENSITIVE_ROLES.includes(activeRole)) return;
     if (links[activeRole]) return;
     if (createOrRotate.isPending) return;
     if (autoCreateTriedRef.current === activeRole) return;

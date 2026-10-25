@@ -29,15 +29,14 @@ function IcpShortInviteRedirect() {
 
     const resolve = async () => {
       try {
-        const [{ AnonymousIdentity }, { getActiveIcpTarget }, { resolveLiveInviteShortCode }] = await Promise.all([
-          import("@icp-sdk/core/agent"),
-          import("@/live/targetRegistry"),
+        const [{ withFeatureBackend }, { resolveLiveInviteShortCode }] = await Promise.all([
+          import("@/live/featureRouter"),
           import("@/live/features/club"),
         ]);
-        const id = await resolveLiveInviteShortCode(
-          { identity: new AnonymousIdentity(), target: getActiveIcpTarget() },
-          resolvingCode,
-        );
+        const id = await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("ICP invitation required"); },
+          icp: ctx => resolveLiveInviteShortCode(ctx, resolvingCode),
+        }, { inviteToken: resolvingCode });
         if (cancelled || resolvingCode !== code) return;
         if (!id) {
           setNotFound(true);
