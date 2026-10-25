@@ -16,7 +16,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import { isIcpSession, icpGetTeam, icpGetClubName, icpListTeams, icpListClubs } from "@/lib/icpClubTeamLookup";
+import { isIcpSession, icpGetTeam, icpGetClubName, icpListTeams, icpListClubs, icpCtx } from "@/lib/icpClubTeamLookup";
 import type { ClubScopeTable } from "@/lib/routeClubScope";
 
 /** Tables whose owning club can be recovered from a `team_id` column. */
