@@ -17,7 +17,7 @@
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
 - ICP pitch alerts use livePitchRecipients for club scope/staff/match duties; omit child names. Why: avoid wrong audiences and plaintext PII.
-- Releases: full_backend covers groups/shared once, router last, no rewiring; preserve keys/journals. Unknown same-Wasm installs lock. Unsettled broadcasts block erasure; original clubs retire queue proof.
+- Releases: full_backend covers groups/shared once, router last; preserve keys/journals. Unknown same-Wasm installs lock. Lookup ready is not upgrade completion. Unsettled broadcasts block erasure; original clubs retire queue proof.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
 - Android bars: apply StatusBarBackdrop after SystemBars; keep its remaining CSS inset, no forced floor. Both Codemagic workflows run scripts/configure-android-status-bar.py; preserve keyboard handling. Why: native padding already reserves space.
 - ICP images wait for restored auth, share account-scoped unlocks and retry after cooldown/foreground recovery. Why: avoid false startup failures and duplicate unlocks.

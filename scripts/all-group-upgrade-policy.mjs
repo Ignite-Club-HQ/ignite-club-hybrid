@@ -81,4 +81,20 @@ export function validateJournal(journal, binding) {
 export function requireSettledPredecessor(journal) {
   if (!journal || journal.complete!==true || journal.published!==true || !Array.isArray(journal.steps) || journal.steps.some(s=>s.phase!=='complete')) throw Error('Previous release is unresolved; retain journal and reconcile');
 }
+/** Lookup ready is user-facing acceptance, not an installation/activation phase.
+ * Its legacy release report always emits published:false before the workflow's
+ * later snapshot publication; the successor produces and publishes fresh evidence.
+ * Never mutate the predecessor or turn readiness into an authorization grant. */
+export function requireSettledNarrowRelease(branch, journal) {
+  const fail = () => { throw Error(`Unsettled existing release: ${branch}; reconcile before any all-group upgrade`); };
+  if (!journal || journal.complete !== true || !Array.isArray(journal.steps) || !journal.steps.length || journal.steps.some(step => step.phase !== 'complete') || journal.backfill && Object.values(journal.backfill).some(value => value !== true)) fail();
+  if (branch !== 'membership-lookup-release-receipts') {
+    if (journal.ready === false) fail();
+    return;
+  }
+  const sources = journal.binding?.sources;
+  if (!Array.isArray(sources) || !sources.length || new Set(sources.map(source => source.groupId)).size !== sources.length || !journal.fill || Object.keys(journal.fill).length !== sources.length || sources.some(source => journal.fill[source.groupId] !== true)) fail();
+  if (!Array.isArray(journal.binding?.targets) || journal.steps.length !== journal.binding.targets.length || new Set(journal.steps.map(step => step.canisterId)).size !== journal.steps.length || journal.binding.targets.some(target => !journal.steps.some(step => step.canisterId === target.canisterId && step.name === target.name && step.newHash === target.newHash))) fail();
+  if (!/^[a-f0-9]{40}$/.test(journal.binding?.release ?? '') || journal.activation?.phase !== 'complete' || journal.activation.release !== journal.binding.release || journal.ownership?.complete !== true || journal.replicaAcceptance?.snapshotVerified !== true || journal.replicaAcceptance?.restorationGuardVerified !== true) fail();
+}
 export function assertCheckedPlan(expected, actual) { if (expected!==actual) throw Error('Checked plan changed; run check on this exact revision/inventory/artifacts'); }

@@ -19,7 +19,7 @@ import type { _SERVICE as WorkloadService } from '../src/lab/bindings/secret_wor
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
-import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, assertCheckedPlan, executeUpgrades } from '../../scripts/all-group-upgrade-policy.mjs';
+import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades } from '../../scripts/all-group-upgrade-policy.mjs';
 
 const [action, scope, artifacts, pem, directory] = process.argv.slice(2);
 const services = validateRequest(action, scope, process.env.CONFIRMATION, process.env.CHECKED_PLAN);
@@ -57,7 +57,7 @@ for (const [b,p] of predecessors) if (branchExists(b)) {
   if (tree.tree.some((e:{path:string})=>e.path===p)) {
     const entry=api(`contents/${p}?ref=${b}`);
     const old=JSON.parse(Buffer.from(entry.content,'base64').toString());
-    if (old.complete!==true || !Array.isArray(old.steps) || old.steps.some((s:{phase:string})=>s.phase!=='complete') || old.backfill && Object.values(old.backfill).some(v=>v!==true) || old.ready===false) throw Error(`Unsettled existing release: ${b}; reconcile before any all-group upgrade`);
+    requireSettledNarrowRelease(b,old);
   }
 }
 let stored:any=null;
