@@ -1,3 +1,7 @@
+## Team-page blocked ICP reads — 25 October 2026
+- [ ] Trace and repair teams, pending invitations, role requests and RPC reads without suppressing team features; run focused dual-mode regressions.
+- [ ] Signed-in U10 Hawks acceptance requires Paul's Internet Identity session; screenshots establish blocked requests, not current deployed code.
+
 ## Bottom navigation response — 25 October 2026
 - [x] Activated previously unused idle main-page code warming and focus/pointer intent prefetch; tab clicks never await imports. All 11 navigation/native scroll/safe-area checks pass in each mode and preview build OK; no deployment or signed-in timing claim.
 - [ ] Real signed-in phone timing remains unverified without Paul's Internet Identity session.
