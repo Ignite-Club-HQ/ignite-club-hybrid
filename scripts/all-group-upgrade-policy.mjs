@@ -1,0 +1,80 @@
+import { digest, executeUpgrades } from './subscription-upgrade-policy.mjs';
+import { GROUP_BUILD_SERVICES } from './stage-group-wasm.mjs';
+import { validateGroup2Inventory, upgradeArgs, GROUP2_GOVERNOR } from './group2-upgrade-rules.mjs';
+export { digest, executeUpgrades };
+export const PRIMARY_SUBNET = 'e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe';
+export const SCOPES = Object.freeze({
+  app_admin: ['identity_access', 'notification_queue'],
+  team_invites: ['club_domain', 'mini_league_domain'],
+  messaging: ['messaging_domain'],
+  competition: ['notification_queue', 'club_domain', 'events_domain', 'competition_domain'],
+  history: ['events_domain', 'competition_domain'],
+  subscriptions: ['club_domain', 'media_blob_store'],
+  events_pitch: ['notification_queue', 'club_domain', 'events_domain'],
+  gallery_vault: ['club_domain', 'media_blob_store', 'media_metadata', 'vault_domain', 'messaging_domain', 'notification_queue'],
+  full_backend: ['identity_access', ...GROUP_BUILD_SERVICES],
+});
+export function validateRequest(action, scope, confirmation, checkedPlan) {
+  if (!['check', 'upgrade'].includes(action) || !Object.hasOwn(SCOPES, scope)) throw Error('Choose a reviewed scope and check or upgrade');
+  if (action === 'upgrade' && (confirmation?.trim() !== 'UPGRADE ALL MAINNET GROUPS' || !/^[a-f0-9]{64}$/.test(checkedPlan ?? ''))) throw Error('Type UPGRADE ALL MAINNET GROUPS and provide the checked plan hash');
+  return SCOPES[scope];
+}
+const text = p => typeof p === 'string' ? p : p?.toText();
+const validId = id => typeof id === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(id) && !['aaaaa-aa', '2vxsx-fae'].includes(id);
+/** Complete saved + consensus inventory. Only explicit shared workload aliases may repeat. */
+export function planInventory(shared, provisions, registry, scope, hashes) {
+  const names = validateRequest('check', scope);
+  if (shared.shard_router !== 'jcdfe-vqaaa-aaaal-qxloq-cai' || shared.identity_access !== 'mq2sj-fiaaa-aaaal-qxlqa-cai' || shared.club_domain !== 'mzzzv-taaaa-aaaal-qxlrq-cai' || shared.pii_access_control !== 'iui5p-aaaaa-aaaal-qxllq-cai' || shared.media_blob_store !== 'jlaoy-dyaaa-aaaal-qxlpa-cai') throw Error('Pinned original mainnet mappings required');
+  if (registry.configurationRevision === undefined || registry.groups.length > 99 || !registry.groups.length || registry.placements.length !== registry.groups.length) throw Error('Complete bounded configuration-bound registry required');
+  const savedIds = provisions.map(p => p.groupId);
+  const liveIds = registry.groups.map(g => g.id);
+  if (new Set(savedIds).size !== savedIds.length || new Set(liveIds).size !== liveIds.length || registry.placements.some(p => !liveIds.includes(p.group_id)) || new Set(registry.placements.map(p => p.group_id)).size !== liveIds.length || savedIds.some(id => !liveIds.includes(id)) || liveIds.some(id => id !== 'g1' && !savedIds.includes(id))) throw Error('Saved and live group inventory differ');
+  const all = [{ id: 'g1', services: GROUP_BUILD_SERVICES.map(name => ({ name, canisterId: shared[name], subnetId: PRIMARY_SUBNET })) },
+    ...provisions.map(p => ({ id: p.groupId, services: validateGroup2Inventory(p, shared, p.groupId) }))].sort((a,b) => a.id.localeCompare(b.id, 'en', { numeric: true }));
+  const seen = new Set(Object.values(shared));
+  if (seen.size !== Object.keys(shared).length || Object.values(shared).some(id => !validId(id))) throw Error('Invalid or colliding shared mappings');
+  for (const g of all) {
+    if (g.id !== 'g1') for (const s of g.services) { if (!validId(s.canisterId) || seen.has(s.canisterId)) throw Error('Cross-group canister collision'); seen.add(s.canisterId); }
+    const live = registry.groups.find(row => row.id === g.id);
+    if (!live && g.id === 'g1') continue;
+    const placement = registry.placements.find(p => p.group_id === g.id);
+    const domains = GROUP_BUILD_SERVICES.filter(n => n !== 'media_blob_store').concat('secret_workload_identity');
+    if (!live || !placement || live.target_alias !== 'mainnet' || placement.deployment_id !== 'mainnet' || placement.host !== 'https://icp-api.io' || placement.network_kind !== 'public_mainnet' || live.domains.length !== domains.length || placement.domains.length !== domains.length || new Set(live.domains.map(d=>d.domain)).size !== domains.length || new Set(placement.domains.map(d=>d.domain)).size !== domains.length) throw Error('Complete mainnet domain placement required');
+    const approved = placement.approved_subnets.map(text);
+    if (!approved.length || new Set(approved).size !== approved.length || !approved.includes(text(placement.primary_subnet))) throw Error('Invalid approved subnet policy');
+    for (const name of domains) {
+      const s = name === 'secret_workload_identity' ? { canisterId: shared[name], subnetId: PRIMARY_SUBNET } : g.services.find(s=>s.name===name);
+      const placed = placement.domains.find(d=>d.domain===name);
+      if (!s || !placed || text(live.domains.find(d=>d.domain===name)?.canister) !== s.canisterId || text(placed.canister)!==s.canisterId || text(placed.subnet)!==s.subnetId || !approved.includes(s.subnetId) || (!placement.additional_subnets_enabled && s.subnetId !== text(placement.primary_subnet))) throw Error(`Placement differs: ${g.id}/${name}`);
+    }
+    if (text(live.photo_store[0]) !== g.services.find(s=>s.name==='media_blob_store')?.canisterId) throw Error('Photo store differs');
+  }
+  const targets = names.flatMap(name => name === 'identity_access' ? [{groupId:'shared',name,canisterId:shared.identity_access,subnetId:PRIMARY_SUBNET,newHash:hashes[name]}] : all.map(g => ({ groupId:g.id, ...g.services.find(s=>s.name===name), newHash:hashes[name] })));
+  if (targets.some(t=>!t.name || !validId(t.canisterId) || !/^[a-f0-9]{64}$/.test(t.newHash ?? '')) || new Set(targets.map(t=>t.canisterId)).size!==targets.length) throw Error('Incomplete upgrade artifacts/targets');
+  return { groups: all, targets, pii: Object.fromEntries(all.map(g=>[g.id,g.services.find(s=>s.name==='pii_access_control').canisterId])) };
+}
+export function installArgs(target, path) {
+  if (!GROUP_BUILD_SERVICES.includes(target.name) && target.name !== 'identity_access') throw Error('Unreviewed install runtime');
+  const args = upgradeArgs(target, path, GROUP2_GOVERNOR);
+  if (target.name === 'identity_access') {
+    args.splice(args.indexOf('--wasm-memory-persistence'), 2);
+    args[args.indexOf('--args')+1] = `(record { governor = principal "${GROUP2_GOVERNOR}" })`;
+  }
+  return args;
+}
+export function validateJournal(journal, binding) {
+  if (!journal || digest(journal.binding)!==digest(binding) || typeof journal.complete!=='boolean' || typeof journal.published!=='boolean' || journal.steps?.length!==binding.targets.length || new Set(journal.steps.map(s=>s.canisterId)).size!==binding.targets.length || journal.keys?.length!==Object.keys(binding.pii).length) throw Error('Foreign or incomplete all-group journal');
+  for (const t of binding.targets) {
+    const s=journal.steps.find(s=>s.canisterId===t.canisterId);
+    if (!s || ['name','groupId','subnetId','newHash'].some(k=>s[k]!==t[k]) || !/^[a-f0-9]{64}$/.test(s.oldHash ?? '') || !/^[a-f0-9]{64}$/.test(s.settingsHash ?? '') || !['ready','pending','complete'].includes(s.phase)) throw Error('Invalid all-group journal step');
+  }
+  for (const [groupId,canisterId] of Object.entries(binding.pii)) {
+    const r=journal.keys.find(k=>k.groupId===groupId)?.receipt;
+    if (!r || r.canisterId!==canisterId || r.governor!==binding.governor || r.host!=='https://icp-api.io' || r.deploymentId!=='mainnet' || r.environment!=='ic' || r.keyName!=='key_1' || !/^[a-f0-9]{192}$/.test(r.publicKeyHex ?? '') || !/^[a-f0-9]{64}$/.test(r.moduleHash ?? '')) throw Error('Original group photo-key receipt required');
+  }
+  if (journal.complete && journal.steps.some(s=>s.phase!=='complete') || journal.published && !journal.complete) throw Error('Unsettled journal cannot be complete/published');
+}
+export function requireSettledPredecessor(journal) {
+  if (!journal || journal.complete!==true || journal.published!==true || !Array.isArray(journal.steps) || journal.steps.some(s=>s.phase!=='complete')) throw Error('Previous release is unresolved; retain journal and reconcile');
+}
+export function assertCheckedPlan(expected, actual) { if (expected!==actual) throw Error('Checked plan changed; run check on this exact revision/inventory/artifacts'); }
