@@ -2852,7 +2852,11 @@ persistent actor class Main(governorInit : Principal) = this {
       if (removalReceiver.denied(caller) or isFenced(club_id)) return #Err("Club access changed");
       let manager = canManageClub(caller, club_id);
       let rows = playhqCompetitionLinks.filter(func x = x.club_id == club_id);
-      #Ok(rows.flatMap(func link = switch (competitions.find(func c = c.id == link.competition_id and c.club_id == club_id and (c.visibility == "public" or manager))) { case (?competition) [{ competition; link }]; case null [] }))
+      var result : [{ competition : Types.Competition; link : Types.PlayHQCompetitionLink }] = [];
+      for (link in rows.values()) {
+        switch (competitions.find(func c = c.id == link.competition_id and c.club_id == club_id and (c.visibility == "public" or manager))) { case (?competition) result := result.concat([{ competition; link }]); case null {} };
+      };
+      #Ok(result)
     } finally { removalReceiver.leave(caller) }
   };
 
