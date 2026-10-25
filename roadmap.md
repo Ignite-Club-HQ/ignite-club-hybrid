@@ -1,5 +1,5 @@
 ## Vault attachment delays — 25 October 2026
-- [ ] Warm scoped Vault picker reads when opening attachment choices, reveal folders independently of files, and reuse authorized selected-folder/root names in draft cards; add regressions and verify both modes.
+- [x] Warm scoped Vault picker reads when opening attachment choices, reveal folders independently of files, and reuse authorized selected-folder/root names in draft cards. Mounted delayed-file/picker-to-card regressions pass; focused suites pass in Supabase (36) and ICP (26), guards pass and preview build OK. No deployment or canister changes; cold inventories still require authorized network reads.
 - [ ] Signed-in phone timing/readback requires Paul's Internet Identity session; local tests cannot certify mainnet latency.
 
 ## Messages Events/Vault warnings — 25 October 2026
