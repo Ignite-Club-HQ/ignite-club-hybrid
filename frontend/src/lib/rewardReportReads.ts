@@ -31,7 +31,7 @@ export async function readIcpRewardReport(ctx: FeatureBackendContext, clubId: st
       resolveLivePiiTextBatch(scoped, [...new Set(rows.flatMap(row => row.child_id))], "name", "reward_report", "Authorized reward recipients"),
     ]);
   });
-  const names = new Map(profiles.map(profile => [profile.account_id, profile.display_name]));
+  const names = new Map(profiles.map(profile => [normalize(profile.account_id), profile.display_name]));
   const catalog = new Map(rewards.map(reward => [reward.id, reward]));
   return rows.sort((a, b) => Number(b.redeemed_at_ms[0] ?? b.created_at_ms) - Number(a.redeemed_at_ms[0] ?? a.created_at_ms)).map(row => {
     const reward = catalog.get(row.reward_id);
@@ -40,6 +40,6 @@ export async function readIcpRewardReport(ctx: FeatureBackendContext, clubId: st
       redeemed_at: new Date(Number(row.redeemed_at_ms[0] ?? row.created_at_ms)).toISOString(), child_id: child ?? null, user_id: user ?? null,
       club_rewards: reward ? { id: reward.id, name: reward.name, reward_type: reward.reward_type } : null,
       children: child ? { name: childNames.get(child) ?? "Player" } : null,
-      profiles: user && names.has(user) ? { display_name: names.get(user) ?? "Member" } : null };
+      profiles: user && names.has(normalize(user)) ? { display_name: names.get(normalize(user)) ?? "Member" } : null };
   });
 }

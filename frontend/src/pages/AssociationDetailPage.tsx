@@ -222,7 +222,7 @@ function SupabaseAssociationDetailPage() {
         </TabsContent>
 
         <TabsContent value="playhq" className="space-y-3">
-          <PlayHQPanel associationId={id!} isAdmin={isAdmin} />
+          {isIcpPageMode() ? <p role="status" className="text-sm text-muted-foreground">PlayHQ association linking is paused until its on-chain connection settings are available.</p> : <PlayHQPanel associationId={id!} isAdmin={isAdmin} />}
         </TabsContent>
 
         <TabsContent value="events" className="space-y-3">
