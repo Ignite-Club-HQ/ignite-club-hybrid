@@ -783,9 +783,13 @@ export default function TeamDetailPage() {
             let grants: Array<{ account_id: string; role: string }>;
             try {
               grants = (await withRosterDeadline(listLiveTeamRoleGrants(ctx, id ?? ""), 15_000, "team member list")).map(g => ({ account_id: g.account_id.replace(/^principal:/, ""), role: g.role }));
-            } catch {
-              // Pre-deploy canisters lack list_team_role_grants; fall back to
-              // the caller's own grants so they at least see themselves.
+            } catch (err) {
+              // Only pre-deploy canisters lacking list_team_role_grants fall
+              // back to the caller's own grants. Other failures (wrong group,
+              // timeout, membership) surface as a retryable error instead of
+              // a slow all-groups sweep that hides the real problem.
+              const msg = err instanceof Error ? err.message : String(err);
+              if (!/has no (query|update) method|method not found|did not find method/i.test(msg)) throw err;
               grants = (await getLiveMyRoleGrants(ctx))
                 .filter((g) => (g.team?.[0] ?? null) === id!)
                 .map((g) => ({ account_id: g.user.toText(), role: g.role }));
@@ -814,7 +818,7 @@ export default function TeamDetailPage() {
               };
             });
           },
-        }, { teamId: id! });
+        }, team?.club_id ? { clubId: team.club_id } : { teamId: id! });
       }
       const { data, error } = await supabase
         .from("user_roles")
@@ -838,7 +842,10 @@ export default function TeamDetailPage() {
       
       return data || [];
     },
-    enabled: !!id && !useIcpLab,
+    // ICP: wait for the team so the read goes straight to its club's group
+    // rather than probing every group for the team owner.
+    enabled: !!id && !useIcpLab && (!isIcpAccount || !!team?.club_id),
+    retry: isIcpAccount ? 1 : 3,
     staleTime: 0, // Always fetch fresh data
     gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
     refetchOnMount: 'always', // Always refetch when component mounts
