@@ -21,7 +21,7 @@ import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
 import { placementOperatorEvidenceIdl, normalizePlacementOperatorEvidence } from '../../scripts/placement-upgrade-evidence.mjs';
 import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement } from '../../scripts/all-group-wiring-policy.mjs';
-import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades } from '../../scripts/all-group-upgrade-policy.mjs';
+import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades, requireCompletedRecovery, galleryAuthorities, verifyCompletedRecovery } from '../../scripts/all-group-upgrade-policy.mjs';
 
 const [action, scope, artifacts, pem, directory] = process.argv.slice(2);
 const services = validateRequest(action, scope, process.env.CONFIRMATION, process.env.CHECKED_PLAN);
@@ -39,14 +39,18 @@ const agent=await HttpAgent.create({host:'https://icp-api.io',identity});
 const router=Actor.createActor<_SERVICE>(idlFactory,{agent,canisterId:shared.shard_router});
 const registry=()=>readPinnedGroupRegistry((rev,cursor,limit)=>router.read_group_registry_page('mainnet',rev,cursor,limit));
 const initial=await registry();
-const hashes=Object.fromEntries(services.map((name:string)=>[name,wasmHash(readFileSync(resolve(artifacts,name)))]));
+const repo=process.env.GITHUB_REPOSITORY, source=process.env.GITHUB_SHA;
+if (!repo || !/^[a-f0-9]{40}$/.test(source ?? '')) throw Error('GitHub source revision required');
+const api=createJournalApi(repo,JSON.stringify);
+const recoveryStored=action==='recover'?api('contents/all-group-upgrade.json?ref=all-group-upgrade-receipts'):null;
+const recoveryJournal=recoveryStored?JSON.parse(Buffer.from(recoveryStored.content,'base64').toString()):null;
+const recovery=action==='recover'?requireCompletedRecovery(recoveryJournal,{repo,scope,checkedPlan:process.env.CHECKED_PLAN,source,branch:process.env.GITHUB_REF}):null;
+const release=recovery?.release??source;
+const hashes=recovery?.hashes??Object.fromEntries(services.map((name:string)=>[name,wasmHash(readFileSync(resolve(artifacts,name)))]));
 const inventory=planInventory(shared,provisions,initial,scope,hashes);
 type Target={groupId:string;name:string;canisterId:string;subnetId:string;newHash:string};
 const targets:Target[]=inventory.targets;
 const configuration=groupApprovalConfiguration(initial.groups,initial.placements);
-const repo=process.env.GITHUB_REPOSITORY, release=process.env.GITHUB_SHA;
-if (!repo || !/^[a-f0-9]{40}$/.test(release ?? '')) throw Error('GitHub source revision required');
-const api=createJournalApi(repo,JSON.stringify);
 const branch='all-group-upgrade-receipts', path='contents/all-group-upgrade.json';
 const refs=api('git/matching-refs/heads/');
 const branchExists=(name:string)=>refs.some((r:{ref:string})=>r.ref===`refs/heads/${name}`);
@@ -69,6 +73,7 @@ if (branchExists(branch)) {
   if(tree.tree.some((e:{path:string})=>e.path==='all-group-upgrade.json'))stored=api(`${path}?ref=${branch}`);
 }
 let journal:any=stored?JSON.parse(Buffer.from(stored.content,'base64').toString()):null;
+if(recovery && (!journal || digest(journal)!==digest(recoveryJournal)))throw Error('Recovery journal changed during readback');
 const mgmtIdl=()=>IDL.Service({canister_status:IDL.Func([IDL.Record({canister_id:IDL.Principal})],[IDL.Record({status:IDL.Variant({running:IDL.Null,stopped:IDL.Null,stopping:IDL.Null}),module_hash:IDL.Opt(IDL.Vec(IDL.Nat8)),cycles:IDL.Nat,settings:IDL.Record({controllers:IDL.Vec(IDL.Principal),compute_allocation:IDL.Nat,memory_allocation:IDL.Nat,freezing_threshold:IDL.Nat,reserved_cycles_limit:IDL.Nat,wasm_memory_limit:IDL.Nat,environment_variables:IDL.Vec(IDL.Record({name:IDL.Text,value:IDL.Text}))})})],[])});
 const observe=async(t:Target)=>{
   const cid=Principal.fromText(t.canisterId);
@@ -140,6 +145,7 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
 const binding={repo,release,scope,...(scope==='full_backend'?{upgradeUnchanged:true}:{}),governor:GROUP2_GOVERNOR,host:'https://icp-api.io',router:shared.shard_router,configurationRevision:String(initial.configurationRevision),configuration,targets,pii:inventory.pii,wiring};
 const planHash=digest(binding);
 const same=journal&&digest(journal.binding)===planHash;
+if(recovery&&!same)throw Error('Live recovery plan differs from the original release; no installs permitted');
 if(journal&&!same)requireSettledPredecessor(journal);
 const gate=async()=>{
   const current=await registry();
@@ -180,30 +186,32 @@ if(!journal){
 validateJournal(journal,binding);
 const persist=async()=>{stored=persistGroup2Journal(api,path,branch,stored,journal,'all-groups');saveReport('progress.json',journal);};
 const verifyKeys=async()=>{for(const k of journal.keys)keyGate(k.groupId,'after');};
+if(recovery){
+  await verifyCompletedRecovery(journal,{gate,observe,verifyKeys});
+  journal.recovery=recovery.recovery;
+}
 await persist();await verifyKeys();
 // Installation completion is not release completion; backfill/snapshot must also pass.
 const moduleJournal={...journal,complete:false};
-await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend',gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
+if(!recovery)await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend',gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
+  if(recovery)throw Error('Recovery cannot install any module');
   const r=spawnSync('icp',installArgs(t,resolve(artifacts,t.name)),{cwd:directory,stdio:'inherit'});
   if(r.status!==0)throw Error('Install reply failed/unknown; pending journal retained, no replay');
 }});
 // Gallery authority wiring is governor-set canister state that migrations
 // initialise to null; re-apply it idempotently after every module upgrade so
 // gallery notifications and Vault copy authority keep working on every group.
-const provisionByGroup=new Map(groupFolders.filter(e=>existsSync(new URL(`${e.name}/provision.json`,groupRoot))).map(e=>[e.name,json(`deploy/groups/${e.name}/provision.json`)]));
 for(const t of targets.filter(t=>t.name==='media_metadata')){
-  // Group 1 has no provision file; the planned inventory is authoritative for every group.
-  const g=inventory.groups.find((g:{id:string})=>g.id===t.groupId) as {services?:{name:string;canisterId:string}[]}|undefined;
-  const p=provisionByGroup.get(t.groupId) as {canisters?:Record<string,string>}|undefined;
-  const own=(n:string)=>g?.services?.find(s=>s.name===n)?.canisterId;
-  const club=own('club_domain')??p?.canisters?.club_domain, vault=own('vault_domain')??p?.canisters?.vault_domain;
-  if(p?.canisters&&((p.canisters.club_domain&&p.canisters.club_domain!==club)||(p.canisters.vault_domain&&p.canisters.vault_domain!==vault)))throw Error(`Gallery authority inventory disagrees for ${t.groupId}; stop without rewiring`);
-  if(!club||!vault)throw Error(`Gallery authority inventory missing for ${t.groupId}; stop without rewiring`);
+  const {club,vault}=galleryAuthorities(inventory,t,provisions);
   const factory=()=>IDL.Service({set_gallery_authorities:IDL.Func([IDL.Principal,IDL.Principal],[IDL.Variant({Ok:IDL.Null,Err:IDL.Text})],[])});
   const actor=Actor.createActor(factory,{agent,canisterId:t.canisterId}) as unknown as {set_gallery_authorities(c:Principal,v:Principal):Promise<{Ok:null}|{Err:string}>};
   await gate();
+  // This setter atomically assigns the same exact pair; repeating it is idempotent.
+  journal.galleryAuthorities??={};
+  journal.galleryAuthorities[t.canisterId]={club,vault,phase:'pending'};await persist();
   const r=await actor.set_gallery_authorities(Principal.fromText(club),Principal.fromText(vault));
   if('Err'in r)throw Error(`Gallery authority wiring refused for ${t.groupId}: ${r.Err}`);
+  journal.galleryAuthorities[t.canisterId]={club,vault,phase:'complete'};await persist();
 }
 if(journal.publication || journal.published){validateJournal(journal,binding);console.log('Exact saved snapshot retained for publication resume; modules reverified without reinstall.');process.exit(0);}
 // Metadata's ordered page index is a required, idempotent release prerequisite.

@@ -7,7 +7,7 @@ on:
         type: choice
         required: true
         default: upgrade
-        options: [check, upgrade]
+        options: [check, upgrade, recover]
       scope:
         description: full_backend upgrades every existing backend canister in every registered group, including shared infrastructure once
         type: choice
@@ -15,11 +15,11 @@ on:
         default: full_backend
         options: [full_backend, app_admin, team_invites, messaging, competition, history, subscriptions, events_pitch, gallery_vault]
       checked_plan:
-        description: Optional for full_backend (preflight is automatic); required for narrow scopes
+        description: Optional for full_backend upgrade; recover requires the original failed run's checked plan hash
         required: false
         default: ''
       confirmation:
-        description: Type UPGRADE ALL MAINNET GROUPS for upgrade; empty for check
+        description: Type UPGRADE ALL MAINNET GROUPS for upgrade, RECOVER COMPLETED MAINNET RELEASE for recover; empty for check
         required: false
         default: ''
 permissions:
@@ -81,6 +81,7 @@ jobs:
           PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
         run: bash scripts/resolve-group-push-worker.sh
       - name: Build selected recipe artifacts once
+        if: inputs.action != 'recover'
         run: |
           node --input-type=module <<'JS'
           import { spawnSync } from 'node:child_process';
@@ -108,7 +109,7 @@ jobs:
         working-directory: frontend
         run: npx --yes tsx@4 scripts/upgrade-all-groups.ts "$ACTION" "$SCOPE" "$RUNNER_TEMP/all-group-wasm" "$RUNNER_TEMP/all-group.pem" "$RUNNER_TEMP/all-group-report"
       - name: Publish verified fingerprints with source-branch compare and readback
-        if: inputs.action == 'upgrade'
+        if: inputs.action == 'upgrade' || inputs.action == 'recover'
         working-directory: frontend
         run: npx --yes tsx@4 scripts/publish-all-group-upgrade.ts
       - name: Remove signing material

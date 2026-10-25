@@ -1,3 +1,7 @@
+## All-group gallery finalization recovery — 25 October 2026
+- [x] Add protected recover action using original journal/artifacts and exact checked hash; completed modules verify twice without builds/installs, G1 gallery authorities resolve from planned inventory, and repair-source publication preserves original release binding. All 69 focused safeguards pass; both operator scripts parse. No live recovery dispatched.
+- [ ] Mainnet recovery/readback waits for the fixed workflow to sync and protected recovery run with the failed release hash; never restart an unresolved release as a new upgrade.
+
 ## Home Vault club spinner — 25 October 2026
 - [x] Bound full ICP club reads including routing (12s member/selected, 35s wider admin directory), retain separately subscribed member clubs while admin discovery loads, and disable automatic retry loops. Stalled-read, explicit-retry and non-authorizing tests pass: 72 ICP / 66 Supabase checks, guards and preview build OK. No deployment.
 - [ ] Signed-in Home-to-Vault timing requires Paul's Internet Identity session and the updated frontend.
