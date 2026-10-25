@@ -37,10 +37,8 @@ describe("Vault Add Link / Google Drive import/link/title-resolution behavior co
   it("exchanges a saved OAuth code with the exact redirect URI used today (native vs web origin)", () => {
     expect(clusterSource).toContain("sessionStorage.getItem('googleDriveOAuthCode')");
     expect(clusterSource).toContain("sessionStorage.removeItem('googleDriveOAuthCode')");
-    // This literal (rather than a production domain) is the exact value
-    // currently used for the native redirect URI — preserved verbatim.
-    expect(clusterSource).toContain("'https://reference.invalid'");
-    expect(clusterSource).toMatch(/redirectUri = isNative \? 'https:\/\/reference\.invalid' : `\$\{window\.location\.origin\}\/vault`/);
+    expect(clusterSource).toContain("googleDriveRedirectUri(Capacitor.isNativePlatform(), window.location.origin)");
+    expect(driveHookSource).not.toContain("https://reference.invalid");
     expect(clusterSource).toContain("'google-drive-import?action=exchange-code'");
     expect(clusterSource).toMatch(/body: \{ code: savedCode, redirectUri \}/);
   });

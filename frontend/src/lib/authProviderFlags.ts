@@ -1,10 +1,11 @@
 /**
  * Which third-party sign-in providers the app offers.
  *
- * Google is switched off: the Google provider is not enabled on this project's
- * Supabase instance, so tapping "Continue with Google" ends on Supabase's
- * "Unsupported provider" error page. To offer it again, first enable it in
- * Supabase (Authentication -> Sign In / Providers -> Google), then flip this to
- * true. Nothing else needs to change - every Google button is gated on this flag.
+ * Default off on this project's unconfigured Supabase instance. Production
+ * builds may explicitly enable it after verifying the existing provider and
+ * callbacks; a frontend flag is not evidence that OAuth is configured.
  */
-export const GOOGLE_SIGN_IN_ENABLED = false;
+export function googleSignInEnabled(setting: unknown): boolean {
+  return setting === "true";
+}
+export const GOOGLE_SIGN_IN_ENABLED = googleSignInEnabled(import.meta.env.IGNITE_LIVE_GOOGLE_SIGN_IN_ENABLED);
