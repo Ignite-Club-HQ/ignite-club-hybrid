@@ -195,8 +195,10 @@ describe("EventsPage roster-derived team scope routing", () => {
     const client = renderPage();
     await screen.findByText("Cup presentation");
     expect(screen.queryByText("Private host social")).toBeNull();
-    const query = client.getQueryCache().getAll().find(q => q.queryKey[0] === "events" && q.queryKey[1] === "supabase");
-    expect((query?.state.data as Array<{id:string}>).map(row => row.id)).toEqual(["cup-social"]);
+    await waitFor(() => {
+      const query = client.getQueryCache().getAll().find(q => q.queryKey[0] === "events" && q.queryKey[1] === "supabase" && Array.isArray(q.state.data));
+      expect((query?.state.data as Array<{id:string}> | undefined)?.map(row => row.id)).toEqual(["cup-social"]);
+    });
   });
   it('starts the event query without resolving teams whose grants already identify their club', async () => {
     eventsRoutedToIcp = true;
