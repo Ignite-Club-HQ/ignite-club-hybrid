@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { FeatureBackendContext } from './featureRouter';
 import { GROUP_DOMAINS } from './groupRouting';
-import { openGroupSession, type GroupRegistry, type GroupSessionTransport } from './groupSession';
+import { openGroupSession, READ_RECHECK_WINDOW_MS, type GroupRegistry, type GroupSessionTransport } from './groupSession';
 
 function fixture() {
   const ctx = { identity: { getPrincipal: () => ({ toText: () => 'person' }) }, target: {
@@ -197,20 +197,34 @@ describe('integrated deployment-bound group read session', () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport); const read = vi.fn(async () => ['ok']);
     await expect(s.readClubs(['foreign'], 'events_domain', read)).rejects.toThrow('outside');
     f.transport.readAssignments = async () => { throw new Error('Club membership required'); };
-    // Opening's confirmed checks are reused for RECHECK_WINDOW_MS; after it revocation is caught.
+    // Member reads reuse opening's confirmed checks for READ_RECHECK_WINDOW_MS; after it revocation is caught.
     const base = Date.now();
-    const spy = vi.spyOn(Date, 'now').mockReturnValue(base + 16_000);
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(base + READ_RECHECK_WINDOW_MS + 1_000);
     try {
       await expect(s.readClubs(['club-a'], 'events_domain', read)).rejects.toThrow('membership');
       f.registry.revision = 3n;
-      spy.mockReturnValue(base + 40_000);
+      spy.mockReturnValue(base + 2 * READ_RECHECK_WINDOW_MS + 2_000);
       await expect(s.readClubs(['club-a'], 'events_domain', read)).rejects.toThrow('registry changed');
     } finally { spy.mockRestore(); }
     expect(read).not.toHaveBeenCalled();
   });
+  it('member reads within five minutes skip re-checks; writes after 15 seconds still re-check first', async () => {
+    const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
+    const assignments = f.transport.readAssignments as ReturnType<typeof vi.fn>; const before = assignments.mock.calls.length;
+    const base = Date.now();
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(base + 2 * 60_000);
+    try {
+      await s.readClub('club-a', 'messaging_domain', async () => 1);
+      expect(assignments.mock.calls.length - before).toBe(0);
+      f.transport.readAssignments = async () => { throw new Error('Club membership required'); };
+      const write = vi.fn(async () => 1);
+      await expect(s.writeClub('club-a', 'messaging_domain', 'k1', write)).rejects.toThrow('membership');
+      expect(write).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); }
+  });
   it('shares one assignment check across concurrent reads of the same club', async () => {
     const f = fixture(); const s = await openGroupSession(f.ctx, f.transport);
-    const spy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 16_000);
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + READ_RECHECK_WINDOW_MS + 1_000);
     const spyFn = f.transport.readAssignments as ReturnType<typeof vi.fn>; const before = spyFn.mock.calls.length;
     try { await Promise.all([1, 2, 3].map(() => s.readClub('club-a', 'club_domain', async () => 1))); } finally { spy.mockRestore(); }
     expect(spyFn.mock.calls.length - before).toBe(1);

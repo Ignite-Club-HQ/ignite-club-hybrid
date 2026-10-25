@@ -42,6 +42,11 @@ const MAX_PAGES = 500;
 
 /** How long one confirmed registry/assignment check is reused. */
 export const RECHECK_WINDOW_MS = 15_000;
+/** Ordinary member reads reuse a confirmed registry/assignment check for longer:
+ * each re-check is several consensus calls in series before the page's own read,
+ * and every destination canister still enforces access on each call. Writes,
+ * hosted lookups and creation keep the strict window above. */
+export const READ_RECHECK_WINDOW_MS = 5 * 60_000;
 export async function openGroupSession(context: FeatureBackendContext, transport: GroupSessionTransport) {
   const principal = context.identity.getPrincipal().toText();
   if (!principal || principal === '2vxsx-fae') throw new Error('Authenticated group session required');
@@ -177,9 +182,9 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   // The registry was just read while opening: seed the window.
   let registryCheckedAt = openedAt; let registryCheck: Promise<void> | null = null;
   // strict: writes and hosted lookups never rely on the open-time read alone.
-  const assertRegistryUnchanged = async (fresh = false, strict = false) => {
+  const assertRegistryUnchanged = async (fresh = false, strict = false, windowMs = RECHECK_WINDOW_MS) => {
     live();
-    if (!fresh && !(strict && registryCheckedAt === openedAt) && Date.now() - registryCheckedAt < RECHECK_WINDOW_MS) return;
+    if (!fresh && !(strict && registryCheckedAt === openedAt) && Date.now() - registryCheckedAt < windowMs) return;
     if (!fresh && registryCheck) return registryCheck;
     const run = (async () => {
       const current = await transport.readRegistry();
@@ -215,14 +220,14 @@ export async function openGroupSession(context: FeatureBackendContext, transport
   // Opening validated every discovered club; seed their check time.
   const assignmentCheckedAt = new Map<string, number>([...clubs].map(id => [id, openedAt]));
   const assignmentInflight = new Map<string, Promise<void>>();
-  const checkStale = async (requested: readonly string[], fresh: boolean, strict = false) => {
-    await assertRegistryUnchanged(fresh, strict);
+  const checkStale = async (requested: readonly string[], fresh: boolean, strict = false, windowMs = RECHECK_WINDOW_MS) => {
+    await assertRegistryUnchanged(fresh, strict, windowMs);
     const now = Date.now();
     const checkedAt = (id: string) => { const t = assignmentCheckedAt.get(id) ?? 0; return strict && t === openedAt ? 0 : t; };
     const unique = [...new Set(requested)];
     // Concurrent asks for the same club share one in-flight check.
     const waiting = fresh ? [] : unique.map(id => assignmentInflight.get(id)).filter((p): p is Promise<void> => !!p);
-    const stale = unique.filter(id => (fresh || now - checkedAt(id) >= RECHECK_WINDOW_MS) && (fresh || !assignmentInflight.has(id)));
+    const stale = unique.filter(id => (fresh || now - checkedAt(id) >= windowMs) && (fresh || !assignmentInflight.has(id)));
     if (stale.length) {
       const run = validateAssignments(stale).then(() => { for (const id of stale) assignmentCheckedAt.set(id, Date.now()); });
       for (const id of stale) assignmentInflight.set(id, run);
@@ -230,11 +235,19 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     }
     await Promise.all(waiting);
   };
-  const revalidate = async (requested: readonly string[], fresh = false, strict = false) => {
+  const revalidate = async (requested: readonly string[], fresh = false, strict = false, windowMs = RECHECK_WINDOW_MS) => {
     live();
     if (requested.length > MAX_CLUBS || requested.some(id => !clubs.has(id))) throw new Error('Club outside discovered membership');
-    await checkStale(requested, fresh, strict);
+    await checkStale(requested, fresh, strict, windowMs);
     live();
+  };
+  /** Member reads: gated on a confirmed check within the read window. Once that
+   * check is half-way stale, refresh it in the background so a later page
+   * open does not pay the consensus round trips in front of its own read.
+   * Background failure changes nothing: the next read re-checks in front. */
+  const revalidateForRead = async (requested: readonly string[]) => {
+    await revalidate(requested, false, false, READ_RECHECK_WINDOW_MS);
+    if (!disposed) void checkStale(requested, false, false, READ_RECHECK_WINDOW_MS / 2).catch(() => undefined);
   };
   const inflight = new Map<string, Promise<unknown>>();
   const api = {
@@ -244,7 +257,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     /** Ordinary member-content reads never query groups with no member clubs. */
     async readMemberGroups<T>(domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows = 1000): Promise<T[]> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
-      await revalidate([...clubs]);
+      await revalidateForRead([...clubs]);
       const memberGroups = new Set([...clubs].map(id => routing.assignments.get(id)?.groupId));
       const reads = registry.groups.filter(g => memberGroups.has(g.id)).map(g => read(targetFor(g.id)));
       if (legacyClubs.size) reads.push(read(context));
@@ -262,7 +275,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     deletionRegistryRevision: registry.revision,
     async readClub<T>(clubId: string, domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
-      await revalidate([clubId]);
+      await revalidateForRead([clubId]);
       const route = resolveDeploymentClubDomain(table, registry.deployment, clubId, domain);
       groupRouteScope(route, principal);
       const result = await read(targetFor(route.groupId)); live(); return result;
@@ -340,7 +353,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     async readEveryGroup<T>(domain: GroupDomain, read: (ctx: FeatureBackendContext) => Promise<readonly T[]>, maxRows = 1000): Promise<T[]> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
       live();
-      await assertRegistryUnchanged();
+      await assertRegistryUnchanged(false, false, READ_RECHECK_WINDOW_MS);
       const parts = await Promise.all(registry.groups.map(g => read(targetFor(g.id))));
       // Fresh: a registry change while replies were in flight must discard them.
       // Sibling reads that finished before one fresh check started share it.
@@ -352,7 +365,7 @@ export async function openGroupSession(context: FeatureBackendContext, transport
     async readClubs<T>(requested: readonly string[], domain: GroupDomain,
       read: (ctx: FeatureBackendContext, clubIds: readonly string[]) => Promise<readonly T[]>): Promise<T[]> {
       if (!GROUP_DOMAINS.includes(domain)) throw new Error('Unknown group domain');
-      await revalidate(requested);
+      await revalidateForRead(requested);
       const batches = new Map<string, { ids: string[]; indices: number[] }>();
       requested.forEach((id, index) => {
         const route = resolveDeploymentClubDomain(table, registry.deployment, id, domain);
