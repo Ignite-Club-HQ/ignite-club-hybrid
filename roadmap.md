@@ -1,3 +1,7 @@
+## Club Vault opening delay — 25 October 2026
+- [x] Selected ICP Vaults read caller roles in their owning club, use exact positive selected-club allowance without waiting for global subscription discovery, reuse its fresh account/provider-scoped allowance on entering and avoid duplicate club reads when admin lookup settles. Failed/unrelated/pending role checks remain non-authorizing. Focused regressions run in both modes; no deployment.
+- [ ] Live signed-in opening timing requires Paul's Internet Identity session and updated frontend.
+
 ## Event Captain spinner — 25 October 2026
 - [x] Repair known-club routing, independent ICP name hydration, bounded reads and retryable assignment failures; focused Captain/read regressions cover picker opening, name hydration, stalled fallback recovery and refusing replacement after failed reads. No canister changes or deployment.
 - [ ] Live signed-in Captain acceptance requires Paul's Internet Identity session and the updated frontend; no deployment requested.

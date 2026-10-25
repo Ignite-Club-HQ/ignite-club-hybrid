@@ -47,6 +47,7 @@ export async function fetchVaultAppAdmin(
 export async function fetchVaultUserRoles(
   userId: string,
   client: IgniteSupabaseClient = supabase,
+  selectedClubId?: string | null,
 ): Promise<VaultRoleRecord[]> {
   return withFeatureBackend("vault", {
     supabase: async () => {
@@ -62,13 +63,13 @@ export async function fetchVaultUserRoles(
       // rows keyed by the II principal.
       const { getLiveMyRoleGrants } = await import("@/live/features/membership");
       const grants = await getLiveMyRoleGrants(ctx);
-      return grants.map((grant) => ({
+      return grants.filter((grant) => !selectedClubId || grant.club[0] === selectedClubId).map((grant) => ({
         role: grant.role,
         club_id: grant.club[0] ?? null,
         team_id: grant.team[0] ?? null,
       }));
     },
-  }, { shared: "person" });
+  }, selectedClubId ? { clubId: selectedClubId } : { shared: "person" });
 }
 
 /** One group stuck (e.g. a service out of fuel) must not hold back the rest. */
