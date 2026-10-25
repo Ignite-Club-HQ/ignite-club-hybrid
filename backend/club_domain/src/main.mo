@@ -4220,7 +4220,7 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) }
   };
 
-  public shared ({ caller }) func read_family_invite_receipt(id : Text) : async { #Ok : { child_ids : [Text]; accepted_by : Principal; accepted_at_ms : Nat64; team_id : ?Text; club_id : Text }; #Err : Text } {
+  public shared ({ caller }) func read_family_invite_receipt(id : Text) : async { #Ok : { child_ids : [Text]; accepted_by : Principal; accepted_at_ms : Nat64; team_id : ?Text; club_id : Text; already_accepted : Bool }; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced");
     try {
       await admitAccount(caller); auth(caller);
@@ -4230,7 +4230,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let family = familyInvites.find(func f = f.primary == id or f.secondary == ?id);
       let ids = switch (family) { case (?f) f.children; case null switch (invite.child_id) { case (?cid) [cid]; case null [] } };
       if (ids.any(func cid = not parentInviteScopeValid(invite.club_id, invite.team_id, cid) or not acl.guardians.any(func g = g.child == cid and g.user == caller))) return #Err("Family access changed");
-      #Ok({ child_ids = ids; accepted_by = caller; accepted_at_ms = invite.accepted_at_ms ?? 0; team_id = invite.team_id; club_id = invite.club_id })
+      #Ok({ child_ids = ids; accepted_by = caller; accepted_at_ms = invite.accepted_at_ms ?? 0; team_id = invite.team_id; club_id = invite.club_id; already_accepted = true })
     } finally { removalReceiver.leave(caller) }
   };
 

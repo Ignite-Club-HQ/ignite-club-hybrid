@@ -75,7 +75,7 @@ export async function acceptParentTeamInvite(params: {
   const pendingId = params.inviteId ?? (params.inviteToken?.startsWith("pinv-") ? params.inviteToken : null);
   if (resolveAuthBackend() === "icp" && pendingId) {
     const receipt = await acceptIcpInviteAndWelcome(pendingId);
-    return { childIds: receipt.child_ids, teamId: receipt.team_id[0] ?? null, clubId: receipt.club_id, alreadyAccepted: false };
+    return { childIds: receipt.child_ids, teamId: receipt.team_id[0] ?? null, clubId: receipt.club_id, alreadyAccepted: receipt.already_accepted };
   }
   // ICP branch: the club_domain canister mints token-based parent invites;
   // acceptance atomically links the guardian after the canister verifies

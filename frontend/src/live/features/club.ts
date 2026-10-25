@@ -694,6 +694,7 @@ export async function createLiveFamilyInvite(ctx: FeatureBackendContext, input: 
   // could not be saved. Stable IDs let the same operation retry without duplicates.
   for (const child of input.children) {
     if (!child.existing) {
+      if (!child.name.trim()) throw new Error("Child name required");
       await registerLivePii(ctx, child.id, "name", new TextEncoder().encode(child.name), ctx.identity.getPrincipal());
       await grantLivePiiReadClub(ctx, child.id, "name", input.clubId);
     }
