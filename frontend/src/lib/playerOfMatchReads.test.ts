@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const m = vi.hoisted(() => ({ rewards: vi.fn(), roles: vi.fn(), from: vi.fn(), scope: vi.fn() }));
+const m = vi.hoisted(() => ({ rewards: vi.fn(), roles: vi.fn(), profiles: vi.fn(), from: vi.fn(), scope: vi.fn() }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { from: m.from } }));
 vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: (_: string, h: { icp: (ctx: object) => unknown }, scope: object) => { m.scope(scope); return h.icp({}); } }));
 vi.mock('@/live/features/points', () => ({ listLiveClubRewards: m.rewards }));
 vi.mock('@/live/features/membership', () => ({ listLiveRoleGrants: m.roles }));
-import { readPlayerOfMatchAdults, readPlayerOfMatchRewards } from './playerOfMatchReads';
+vi.mock('@/live/features/identityAccessClient', () => ({ listLiveProfilesByIds: m.profiles }));
+import { readPlayerOfMatchAdults, readPlayerOfMatchRewards, readProfileSummaries } from './playerOfMatchReads';
 const reward = (id: string, team: string[], extra = {}) => ({ id, club_id: 'club', team_id: team, is_active: true, reward_type: 'player_of_match', created_at_ms: 1n, description: [], logo_url: [], qr_code_url: [], sponsor_id: [], ...extra });
 describe('ICP match rewards and player eligibility', () => {
   beforeEach(() => vi.clearAllMocks());
