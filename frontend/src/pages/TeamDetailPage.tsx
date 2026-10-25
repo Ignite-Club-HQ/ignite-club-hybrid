@@ -135,6 +135,15 @@ type TeamRole = TeamJoinRole;
 const SOCCER_SPORTS = ["soccer", "football", "futsal"];
 const normalizeDutyName = (name: string | null | undefined) => name?.trim().toLowerCase() ?? "";
 
+
+/** Bound a live read so a stalled canister call becomes a retryable error, not an endless spinner. */
+function withRosterDeadline<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`The ${label} took too long to load. Please try again.`)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
 export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, profile: myProfile } = useAuth();
@@ -681,7 +690,7 @@ export default function TeamDetailPage() {
     queryFn: async () => {
       if (isIcpAccount) {
         if (!id) return [];
-        const roster = await readIcpPitchRoster(id);
+        const roster = await withRosterDeadline(readIcpPitchRoster(id), 15_000, "team player list");
         return roster.children.map(child => ({ id: child.child_id, child_id: child.child_id, children: { id: child.child_id, name: child.child_name, year_of_birth: null, parent_id: null, profiles: null, allParentNames: [] } }));
       }
       const { data: rpcChildren, error: rpcError } = await supabase.rpc("get_team_children_for_pitch_board", {
@@ -773,7 +782,7 @@ export default function TeamDetailPage() {
           icp: async (ctx) => {
             let grants: Array<{ account_id: string; role: string }>;
             try {
-              grants = (await listLiveTeamRoleGrants(ctx, id ?? "")).map(g => ({ account_id: g.account_id.replace(/^principal:/, ""), role: g.role }));
+              grants = (await withRosterDeadline(listLiveTeamRoleGrants(ctx, id ?? ""), 15_000, "team member list")).map(g => ({ account_id: g.account_id.replace(/^principal:/, ""), role: g.role }));
             } catch {
               // Pre-deploy canisters lack list_team_role_grants; fall back to
               // the caller's own grants so they at least see themselves.
@@ -783,13 +792,13 @@ export default function TeamDetailPage() {
             }
             const accountIds = [...new Set(grants.map((g) => g.account_id))];
             const profiles = accountIds.length > 0
-              ? await listLiveProfilesByIds(ctx, accountIds).catch(() => [])
+              ? await withRosterDeadline(listLiveProfilesByIds(ctx, accountIds), 8_000, "member names").catch(() => [])
               : [];
             const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
             // The signed-in member's own name is always known locally — use it
             // when identity_access has no (named) profile row for their id.
             const selfIds = new Set<string>([user?.id, user?.id ? `principal:${user.id}` : null, (myProfile as any)?.id].filter(Boolean) as string[]);
-            if (user?.id) { const a = await accountIdForPrincipal(user.id); if (a) selfIds.add(a); }
+            if (user?.id) { const a = await withRosterDeadline(accountIdForPrincipal(user.id), 4_000, "account").catch(() => null); if (a) selfIds.add(a); }
             return grants.map((g) => {
               let p: any = profileMap.get(g.account_id);
               if ((!p || !p.display_name) && selfIds.has(g.account_id) && myProfile?.display_name) {
