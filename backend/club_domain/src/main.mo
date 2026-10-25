@@ -1919,6 +1919,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not canManageTeam(caller, invite.club_id, invite.team_id)) return #Err("Team or club admin required");
         if (not canManageTeam(caller, invite.club_id, team_id)) return #Err("Team or club admin required");
         if (invite.status == "accepted" or invite.status == "revoked") return #Err("Invite no longer pending");
+        if (familyInvites.any(func f = f.primary == id or f.secondary == ?id)) return #Err("Family invite scope is immutable; revoke and reissue");
         let updated : Types.PendingInvite = { invite with team_id };
         pendingInvites := pendingInvites.map(func(i) = if (i.id == id) updated else i);
         #Ok(updated)
@@ -5929,6 +5930,7 @@ persistent actor class Main(governorInit : Principal) = this {
     teamInvites := teamInvites.filter(func(i) = i.team_id != teamId);
     teamInviteLinks := teamInviteLinks.filter(func(l) = l.team_id != teamId);
     pendingInvites := pendingInvites.filter(func(i) = i.team_id != ?teamId);
+    familyInvites := familyInvites.filter(func f = pendingInvites.any(func i = i.id == f.primary));
     teamPlayerPositions := teamPlayerPositions.filter(func(p) = p.team_id != teamId);
     teamCaptains := teamCaptains.filter(func(c) = c.team_id != teamId);
     teamSponsorAllocations := teamSponsorAllocations.filter(func(a) = a.team_id != teamId);
@@ -5974,6 +5976,7 @@ persistent actor class Main(governorInit : Principal) = this {
     teamInvites := teamInvites.filter(func(i) = i.club_id != id);
     teamInviteLinks := teamInviteLinks.filter(func(l) = l.club_id != id);
     pendingInvites := pendingInvites.filter(func(i) = i.club_id != id);
+    familyInvites := familyInvites.filter(func f = pendingInvites.any(func i = i.id == f.primary));
     teamCreationRequests := teamCreationRequests.filter(func(r) = r.club_id != id);
     teamPlayerPositions := teamPlayerPositions.filter(func(p) = not isClubTeam(p.team_id));
     teamCaptains := teamCaptains.filter(func(c) = not isClubTeam(c.team_id));
