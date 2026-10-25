@@ -196,11 +196,12 @@ export function useVaultAccessModel({
     : undefined;
   // Only the exact selected ICP read carries authoritative media allowance.
   // Directory flags from the other paths are labels, not access evidence.
-  const selectedClubsUpdatedAt = queryClient.getQueryState([
+  const selectedClubsState = queryClient.getQueryState([
     ...vaultKeys.clubsForUser(userId, false), activeClubFilter ?? null, isIcpVault,
-  ])?.dataUpdatedAt ?? 0;
+  ]);
+  const selectedClubsUpdatedAt = selectedClubsState?.dataUpdatedAt ?? 0;
   const reusableSelectedClub = selectedClub && selectedClub.id === contextClubId &&
-    Date.now() - selectedClubsUpdatedAt < 30_000 ? selectedClub : undefined;
+    !selectedClubsState?.isInvalidated && Date.now() - selectedClubsUpdatedAt < 30_000 ? selectedClub : undefined;
 
   // Check if the current club has Pro
   const { data: currentClubHasPro, isLoading: isLoadingClubHasPro, error: clubProError, refetch: retryClubPro } = useQuery({
