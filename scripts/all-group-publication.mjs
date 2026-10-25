@@ -15,7 +15,7 @@ export function publishVerifiedFiles(api, { branch, release, journal, files }) {
   }
   if(head!==release)throw Error('Source branch advanced; no overwrite/rebase permitted');
   const original=api(`git/commits/${release}`);
-  if(!files.length || files.some(f=> !/^deploy\/groups\/g[1-9][0-9]*\/general-opening\.json$/.test(f.path) && f.path!=='frontend/src/live/generated/routingGates.ts') || new Set(files.map(f=>f.path)).size!==files.length)throw Error('Publication paths not allowlisted');
+  if(!files.length || files.some(f=> !/^deploy\/groups\/g[1-9][0-9]*\/general-opening\.json$/.test(f.path) && !['frontend/src/live/generated/routingGates.ts','deploy/mainnet/backend-release.json'].includes(f.path)) || new Set(files.map(f=>f.path)).size!==files.length)throw Error('Publication paths not allowlisted');
   const tree=api('git/trees','POST',{base_tree:original.tree.sha,tree:files.map(f=>({path:f.path,mode:'100644',type:'blob',content:f.content}))});
   const commit=api('git/commits','POST',{message:'chore: verified all-group backend upgrade snapshot [skip ci]',tree:tree.sha,parents:[release]});
   if(!/^[a-f0-9]{40}$/.test(tree.sha ?? '') || !/^[a-f0-9]{40}$/.test(commit.sha ?? ''))throw Error('Publication object acknowledgement invalid');

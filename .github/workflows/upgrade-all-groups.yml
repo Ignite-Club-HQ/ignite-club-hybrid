@@ -3,19 +3,19 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Check first; upgrade uses the exact plan hash from its report
+        description: Upgrade runs its own complete preflight; check is read-only
         type: choice
         required: true
-        default: check
+        default: upgrade
         options: [check, upgrade]
       scope:
-        description: Reviewed services across EVERY registered group; shared identity once
+        description: full_backend upgrades every existing backend canister in every registered group, including shared infrastructure once
         type: choice
         required: true
-        default: app_admin
-        options: [app_admin, team_invites, messaging, competition, history, subscriptions, events_pitch, gallery_vault]
+        default: full_backend
+        options: [full_backend, app_admin, team_invites, messaging, competition, history, subscriptions, events_pitch, gallery_vault]
       checked_plan:
-        description: Paste planHash from check.json; use the SAME branch and source revision
+        description: Optional for full_backend (preflight is automatic); required for narrow scopes
         required: false
         default: ''
       confirmation:
@@ -47,7 +47,14 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - name: Validate reviewed scope and exact confirmation
-        run: node --input-type=module -e 'import {validateRequest} from "./scripts/all-group-upgrade-policy.mjs";validateRequest(process.env.ACTION,process.env.SCOPE,process.env.CONFIRMATION,process.env.CHECKED_PLAN)'
+        run: |
+          node --input-type=module <<'JS'
+          import {validateRequest} from './scripts/all-group-upgrade-policy.mjs';
+          if(process.env.ACTION==='upgrade'&&process.env.SCOPE==='full_backend'&&!process.env.CHECKED_PLAN){
+            if(process.env.CONFIRMATION?.trim()!=='UPGRADE ALL MAINNET GROUPS')throw Error('Type UPGRADE ALL MAINNET GROUPS');
+            validateRequest('check',process.env.SCOPE);
+          }else validateRequest(process.env.ACTION,process.env.SCOPE,process.env.CONFIRMATION,process.env.CHECKED_PLAN);
+          JS
       - name: Install pinned tools and existing dependencies
         run: |
           npm install -g @icp-sdk/icp-cli@1.7.0 @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
@@ -85,6 +92,17 @@ jobs:
           if(result.status!==0)process.exit(1);
           const dest=process.env.RUNNER_TEMP+'/all-group-wasm';mkdirSync(dest,{recursive:true});
           for(const name of names)copyFileSync('deploy/mainnet/.icp/cache/artifacts/'+name,dest+'/'+name);
+          JS
+      - name: Automatically check the complete release on this exact source revision
+        if: inputs.action == 'upgrade' && inputs.scope == 'full_backend' && inputs.checked_plan == ''
+        working-directory: frontend
+        run: |
+          npx --yes tsx@4 scripts/upgrade-all-groups.ts check "$SCOPE" "$RUNNER_TEMP/all-group-wasm" "$RUNNER_TEMP/all-group.pem" "$RUNNER_TEMP/all-group-report"
+          node --input-type=module <<'JS'
+          import {readFileSync,appendFileSync} from 'node:fs';
+          const {planHash}=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/all-group-report/check.json','utf8'));
+          if(!/^[a-f0-9]{64}$/.test(planHash))throw Error('Complete checked plan missing');
+          appendFileSync(process.env.GITHUB_ENV,'CHECKED_PLAN='+planHash+'\n');
           JS
       - name: Check or upgrade the complete existing mainnet inventory
         working-directory: frontend

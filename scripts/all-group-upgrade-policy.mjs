@@ -3,7 +3,9 @@ import { GROUP_BUILD_SERVICES } from './stage-group-wasm.mjs';
 import { validateGroup2Inventory, upgradeArgs, GROUP2_GOVERNOR } from './group2-upgrade-rules.mjs';
 export { digest, executeUpgrades };
 export const PRIMARY_SUBNET = 'e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe';
+export const SHARED_SERVICES = Object.freeze(['shard_router', 'identity_access', 'placement_registry', 'migration_coordinator', 'secret_workload_identity']);
 export const SCOPES = Object.freeze({
+  full_backend: [...SHARED_SERVICES.filter(name=>name!=='shard_router'), ...GROUP_BUILD_SERVICES, 'shard_router'],
   app_admin: ['identity_access', 'notification_queue'],
   team_invites: ['club_domain', 'mini_league_domain'],
   messaging: ['messaging_domain'],
@@ -33,6 +35,7 @@ export function planInventory(shared, provisions, registry, scope, hashes) {
   const all = [{ id: 'g1', services: GROUP_BUILD_SERVICES.map(name => ({ name, canisterId: shared[name], subnetId: PRIMARY_SUBNET })) },
     ...provisions.map(p => ({ id: p.groupId, services: validateGroup2Inventory(p, shared, p.groupId) }))].sort((a,b) => a.id.localeCompare(b.id, 'en', { numeric: true }));
   const seen = new Set(Object.values(shared));
+  if (scope === 'full_backend' && (Object.keys(shared).length !== SCOPES.full_backend.length || Object.keys(shared).some(name => !SCOPES.full_backend.includes(name)))) throw Error('Unreviewed shared canister inventory; update the complete release policy before upgrading');
   if (seen.size !== Object.keys(shared).length || Object.values(shared).some(id => !validId(id))) throw Error('Invalid or colliding shared mappings');
   for (const g of all) {
     if (g.id !== 'g1') for (const s of g.services) { if (!validId(s.canisterId) || seen.has(s.canisterId)) throw Error('Cross-group canister collision'); seen.add(s.canisterId); }
@@ -50,14 +53,14 @@ export function planInventory(shared, provisions, registry, scope, hashes) {
     }
     if (text(live.photo_store[0]) !== g.services.find(s=>s.name==='media_blob_store')?.canisterId) throw Error('Photo store differs');
   }
-  const targets = names.flatMap(name => name === 'identity_access' ? [{groupId:'shared',name,canisterId:shared.identity_access,subnetId:PRIMARY_SUBNET,newHash:hashes[name]}] : all.map(g => ({ groupId:g.id, ...g.services.find(s=>s.name===name), newHash:hashes[name] })));
+  const targets = names.flatMap(name => SHARED_SERVICES.includes(name) ? [{groupId:'shared',name,canisterId:shared[name],subnetId:PRIMARY_SUBNET,newHash:hashes[name]}] : all.map(g => ({ groupId:g.id, ...g.services.find(s=>s.name===name), newHash:hashes[name] })));
   if (targets.some(t=>!t.name || !validId(t.canisterId) || !/^[a-f0-9]{64}$/.test(t.newHash ?? '')) || new Set(targets.map(t=>t.canisterId)).size!==targets.length) throw Error('Incomplete upgrade artifacts/targets');
   return { groups: all, targets, pii: Object.fromEntries(all.map(g=>[g.id,g.services.find(s=>s.name==='pii_access_control').canisterId])) };
 }
 export function installArgs(target, path) {
-  if (!GROUP_BUILD_SERVICES.includes(target.name) && target.name !== 'identity_access') throw Error('Unreviewed install runtime');
+  if (!GROUP_BUILD_SERVICES.includes(target.name) && !SHARED_SERVICES.includes(target.name)) throw Error('Unreviewed install runtime');
   const args = upgradeArgs(target, path, GROUP2_GOVERNOR);
-  if (target.name === 'identity_access') {
+  if (['identity_access', 'shard_router', 'placement_registry'].includes(target.name)) {
     args.splice(args.indexOf('--wasm-memory-persistence'), 2);
     args[args.indexOf('--args')+1] = `(record { governor = principal "${GROUP2_GOVERNOR}" })`;
   }

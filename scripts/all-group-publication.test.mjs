@@ -23,3 +23,10 @@ test('unverified release and unrelated file paths cannot publish',()=>{
 test('publication content and exact commit readback must agree',()=>{
   const f=fixture(),journal=verified();journal.publication=publishVerifiedFiles(f.api,{branch,release,journal,files});assert.throws(()=>publishVerifiedFiles(f.api,{branch,release,journal,files:[{...files[0],content:'changed'}]}));assert.throws(()=>requirePublicationReadback(f.api,branch,journal.publication));
 });
+test('complete backend manifest is the only additional allowed publication path',()=>{
+  const f=fixture(),manifest=[{path:'deploy/mainnet/backend-release.json',content:'verified'}];
+  const journal={complete:true,snapshotVerified:true,snapshotFiles:manifest,snapshotFilesHash:digest(manifest)};
+  assert.ok(publishVerifiedFiles(f.api,{branch,release,journal,files:manifest}));
+  const other=[{path:'deploy/mainnet/other.json',content:'verified'}];
+  assert.throws(()=>publishVerifiedFiles(f.api,{branch,release,journal:{...journal,snapshotFiles:other,snapshotFilesHash:digest(other)},files:other}),/allowlisted/);
+});
