@@ -17,7 +17,7 @@
       "name": "club_domain",
       "canisterId": "yfwyv-nyaaa-aaaal-qxpyq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "d952483d1d4d7eb077a426339741d13c1ce1f67d1b08c44540dfa24355e60eba"
+      "moduleHash": "670375813d5e68e1e0a5d2e1540eda665dd38a4f26bd30df3ae95dc694c214f7"
     },
     {
       "name": "events_domain",
@@ -29,19 +29,19 @@
       "name": "messaging_domain",
       "canisterId": "yluv5-wiaaa-aaaal-qxpzq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "1ab593e70440020c38eaaa09f5319f87879c0318cebb7978f8485f87eb1c3c67"
+      "moduleHash": "b7124f81275a3a5fe5d9131d4081a2b2c8210cbefeefaeb51f438cf4876053e7"
     },
     {
       "name": "vault_domain",
       "canisterId": "y6teq-xaaaa-aaaal-qxp2a-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "386fe10c763e54ec8758683efb0265bbe437a0a62bc4dc1b8a9c99570f1fae89"
+      "moduleHash": "8e53acb5bbbe68daa438c94aacff16821c026f7e14b7b5b946607c3d63a7bfee"
     },
     {
       "name": "competition_domain",
       "canisterId": "yzsce-2yaaa-aaaal-qxp2q-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "966c6220255dff066bdc57b8d7df0ae32808faeffc0bfd320c8a9c190740559b"
+      "moduleHash": "1f816f7d1e5887ea61e272f71c74af6c0d767a7557af434768deedc85e240ada"
     },
     {
       "name": "club_points_domain",
@@ -53,13 +53,13 @@
       "name": "mini_league_domain",
       "canisterId": "yxqpm-biaaa-aaaal-qxp3q-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "f57decd4b000ed493ee702f8995f136c252f4c48e2a27ba53e52df96e58e017f"
+      "moduleHash": "c2cb3242389d8142bbeae35709c52187dc78967fad992f3f582bcb3f87b87a0b"
     },
     {
       "name": "media_metadata",
       "canisterId": "z26lc-oaaaa-aaaal-qxp4a-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "6f75f31a1daa9479f1cde860413a86f03f5ec196fbcff02f7686dfe4f89aab3a"
+      "moduleHash": "51d2750174b52069161d23ab7c1f5cc286643d85a4a0913fe5a79d097b9ca9d2"
     },
     {
       "name": "insights_domain",
@@ -71,7 +71,7 @@
       "name": "notification_queue",
       "canisterId": "zu4gk-vqaaa-aaaal-qxp5a-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "659304d52e828b34806d8decff878d4115725a99ba8e14ccdd642c346534dadc"
+      "moduleHash": "100b0197578278a06008394961362abcc805afad998cf6a562a647e17dd49d95"
     },
     {
       "name": "pii_access_control",
@@ -89,7 +89,7 @@
       "name": "media_blob_store",
       "canisterId": "ycx6b-aaaaa-aaaal-qxpya-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "12b5ff8f7f557b79ac1d1c0333b4026e63f49adfbb4ad8264e6158c6a29561b9"
+      "moduleHash": "8fe9fc10f1f58a9d6da4a08434c5f864292663a2e229c6a31e45d870c6365455"
     }
   ]
 }

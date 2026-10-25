@@ -1,0 +1,228 @@
+{
+  "sourceRevision": "1d685e5ae0de89a98a6a4b2af1a1bd586de43ee0",
+  "planHash": "c5dcb9a0bb1fd7d32fa6a52c29e469c2418e949c3ca1194f57d036ca1dfce33e",
+  "groups": [
+    "g1",
+    "g2"
+  ],
+  "targets": [
+    {
+      "groupId": "shared",
+      "name": "identity_access",
+      "canisterId": "mq2sj-fiaaa-aaaal-qxlqa-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "a07bf5810d50da87a884b2ff3df4abda8dd4a51a01174fb24d633ded453b8e38"
+    },
+    {
+      "groupId": "shared",
+      "name": "placement_registry",
+      "canisterId": "ml7om-7qaaa-aaaal-qxlsq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "c1028e86e719e591359700b61eebe9af437dc99b77e0c863c253a868637b7d7c"
+    },
+    {
+      "groupId": "shared",
+      "name": "migration_coordinator",
+      "canisterId": "jmbim-oaaaa-aaaal-qxlpq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "74e6510ef0f2758775f0e0b4133abb50cc38df7707ec0579fe92dafdd3e94c29"
+    },
+    {
+      "groupId": "shared",
+      "name": "secret_workload_identity",
+      "canisterId": "mm6iy-siaaa-aaaal-qxlsa-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "4a16ba01d5a179699136d3fb8e3a65f5389d1b6755fb54237a9a1ac892cf15ce"
+    },
+    {
+      "groupId": "g1",
+      "name": "club_domain",
+      "canisterId": "mzzzv-taaaa-aaaal-qxlrq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "670375813d5e68e1e0a5d2e1540eda665dd38a4f26bd30df3ae95dc694c214f7"
+    },
+    {
+      "groupId": "g2",
+      "name": "club_domain",
+      "canisterId": "yfwyv-nyaaa-aaaal-qxpyq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "670375813d5e68e1e0a5d2e1540eda665dd38a4f26bd30df3ae95dc694c214f7"
+    },
+    {
+      "groupId": "g1",
+      "name": "events_domain",
+      "canisterId": "m6y7b-6yaaa-aaaal-qxlra-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "224227082e9d62840d19eb0ad55e8eb82e2c7479618e4ecac299ad9d85bdfd9e"
+    },
+    {
+      "groupId": "g2",
+      "name": "events_domain",
+      "canisterId": "ymvtj-3qaaa-aaaal-qxpza-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "224227082e9d62840d19eb0ad55e8eb82e2c7479618e4ecac299ad9d85bdfd9e"
+    },
+    {
+      "groupId": "g1",
+      "name": "messaging_domain",
+      "canisterId": "mx3u5-iqaaa-aaaal-qxlqq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "b7124f81275a3a5fe5d9131d4081a2b2c8210cbefeefaeb51f438cf4876053e7"
+    },
+    {
+      "groupId": "g2",
+      "name": "messaging_domain",
+      "canisterId": "yluv5-wiaaa-aaaal-qxpzq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "b7124f81275a3a5fe5d9131d4081a2b2c8210cbefeefaeb51f438cf4876053e7"
+    },
+    {
+      "groupId": "g1",
+      "name": "vault_domain",
+      "canisterId": "jxeuj-uyaaa-aaaal-qxlna-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "8e53acb5bbbe68daa438c94aacff16821c026f7e14b7b5b946607c3d63a7bfee"
+    },
+    {
+      "groupId": "g2",
+      "name": "vault_domain",
+      "canisterId": "y6teq-xaaaa-aaaal-qxp2a-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "8e53acb5bbbe68daa438c94aacff16821c026f7e14b7b5b946607c3d63a7bfee"
+    },
+    {
+      "groupId": "g1",
+      "name": "competition_domain",
+      "canisterId": "jqfs5-zaaaa-aaaal-qxlnq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "1f816f7d1e5887ea61e272f71c74af6c0d767a7557af434768deedc85e240ada"
+    },
+    {
+      "groupId": "g2",
+      "name": "competition_domain",
+      "canisterId": "yzsce-2yaaa-aaaal-qxp2q-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "1f816f7d1e5887ea61e272f71c74af6c0d767a7557af434768deedc85e240ada"
+    },
+    {
+      "groupId": "g1",
+      "name": "club_points_domain",
+      "canisterId": "itj33-nyaaa-aaaal-qxlla-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "c743d1a8eb0bffb9fc95b5abaf62c4eef0d58b8ec717769b5936df5a249a68e1"
+    },
+    {
+      "groupId": "g2",
+      "name": "club_points_domain",
+      "canisterId": "yqrjy-mqaaa-aaaal-qxp3a-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "c743d1a8eb0bffb9fc95b5abaf62c4eef0d58b8ec717769b5936df5a249a68e1"
+    },
+    {
+      "groupId": "g1",
+      "name": "mini_league_domain",
+      "canisterId": "jzgzb-piaaa-aaaal-qxlma-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "c2cb3242389d8142bbeae35709c52187dc78967fad992f3f582bcb3f87b87a0b"
+    },
+    {
+      "groupId": "g2",
+      "name": "mini_league_domain",
+      "canisterId": "yxqpm-biaaa-aaaal-qxp3q-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "c2cb3242389d8142bbeae35709c52187dc78967fad992f3f582bcb3f87b87a0b"
+    },
+    {
+      "groupId": "g1",
+      "name": "media_metadata",
+      "canisterId": "mc4fq-jyaaa-aaaal-qxlta-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "51d2750174b52069161d23ab7c1f5cc286643d85a4a0913fe5a79d097b9ca9d2"
+    },
+    {
+      "groupId": "g2",
+      "name": "media_metadata",
+      "canisterId": "z26lc-oaaaa-aaaal-qxp4a-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "51d2750174b52069161d23ab7c1f5cc286643d85a4a0913fe5a79d097b9ca9d2"
+    },
+    {
+      "groupId": "g1",
+      "name": "insights_domain",
+      "canisterId": "mf5de-eaaaa-aaaal-qxltq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "643c426eef6ae0bea32abd987b24c62c10ba2850cec968636c495f334987848f"
+    },
+    {
+      "groupId": "g2",
+      "name": "insights_domain",
+      "canisterId": "z57nw-dyaaa-aaaal-qxp4q-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "643c426eef6ae0bea32abd987b24c62c10ba2850cec968636c495f334987848f"
+    },
+    {
+      "groupId": "g1",
+      "name": "notification_queue",
+      "canisterId": "jfcdq-yiaaa-aaaal-qxloa-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "100b0197578278a06008394961362abcc805afad998cf6a562a647e17dd49d95"
+    },
+    {
+      "groupId": "g2",
+      "name": "notification_queue",
+      "canisterId": "zu4gk-vqaaa-aaaal-qxp5a-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "100b0197578278a06008394961362abcc805afad998cf6a562a647e17dd49d95"
+    },
+    {
+      "groupId": "g1",
+      "name": "pii_access_control",
+      "canisterId": "iui5p-aaaaa-aaaal-qxllq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "d854d33e26b859dba9e8d7b16db06a772190e2b72b64e1f4f7f2652b6eaed0f1"
+    },
+    {
+      "groupId": "g2",
+      "name": "pii_access_control",
+      "canisterId": "zt5a6-yiaaa-aaaal-qxp5q-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "d854d33e26b859dba9e8d7b16db06a772190e2b72b64e1f4f7f2652b6eaed0f1"
+    },
+    {
+      "groupId": "g1",
+      "name": "timer_jobs",
+      "canisterId": "j6h7v-cqaaa-aaaal-qxlmq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "70d631b37e367b3b97f0423662843f32cd1434ca535666c351f9fa65143e1871"
+    },
+    {
+      "groupId": "g2",
+      "name": "timer_jobs",
+      "canisterId": "zg2rt-zaaaa-aaaal-qxp6a-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "70d631b37e367b3b97f0423662843f32cd1434ca535666c351f9fa65143e1871"
+    },
+    {
+      "groupId": "g1",
+      "name": "media_blob_store",
+      "canisterId": "jlaoy-dyaaa-aaaal-qxlpa-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "8fe9fc10f1f58a9d6da4a08434c5f864292663a2e229c6a31e45d870c6365455"
+    },
+    {
+      "groupId": "g2",
+      "name": "media_blob_store",
+      "canisterId": "ycx6b-aaaaa-aaaal-qxpya-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "8fe9fc10f1f58a9d6da4a08434c5f864292663a2e229c6a31e45d870c6365455"
+    },
+    {
+      "groupId": "shared",
+      "name": "shard_router",
+      "canisterId": "jcdfe-vqaaa-aaaal-qxloq-cai",
+      "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
+      "newHash": "c197794a338069e7ac34d62ab5579410f0cbae0290ec84401aa0dda8803dc19d"
+    }
+  ],
+  "liveAcceptance": false
+}
