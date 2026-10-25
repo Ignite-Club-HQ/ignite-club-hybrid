@@ -631,6 +631,34 @@ export default function MessagesPage() {
     },
   });
 
+  // ICP: quietly preload the newest club chats, group chats and DMs (the
+  // slowest cold opens) so tapping one shows messages straight away.
+  const conversationWarmIds = useMemo(() => {
+    const at = (v: any) => String(v?.created_at ?? "");
+    const clubLatest = (memberClubsWithMessages?.latestMessages ?? {}) as Record<string, any>;
+    const groupLatest = (chatGroupsWithMessages?.latestMessages ?? {}) as Record<string, any>;
+    const pick = <T,>(rows: T[], when: (r: T) => string, n: number) => rows.slice().sort((a, b) => when(b).localeCompare(when(a))).slice(0, n);
+    const clubs = pick((memberClubsWithMessages?.clubs ?? []) as any[], (c) => at(clubLatest[c.id]), 3).map((c) => `club|${c.id}|`);
+    const groups = pick((chatGroupsWithMessages?.groups ?? []) as any[], (g) => at(groupLatest[g.id]), 4).map((g) => `group|${g.id}|${g.club_id ?? ""}`);
+    const dms = pick((dmConversations ?? []) as any[], (d) => at(d.last_message) || String(d.updated_at ?? ""), 4).map((d) => `dm|${d.id}|`);
+    // Interleave so each kind gets an early slot.
+    const out: string[] = [];
+    for (let i = 0; i < 4; i++) for (const list of [clubs, groups, dms]) if (list[i]) out.push(list[i]);
+    return out.join(",");
+  }, [memberClubsWithMessages, chatGroupsWithMessages, dmConversations]);
+  useEffect(() => {
+    if (!conversationWarmIds || !user?.id || !isFeatureRoutedToIcp("messaging")) return;
+    const userId = user.id;
+    const timer = window.setTimeout(() => {
+      void import("@/features/messaging/thread/icpConversationWarm").then(({ warmIcpConversations }) =>
+        warmIcpConversations(queryClient, userId, conversationWarmIds.split(",").map((row) => {
+          const [kind, id, clubId] = row.split("|");
+          return { kind, id, clubId: clubId || null } as any;
+        }))).catch(() => undefined);
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [conversationWarmIds, user?.id, queryClient]);
+
   // Fetch hidden DM conversations (with hidden_at so they can resurface on new messages)
   const { data: hiddenDMMap } = useQuery({
     queryKey: ["hidden-dm-conversations", user?.id],

@@ -133,7 +133,47 @@ function takeBundled<K extends "reactions" | "pins">(conversationId: string, key
   return value;
 }
 
+// Short-lived warm cache for the newest page of a conversation, filled in the
+// background from the inbox so the first open of a chat skips the canister wait.
+const WARM_PAGE_TTL_MS = 20_000;
+const warmLatestPages = new Map<string, { at: number; page: Promise<unknown> }>();
+function warmKey(ctx: FeatureBackendContext, conversationId: string, limit: number): string {
+  let who = "anon";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- identity shape varies by provider
+  try { who = (ctx.identity as any)?.getPrincipal?.().toText() ?? "anon"; } catch { /* ignore */ }
+  return `${who}|${conversationId}|${limit}`;
+}
+/** Background-load the newest page so a later open of this chat returns at once. */
+export function warmLiveLatestMessagesPage(ctx: FeatureBackendContext, conversationId: string, limit: number): Promise<unknown> {
+  const key = warmKey(ctx, conversationId, limit);
+  const hit = warmLatestPages.get(key);
+  if (hit && Date.now() - hit.at < WARM_PAGE_TTL_MS) return hit.page;
+  const page = readLatestMessagesPage(ctx, conversationId, null, limit);
+  warmLatestPages.set(key, { at: Date.now(), page });
+  if (warmLatestPages.size > 50) warmLatestPages.delete(warmLatestPages.keys().next().value as string);
+  page.catch(() => warmLatestPages.delete(key));
+  return page;
+}
+export function clearWarmLiveLatestPages(): void { warmLatestPages.clear(); }
+
 export async function listLiveLatestMessagesPage(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  before: number | null,
+  limit: number,
+) {
+  if (before === null) {
+    const key = warmKey(ctx, conversationId, limit);
+    const hit = warmLatestPages.get(key);
+    warmLatestPages.delete(key);
+    if (hit && Date.now() - hit.at < WARM_PAGE_TTL_MS) {
+      try { return (await hit.page) as Awaited<ReturnType<typeof readLatestMessagesPage>>; } catch { /* fall through to a fresh read */ }
+    }
+  }
+  return readLatestMessagesPage(ctx, conversationId, before, limit);
+}
+
+async function readLatestMessagesPage(
   ctx: FeatureBackendContext,
   conversationId: string,
   before: number | null,
