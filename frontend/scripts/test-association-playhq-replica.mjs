@@ -26,7 +26,7 @@ try {
     assert.ok('Err' in await actor.sync_playhq_grade(competition.id, 'wrong-tenant', 'grade'));
     const rows = ok(await actor.list_playhq_competitions(club));
     assert.equal(rows.length, 1); assert.deepEqual(rows[0].link.sport, ['basketball']); assert.deepEqual(rows[0].link.last_synced_at_ms, []);
-    await pic.upgradeCanister({ canisterId: service.canisterId, wasm, sender: governor, wasmMemoryPersistence: 'keep', arg: IDL.encode([IDL.Principal], [governor]) });
+    await pic.upgradeCanister({ canisterId: service.canisterId, wasm, sender: governor, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] }, arg: IDL.encode([IDL.Principal], [governor]) });
     assert.equal(ok(await actor.list_playhq_competitions(club)).length, 1);
     ok(await actor.set_transfer_fence(club, true));
     const snapshot = ok(await actor.export_club_snapshot(club));
