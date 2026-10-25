@@ -23,6 +23,7 @@ import {
 } from "./vaultAccess";
 import { withReadDeadline } from "@/live/readDeadline";
 import { vaultKeys } from "./vaultQueryKeys";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export type { VaultClubSummary } from "./vaultAccessRepository";
 
@@ -105,12 +106,18 @@ export function useVaultAccessModel({
   // every `isAppAdmin ?? false` / `!!isAppAdmin` call site keeps working.
   const isAppAdmin = !userId || isLoadingAppAdminHook ? undefined : isAppAdminFromHook;
   const isLoadingAppAdmin = !!userId && isLoadingAppAdminHook;
+  const isIcpVault = isFeatureRoutedToIcp("vault");
+  const selectedRoleClubId = isIcpVault
+    ? (currentView.type === "root" ? activeClubFilter : currentView.clubId)
+    : null;
 
   const { data: userRoles, isLoading: isLoadingRoles, error: rolesError, refetch: retryRoles } = useQuery({
-    queryKey: ["user-admin-roles", userId],
+    queryKey: ["user-admin-roles", userId, selectedRoleClubId],
     queryFn: async () => {
       if (!userId) return [];
-      const roles = await withReadDeadline(fetchVaultUserRoles(userId), "Vault roles");
+      const roles = await withReadDeadline(selectedRoleClubId
+        ? fetchVaultUserRoles(userId, undefined, selectedRoleClubId)
+        : fetchVaultUserRoles(userId), "Vault roles");
       console.log("[Vault] Fetched userRoles for user", userId, ":", roles);
       return roles;
     },
@@ -126,7 +133,7 @@ export function useVaultAccessModel({
   // Each group is bounded inside the lookup, so a stuck group drops out on
   // its own instead of a whole-list cut-off failing every club.
   const { data: userClubs, isLoading: isLoadingClubs, error: clubsError, refetch: refetchClubs } = useQuery({
-    queryKey: [...vaultKeys.clubsForUser(userId, !!isAppAdmin), activeClubFilter ?? null],
+    queryKey: [...vaultKeys.clubsForUser(userId, activeClubFilter ? false : !!isAppAdmin), activeClubFilter ?? null, isIcpVault],
     queryFn: () => userId ? (activeClubFilter
       ? fetchVaultAccessibleClubs(userId, !!isAppAdmin, undefined, activeClubFilter)
       : fetchVaultAccessibleClubs(userId, !!isAppAdmin)) : [],
@@ -184,12 +191,24 @@ export function useVaultAccessModel({
     currentView.type === "club" || currentView.type === "team" || currentView.type === "mini-league" || currentView.type === "competition"
       ? currentView.clubId
       : null;
+  const selectedClub = isIcpVault && activeClubFilter
+    ? userClubs?.find((club) => club.id === activeClubFilter)
+    : undefined;
+  // Only the exact selected ICP read carries authoritative media allowance.
+  // Directory flags from the other paths are labels, not access evidence.
+  const selectedClubsUpdatedAt = queryClient.getQueryState([
+    ...vaultKeys.clubsForUser(userId, false), activeClubFilter ?? null, isIcpVault,
+  ])?.dataUpdatedAt ?? 0;
+  const reusableSelectedClub = selectedClub && selectedClub.id === contextClubId &&
+    Date.now() - selectedClubsUpdatedAt < 30_000 ? selectedClub : undefined;
 
   // Check if the current club has Pro
   const { data: currentClubHasPro, isLoading: isLoadingClubHasPro, error: clubProError, refetch: retryClubPro } = useQuery({
-    queryKey: vaultKeys.clubHasPro(contextClubId),
+    queryKey: [...vaultKeys.clubHasPro(contextClubId), userId, isIcpVault],
     queryFn: () => contextClubId ? withReadDeadline(fetchVaultClubHasPro(contextClubId), "Vault club subscription") : false,
-    enabled: contextClubId !== null,
+    enabled: !!userId && contextClubId !== null,
+    initialData: reusableSelectedClub?.is_pro,
+    initialDataUpdatedAt: reusableSelectedClub ? selectedClubsUpdatedAt : undefined,
     staleTime: 30_000,
   });
 
@@ -220,7 +239,7 @@ export function useVaultAccessModel({
     staleTime: 30_000,
   });
 
-  const hasProClub = proAccessInfo ?? false;
+  const hasProClub = (selectedClub?.is_pro === true) || (proAccessInfo ?? false);
 
   // Vault access requires: 1) Pro subscription in current context AND 2) Admin/coach role
   const vaultAccessContextHasPro = currentView.type === "root" ? hasProClub : currentContextHasPro;

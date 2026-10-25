@@ -35,7 +35,7 @@ describe("VaultPage access/entitlement/root-navigation data-model contract", () 
 
   it("keeps the eligible-clubs query branching on app-admin and scoping to the exact user id", () => {
     expect(clusterSource).toContain('"vault-clubs"');
-    expect(accessModelHookSource).toContain("vaultKeys.clubsForUser(userId, !!isAppAdmin)");
+    expect(accessModelHookSource).toContain("vaultKeys.clubsForUser(userId, activeClubFilter ? false : !!isAppAdmin)");
     expect(accessModelHookSource).toContain("fetchVaultAccessibleClubs(userId, !!isAppAdmin)");
   });
 
@@ -72,7 +72,7 @@ describe("VaultPage access/entitlement/root-navigation data-model contract", () 
 
   it("keeps the root-view any-Pro entitlement check distinct from the scoped current-context check", () => {
     expect(clusterSource).toContain('"pro-access-info"');
-    expect(clusterSource).toMatch(/hasProClub\s*=\s*proAccessInfo\s*\?\?\s*false/);
+    expect(clusterSource).toContain("(proAccessInfo ?? false)");
     expect(clusterSource).toMatch(/currentView\.type === "root" \? hasProClub : currentContextHasPro/);
   });
 
