@@ -477,7 +477,7 @@ export default function MessagesPage() {
   // ICP: load the newest page of the most recently active team chats in the
   // background, so opening one shows its messages immediately.
   const teamPrefetchIds = useMemo(() => {
-    if (useIcpLab || !teams?.length) return "";
+    if (!teams?.length) return "";
     const latest = (teamsWithMessages?.latestMessages ?? {}) as Record<string, { created_at?: string } | undefined>;
     return (teams as Array<{ id: string; club_id?: string | null }>)
       .slice()
@@ -485,7 +485,7 @@ export default function MessagesPage() {
       .slice(0, 5)
       .map((t) => `${t.id}|${t.club_id ?? ""}`)
       .join(",");
-  }, [teams, teamsWithMessages?.latestMessages, useIcpLab]);
+  }, [teams, teamsWithMessages?.latestMessages]);
   useEffect(() => {
     if (!teamPrefetchIds || !user?.id || !isFeatureRoutedToIcp("messaging")) return;
     const userId = user.id;
