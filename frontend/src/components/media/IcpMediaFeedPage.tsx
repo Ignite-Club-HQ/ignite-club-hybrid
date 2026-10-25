@@ -41,7 +41,8 @@ import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { CreateActionButton } from "@/components/CreateActionButton";
 import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorStrip";
 import { MediaSponsorTile } from "@/components/media/MediaSponsorTile";
-import { IcpUploadPhotoSheet, type IcpPendingUploadPreview } from "@/components/media/IcpUploadPhotoSheet";
+import { IcpUploadPhotoSheet } from "@/components/media/IcpUploadPhotoSheet";
+import { usePendingGalleryUploads, reconcileGalleryUploads } from './pendingGalleryUploads';
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 import { mediaProfileDirectory } from "./mediaProfileDirectory";
@@ -462,7 +463,7 @@ export function IcpMediaFeedPage() {
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [pendingPreviews, setPendingPreviews] = useState<IcpPendingUploadPreview[]>([]);
+  const pendingUploads = usePendingGalleryUploads(queryClient, principal);
   // Home's "Add photos" shortcut and gallery prompts link to /media?upload=1.
   const [searchParams, setSearchParams] = useSearchParams();
   const competitionId = searchParams.get("competition");
@@ -486,6 +487,7 @@ export function IcpMediaFeedPage() {
   // the feed must not show other clubs' media.
   const { activeClubFilter } = useClubTheme();
   const effectiveClubId = activeClubFilter ?? selectedClubId;
+  const loadedAssetIds = new Set(feedQueryPlaceholder());
   useEffect(() => {
     setSelectedClubId(activeClubFilter ?? "all");
     setSelectedTeamId(link.teamId ?? "all");
