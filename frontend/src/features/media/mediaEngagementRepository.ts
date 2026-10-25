@@ -10,6 +10,7 @@ import { getActiveIcpTarget } from "@/live/targetRegistry";
 import {
   addLiveComment,
   addLiveReaction,
+  deleteLiveComment,
   listLiveReactions,
   removeLiveReaction,
 } from "@/live/features/media";
@@ -110,4 +111,47 @@ export async function createMediaComment(
       await addLiveComment(ctx, input.photoId, input.text, Date.now(), input.replyToId);
     },
   }, writeOnce({ photoId: input.photoId }));
+}
+
+export interface MediaCommentReaction {
+  id: string;
+  user_id: string;
+  reaction_type: string;
+}
+
+/**
+ * Reactions on a photo comment. The media canister has no
+ * reactions-on-comments API, so the ICP branch returns none rather than
+ * touching Supabase; the comment reaction UI is hidden in ICP mode.
+ */
+export async function listMediaCommentReactions(
+  commentId: string,
+  client: IgniteSupabaseClient = supabase,
+): Promise<MediaCommentReaction[]> {
+  return withFeatureBackend("media", {
+    supabase: async () => {
+      const { data, error } = await client
+        .from("photo_comment_reactions")
+        .select("id, user_id, reaction_type")
+        .eq("comment_id", commentId);
+      if (error) throw error;
+      return (data ?? []) as MediaCommentReaction[];
+    },
+    icp: async () => [] as MediaCommentReaction[],
+  }, { commentId });
+}
+
+export async function deleteMediaComment(
+  input: { commentId: string },
+  client: IgniteSupabaseClient = supabase,
+): Promise<void> {
+  return withFeatureBackend("media", {
+    supabase: async () => {
+      const { error } = await client.from("photo_comments").delete().eq("id", input.commentId);
+      if (error) throw error;
+    },
+    icp: async (ctx) => {
+      await deleteLiveComment(ctx, input.commentId);
+    },
+  }, writeOnce({ commentId: input.commentId }));
 }
