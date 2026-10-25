@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({ match: vi.fn(), season: vi.fn(), profiles: vi.fn(), oldRead: vi.fn(), route: vi.fn() }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'paul' } }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'paul' } }), useOptionalAuth: () => null }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock('@/live/loadBackendRouting', () => ({ isFeatureRoutedToIcp: () => true }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { from: m.oldRead } }));
