@@ -1,10 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { legacyClubLifecycleDisabled, validateClubIdentityWiring } from './all-group-wiring-policy.mjs';
+import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement, validateGroupPermissionWiring } from './all-group-wiring-policy.mjs';
 import { digest } from './all-group-upgrade-policy.mjs';
 const identity = 'mq2sj-fiaaa-aaaal-qxlqa-cai';
 const g1 = {groupId:'g1',name:'club_domain',canisterId:'mzzzv-taaaa-aaaal-qxlrq-cai'};
 const legacyRows = [['club_domain',g1.canisterId],['identity_access','']];
+test('media and insights require their real local role permission source, not a nonexistent club pointer', () => {
+  for (const service of ['media_metadata','insights_domain']) {
+    assert.deepEqual(groupPermissionRequirement(service,g1.canisterId),['permission_source','local_club_roles']);
+    validateGroupPermissionWiring(service,[['permission_source','local_club_roles']],g1.canisterId);
+    for (const rows of [[],[['club_domain',g1.canisterId]],[['permission_source','unknown']],[['permission_source','local_club_roles'],['permission_source','local_club_roles']]]) {
+      assert.throws(()=>validateGroupPermissionWiring(service,rows,g1.canisterId));
+    }
+  }
+});
+test('every pointer-based service retains its exact owning club requirement', () => {
+  for (const service of ['club_domain','notification_queue','events_domain','messaging_domain','competition_domain','mini_league_domain','vault_domain','pii_access_control','media_blob_store','club_points_domain']) {
+    assert.deepEqual(groupPermissionRequirement(service,g1.canisterId),['club_domain',g1.canisterId]);
+    validateGroupPermissionWiring(service,[['club_domain',g1.canisterId]],g1.canisterId);
+    for (const rows of [[],[['permission_source','local_club_roles']],[['club_domain','wrong-club-cai']],[['club_domain',g1.canisterId],['club_domain',g1.canisterId]]])assert.throws(()=>validateGroupPermissionWiring(service,rows,g1.canisterId));
+  }
+  assert.equal(groupPermissionRequirement('timer_jobs',g1.canisterId),null);
+});
 test('pinned original Group 1 preserves one explicit empty legacy authority without altering rows', () => {
   const before = digest(legacyRows);
   validateClubIdentityWiring(g1,legacyRows,identity,legacyClubLifecycleDisabled([]));
