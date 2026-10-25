@@ -28,12 +28,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { recordPointsHistory } from "@/lib/pointsHistory";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { awardLivePoints, subjectForChild, subjectForUser } from "@/live/features/points";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { getLiveEventChild, getLiveGameResult, saveLiveGameResult } from "@/live/features/events";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
-import { readPlayerOfMatchAdults, readPlayerOfMatchRewards } from "@/lib/playerOfMatchReads";
+import { readPlayerOfMatchAdults, readPlayerOfMatchRewards, readProfileSummaries } from "@/lib/playerOfMatchReads";
 
 interface PlayerOfMatchSelectorProps {
   eventId: string;
@@ -642,6 +643,24 @@ export default function PlayerOfMatchSelector({
   const goingMembers = goingPlayers.filter(
     (r) => !r.child_id && r.user_id && playerUserIds.includes(r.user_id)
   );
+
+  // ICP rosters carry no profile enrichment, so hydrate adult names/avatars
+  // on-chain for the pick list instead of showing "Unknown".
+  const isIcp = resolveAuthBackend() === "icp";
+  const goingAdultIds = useMemo(
+    () => goingMembers.map((r) => r.user_id as string),
+    [goingMembers],
+  );
+  const { data: adultProfiles } = useQuery({
+    queryKey: ["roster-profile-names", eventId, goingAdultIds.join(",")],
+    queryFn: () => readProfileSummaries(goingAdultIds),
+    enabled: isIcp && goingAdultIds.length > 0,
+    staleTime: 60_000,
+  });
+  const adultName = (userId: string | null | undefined) =>
+    (userId ? adultProfiles?.get(userId)?.display_name : null) || null;
+  const adultAvatar = (userId: string | null | undefined) =>
+    (userId ? adultProfiles?.get(userId)?.avatar_url : null) || null;
 
   if (isLoading) {
     return (
