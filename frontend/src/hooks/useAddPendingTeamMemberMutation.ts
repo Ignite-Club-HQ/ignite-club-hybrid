@@ -1,5 +1,6 @@
 import { writeOnce } from "@/live/clubScope";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { assertSimpleIcpInvite } from "@/features/membership/inviteFlowRules";
 import { useMutation } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import type { BulkChild } from "@/components/members/ChildAndSecondGuardianFields";
@@ -85,6 +86,7 @@ export function useAddPendingTeamMemberMutation({
    */
   const mutationIcp = async (ctx: FeatureBackendContext) => {
     if (!nameInput.trim()) throw new Error("Please enter a name");
+    assertSimpleIcpInvite(singleChildren, !!selectedSecondParent || !!secondParentEmail.trim() || !!secondParentName.trim());
 
     // Dedupe against existing pending invites for the same email+club — the
     // ICP equivalent of the Supabase email dedupe. Account matching has no

@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getCachedRoles } from "@/lib/rolesCache";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
+import { allowedInviteRole } from "@/features/membership/inviteFlowRules";
 import { createLiveTeamInviteLink, listLiveTeamInviteLinks, listLivePendingInvitesByClub, rotateLiveTeamInviteLink, revokeLiveTeamInviteLink, getLiveTeam } from "@/live/features/club";
 
 const APP_URL = "https://ignite-canister-connect.lovable.app";
@@ -108,13 +109,18 @@ export default function TeamJoinLinkCard({
     return true;
   });
 
-  const defaultRole: RoleVariant = teamType === "junior" ? "parent" : "player";
+  const preferredRole: RoleVariant = teamType === "junior" ? "parent" : "player";
+  const defaultRole = allowedInviteRole(preferredRole, roleOptions.map(r => r.value)) ?? preferredRole;
   const [activeRole, setActiveRole] = useState<RoleVariant>(defaultRole);
   const [copied, setCopied] = useState(false);
   const [showQR, setShowQR] = useState(true);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [autoSelected, setAutoSelected] = useState(false);
+  useEffect(() => {
+    const next = allowedInviteRole(activeRole, roleOptions.map(r => r.value));
+    if (next && next !== activeRole) setActiveRole(next);
+  }, [activeRole, roleOptions]);
 
   // Only admins/coaches can regenerate or revoke the link.
   const hasCachedTeamAdmin = useMemo(() => {
@@ -217,6 +223,7 @@ export default function TeamJoinLinkCard({
     mutationFn: async ({ rotate, role }: { rotate: boolean; role: RoleVariant }) =>
       withFeatureBackend("membership", {
         icp: async (ctx) => {
+          if (!roleOptions.some(option => option.value === role)) throw new Error("Choose an available invitation role");
           const existing = links?.[role];
           let link;
           if (rotate && existing) {
@@ -242,6 +249,7 @@ export default function TeamJoinLinkCard({
           return { role, row };
         },
         supabase: async () => {
+          if (!roleOptions.some(option => option.value === role)) throw new Error("Choose an available invitation role");
           if (!user) throw new Error("Not signed in");
           const existing = links?.[role];
           if (rotate && existing) {
@@ -283,6 +291,7 @@ export default function TeamJoinLinkCard({
   const autoCreateTriedRef = useRef<RoleVariant | null>(null);
   useEffect(() => {
     if (!autoCreateLink || isLoading || !links || !isAdmin) return;
+    if (!roleOptions.some(option => option.value === activeRole)) return;
     if (SENSITIVE_ROLES.includes(activeRole)) return;
     if (links[activeRole]) return;
     if (createOrRotate.isPending) return;

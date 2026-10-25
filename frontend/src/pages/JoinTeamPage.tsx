@@ -766,7 +766,7 @@ function SupabaseJoinTeamPage() {
   // New signups (no display_name yet) are allowed - their name will be auto-set during join
   // A matching email always wins over a name difference.
   useEffect(() => {
-    if (isPendingInvite && pendingInviteData?.invited_label && user && userProfile !== undefined) {
+    if (isPendingInvite && pendingInviteData?.invited_label && user && userProfile !== undefined && (pendingInviteData.metadata as { kind?: string } | null)?.kind !== "mini_league_named_player_invite") {
       // Skip under Internet Identity: `user.email` is always undefined for
       // principal-based II accounts, so this never matches — that's
       // intentional, not a silent failure. II pending-invite joins are
@@ -1625,9 +1625,9 @@ function SupabaseJoinTeamPage() {
       // don't ask the parent to add a child that now exists.
       const childrenAlreadyProvisioned = provisionedChildIdsRef.current.length > 0;
       if (
-        (!isPendingInvite &&
+        ((!isPendingInvite || (pendingInviteData?.metadata as { icp_pending_invite?: boolean } | null)?.icp_pending_invite) &&
           rolesToAdd.includes("parent") &&
-          !teamInvite?.metadata &&
+          !(teamInvite?.metadata as { child_name?: string } | null)?.child_name &&
           !childrenAlreadyProvisioned) ||
         (isLeagueParentLink && rolesToAdd.includes("parent"))
       ) {
@@ -1747,7 +1747,7 @@ function SupabaseJoinTeamPage() {
         if (
           !isPendingInvite &&
           result.includes("parent") &&
-          !teamInvite?.metadata &&
+          !(teamInvite?.metadata as { child_name?: string } | null)?.child_name &&
           provisionedChildIdsRef.current.length === 0
         ) {
           setShowChildStep(true);
