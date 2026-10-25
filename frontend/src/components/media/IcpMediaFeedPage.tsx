@@ -873,14 +873,14 @@ export function IcpMediaFeedPage() {
       </div>
 
       <main className="mx-auto w-full max-w-lg flex-1">
-        {feedQuery.isLoading && !feedQuery.data?.posts.length && (
+        {(feedQuery.isLoading || (feedQuery.isError && isCancelledError(feedQuery.error))) && !feedQuery.data?.posts.length && (
           <div className="space-y-6" aria-label="Photos loading">
             <PhotoSkeleton />
             <PhotoSkeleton />
           </div>
         )}
 
-        {feedQuery.isError && (
+        {feedQuery.isError && !isCancelledError(feedQuery.error) && (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <p className="text-sm text-muted-foreground">
               {feedQuery.error instanceof Error ? feedQuery.error.message : "Media could not be loaded."}
