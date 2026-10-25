@@ -63,6 +63,25 @@ async function actor(ctx: FeatureBackendContext) {
   return actor;
 }
 
+type PointsActor = Awaited<ReturnType<typeof actor>>;
+
+/**
+ * The canister authorizes subject reads against its local role mirror, which
+ * is only populated by `refresh_club_roles`. Catalog/settings reads already
+ * refresh first; balance/history/redemption reads must do the same or a
+ * stale mirror answers "Forbidden" even for the member themselves. Refresh
+ * once per caller+club per session — the mirror is re-synced on every
+ * catalog read anyway, and a failed refresh is not cached so a retry can
+ * succeed later.
+ */
+const roleMirrorRefreshed = new Set<string>();
+async function ensureRoleMirror(a: PointsActor, ctx: FeatureBackendContext, clubId: string) {
+  const key = `${ctx.identity.getPrincipal().toText()}|${clubId}`;
+  if (roleMirrorRefreshed.has(key)) return;
+  await unwrapCandid(a.refresh_club_roles(clubId), "Verify club membership");
+  roleMirrorRefreshed.add(key);
+}
+
 /**
  * Awards (or deducts, with a negative `amount`) points to a user or child and
  * records the matching history entry atomically. `actionType` + `scopeId`
@@ -197,6 +216,7 @@ export async function getLiveUserPoints(
   userId: string,
 ): Promise<number> {
   const a = await actor(ctx);
+  await ensureRoleMirror(a, ctx, clubId);
   return unwrapCandid(a.get_user_points(clubId, userId), "Get user points");
 }
 
@@ -206,6 +226,7 @@ export async function getLiveChildPoints(
   childId: string,
 ): Promise<number> {
   const a = await actor(ctx);
+  await ensureRoleMirror(a, ctx, clubId);
   return unwrapCandid(a.get_child_points(clubId, childId), "Get child points");
 }
 
@@ -231,6 +252,7 @@ export async function listLivePointsHistory(
   limit: number,
 ): Promise<HistoryPage> {
   const a = await actor(ctx);
+  await ensureRoleMirror(a, ctx, clubId);
   return unwrapCandid(
     a.list_points_history(clubId, candidOpt(subject), BigInt(offset), BigInt(limit)),
     "List points history",
@@ -369,6 +391,7 @@ export async function listLiveRedemptions(
   subject: Subject | null,
 ): Promise<RewardRedemption[]> {
   const a = await actor(ctx);
+  await ensureRoleMirror(a, ctx, clubId);
   return unwrapCandid(a.list_redemptions(clubId, candidOpt(subject)), "List redemptions");
 }
 

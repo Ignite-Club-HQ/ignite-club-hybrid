@@ -47,4 +47,15 @@ describe('cross-club rewards', () => {
     state.rewards.mockRejectedValue(new Error('group unavailable'));
     await expect(liveRedeemableRewards(shared, ['club-b'])).rejects.toThrow('group unavailable');
   });
+  it('keeps the healthy clubs when one club read fails', async () => {
+    state.history.mockImplementation(async (ctx, id) => {
+      if (id === 'club-b') throw new Error('group unavailable');
+      return { items: [{ id, club_id: id, amount: 5, source_id: [], created_at_ms: 1000n }] };
+    });
+    expect((await liveMyPointsHistory(shared, 'user', null)).map(r => r.club_id)).toEqual(['club-a']);
+  });
+  it('still fails when every club read fails', async () => {
+    state.history.mockRejectedValue(new Error('group unavailable'));
+    await expect(liveMyPointsHistory(shared, 'user', null)).rejects.toThrow('group unavailable');
+  });
 });
