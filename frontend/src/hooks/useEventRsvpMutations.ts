@@ -46,7 +46,36 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+
+  // Optimistic RSVP: show the tapped answer immediately, roll back on failure.
+  const sameAccount = (a?: string | null, b?: string | null) =>
+    !!a && !!b && a.replace(/^principal:/, "") === b.replace(/^principal:/, "");
+  const applyOptimisticRsvp = async (match: (row: any) => boolean, patch: Record<string, unknown>, fresh: Record<string, unknown>) => {
+    const key = eventKeys.rsvps(id);
+    await queryClient.cancelQueries({ queryKey: key });
+    const previous = queryClient.getQueryData(key);
+    queryClient.setQueryData(key, (current: unknown) => {
+      const rows = Array.isArray(current) ? current : [];
+      const index = rows.findIndex(match);
+      if (index < 0) return [...rows, fresh];
+      return rows.map((row: any, i) => (i === index ? { ...row, ...patch } : row));
+    });
+    return { previous };
+  };
+  const rollbackRsvp = (context?: { previous?: unknown }) => {
+    if (context && "previous" in context) queryClient.setQueryData(eventKeys.rsvps(id), context.previous);
+  };
   const rsvpMutation = useMutation({
+    onMutate: async (status: RsvpStatus) => {
+      if (useIcpLab || !user?.id) return undefined;
+      return applyOptimisticRsvp(
+        (row) => !row.child_id && sameAccount(row.user_id, user.id),
+        { status, source: "user" },
+        { id: myRsvp?.id || `pending-rsvp-${id}-${user.id}`, event_id: id, user_id: user.id, child_id: null, status, notes: rsvpNotes || null, source: "user",
+          profiles: { display_name: profile?.display_name ?? null, avatar_url: profile?.avatar_url ?? null }, children: null },
+      );
+    },
+    onError: (_err, _status, context) => rollbackRsvp(context),
     mutationFn: async (status: RsvpStatus) => {
       if (useIcpLab) {
         if (!id) throw new Error("Missing event ID");
@@ -86,11 +115,9 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
         icp: async (ctx) => {
           if (!id || !user?.id) throw new Error("Missing event or user ID");
           await setLiveEventRsvp(ctx, id, user.id, status);
-          try {
-            await recordLiveRsvpCompleted(ctx, event?.club_id ?? id, user.id);
-          } catch {
-            // best-effort engagement counter; must never block RSVP confirmation
-          }
+          // Best-effort engagement counter: runs in the background so it
+          // never delays the RSVP confirmation.
+          void recordLiveRsvpCompleted(ctx, event?.club_id ?? id, user.id).catch(() => undefined);
           return true;
         },
       }, writeOnce({ eventId: id ?? "" }));
@@ -180,6 +207,16 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
 
   // Child RSVP mutation
   const childRsvpMutation = useMutation({
+    onMutate: async ({ childId, status, childName }: { childId: string; status: RsvpStatus; childName?: string }) => {
+      if (useIcpLab || !user?.id) return undefined;
+      return applyOptimisticRsvp(
+        (row) => row.child_id === childId,
+        { status, source: "user" },
+        { id: `pending-child-rsvp-${id}-${childId}`, event_id: id, user_id: user.id, child_id: childId, status, notes: null, source: "user",
+          profiles: null, children: { id: childId, name: childName ?? null } },
+      );
+    },
+    onError: (_err, _vars, context) => rollbackRsvp(context),
     mutationFn: async ({ childId, status, childName }: { childId: string; status: RsvpStatus; childName?: string }) => {
       const existingRsvp = childRsvps.find((r) => r.child_id === childId);
 
