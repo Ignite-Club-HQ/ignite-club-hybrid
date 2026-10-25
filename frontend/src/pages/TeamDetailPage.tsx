@@ -127,6 +127,7 @@ import { TeamQuickActionsSection } from "@/components/team/TeamQuickActionsSecti
 import { TeamDetailAccordionSections } from "@/components/team/TeamDetailAccordionSections";
 import { getCachedTeam, getCachedClub, cacheTeam, cacheClub } from "@/lib/clubTeamCache";
 import { loadTeamClubDetails } from "@/lib/teamClubDetails";
+import { readIcpTeamPendingInvites } from "@/features/membership/teamPendingInvites";
 
 
 type TeamRole = TeamJoinRole;
@@ -141,7 +142,7 @@ export default function TeamDetailPage() {
   // Team lifecycle management (delete/restore/permanent-delete/role-removal/join-request)
   // has no club_domain canister shape yet, so these actions are gated off entirely
   // in ICP mode rather than falling through to Supabase against a principal id.
-  const isIcpAccount = resolveAuthBackend() === "icp";
+  const isIcpAccount = isFeatureRoutedToIcp("membership");
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -678,7 +679,7 @@ export default function TeamDetailPage() {
   const { data: teamChildren = [], isLoading: isChildrenLoading, isFetching: isChildrenFetching, refetch: refetchChildren } = useQuery({
     queryKey: membershipKeys.teamChildren(id),
     queryFn: async () => {
-      if (resolveAuthBackend() === 'icp') {
+      if (isIcpAccount) {
         if (!id) return [];
         const roster = await readIcpPitchRoster(id);
         return roster.children.map(child => ({ id: child.child_id, child_id: child.child_id, children: { id: child.child_id, name: child.child_name, year_of_birth: null, parent_id: null, profiles: null, allParentNames: [] } }));
@@ -1082,7 +1083,7 @@ export default function TeamDetailPage() {
   const { data: activeGame } = useQuery({
     queryKey: ["team-active-game", id],
     queryFn: async () => {
-      if (resolveAuthBackend() === 'icp') {
+      if (isFeatureRoutedToIcp('events')) {
         if (!id) return null;
         return withFeatureBackend('events', {
           supabase: async () => null,
@@ -1116,8 +1117,12 @@ export default function TeamDetailPage() {
 
   // Fetch pending invites for this team
   const { data: pendingInvites = [] } = useQuery({
-    queryKey: ["pending-invites", id, null],
+    queryKey: ["pending-invites", id, null, isIcpAccount ? "icp" : "supabase", user?.id],
     queryFn: async () => {
+      if (isIcpAccount) {
+        if (!team?.club_id || !id) throw new Error("Team invitations could not be loaded");
+        return readIcpTeamPendingInvites(team.club_id, id);
+      }
       const { data, error } = await supabase
         .from("pending_invites")
         .select("id, role, invited_user_id, invited_label, invited_email, created_at, status, email_sent_at, email_id, email_error, last_reminder_sent_at, reminder_count, metadata")
@@ -1154,7 +1159,7 @@ export default function TeamDetailPage() {
       }
       return invitesWithProfiles;
     },
-    enabled: !!id && isMember && !useIcpLab && !isIcpAccount,
+    enabled: !!id && isMember && !useIcpLab && (!isIcpAccount || (!!team?.club_id && !!canManageTeam)),
   });
   const { data: existingRequest } = useQuery({
     queryKey: ["team-request", id, user?.id],
@@ -1177,10 +1182,12 @@ export default function TeamDetailPage() {
       // child-link prompts below stay Supabase-only; the ICP branch submits
       // the bare role request.
       if (isIcpAccount) {
-        await withFeatureBackend("membership", {
+        if (!team?.club_id || !id) throw new Error("Team could not be verified");
+        const request = await withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
-          icp: async (ctx) => { await requestLiveRole(ctx, team!.club_id, selectedRole, id!); },
-        }, writeOnce({ clubId: team?.club_id as string }));
+          icp: async (ctx) => requestLiveRole(ctx, team.club_id, selectedRole, id),
+        }, writeOnce({ clubId: team.club_id }));
+        queryClient.setQueryData(["team-request", id, user?.id], { role: request.role, status: request.status });
         return;
       }
       const metadata: Record<string, any> = {};
