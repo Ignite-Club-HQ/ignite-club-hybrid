@@ -4,54 +4,40 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, RefreshCw, Trash2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
-import { withFeatureBackend } from "@/live/featureRouter";
-import { writeOnce } from "@/live/clubScope";
-import { getLivePushDeliveryHealth, getLivePushAlertSettings, upsertLivePushAlertSettings, cleanupLiveStaleDeviceTokens, type LivePushAlertSettingsInput } from "@/live/features/notifications";
+import type { LivePushAlertSettingsInput } from "@/live/features/notifications";
+import { readAdminQueueHealth, readAdminQueueSettings, saveAdminQueueSettings, cleanupAdminDeviceTokens } from "@/live/adminQueueOperations";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const unavailable = async (): Promise<never> => { throw new Error("Internet Identity connection required"); };
-
 export default function IcpPushAnalyticsPage() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { isAppAdmin, isLoading } = useIsAppAdmin();
   const [draft, setDraft] = useState<LivePushAlertSettingsInput | null>(null);
   const [ageDays, setAgeDays] = useState(60);
   const health = useQuery({
-    queryKey: ["icp-admin-push-health"], enabled: isAppAdmin, refetchInterval: 60000,
-    queryFn: () => withFeatureBackend("notifications", {
-      supabase: unavailable,
-      icp: async ctx => ({ queue: ctx.target.canisterIds.notification_queue, ...await getLivePushDeliveryHealth(ctx, Date.now()) }),
-    }, { everyGroup: true, requireComplete: true, merge: (parts: unknown[]) => {
-      const rows = parts as Array<Awaited<ReturnType<typeof getLivePushDeliveryHealth>> & { queue: string }>;
-      return [...new Map(rows.map(row => [row.queue, row])).values()];
-    } }),
+    queryKey: ["icp-admin-push-health", user?.id], enabled: isAppAdmin, refetchInterval: 60000,
+    queryFn: readAdminQueueHealth,
   });
-  const settings = useQuery({ queryKey: ["icp-admin-push-settings"], enabled: isAppAdmin,
-    queryFn: () => withFeatureBackend("notifications", { supabase: unavailable, icp: getLivePushAlertSettings }, { shared: "app" }),
+  const settings = useQuery({ queryKey: ["icp-admin-push-settings", user?.id], enabled: isAppAdmin,
+    queryFn: readAdminQueueSettings,
   });
   const save = useMutation({ mutationFn: async (value: LivePushAlertSettingsInput) => {
-    await withFeatureBackend("notifications", { supabase: unavailable, icp: ctx => upsertLivePushAlertSettings(ctx, value) }, writeOnce({ shared: "app" }));
+    await saveAdminQueueSettings(value);
   }, onSuccess: () => { setDraft(null); qc.invalidateQueries({ queryKey: ["icp-admin-push-settings"] }); toast.success("Alert settings saved"); }, onError: (e: Error) => toast.error(e.message) });
   const cleanup = useMutation({ mutationFn: async () => {
     if (!Number.isInteger(ageDays) || ageDays < 1 || ageDays > 3650) throw new Error("Choose a valid token age");
     if (!confirm(`Remove device registrations unused for ${ageDays} days from all listed queues?`)) return null;
-    // The read above returns exact approved contexts; writes are explicit and
-    // execute once per queue, never mutation fanout through readAcross.
-    const contexts = await withFeatureBackend("notifications", { supabase: unavailable, icp: async ctx => ctx }, {
-      everyGroup: true, requireComplete: true, merge: parts => [...new Map((parts as Parameters<typeof getLivePushDeliveryHealth>[0][]).map(ctx => [ctx.target.canisterIds.notification_queue, ctx])).values()],
-    });
-    let count = 0;
-    for (const ctx of contexts) count += await cleanupLiveStaleDeviceTokens(ctx, Date.now(), ageDays * 86400000);
-    return count;
+    return cleanupAdminDeviceTokens(ageDays);
   }, onSuccess: count => { if (count !== null) { toast.success(`Removed ${count} stale device registrations`); qc.invalidateQueries({ queryKey: ["icp-admin-push-health"] }); } }, onError: (e: Error) => toast.error(e.message) });
   if (isLoading) return <Skeleton className="h-32 m-4" />;
   if (!isAppAdmin) return <p className="p-6 text-muted-foreground">App admins only.</p>;
-  const value = draft ?? settings.data;
+  const value = draft ?? settings.data?.[0];
   const totals = health.data?.reduce((total, row) => ({
     total24h: total.total24h + row.total24h, pending24h: total.pending24h + row.pending24h,
     processing24h: total.processing24h + row.processing24h, delivered24h: total.delivered24h + row.delivered24h,

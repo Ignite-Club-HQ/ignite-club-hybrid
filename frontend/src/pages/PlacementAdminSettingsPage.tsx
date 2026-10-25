@@ -248,8 +248,8 @@ export default function PlacementAdminSettingsPage() {
             }
           },
         }, { everyGroup: true, requireComplete: true, merge: () => undefined });
-      } catch {
-        // canister list is best-effort too
+      } catch (error) {
+        if (isIcp) throw error;
       }
       return [...merged.entries()]
         .map(([id, name]) => ({ id, name }))
@@ -325,8 +325,8 @@ export default function PlacementAdminSettingsPage() {
             if (fromCanister) value = fromCanister;
           },
         }, { shared: 'app' });
-      } catch {
-        // canister read is best-effort
+      } catch (error) {
+        if (isIcp) throw error;
       }
       return decodeStoredConfigText(value);
     },
