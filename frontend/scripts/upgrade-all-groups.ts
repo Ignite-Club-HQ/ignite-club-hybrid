@@ -192,8 +192,12 @@ await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend',gat
 // gallery notifications and Vault copy authority keep working on every group.
 const provisionByGroup=new Map(groupFolders.filter(e=>existsSync(new URL(`${e.name}/provision.json`,groupRoot))).map(e=>[e.name,json(`deploy/groups/${e.name}/provision.json`)]));
 for(const t of targets.filter(t=>t.name==='media_metadata')){
+  // Group 1 has no provision file; the planned inventory is authoritative for every group.
+  const g=inventory.groups.find((g:{id:string})=>g.id===t.groupId) as {services?:{name:string;canisterId:string}[]}|undefined;
   const p=provisionByGroup.get(t.groupId) as {canisters?:Record<string,string>}|undefined;
-  const club=p?.canisters?.club_domain, vault=p?.canisters?.vault_domain;
+  const own=(n:string)=>g?.services?.find(s=>s.name===n)?.canisterId;
+  const club=own('club_domain')??p?.canisters?.club_domain, vault=own('vault_domain')??p?.canisters?.vault_domain;
+  if(p?.canisters&&((p.canisters.club_domain&&p.canisters.club_domain!==club)||(p.canisters.vault_domain&&p.canisters.vault_domain!==vault)))throw Error(`Gallery authority inventory disagrees for ${t.groupId}; stop without rewiring`);
   if(!club||!vault)throw Error(`Gallery authority inventory missing for ${t.groupId}; stop without rewiring`);
   const factory=()=>IDL.Service({set_gallery_authorities:IDL.Func([IDL.Principal,IDL.Principal],[IDL.Variant({Ok:IDL.Null,Err:IDL.Text})],[])});
   const actor=Actor.createActor(factory,{agent,canisterId:t.canisterId}) as unknown as {set_gallery_authorities(c:Principal,v:Principal):Promise<{Ok:null}|{Err:string}>};
