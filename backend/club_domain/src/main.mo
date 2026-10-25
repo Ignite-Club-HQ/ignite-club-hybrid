@@ -5095,9 +5095,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?req) {
         if (not isAdmin(caller, req.club_id)) return #Err("Club admin required");
         if (req.status != "pending") return #Err("Request already processed");
-        if (isExcluded(req.user, req.club) or removalReceiver.denied(req.user) or isTransferFenced(req.club) or not validPendingInviteRole(if (req.team == null) "club" else "team", req.team, ?req.role)) return #Err("Request no longer eligible");
-        switch (req.team) { case (?id) { if (not inviteTeamValid(req.club, id)) return #Err("Team no longer available") }; case null {} };
-        if (acl.roles.any(func g = g.user == req.user and g.role == req.role and g.club == ?req.club and g.team == req.team)) return #Err("Role already granted");
+        if (isExcluded(req.user, req.club_id) or removalReceiver.denied(req.user) or isTransferFenced(req.club_id)) return #Err("Request no longer eligible");
         bumpMembershipDiscovery();
         acl := { acl with roles = acl.roles.concat([{ user = req.user; role = "member"; club = ?req.club_id; team = null }]) };
         accountRoles := accountRoles.concat([{ account_id = accountIdFor(req.user); club = ?req.club_id; role = "member"; team = null }]);

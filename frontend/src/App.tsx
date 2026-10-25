@@ -535,9 +535,10 @@ const App = () => {
                 <Route path="/verify-reset-code" element={<VerifyResetCodePage />} />
                 <Route path="/complete-profile" element={<CompleteProfilePage />} />
                 <Route path="/competitions/officials/join" element={<NativeOnlyGate><WithDeepLinkGate><CompetitionOfficialJoinPage /></WithDeepLinkGate></NativeOnlyGate>} />
-                <Route path="/join/:token" element={<NativeOnlyGate><WithDeepLinkGate><JoinTeamPage /></WithDeepLinkGate></NativeOnlyGate>} />
-                <Route path="/join/p/:token" element={<NativeOnlyGate><WithDeepLinkGate><JoinTeamPage /></WithDeepLinkGate></NativeOnlyGate>} />
-                <Route path="/j/:code" element={<NativeOnlyGate><WithDeepLinkGate><ShortInviteRedirect /></WithDeepLinkGate></NativeOnlyGate>} />
+                <Route path="/join/:token" element={<WithDeepLinkGate><JoinTeamPage /></WithDeepLinkGate>} />
+                <Route path="/join/p/:token" element={<WithDeepLinkGate><JoinTeamPage /></WithDeepLinkGate>} />
+                <Route path="/j/:code" element={<WithDeepLinkGate><ShortInviteRedirect /></WithDeepLinkGate>} />
+                <Route path="/i/:code" element={<WithDeepLinkGate><ShortInviteRedirect /></WithDeepLinkGate>} />
                 <Route path="/join-club/:token" element={<NativeOnlyGate><WithDeepLinkGate><JoinClubPage /></WithDeepLinkGate></NativeOnlyGate>} />
                 <Route path="/signup-pro" element={<SignupProPage />} />
                 <Route path="/terms" element={<TermsOfServicePage />} />

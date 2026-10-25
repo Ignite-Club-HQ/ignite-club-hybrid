@@ -13,7 +13,7 @@ export async function icpInvitePhotoConsent(granted?: boolean): Promise<boolean>
           await client.setPrivacyConsent(account.id, "photo", granted);
           return granted;
         }
-        return client.getPrivacyConsent(account.id, "photo");
+        return await client.getPrivacyConsent(account.id, "photo");
       } finally { client.dispose(); }
     },
   }, { shared: "person" });
