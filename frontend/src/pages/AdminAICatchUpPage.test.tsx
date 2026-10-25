@@ -8,8 +8,9 @@ vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => "icp" }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: m.from, rpc: m.rpc } }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, h: { icp: (ctx: unknown) => unknown }) => h.icp({}) }));
 vi.mock("@/live/features/appSettings", () => ({ getLiveAppSetting: m.get, setLiveAppSetting: m.set, decodeAppSettingBool: (v: string | null, fallback: boolean) => v == null ? fallback : JSON.parse(v) === true }));
-vi.mock("@/live/features/club", () => ({ listLiveClubs: m.clubs }));
-vi.mock("@/live/features/proAccess", () => ({ listLiveClubSubscriptions: m.subs }));
+vi.mock("@/live/features/club", () => ({ listLiveClubs: m.clubs, getLiveClubSubscription: async (_ctx: unknown, id: string) => (await m.subs()).get(id) }));
+vi.mock("@/live/features/proAccess", () => ({ listLiveClubSubscriptionsStrict: m.subs }));
+vi.mock("@/live/membershipRouting", () => ({ readMembershipInScope: (ctx: unknown, _scope: unknown, read: (ctx: unknown) => unknown) => read(ctx) }));
 vi.mock("@/live/features/messaging", () => ({ listLiveAllClubDmSettings: m.settings, setLiveClubAiCatchUp: m.flag, enableLiveAiCatchUpForAllMembers: m.members }));
 vi.mock("sonner", () => ({ toast: { success: m.success, error: m.error } }));
 import Page from "./AdminAICatchUpPage";
@@ -46,7 +47,7 @@ describe("ICP AI recap administration", () => {
   it("does not report rejected bulk enables as success", async () => {
     m.members.mockRejectedValue(new Error("App admin required")); open();
     fireEvent.click(await screen.findByRole("button", { name: "Enable for ALL Pro clubs (1)" })); fireEvent.click(screen.getByRole("button", { name: "Enable", exact: true }));
-    await waitFor(() => expect(m.error).toHaveBeenCalledWith("Failed: App admin required")); expect(m.success).not.toHaveBeenCalled(); expect(m.rpc).not.toHaveBeenCalled();
+    await waitFor(() => expect(m.error).toHaveBeenCalledWith("Failed: Acknowledged 1 club flags and 0 member updates (0 members); the attempted step is unconfirmed. Do not retry the whole batch.")); expect(m.success).not.toHaveBeenCalled(); expect(m.rpc).not.toHaveBeenCalled();
   });
   it("reports failed reads rather than empty defaults", async () => {
     m.get.mockRejectedValue(new Error("Connection failed")); m.clubs.mockRejectedValue(new Error("Club read failed")); open();

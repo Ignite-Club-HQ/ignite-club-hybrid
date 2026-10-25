@@ -75,6 +75,9 @@ describe("media_blob_store contract", () => {
       "club_media_inventory_page",
       "cycles_balance",
       "delete_blob",
+      "delete_erased_scope_vault_blob",
+      "delete_expired_vault_blob",
+      "delete_vault_blob",
       "enable_retained_media_quota",
       "enable_shared_media_quota",
       "enable_stable_media_storage",
@@ -101,6 +104,7 @@ describe("media_blob_store contract", () => {
       "read_pending_test_uploads",
       "read_pending_uploads",
       "read_physical_growth_capacity",
+      "read_vault_blob_evidence",
       "reconcile_retained_deletions",
       "reconcile_upload_operations",
       "rekey_principal",
@@ -110,6 +114,7 @@ describe("media_blob_store contract", () => {
       "set_capacity_limit",
       "set_club_domain_canister",
       "set_club_media_transfer_fence",
+      "set_vault_authority",
       "stable_storage_status",
     ]);
   });

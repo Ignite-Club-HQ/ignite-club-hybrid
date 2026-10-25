@@ -7,6 +7,12 @@ import React from "react";
 // ---- mocks ----
 const getLiveTeamInviteMock = vi.fn();
 const acceptLiveTeamInviteMock = vi.fn();
+const getLiveTeamInviteLinkByTokenMock = vi.fn();
+const acceptLiveTeamInviteLinkMock = vi.fn();
+vi.mock("@/live/features/club", () => ({
+  getLiveTeamInviteLinkByToken: (...args: unknown[]) => getLiveTeamInviteLinkByTokenMock(...args),
+  acceptLiveTeamInviteLink: (...args: unknown[]) => acceptLiveTeamInviteLinkMock(...args),
+}));
 vi.mock("@/live/features/membership", () => ({
   getLiveTeamInvite: (...args: unknown[]) => getLiveTeamInviteMock(...args),
   acceptLiveTeamInvite: (...args: unknown[]) => acceptLiveTeamInviteMock(...args),
@@ -26,6 +32,11 @@ vi.mock("@/live/features/miniLeagues", () => ({
 }));
 
 let membershipRoutedToIcp = false;
+vi.mock("@/live/invitePreview", () => ({
+  readInvitePreview: async (_token: string, providers: any) => membershipRoutedToIcp
+    ? providers.icp({ identity: {}, target: {} })
+    : providers.supabase(),
+}));
 vi.mock("@/live/loadBackendRouting", () => ({
   isFeatureRoutedToIcp: (feature: string) => feature === "membership" && membershipRoutedToIcp,
 }));
@@ -124,6 +135,10 @@ beforeEach(() => {
   rpcMock.mockReset();
   getLiveTeamInviteMock.mockReset();
   acceptLiveTeamInviteMock.mockReset();
+  getLiveTeamInviteLinkByTokenMock.mockReset().mockResolvedValue(null);
+  acceptLiveTeamInviteLinkMock.mockReset().mockResolvedValue(undefined);
+  toastMock.mockClear();
+  sendGamificationNotificationMock.mockClear();
   playerPreviewMock.mockReset().mockResolvedValue(null);
   claimPlayerMock.mockReset();
   getLiveJoinLinkByTokenMock.mockReset();
@@ -178,6 +193,21 @@ describe("JoinTeamPage team-invite acceptance routing", () => {
         message: expect.stringContaining("Coach"),
       }),
     );
+  });
+
+  it("ICP shareable links are accepted by token, not by a legacy invite ID", async () => {
+    membershipRoutedToIcp = true;
+    getLiveTeamInviteLinkByTokenMock.mockResolvedValue({
+      id: "link-1", team_id: "team-1", club_id: "club-1", role: "coach",
+      revoked: false, created_at_ms: 1000n,
+    });
+    renderAt("/join/share-token");
+    const joinButton = await screen.findByRole("button", { name: /join/i });
+    await waitFor(() => expect(joinButton).toBeEnabled());
+    fireEvent.click(joinButton);
+    await waitFor(() => expect(acceptLiveTeamInviteLinkMock).toHaveBeenCalledWith(expect.anything(), "share-token"));
+    expect(acceptLiveTeamInviteMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 
   it("mini-league join under ICP shows an unavailable message instead of joining", async () => {

@@ -26,8 +26,10 @@ describe("live Supabase compatibility guards", () => {
 
   it("keeps the aliased live client aligned with Supabase defaults", () => {
     expect(liveClient).toMatch(
-      /createClient<Database>\(target\.url, target\.anonKey\)/
+      /createClient<Database>\(target\.url,\s*target\.anonKey,\s*\{/
     );
+    expect(liveClient).toContain("await assertStrictIcpRequest(input, init)");
+    expect(liveClient).toContain("return globalThis.fetch(input, init)");
     expect(liveClient).not.toMatch(/storageKey/);
     expect(liveClient).not.toMatch(/x-ignite-backend-target/);
   });
