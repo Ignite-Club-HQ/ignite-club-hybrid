@@ -105,10 +105,13 @@ const readSharedEvidence=async(t:Target)=>{
 for(const t of targets.filter(t=>t.groupId==='shared'&&t.name!=='identity_access'))wiring[t.canisterId]=digest(await readSharedEvidence(t));
 for(const t of targets.filter(t=>t.groupId!=='shared')){
   const rows=await readConfig(t);
+  // Preserve actual preflight evidence even when a required authority differs.
+  // Public canister wiring only; never management environment values or secrets.
+  writeFileSync(join(directory,`${t.groupId}-${t.name}-wiring.json`),JSON.stringify({groupId:t.groupId,service:t.name,canisterId:t.canisterId,rows},null,2));
   const group=inventory.groups.find((g:{id:string})=>g.id===t.groupId);
   if(!group)throw Error('Missing owning group');
   const own=(name:string)=>group.services.find((s:{name:string})=>s.name===name)?.canisterId;
-  const requireRow=(name:string,expected:string|undefined)=>{if(!expected||rows.filter(r=>r[0]===name&&r[1]===expected).length!==1)throw Error(`Owning-group wiring differs: ${t.groupId}/${t.name}/${name}`);};
+  const requireRow=(name:string,expected:string|undefined)=>{if(!expected||rows.filter(r=>r[0]===name&&r[1]===expected).length!==1)throw Error(`Owning-group wiring differs: ${t.groupId}/${t.name}/${name}; expected ${expected??'missing inventory'}, reported ${JSON.stringify(rows.filter(r=>r[0]===name))}. Full readback saved in ${t.groupId}-${t.name}-wiring.json; no authority changes applied.`);};
   if(!['timer_jobs','insights_domain'].includes(t.name))requireRow('club_domain',own('club_domain'));
   if(t.name==='insights_domain')requireRow('permission_source','local_club_roles');
   if(t.name==='club_domain'){requireRow('identity_access',shared.identity_access);requireRow('notification_queue',own('notification_queue'));requireRow('events_domain',own('events_domain'));}
