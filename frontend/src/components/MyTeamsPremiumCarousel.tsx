@@ -19,14 +19,11 @@ import { filterDeletedTeams } from "@/lib/deletedTeamTombstones";
 import { clearMyTeamsCarouselCache } from "@/lib/invalidateTeamLists";
 import { format, isToday, isTomorrow, parseISO, differenceInDays } from "date-fns";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend } from "@/live/featureRouter";
+import { mergeLists, withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
-import { getLiveTeam } from "@/live/features/club";
+import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
+import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { listLiveEvents } from "@/live/features/events";
-
-import { fetchIcpCarouselItems } from "@/live/carouselItems";
-import { useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
 
 // Render Supabase storage URLs through the image-transform endpoint at a tiny
 // width so the 28×28 avatar thumbnails don't download full-resolution originals.
