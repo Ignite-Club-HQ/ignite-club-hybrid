@@ -22,6 +22,7 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubProfile, getLiveClubKind } from "@/live/features/club";
 import { readIcpAssociationPlayhq, linkIcpAssociationPlayhq, syncIcpAssociationPlayhq } from "@/lib/associationPlayhqRepository";
+import { playhqGradeId } from "@/lib/playhqLinkInput";
 
 const isIcpPageMode = () => isFeatureRoutedToIcp("competitions") || resolveAuthBackend() === "icp";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -582,11 +583,12 @@ export function PlayHQPanel({ associationId, isAdmin }: { associationId: string;
   };
 
   const handleLink = async () => {
+    if (saving) return;
     if (!user || !name.trim() || !url.trim() || !tenant.trim()) {
       toast({ title: "Missing details", description: "Name, PlayHQ URL and tenant are required.", variant: "destructive" });
       return;
     }
-    const extId = parseExternalId(url);
+    const extId = isIcp ? playhqGradeId(url) : parseExternalId(url);
     if (!extId) {
       toast({ title: "Couldn't read PlayHQ URL", variant: "destructive" });
       return;
