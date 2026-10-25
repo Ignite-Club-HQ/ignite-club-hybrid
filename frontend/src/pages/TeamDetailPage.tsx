@@ -1001,7 +1001,7 @@ export default function TeamDetailPage() {
   // may invite players only — no staff roles, no other management.
   const { data: canInvitePlayersOnly = false } = useQuery({
     queryKey: ["can-invite-players-to-team", id, user?.id],
-    enabled: !!id && !!user && !isCoachOrAdmin && !isClubAdmin && !useIcpLab,
+    enabled: !!id && !!user && !isCoachOrAdmin && !isClubAdmin && !useIcpLab && !isIcpAccount,
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await (supabase as any).rpc("can_invite_players_to_team", {
@@ -1154,7 +1154,7 @@ export default function TeamDetailPage() {
       }
       return invitesWithProfiles;
     },
-    enabled: !!id && isMember && !useIcpLab,
+    enabled: !!id && isMember && !useIcpLab && !isIcpAccount,
   });
   const { data: existingRequest } = useQuery({
     queryKey: ["team-request", id, user?.id],
@@ -1168,7 +1168,7 @@ export default function TeamDetailPage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!id && !!user && !isMember && !useIcpLab,
+    enabled: !!id && !!user && !isMember && !useIcpLab && !isIcpAccount,
   });
 
   const requestRoleMutation = useMutation({
