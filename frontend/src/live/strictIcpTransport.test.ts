@@ -39,10 +39,11 @@ describe("strict ICP fallback boundary", () => {
     await expect(assertStrictIcpRequest(host + "/functions/v1/send-welcome-email-icp", post({ token: "job-token" }))).resolves.toBeUndefined();
     await expect(assertStrictIcpRequest(host + "/functions/v1/send-welcome-email-icp", post({ token: "job-token", to: "private" }))).rejects.toThrow("blocked");
   });
-  it("preserves external file bytes and signing, not uploads or deletion", async () => {
+  it("preserves external file byte reads, uploads, deletion and signing, not inventory", async () => {
     await expect(assertStrictIcpRequest(host + "/storage/v1/object/public/photos/file.jpg")).resolves.toBeUndefined();
     await expect(assertStrictIcpRequest(host + "/storage/v1/object/sign/photos/file.jpg", post({ expiresIn: 60 }))).resolves.toBeUndefined();
-    for (const method of ["PUT", "DELETE", "POST"]) await expect(assertStrictIcpRequest(host + "/storage/v1/object/photos/file.jpg", { method })).rejects.toThrow("blocked");
+    for (const method of ["PUT", "DELETE", "POST"]) await expect(assertStrictIcpRequest(host + "/storage/v1/object/photos/file.jpg", { method })).resolves.toBeUndefined();
+    await expect(assertStrictIcpRequest(host + "/storage/v1/object/list/photos", post({}))).rejects.toThrow("blocked");
   });
   it("leaves external maps, GIPHY, PlayHQ and payment websites untouched", async () => {
     for (const url of ["https://maps.googleapis.com/maps/api", "https://api.giphy.com/v1/gifs", "https://www.playhq.com/grade/a", "https://checkout.stripe.com/pay"]) await expect(assertStrictIcpRequest(url)).resolves.toBeUndefined();

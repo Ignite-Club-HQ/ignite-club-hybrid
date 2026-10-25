@@ -29,10 +29,13 @@ function supabaseDestination(url: URL): boolean {
 }
 
 async function externalException(url: URL, method: string, input: RequestInfo | URL, init?: RequestInit): Promise<boolean> {
-  // Stored file bytes are an approved external boundary; metadata/mutations are not.
-  if ((method === "GET" || method === "HEAD") && /^\/storage\/v1\/(object|render\/image)\//.test(url.pathname)) return true;
+  // Stored file bytes (including existing upload/delete transports) are an
+  // approved boundary. Database metadata and Storage inventory are not.
+  if (["GET", "HEAD", "POST", "PUT", "DELETE"].includes(method)
+      && /^\/storage\/v1\/object\//.test(url.pathname)
+      && !/^\/storage\/v1\/object\/(list|info)\//.test(url.pathname)) return true;
+  if ((method === "GET" || method === "HEAD") && /^\/storage\/v1\/render\/image\//.test(url.pathname)) return true;
   if (method !== "POST") return false;
-  if (/^\/storage\/v1\/object\/sign\//.test(url.pathname)) return true;
   const endpoint = url.pathname;
   if (endpoint !== "/functions/v1/verify-iap-receipt-icp" && endpoint !== "/functions/v1/send-welcome-email-icp") return false;
   let body: Record<string, unknown>;
