@@ -16,7 +16,8 @@ export const SCOPES = Object.freeze({
   gallery_vault: ['club_domain', 'media_blob_store', 'media_metadata', 'vault_domain', 'messaging_domain', 'notification_queue'],
 });
 export function validateRequest(action, scope, confirmation, checkedPlan) {
-  if (!['check', 'upgrade'].includes(action) || !Object.hasOwn(SCOPES, scope)) throw Error('Choose a reviewed scope and check or upgrade');
+  if (!['check', 'upgrade', 'recover'].includes(action) || !Object.hasOwn(SCOPES, scope)) throw Error('Choose a reviewed scope and check, upgrade or recover');
+  if (action === 'recover' && (confirmation?.trim() !== 'RECOVER COMPLETED MAINNET RELEASE' || !/^[a-f0-9]{64}$/.test(checkedPlan ?? ''))) throw Error('Type RECOVER COMPLETED MAINNET RELEASE and provide the original checked plan hash');
   if (action === 'upgrade' && (confirmation?.trim() !== 'UPGRADE ALL MAINNET GROUPS' || !/^[a-f0-9]{64}$/.test(checkedPlan ?? ''))) throw Error('Type UPGRADE ALL MAINNET GROUPS and provide the checked plan hash');
   return SCOPES[scope];
 }
@@ -98,3 +99,26 @@ export function requireSettledNarrowRelease(branch, journal) {
   if (!/^[a-f0-9]{40}$/.test(journal.binding?.release ?? '') || journal.activation?.phase !== 'complete' || journal.activation.release !== journal.binding.release || journal.ownership?.complete !== true || journal.replicaAcceptance?.snapshotVerified !== true || journal.replicaAcceptance?.restorationGuardVerified !== true) fail();
 }
 export function assertCheckedPlan(expected, actual) { if (expected!==actual) throw Error('Checked plan changed; run check on this exact revision/inventory/artifacts'); }
+/** Recovery never adopts pending or ready steps, even when module hashes match. */
+export function requireCompletedRecovery(journal, {repo, scope, checkedPlan, source, branch}) {
+  if (!journal?.binding) throw Error('Existing release journal required; no recovery journal may be created');
+  validateJournal(journal, journal.binding);
+  if (journal.binding.repo !== repo || journal.binding.scope !== scope || digest(journal.binding) !== checkedPlan || !/^[a-f0-9]{40}$/.test(journal.binding.release ?? '') || journal.modulesComplete !== true || journal.steps.some(s=>s.phase !== 'complete') || journal.published) throw Error('Recovery requires the exact acknowledged module-complete unpublished release');
+  if (!/^[a-f0-9]{40}$/.test(source ?? '') || !/^refs\/heads\/[A-Za-z0-9._/-]+$/.test(branch ?? '')) throw Error('Recovery source and branch required');
+  if (journal.recovery && (journal.recovery.source !== source || journal.recovery.branch !== branch || journal.recovery.planHash !== checkedPlan)) throw Error('Recovery source changed; resume the pinned recovery run');
+  const hashes = {};
+  for (const t of journal.binding.targets) {
+    if (hashes[t.name] && hashes[t.name] !== t.newHash) throw Error('Conflicting saved artifacts');
+    hashes[t.name] = t.newHash;
+  }
+  return {release:journal.binding.release, hashes, recovery:{source, branch, planHash:checkedPlan}};
+}
+export function galleryAuthorities(inventory, target, provisions) {
+  const group = inventory.groups.find(g=>g.id===target.groupId);
+  const own = name => group?.services.find(s=>s.name===name)?.canisterId;
+  const club=own('club_domain'), vault=own('vault_domain');
+  if (!validId(club) || !validId(vault) || own('media_metadata') !== target.canisterId) throw Error(`Gallery authority inventory missing for ${target.groupId}; stop without rewiring`);
+  const provision=provisions.find(p=>p.groupId===target.groupId);
+  if (provision && (provision.canisters?.club_domain !== club || provision.canisters?.vault_domain !== vault)) throw Error(`Gallery authority inventory disagrees for ${target.groupId}; stop without rewiring`);
+  return {club, vault};
+}
