@@ -298,9 +298,8 @@ export default function EventDetailPage() {
       // shaped like Supabase `rsvps`, so the roster (account RSVPs + linked
       // children) and the caller's own child RSVPs are read via the
       // upgraded event_roster / my_child_rsvps queries and mapped into the
-      // Supabase-shaped row the rest of this page expects. Enrichment
-      // (profile display names, mini_league_players) has no canister
-      // equivalent and is left null — provisional until verified post-deploy.
+      // Supabase-shaped row the rest of this page expects. Adult profiles
+      // hydrate from shared identity records; child names retain PII grants.
       const icpRsvps = await withFeatureBackend("events", {
         supabase: async () => null,
         icp: async (ctx) => {
@@ -339,7 +338,7 @@ export default function EventDetailPage() {
             };
           });
           const { hydrateRsvpDisplayProfiles } = await import("@/features/events/rsvpDisplayProfiles");
-          const profileIds = [...new Set(rows.map(row => row.user_id.replace(/^principal:/, "")))];
+          const profileIds = [...new Set(rows.filter(row => !row.child_id).map(row => row.user_id))];
           const profiles = await listLiveProfilesByIds(ctx, profileIds).catch(() => []);
           return hydrateRsvpDisplayProfiles(rows, profiles.map(p => ({
             id: p.account_id, display_name: p.display_name, avatar_url: p.avatar_ref[0] ?? null,

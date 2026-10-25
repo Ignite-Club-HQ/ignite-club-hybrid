@@ -1,5 +1,5 @@
 ## Attendance name lost after Going — 25 October 2026
-- [ ] Hydrate ICP RSVP adult profiles and retain known authorized roster/self names when responses move between attendance sections; verify status transitions.
+- [x] ICP roster reads now hydrate adult profiles through the shared identity service; attendance buckets reuse known authorized roster/self names without changing RSVP wire identities or child names. Actual No Response → Going/name render and status/profile regressions pass (34 unique focused checks per mode); ICP guards and preview build OK. No deployment/live readback claim.
 - [ ] Signed-in phone RSVP readback requires Paul's Internet Identity session.
 
 ## Scoped news codes in inbox previews — 25 October 2026
