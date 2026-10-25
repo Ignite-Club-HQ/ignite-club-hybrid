@@ -41,7 +41,8 @@ import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { CreateActionButton } from "@/components/CreateActionButton";
 import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorStrip";
 import { MediaSponsorTile } from "@/components/media/MediaSponsorTile";
-import { IcpUploadPhotoSheet, type IcpPendingUploadPreview } from "@/components/media/IcpUploadPhotoSheet";
+import { IcpUploadPhotoSheet } from "@/components/media/IcpUploadPhotoSheet";
+import { usePendingGalleryUploads, reconcileGalleryUploads } from './pendingGalleryUploads';
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 import { mediaProfileDirectory } from "./mediaProfileDirectory";
@@ -462,7 +463,7 @@ export function IcpMediaFeedPage() {
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [pendingPreviews, setPendingPreviews] = useState<IcpPendingUploadPreview[]>([]);
+  const pendingUploads = usePendingGalleryUploads(queryClient, principal);
   // Home's "Add photos" shortcut and gallery prompts link to /media?upload=1.
   const [searchParams, setSearchParams] = useSearchParams();
   const competitionId = searchParams.get("competition");
@@ -738,6 +739,14 @@ export function IcpMediaFeedPage() {
     const extra = (cardPhotoQuery.data ?? []).filter(p => !known.has(p.representativeAssetId));
     return [...(linked && !known.has(link.photoId ?? '') ? [linked] : []), ...extra, ...loaded];
   }, [feedQuery.data?.posts, linkedFeedAsset.data, link.photoId, cardPhotoQuery.data]);
+  useEffect(() => {
+    if (principal) reconcileGalleryUploads(queryClient, principal, allFeedPosts.flatMap(post => post.assets.map(asset => asset.id)));
+  }, [principal, queryClient, allFeedPosts]);
+  const loadedAssetIds = new Set(allFeedPosts.flatMap(post => post.assets.map(asset => asset.id)));
+  const pendingPreviews = pendingUploads.filter(row => (!row.assetId || !loadedAssetIds.has(row.assetId))
+    && (effectiveClubId === 'all' || row.clubId === effectiveClubId)
+    && (selectedTeamId === 'all' || row.teamId === selectedTeamId)
+    && (!competitionId || row.competitionId === competitionId));
   const resolvedUrls = useResolvedAssetUrls(allFeedPosts);
   const posts = useMemo(() => {
     const all = allFeedPosts;
@@ -913,10 +922,11 @@ export function IcpMediaFeedPage() {
                   </p>
                 </div>
               </div>
-              <img src={pending.src} alt="" className="aspect-square w-full object-cover" />
+              {pending.isVideo ? <video src={pending.src} muted controls className="aspect-square w-full object-cover" />
+                : <img src={pending.src} alt="" className="aspect-square w-full object-cover" />}
               <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-background/85 px-2.5 py-1">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                <p className="text-xs font-medium text-foreground">Uploading…</p>
+                {!pending.settled && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
+                <p className="text-xs font-medium text-foreground">{pending.settled ? 'Published' : 'Uploading…'}</p>
               </div>
             </div>
           ))}
@@ -968,10 +978,10 @@ export function IcpMediaFeedPage() {
 
       {options && (
         <IcpUploadPhotoSheet
+          principal={principal}
           open={uploadOpen}
           onOpenChange={setUploadOpen}
-          onUploaded={() => queryClient.refetchQueries({ queryKey: ["icp-media-feed"] })}
-          onPendingChange={setPendingPreviews}
+          onUploaded={() => undefined}
           clubs={options.clubs}
           teams={options.teams}
           miniLeagues={options.miniLeagues}

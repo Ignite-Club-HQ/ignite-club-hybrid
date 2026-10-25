@@ -1,5 +1,7 @@
 import { writeOnce } from "@/live/clubScope";
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from '@tanstack/react-query';
+import { beginGalleryUpload, acknowledgeGalleryUpload, finishGalleryUpload } from './pendingGalleryUploads';
 import { Check, ImagePlus, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -40,6 +42,7 @@ export interface IcpPendingUploadPreview {
 }
 
 interface IcpUploadPhotoSheetProps {
+  principal?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUploaded: () => unknown;
@@ -69,6 +72,7 @@ function prepareFile(raw: File): Promise<{ file: File | Blob }> {
 const SCOPE_UNSUPPORTED = /set_asset_scope|has no update method|not found/i;
 
 export function IcpUploadPhotoSheet({
+  principal,
   open,
   onOpenChange,
   onUploaded,
@@ -81,6 +85,7 @@ export function IcpUploadPhotoSheet({
   defaultEventId,
   onPendingChange,
 }: IcpUploadPhotoSheetProps) {
+  const queryClient = useQueryClient();
   const { activeClubFilter } = useClubTheme();
   const availableClubs = creationClubChoices(clubs, activeClubFilter) ?? [];
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -170,6 +175,10 @@ export function IcpUploadPhotoSheet({
       toast.error("Pick a club");
       return;
     }
+    if (!principal) {
+      toast.error('Please wait for sign-in to finish before uploading.');
+      return;
+    }
     setUploading(true);
     setProgress({ done: 0, total: files.length });
     // Show the photos in the feed instantly (like chat); no "shared" toast.
@@ -183,9 +192,11 @@ export function IcpUploadPhotoSheet({
         : competitionId
           ? competitions.find((c) => c.id === competitionId)?.name ?? null
           : null;
-    const previews = files
-      .filter((f) => f.type.startsWith("image/"))
-      .map((f) => ({ src: URL.createObjectURL(f), clubName, scopeName }));
+    const batchId = crypto.randomUUID();
+    const previews = files.map((f, index) => ({ id: `${batchId}:${index}`, batchId,
+      src: URL.createObjectURL(f), clubId, teamId: teamId || null, competitionId: competitionId || null,
+      clubName, scopeName, isVideo: f.type.startsWith('video/') }));
+    beginGalleryUpload(queryClient, principal, previews);
     onPendingChange?.(previews);
     onOpenChange(false);
     // Multi-photo uploads form one album post, like the Supabase gallery.
@@ -242,6 +253,7 @@ export function IcpUploadPhotoSheet({
               contentLength: prepared.file.size,
               blobRef: uploaded.blobRef,
             });
+            acknowledgeGalleryUpload(queryClient, principal, previews[i].id, asset.id);
             try {
               await setLiveAssetScope(ctx, asset.id, {
                 teamId: teamId || null,
@@ -273,7 +285,9 @@ export function IcpUploadPhotoSheet({
           const worker = async () => {
             while (nextIndex < files.length) await uploadOne(nextIndex++);
           };
-          await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
+          const results = await Promise.allSettled(Array.from({ length: Math.min(3, files.length) }, worker));
+          const failed = results.find(result => result.status === 'rejected');
+          if (failed?.status === 'rejected') throw failed.reason;
           if (teamId && registeredAssetIds.length) {
             const { publishLiveGalleryChatCard } = await import('@/live/features/media');
 
@@ -299,6 +313,7 @@ export function IcpUploadPhotoSheet({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
+      await finishGalleryUpload(queryClient, principal, batchId).catch(() => undefined);
       onPendingChange?.([]);
       setUploading(false);
     }
