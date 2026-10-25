@@ -72,9 +72,9 @@ describe('Next Up pending secondary reads', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><MemoryRouter><NextUpCarousel events={[event('icp-event', 'club-a')]} /></MemoryRouter></QueryClientProvider>);
     await waitFor(() => expect(client.getQueryData(['hero-rsvp', 'icp-event', 'account-1'])).toEqual({ id: 'icp-event:account-1', status: 'going' }));
-    await waitFor(() => expect(client.getQueryData(['hero-my-duties', 'icp-event', 'account-1'])).toEqual([
+    await waitFor(() => { const q = client.getQueryState(['hero-my-duties', 'icp-event', 'account-1']); if (q?.error) throw q.error; expect(q?.data).toEqual([
       { id: 'icp-event:account-1:Referee', name: 'Referee', status: 'completed', start_time: null, end_time: null },
-    ]));
+    ]); });
     expect(state.reads).toEqual([]);
     client.clear();
   });
