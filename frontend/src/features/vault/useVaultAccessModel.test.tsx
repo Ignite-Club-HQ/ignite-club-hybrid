@@ -7,8 +7,8 @@
  */
 
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useVaultAccessModel } from "./useVaultAccessModel";
 import type { FolderView } from "./useVaultExport";
@@ -99,6 +99,8 @@ beforeEach(() => {
   fetchVaultTeamHasPro.mockReset().mockResolvedValue(false);
   fetchVaultAnyProAccess.mockReset().mockResolvedValue(false);
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe("useVaultAccessModel — access decision", () => {
   it("reports failed subscription checks as retryable errors, not established Free access", async () => {
@@ -346,6 +348,37 @@ describe("useVaultAccessModel — root auto-navigation", () => {
 });
 
 describe("useVaultAccessModel — eligible clubs query", () => {
+  it("keeps returned ICP member clubs visible while the wider admin directory stalls", async () => {
+    featureRouting.icp = true;
+    fetchVaultAppAdmin.mockResolvedValue(true);
+    fetchVaultAccessibleClubs.mockImplementation(async (_user, admin) => admin
+      ? new Promise(() => {})
+      : [{ id: "club-a", name: "Club A", is_pro: true, storage_used_bytes: 0 }]);
+    const { result } = renderAccessModel();
+    await waitFor(() => expect(fetchVaultAccessibleClubs).toHaveBeenCalledWith("user-1", true));
+    await waitFor(() => expect(result.current.userClubs?.map(c => c.id)).toEqual(["club-a"]));
+    expect(result.current.isLoadingClubs).toBe(false);
+    expect(result.current.clubsError).toBeNull();
+  });
+
+  it("settles a stalled ICP routing read after 12 seconds without automatic repeats, and supports retry", async () => {
+    vi.useFakeTimers();
+    featureRouting.icp = true;
+    fetchVaultAccessibleClubs.mockReturnValue(new Promise(() => {}));
+    const { result } = renderAccessModel();
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_100); });
+    expect(result.current.isLoadingClubs).toBe(false);
+    expect(result.current.clubsError).toBeInstanceOf(Error);
+    expect(result.current.userClubs).toBeUndefined();
+    expect(fetchVaultAccessibleClubs).toHaveBeenCalledTimes(1);
+    fetchVaultAccessibleClubs.mockResolvedValue([{ id: "club-a", name: "Club A", is_pro: true, storage_used_bytes: 0 }]);
+    await act(async () => { result.current.retryClubs(); await vi.advanceTimersByTimeAsync(100); });
+    expect(result.current.userClubs?.map(c => c.id)).toEqual(["club-a"]);
+    expect(result.current.clubsError).toBeNull();
+    expect(fetchVaultAccessibleClubs).toHaveBeenCalledTimes(2);
+    expect(result.current.canAccessVault).toBe(false);
+  });
+
   it("passes the resolved app-admin flag into the accessible-clubs fetch", async () => {
     fetchVaultAppAdmin.mockResolvedValue(true);
     renderAccessModel();

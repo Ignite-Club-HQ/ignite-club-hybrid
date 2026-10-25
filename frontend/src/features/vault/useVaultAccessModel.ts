@@ -27,6 +27,8 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export type { VaultClubSummary } from "./vaultAccessRepository";
 
+const VAULT_OPEN_READ_MS = 12_000;
+
 export interface VaultAdminUpgradeInfo {
   clubId: string | undefined;
   teamId: string | undefined;
@@ -117,12 +119,13 @@ export function useVaultAccessModel({
       if (!userId) return [];
       const roles = await withReadDeadline(selectedRoleClubId
         ? fetchVaultUserRoles(userId, undefined, selectedRoleClubId)
-        : fetchVaultUserRoles(userId), "Vault roles");
+        : fetchVaultUserRoles(userId), "Vault roles", isIcpVault ? VAULT_OPEN_READ_MS : undefined);
       console.log("[Vault] Fetched userRoles for user", userId, ":", roles);
       return roles;
     },
     enabled: !!userId,
     staleTime: 60_000,
+    retry: isIcpVault ? false : undefined,
   });
 
   const hasVaultRoleAccess = useMemo(
@@ -130,18 +133,40 @@ export function useVaultAccessModel({
     [isAppAdmin, userRoles],
   );
 
-  // Each group is bounded inside the lookup, so a stuck group drops out on
-  // its own instead of a whole-list cut-off failing every club.
-  const { data: userClubs, isLoading: isLoadingClubs, error: clubsError, refetch: refetchClubs } = useQuery({
-    queryKey: [...vaultKeys.clubsForUser(userId, activeClubFilter ? false : !!isAppAdmin), activeClubFilter ?? null, isIcpVault],
-    queryFn: () => userId ? (activeClubFilter
-      ? fetchVaultAccessibleClubs(userId, !!isAppAdmin, undefined, activeClubFilter)
-      : fetchVaultAccessibleClubs(userId, !!isAppAdmin)) : [],
-    // A member-scoped read is safe while the broader admin lookup runs.
-    // Resolving admin=true starts its own separately keyed directory read.
-    enabled: !!userId,
+  // Keep the member read subscribed when admin status resolves. A wider
+  // directory must not replace already-returned member clubs with a spinner.
+  const memberDirectoryEnabled = isIcpVault && !activeClubFilter;
+  const memberClubs = useQuery({
+    queryKey: [...vaultKeys.clubsForUser(userId, false), null, isIcpVault],
+    queryFn: ({ signal }) => userId ? withReadDeadline(
+      fetchVaultAccessibleClubs(userId, false), "Vault clubs", VAULT_OPEN_READ_MS, signal,
+    ) : [],
+    enabled: !!userId && memberDirectoryEnabled,
     staleTime: 60_000,
+    retry: false,
   });
+  const directoryClubs = useQuery({
+    queryKey: [...vaultKeys.clubsForUser(userId, activeClubFilter ? false : !!isAppAdmin), activeClubFilter ?? null, isIcpVault],
+    queryFn: ({ signal }) => {
+      if (!userId) return [];
+      const read = activeClubFilter
+        ? fetchVaultAccessibleClubs(userId, !!isAppAdmin, undefined, activeClubFilter)
+        : fetchVaultAccessibleClubs(userId, !!isAppAdmin);
+      // Include routing/session opening, not only the provider callback.
+      return isIcpVault ? withReadDeadline(read, "Vault clubs", VAULT_OPEN_READ_MS, signal) : read;
+    },
+    enabled: !!userId && (!memberDirectoryEnabled || isAppAdmin === true),
+    staleTime: 60_000,
+    retry: isIcpVault ? false : undefined,
+  });
+  const userClubs = directoryClubs.data?.length ? directoryClubs.data : memberDirectoryEnabled
+    ? memberClubs.data ?? directoryClubs.data : directoryClubs.data;
+  const isLoadingClubs = !userClubs?.length && (directoryClubs.isLoading || (memberDirectoryEnabled && memberClubs.isLoading));
+  const clubsError = directoryClubs.error || (memberDirectoryEnabled ? memberClubs.error : null);
+  const refetchClubs = () => {
+    if (memberDirectoryEnabled) void memberClubs.refetch();
+    if (!memberDirectoryEnabled || isAppAdmin === true) void directoryClubs.refetch();
+  };
 
   // Auto-navigate to club view when theme filter is active - only on initial load
   const hasAutoNavigatedRef = useRef(false);
@@ -233,11 +258,12 @@ export function useVaultAccessModel({
   // in (the root-view entitlement gate; distinct from `currentContextHasPro`).
   const { data: proAccessInfo, isLoading: isLoadingProClub, error: anyProError, refetch: retryAnyPro } = useQuery({
     queryKey: ["pro-access-info", userId],
-    queryFn: () => userId ? withReadDeadline(fetchVaultAnyProAccess(userId), "Vault subscriptions") : false,
+    queryFn: () => userId ? withReadDeadline(fetchVaultAnyProAccess(userId), "Vault subscriptions", isIcpVault ? VAULT_OPEN_READ_MS : undefined) : false,
     // Other page consumers still use this for storage warning state;
     // scoped access never waits for it, but keep those consumers populated.
     enabled: !!userId,
     staleTime: 30_000,
+    retry: isIcpVault ? false : undefined,
   });
 
   const hasProClub = (selectedClub?.is_pro === true) || (proAccessInfo ?? false);
