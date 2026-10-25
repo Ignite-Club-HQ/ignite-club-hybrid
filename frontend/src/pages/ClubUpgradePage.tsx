@@ -50,7 +50,7 @@ import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
-import { getLiveClubProfile, getLiveClubSubscription, listLiveTeams } from "@/live/features/club";
+import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors, listLiveTeams } from "@/live/features/club";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 import { useInAppPurchase } from "@/hooks/useInAppPurchase";
@@ -337,6 +337,17 @@ export default function ClubUpgradePage() {
     queryKey: ["club-active-sponsors", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return [];
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const rows = await listLiveSponsors(ctx, clubId!);
+            return rows
+              .filter((s) => s.is_active)
+              .map((s) => ({ id: s.id, name: s.name, logo_url: s.logo_url[0] ?? null, is_active: s.is_active }));
+          },
+        }, { clubId: clubId! });
+      }
       const { data } = await supabase
         .from("sponsors")
         .select("id, name, logo_url, is_active")
