@@ -23,6 +23,21 @@ describe("schedule entity filter", () => {
 });
 
 describe("schedule visibility", () => {
+  it("retains an RLS-readable competition event for a participating member outside the host club", () => {
+    const rows = [
+      { id: "competition-event", club_id: "host-club", competition_id: "competition-1", team_id: null },
+      { id: "unrelated-club-event", club_id: "host-club", competition_id: null, team_id: null },
+    ];
+    expect(filterVisibleScheduleEvents(rows, scope, null, null, { includeReadableCompetitionEvents: true }).map(row => row.id))
+      .toEqual(["competition-event"]);
+    expect(filterVisibleScheduleEvents(rows, scope, null, null)).toEqual([]);
+  });
+  it("does not let competition-wide rows bypass explicit club, team or league filters", () => {
+    const rows = [{ club_id: "host-club", competition_id: "competition-1", team_id: null }];
+    expect(filterVisibleScheduleEvents(rows, scope, null, null, { includeReadableCompetitionEvents: true, selectedClubId: "club-1" })).toEqual([]);
+    expect(filterVisibleScheduleEvents(rows, scope, "team-1", null, { includeReadableCompetitionEvents: true })).toEqual([]);
+    expect(filterVisibleScheduleEvents(rows, scope, null, "league-1", { includeReadableCompetitionEvents: true })).toEqual([]);
+  });
   const events = [
     { id: "team-visible", team_id: "team-1", club_id: "club-1", mini_league_id: null },
     { id: "team-hidden", team_id: "team-9", club_id: "club-9", mini_league_id: null },

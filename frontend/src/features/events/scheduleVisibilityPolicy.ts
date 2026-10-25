@@ -9,6 +9,7 @@ export type ScheduleEventScope = {
   team_id?: string | null;
   club_id: string;
   mini_league_id?: string | null;
+  competition_id?: string | null;
   is_cancelled?: boolean | null;
   updated_at?: string | null;
 };
@@ -39,8 +40,17 @@ export function filterVisibleScheduleEvents<T extends ScheduleEventScope>(
   scope: ScheduleMembershipScope,
   selectedTeamId: string | null,
   selectedMiniLeagueId: string | null,
+  options: {
+    /** Input must already be authorized by Supabase RLS or its owning service. */
+    includeReadableCompetitionEvents?: boolean;
+    selectedClubId?: string | null;
+    isVisibleTeamEvent?: (event: T) => boolean;
+  } = {},
 ): T[] {
   return events.filter((event) => {
+    if (options.selectedClubId && event.club_id !== options.selectedClubId) return false;
+    if (selectedTeamId && event.team_id !== selectedTeamId) return false;
+    if (selectedMiniLeagueId && event.mini_league_id !== selectedMiniLeagueId) return false;
     if (event.mini_league_id) {
       if (selectedMiniLeagueId) return event.mini_league_id === selectedMiniLeagueId;
       return scope.miniLeagueIds.includes(event.mini_league_id);
@@ -49,8 +59,9 @@ export function filterVisibleScheduleEvents<T extends ScheduleEventScope>(
       if (selectedTeamId === event.team_id && scope.clubAdminClubIds.includes(event.club_id)) {
         return true;
       }
-      return scope.teamIds.includes(event.team_id);
+      return options.isVisibleTeamEvent ? options.isVisibleTeamEvent(event) : scope.teamIds.includes(event.team_id);
     }
+    if (options.includeReadableCompetitionEvents && event.competition_id) return true;
     return scope.clubIds.includes(event.club_id);
   });
 }
