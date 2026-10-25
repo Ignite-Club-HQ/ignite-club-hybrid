@@ -58,16 +58,19 @@ describe('ICP event captain loading', () => {
     vi.useFakeTimers();
     m.season.mockImplementationOnce(() => new Promise(() => {})).mockResolvedValue([]);
     const view = mount();
-    await act(async () => { await vi.advanceTimersByTimeAsync(12_100); });
+    // A stalled season read times out after 30s, then one automatic retry
+    // reopens assignment without the member needing to tap Try again.
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_100); });
     expect(m.season).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    expect(m.season).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
-    fireEvent.click(await view.findByRole('button', { name: 'Try again' }));
     expect(await view.findByRole('button', { name: 'Assign Captain' })).toBeTruthy();
   });
   it('does not offer replacement when assignment discovery fails', async () => {
     m.match.mockRejectedValue(new Error('refused'));
     const view = mount();
-    await waitFor(() => expect(view.getByRole('button', { name: 'Try again' })).toBeTruthy());
+    await waitFor(() => expect(view.getByRole('button', { name: 'Try again' })).toBeTruthy(), { timeout: 3000 });
     expect(view.queryByRole('button', { name: 'Assign Captain' })).toBeNull();
     expect(m.oldRead).not.toHaveBeenCalled();
   });

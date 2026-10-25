@@ -110,6 +110,7 @@ export default function MatchCaptainSelector({
     }, clubId ? { clubId } : { eventId }), "Captain details", 30_000, signal),
     staleTime: 60_000,
     retry: 1,
+    retryDelay: 500,
   });
 
   // Player-role eligibility is routed: Supabase reads user_roles, ICP reads
@@ -163,6 +164,7 @@ export default function MatchCaptainSelector({
     },
     staleTime: 5 * 60_000,
     retry: 1,
+    retryDelay: 500,
   });
 
   const profileIds = [...new Set([...goingAdultIds, captain?.user_id, seasonCaptain?.user_id]
@@ -315,14 +317,14 @@ export default function MatchCaptainSelector({
                 </div>
               )}
             </div>
-          ) : captainError ? (
+          ) : captainError || seasonCaptainError ? (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">We couldn’t check the captain assignment. Please try again.</p>
               {/* Temporary while testing: plain-English reason for the failure. */}
-              <p className="text-xs text-muted-foreground">Reason: {captainError instanceof Error ? captainError.message : String(captainError)}</p>
+              <p className="text-xs text-muted-foreground">Reason: {(() => { const e = captainError ?? seasonCaptainError; return e instanceof Error ? e.message : String(e); })()}</p>
               <Button variant="outline" onClick={() => { void refetchCaptain(); void refetchSeasonCaptain(); }}>Try again</Button>
             </div>
-          ) : isSeasonCaptainLoading && !seasonCaptainError ? (
+          ) : isSeasonCaptainLoading ? (
             <Loader2 aria-label="Checking season captain" className="h-5 w-5 animate-spin text-muted-foreground" />
           ) : effectiveIsAdmin ? (
             <div className="space-y-2">
