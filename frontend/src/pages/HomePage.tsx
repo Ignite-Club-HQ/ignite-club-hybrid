@@ -1862,8 +1862,24 @@ export default function HomePage() {
   // Fetch children on the selected team for parent linking
   const showChildLinker = !isLeagueSelected && selectedTeam && selectedTeamRole === "parent";
   const { data: teamChildren } = useQuery({
-    queryKey: ["team-children-for-link", selectedTeam],
+    queryKey: ["team-children-for-link", selectedTeam, user?.id, resolveAuthBackend()],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        // ICP: offer the parent's own children (decrypted names), not the old database.
+        const [{ icpCtx }, club, vault] = await Promise.all([
+          import("@/lib/icpClubTeamLookup"),
+          import("@/live/features/club"),
+          import("@/live/features/vault"),
+        ]);
+        const ctx = await icpCtx();
+        const rows = (await club.listMyLiveOwnChildren(ctx)) as Array<{ id: string }>;
+        const names = await vault
+          .resolveLivePiiTextBatch(ctx, rows.map((r) => r.id), "name", "read", "join_team")
+          .catch(() => new Map<string, string>());
+        return rows
+          .map((r) => ({ id: r.id, name: names.get(r.id)?.trim() || "Child" }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+      }
       const [{ data: assignedData, error: assignedError }, { data: pendingInvites, error: pendingError }] = await Promise.all([
         supabase
           .from("child_team_assignments")
@@ -1915,7 +1931,7 @@ export default function HomePage() {
 
       return Array.from(childrenMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     },
-    enabled: !!showChildLinker && resolveAuthBackend() !== "icp",
+    enabled: !!showChildLinker,
   });
 
   // Check if user already has the SPECIFIC role they're requesting in the selected team/league
