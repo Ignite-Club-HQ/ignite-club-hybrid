@@ -1,5 +1,5 @@
 ## Club Vault opening delay — 25 October 2026
-- [ ] Remove selected-club waits on unrelated role/subscription discovery and reuse its exact authorized allowance on entering; preserve failed reads and verify both modes.
+- [x] Selected ICP Vaults read caller roles in their owning club, use exact positive selected-club allowance without waiting for global subscription discovery, reuse its fresh account/provider-scoped allowance on entering and avoid duplicate club reads when admin lookup settles. Failed/unrelated/pending role checks remain non-authorizing. Focused regressions run in both modes; no deployment.
 - [ ] Live signed-in opening timing requires Paul's Internet Identity session and updated frontend.
 
 ## Event Captain spinner — 25 October 2026

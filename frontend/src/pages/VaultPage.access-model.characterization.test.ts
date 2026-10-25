@@ -62,7 +62,7 @@ describe("VaultPage access/entitlement/root-navigation data-model contract", () 
   });
 
   it("keeps current-context Pro entitlement scoped per view type (club/team inherits club, mini-league is club-only)", () => {
-    expect(clusterSource).toMatch(/queryKey:\s*(?:\["vault-club-has-pro"|vaultKeys\.clubHasPro)/);
+    expect(clusterSource).toMatch(/queryKey:\s*(?:\["vault-club-has-pro"|\[\.\.\.vaultKeys\.clubHasPro|vaultKeys\.clubHasPro)/);
     expect(clusterSource).toMatch(/queryKey:\s*(?:\["vault-team-has-pro"|vaultKeys\.teamHasPro)/);
     expect(clusterSource).toContain("club_subscriptions");
     expect(clusterSource).toContain("team_subscriptions");
