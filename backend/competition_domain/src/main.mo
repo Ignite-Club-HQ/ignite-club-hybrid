@@ -2891,7 +2891,7 @@ persistent actor class Main(governorInit : Principal) = this {
     matches:=matches.filter(func(m)=not imported.any(func(i)=i.id==m.id)).concat(imported);
     playhqMatchMetadata:=playhqMatchMetadata.filter(func(m)=not incoming.any(func(i)=i.match_id==m.match_id)).concat(incoming);
     playhqStats:=playhqStats.filter(func(s)=not incoming.any(func(i)=i.match_id==s.match_id)).concat(statRows);
-    playhqCompetitionLinks := playhqCompetitionLinks.map(func x = if (x.competition_id == competition_id) { x with last_synced_at_ms = ?nowMs() } else x);
+    playhqCompetitionLinks := playhqCompetitionLinks.map(func x = if (x.competition_id == competition_id) ({ x with last_synced_at_ms = ?nowMs() }) else x);
     #Ok(imported.size())
   
     } finally { removalReceiver.leave(caller) };
