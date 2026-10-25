@@ -20,6 +20,7 @@ vi.mock("@/live/featureRouter", () => ({
 }));
 vi.mock("@/live/features/events", () => ({
   listLiveEvents: (...args: unknown[]) => backendMocks.events(...args),
+  getListedLiveEvent: () => null,
 }));
 vi.mock("@/lib/icpClubTeamLookup", () => ({
   icpGetTeam: (...args: unknown[]) => backendMocks.getTeam(...args),
