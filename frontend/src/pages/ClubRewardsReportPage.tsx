@@ -48,15 +48,18 @@ import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { resolveLiveProAccess } from "@/live/features/proAccess";
 import { listLiveRedemptions } from "@/live/features/points";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { readIcpRewardReport } from "@/lib/rewardReportReads";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface ReportRedemption {
   id: string;
+  reward_id?: string;
   points_spent: number;
   status: string;
   redeemed_at: string | null;
   child_id: string | null;
   user_id: string | null;
-  club_rewards: { name: string; reward_type: string } | null;
+  club_rewards: { id?: string; name: string; reward_type: string } | null;
   children: { name: string } | null;
   profiles: { display_name: string } | null;
 }
@@ -185,8 +188,8 @@ export default function ClubRewardsReportPage() {
   });
 
   // Fetch redemptions with filters
-  const { data: redemptions = [], isLoading } = useQuery({
-    queryKey: ["rewards-report", clubId, startDate, endDate, selectedTeamId],
+  const { data: redemptions = [], isLoading, error: reportError } = useQuery({
+    queryKey: ["rewards-report", clubId, user?.id, resolveAuthBackend(), startDate, endDate, selectedTeamId],
     queryFn: async () => {
       if (useIcpLab) {
         return getLocalLabRewardRedemptions(clubId!).filter((redemption) => {
@@ -248,7 +251,7 @@ export default function ClubRewardsReportPage() {
               child_id: r.child_id,
               user_id: r.user_id,
               club_rewards: r.club_rewards
-                ? { name: r.club_rewards.name, reward_type: r.club_rewards.reward_type }
+                ? { id: r.club_rewards.id, name: r.club_rewards.name, reward_type: r.club_rewards.reward_type }
                 : null,
               children: r.children ? { name: r.children.name } : null,
               profiles: displayName ? { display_name: displayName } : null,
@@ -283,29 +286,7 @@ export default function ClubRewardsReportPage() {
           return (data || []).map(mapRow);
         },
         icp: async (ctx) => {
-          // `list_redemptions` has no reward/child/profile display-name joins
-          // and no `user_roles`/`child_team_assignments` equivalent for team
-          // filtering — ICP-routed reports render with neutral fallback
-          // names ("Unknown Reward" etc., already handled downstream) and
-          // ignore the team filter (ungated: ICP has no cross-table team
-          // membership lookup to apply it against).
-          const redemptions = await listLiveRedemptions(ctx, clubId, null);
-          return redemptions
-            .filter((r) => {
-              const redeemedAt = r.redeemed_at_ms[0] ? new Date(Number(r.redeemed_at_ms[0])) : new Date(Number(r.created_at_ms));
-              return redeemedAt >= startDate && redeemedAt <= endDate;
-            })
-            .map((r) => ({
-              id: r.id,
-              points_spent: r.points_spent,
-              status: r.status,
-              redeemed_at: r.redeemed_at_ms[0] ? new Date(Number(r.redeemed_at_ms[0])).toISOString() : null,
-              child_id: r.child_id[0] ?? null,
-              user_id: r.user_id[0] ?? null,
-              club_rewards: null,
-              children: null,
-              profiles: null,
-            }));
+          return readIcpRewardReport(ctx, clubId, selectedTeamId === "all" ? null : selectedTeamId, startDate, endDate);
         },
       }, { clubId });
     },
@@ -317,9 +298,10 @@ export default function ClubRewardsReportPage() {
   const aggregatedData = redemptionRows.reduce((acc, redemption) => {
     const rewardName = redemption.club_rewards?.name || "Unknown Reward";
     const rewardType = redemption.club_rewards?.reward_type || "custom";
+    const rewardKey = redemption.reward_id ?? redemption.club_rewards?.id ?? rewardName;
     
-    if (!acc[rewardName]) {
-      acc[rewardName] = {
+    if (!acc[rewardKey]) {
+      acc[rewardKey] = {
         name: rewardName,
         type: rewardType,
         pending: 0,
@@ -329,13 +311,13 @@ export default function ClubRewardsReportPage() {
       };
     }
     
-    acc[rewardName].total += 1;
-    acc[rewardName].totalPoints += redemption.points_spent;
+    acc[rewardKey].total += 1;
+    acc[rewardKey].totalPoints += redemption.points_spent;
     
     if (redemption.status === "pending") {
-      acc[rewardName].pending += 1;
+      acc[rewardKey].pending += 1;
     } else if (redemption.status === "fulfilled") {
-      acc[rewardName].fulfilled += 1;
+      acc[rewardKey].fulfilled += 1;
     }
     
     return acc;
@@ -470,13 +452,14 @@ export default function ClubRewardsReportPage() {
             </Alert>
           )}
         </div>
-        <Button onClick={handleDownload} disabled={isLoading || redemptions.length === 0} size="sm">
+        <Button onClick={handleDownload} disabled={isLoading || !!reportError || redemptions.length === 0} size="sm">
           <Download className="h-4 w-4 mr-2" />
           Export
         </Button>
       </div>
 
       {/* Filters */}
+      {reportError && <Alert variant="destructive"><AlertDescription>Could not load this report. Change the filters or try again.</AlertDescription></Alert>}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
@@ -643,7 +626,7 @@ export default function ClubRewardsReportPage() {
 
             {/* Team Filter */}
             <div className="space-y-2">
-              <Label>Team</Label>
+              <Label>Current team members</Label>
               <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="All Teams" />
