@@ -311,14 +311,15 @@ describe("useVaultAccessModel — eligible clubs query", () => {
     await waitFor(() => expect(fetchVaultAccessibleClubs).toHaveBeenCalledWith("user-1", false));
     expect(fetchVaultAccessibleClubs).not.toHaveBeenCalledWith("user-1", true);
   });
-  it("opens an authorized club without waiting for app-admin lookup or starting all-club subscriptions", async () => {
+  it("opens an authorized club without waiting for app-admin lookup or all-club subscriptions", async () => {
     fetchVaultAppAdmin.mockReturnValue(new Promise(() => {}));
     fetchVaultUserRoles.mockResolvedValue([{ role: "coach", club_id: "club-a", team_id: null }]);
     fetchVaultClubHasPro.mockResolvedValue(true);
+    fetchVaultAnyProAccess.mockReturnValue(new Promise(() => {}));
     const { result } = renderAccessModel({ currentView: clubView });
     await waitFor(() => expect(result.current.canAccessVault).toBe(true));
     expect(result.current.isLoadingAccess).toBe(false);
     expect(result.current.isAppAdmin).toBeUndefined();
-    expect(fetchVaultAnyProAccess).not.toHaveBeenCalled();
+    expect(fetchVaultAnyProAccess).toHaveBeenCalled();
   });
 });

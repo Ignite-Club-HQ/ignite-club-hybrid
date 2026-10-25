@@ -212,7 +212,9 @@ export function useVaultAccessModel({
   const { data: proAccessInfo, isLoading: isLoadingProClub, error: anyProError, refetch: retryAnyPro } = useQuery({
     queryKey: ["pro-access-info", userId],
     queryFn: () => userId ? withReadDeadline(fetchVaultAnyProAccess(userId), "Vault subscriptions") : false,
-    enabled: !!userId && currentView.type === "root",
+    // Other page consumers still use this for storage warning state;
+    // scoped access never waits for it, but keep those consumers populated.
+    enabled: !!userId,
     staleTime: 30_000,
   });
 
