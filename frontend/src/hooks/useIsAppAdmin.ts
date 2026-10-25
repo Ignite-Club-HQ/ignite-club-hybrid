@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { withReadDeadline } from "@/live/readDeadline";
 // features/insights is imported lazily in the icp provider below so the ICP
 // SDK stays out of the entry chunk (this hook runs on most pages).
 
@@ -34,7 +35,10 @@ export const isAppAdminQueryKey = (userId: string | null | undefined) =>
   ["is-app-admin", userId] as const;
 
 export async function fetchIsAppAdmin(userId: string): Promise<boolean> {
-  return withFeatureBackend("admin", {
+  // Bounded: a stuck routing or canister call must reject (and resolve to
+  // non-admin) rather than leave every consumer's `isAppAdmin` undefined
+  // forever — Vault's club list is gated on this resolving at all.
+  return withReadDeadline(withFeatureBackend("admin", {
     supabase: async () => {
       const { data, error } = await supabase
         .from("user_roles")
@@ -47,7 +51,7 @@ export async function fetchIsAppAdmin(userId: string): Promise<boolean> {
       return !!data;
     },
     icp: async (ctx) => (await import("@/live/features/insights")).isLiveAppAdmin(ctx),
-  });
+  }), "App admin check");
 }
 
 export interface UseIsAppAdminResult {
