@@ -19,6 +19,7 @@ import type { _SERVICE as WorkloadService } from '../src/lab/bindings/secret_wor
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
+import { placementOperatorEvidenceIdl, normalizePlacementOperatorEvidence } from '../../scripts/placement-upgrade-evidence.mjs';
 import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades } from '../../scripts/all-group-upgrade-policy.mjs';
 
 const [action, scope, artifacts, pem, directory] = process.argv.slice(2);
@@ -91,7 +92,8 @@ const readSharedEvidence=async(t:Target)=>{
   if(t.name==='shard_router')return router.read_group_opening_configuration();
   if(t.name==='placement_registry'){
     const actor=Actor.createActor<PlacementService>(placementIdl,{agent,canisterId:t.canisterId});
-    return {version:await actor.version(),availability:await actor.get_availability(),governor:await actor.get_operator(identity.getPrincipal())};
+    const operator=Actor.createActor(()=>placementOperatorEvidenceIdl(IDL),{agent,canisterId:t.canisterId}) as unknown as {get_operator(user:Principal):Promise<unknown>};
+    return {version:await actor.version(),availability:await actor.get_availability(),governor:normalizePlacementOperatorEvidence(await operator.get_operator(identity.getPrincipal()))};
   }
   if(t.name==='migration_coordinator')return Actor.createActor<MigrationService>(migrationIdl,{agent,canisterId:t.canisterId}).status();
   if(t.name==='secret_workload_identity'){
