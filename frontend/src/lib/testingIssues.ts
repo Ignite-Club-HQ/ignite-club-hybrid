@@ -26,6 +26,16 @@ export function explainBlockedLabel(label: string): { title: string; explanation
   const [kind, ...rest] = label.split(" ");
   const name = humanize(rest.join(" "));
   switch (kind) {
+    case "gallery_notice": {
+      const explanations: Record<string, string> = {
+        not_configured: "Your photos were saved, but the gallery service has no club notification connection configured. The protected backend update must restore that connection; uploading the photos again will not fix it.",
+        refused: "Your photos were saved, but the club service declined the notification request. Its notification permissions or club audience checks need investigation; this does not mean the photo upload failed.",
+        denied: "Your photos were saved, but the notification was blocked because access to the account or gallery changed during the upload.",
+        capacity: "Your photos were saved, but the gallery notification record limit was reached. An administrator needs to review that limit.",
+        unknown: "Your photos were saved, but the app did not receive a confirmed notification result. The notification may already have been queued, so the app has not automatically sent it again.",
+      };
+      return { title: "Photos saved; notification not confirmed", explanation: explanations[rest.join(" ")] ?? explanations.unknown };
+    }
     case "data":
       return {
         title: `“${name}” information isn’t connected yet`,

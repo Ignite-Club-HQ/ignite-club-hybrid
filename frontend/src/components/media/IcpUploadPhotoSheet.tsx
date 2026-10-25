@@ -17,6 +17,7 @@ import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { creationClubChoices } from "@/lib/creationClubChoices";
+import { recordTestingIssue } from '@/lib/testingIssues';
 
 export interface IcpUploadClubOption {
   id: string;
@@ -204,7 +205,7 @@ export function IcpUploadPhotoSheet({
     const trimmedCaption = caption.trim() || null;
     let scopePending = false;
     let vaultCopyFailed = false;
-    let noticeFailed = false;
+    let noticeStatus = 'queued';
     let chatCardFailed = false;
     let heroUrl = "";
     const registeredAssetIds: string[] = [];
@@ -296,7 +297,7 @@ export function IcpUploadPhotoSheet({
           }
           if (registeredAssetIds[0]) {
             const notice = await announceLiveGalleryAsset(ctx, registeredAssetIds[0]).catch(() => "unknown");
-            noticeFailed = notice !== "queued";
+            noticeStatus = ['queued', 'not_configured', 'refused', 'denied', 'capacity'].includes(notice) ? notice : 'unknown';
           }
         },
       }, writeOnce({ clubId }));
@@ -307,7 +308,7 @@ export function IcpUploadPhotoSheet({
       }
       if (vaultCopyFailed) toast.warning('Photos published; some Vault copies could not be saved.');
       if (chatCardFailed) toast.warning('Photos published; the team chat announcement could not be confirmed.');
-      if (noticeFailed) toast.warning('Photos published; the notification could not be confirmed.');
+      if (noticeStatus !== 'queued') recordTestingIssue(`gallery_notice ${noticeStatus}`, window.location.pathname);
       // Keep the local copies on screen until the refreshed feed has them.
       await Promise.resolve(onUploaded()).catch(() => undefined);
     } catch (err) {
