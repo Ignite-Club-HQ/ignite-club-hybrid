@@ -1271,7 +1271,7 @@ export default function TeamChatPage() {
     } finally {
       setIsLoadingOlder(false);
     }
-  }, [teamId, queryClient, isLoadingOlder, hasOlderMessages, queueAnchoredPrepend, useIcpLab]);
+  }, [teamId, queryClient, isLoadingOlder, hasOlderMessages, queueAnchoredPrepend, useIcpLab, messagesData, team?.club_id]);
 
   // Keep the loader ref in sync for the anchor hook to call.
   useEffect(() => {
