@@ -187,6 +187,20 @@ await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend',gat
   const r=spawnSync('icp',installArgs(t,resolve(artifacts,t.name)),{cwd:directory,stdio:'inherit'});
   if(r.status!==0)throw Error('Install reply failed/unknown; pending journal retained, no replay');
 }});
+// Gallery authority wiring is governor-set canister state that migrations
+// initialise to null; re-apply it idempotently after every module upgrade so
+// gallery notifications and Vault copy authority keep working on every group.
+const provisionByGroup=new Map(groupFolders.filter(e=>existsSync(new URL(`${e.name}/provision.json`,groupRoot))).map(e=>[e.name,json(`deploy/groups/${e.name}/provision.json`)]));
+for(const t of targets.filter(t=>t.name==='media_metadata')){
+  const p=provisionByGroup.get(t.groupId) as {canisters?:Record<string,string>}|undefined;
+  const club=p?.canisters?.club_domain, vault=p?.canisters?.vault_domain;
+  if(!club||!vault)throw Error(`Gallery authority inventory missing for ${t.groupId}; stop without rewiring`);
+  const factory=()=>IDL.Service({set_gallery_authorities:IDL.Func([IDL.Principal,IDL.Principal],[IDL.Variant({Ok:IDL.Null,Err:IDL.Text})],[])});
+  const actor=Actor.createActor(factory,{agent,canisterId:t.canisterId}) as unknown as {set_gallery_authorities(c:Principal,v:Principal):Promise<{Ok:null}|{Err:string}>};
+  await gate();
+  const r=await actor.set_gallery_authorities(Principal.fromText(club),Principal.fromText(vault));
+  if('Err'in r)throw Error(`Gallery authority wiring refused for ${t.groupId}: ${r.Err}`);
+}
 if(journal.publication || journal.published){validateJournal(journal,binding);console.log('Exact saved snapshot retained for publication resume; modules reverified without reinstall.');process.exit(0);}
 // Metadata's ordered page index is a required, idempotent release prerequisite.
 for(const t of targets.filter(t=>t.name==='media_metadata')){
