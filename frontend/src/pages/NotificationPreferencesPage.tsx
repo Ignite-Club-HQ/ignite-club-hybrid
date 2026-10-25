@@ -44,6 +44,7 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLivePreferencesByClub } from "@/live/features/notifications";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { readAdminPages } from "@/live/adminPaging";
 
 export default function NotificationPreferencesPage() {
   if (isFeatureRoutedToIcp("notifications")) {
@@ -79,8 +80,10 @@ function IcpNotificationPreferencesPage() {
       withFeatureBackend("notifications", {
         supabase: async () => null,
         icp: async (ctx) => {
-          const page = await listLivePreferencesByClub(ctx, "", 500, 0);
-          const items = page.items ?? [];
+          const items = await readAdminPages(async (offset, limit) => {
+            const page = await listLivePreferencesByClub(ctx, "app", limit, offset);
+            return { items: page.items, total: Number(page.total) };
+          }, item => item.user, 500);
           const ids = items.map((p) => p.user);
           const profiles = await listLiveProfilesByIds(ctx, ids).catch(() => []);
           const nameMap = new Map<string, string | null>(
@@ -97,7 +100,7 @@ function IcpNotificationPreferencesPage() {
             pushMediaEnabled: p.media_enabled,
           }));
           return {
-            total: Number(page.total),
+            total: items.length,
             usersWithEmailEnabled: users.filter((u) => u.emailMessagesEnabled).length,
             users,
           };
