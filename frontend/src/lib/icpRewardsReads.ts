@@ -95,8 +95,8 @@ export function mapLiveReward(r: Awaited<ReturnType<typeof listLiveClubRewards>>
     qr_code_url: r.qr_code_url[0] ?? null,
     show_qr_code: r.show_qr_code,
     reward_type: r.reward_type,
-    sponsor_id: r.sponsor_id[0] ?? null,
-    sponsors: r.sponsor_id[0] ? sponsorsByClub?.get(r.club_id)?.get(r.sponsor_id[0]) ?? null : null,
+    sponsor_id: r.sponsor_id?.[0] ?? null,
+    sponsors: r.sponsor_id?.[0] ? sponsorsByClub?.get(r.club_id)?.get(r.sponsor_id[0]) ?? null : null,
   };
 }
 

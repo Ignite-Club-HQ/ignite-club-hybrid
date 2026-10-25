@@ -4,8 +4,6 @@ export async function readIcpActiveBoards(teamId?: string) {
   const ids = teamId ? [teamId] : await withFeatureBackend("membership", {
     supabase: async (): Promise<string[]> => { throw new Error("Internet Identity required"); },
     icp: async ctx => {
-      const { listLiveTeamRoleGrants } = await import("@/live/features/membership");
-      await listLiveTeamRoleGrants(ctx, id);
       const { getLiveMyRoleGrants } = await import("@/live/features/membership");
       return [...new Set((await getLiveMyRoleGrants(ctx)).flatMap(role => role.team))];
     },
@@ -13,6 +11,9 @@ export async function readIcpActiveBoards(teamId?: string) {
   const boards = await Promise.all(ids.map(id => withFeatureBackend("events", {
     supabase: async () => { throw new Error("Internet Identity required"); },
     icp: async ctx => {
+      const { readMembershipInScope } = await import("@/live/membershipRouting");
+      const { listLiveTeamRoleGrants } = await import("@/live/features/membership");
+      await readMembershipInScope(ctx, { teamId: id }, scoped => listLiveTeamRoleGrants(scoped, id));
       const [{ getLiveActiveGame }, { getLiveTeam, getLiveClubProfile }] = await Promise.all([
         import("@/live/features/events"), import("@/live/features/club"),
       ]);
