@@ -1,4 +1,5 @@
 ## App-admin ICP audit — 25 October 2026
+- [ ] Close app-admin ICP gaps: live authorized user management, genuine notification analytics, on-chain canister configuration, no ICP Supabase realtime, complete paging/counts and group coverage; preserve Supabase tools and protected permissions. Verify focused tests and document exact release/live acceptance requirements without broad recovery expansion.
 - [x] Audit app-admin pages/actions, permissions, settings, analytics, backups and infrastructure. Four read-only reviews plus current-code verification found remaining disabled User Management live path, Supabase Push Analytics/canister overrides and ICP Active Games realtime subscription; paging/count and cross-group acceptance concerns recorded in docs/app-admin-icp-audit-2026-10-25.md. Existing 13-file suites pass both modes; ICP guard passes but does not cover every Supabase table/realtime call. No application changes, live mutations or deployment. Repairs were not requested in this audit.
 
 ## Team invitations ICP audit — 25 October 2026
