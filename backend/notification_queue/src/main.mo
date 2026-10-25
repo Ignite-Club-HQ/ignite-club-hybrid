@@ -253,8 +253,8 @@ persistent actor class Main(governorInit : Principal) = this {
     switch (clubDomainCanister) {
       case null { #Err("club_domain canister not configured") };
       case (?cd) {
-        let clubDomain = actor (Principal.toText(cd)) : actor { is_app_admin : shared query (Principal) -> async Bool };
-        let isAdmin = try { await clubDomain.is_app_admin(caller) } catch (_) { false };
+        let clubDomain = actor (Principal.toText(cd)) : actor { read_account_is_app_admin : shared (Principal) -> async Bool };
+        let isAdmin = try { await (with timeout = 20) clubDomain.read_account_is_app_admin(caller) } catch (_) { false };
         if (isAdmin) { #Ok } else { #Err("App admin required") };
       };
     };
