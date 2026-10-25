@@ -89,6 +89,7 @@ const readConfig=async(t:Target)=>{
   return (Array.isArray(reply)?reply:reply.Ok).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
 };
 const wiring:Record<string,string>={};
+const legacySettings:Record<string,string>={};
 const readSharedEvidence=async(t:Target)=>{
   if(t.name==='shard_router')return router.read_group_opening_configuration();
   if(t.name==='placement_registry'){
@@ -120,8 +121,10 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
     // singleton must be preserved, never configured by an upgrade. Verify
     // disabled settings via controller readback, not a guessed group label.
     const legacy=rows.some(r=>r[0]==='identity_access'&&r[1]==='');
-    const disabled=legacy?(await observe(t)).legacyLifecycleDisabled:false;
+    const status=legacy?await observe(t):null;
+    const disabled=status?.legacyLifecycleDisabled??false;
     validateClubIdentityWiring(t,rows,shared.identity_access,disabled);
+    if(status)legacySettings[t.canisterId]=status.settingsHash;
     requireRow('notification_queue',own('notification_queue'));requireRow('events_domain',own('events_domain'));
   }
   if(t.name==='notification_queue'){requireRow('identity_access',shared.identity_access);requireRow('messaging_domain',own('messaging_domain'));}
@@ -143,6 +146,7 @@ const gate=async()=>{
   if(current.configurationRevision!==initial.configurationRevision||groupApprovalConfiguration(current.groups,current.placements)!==configuration)throw Error('Routing configuration drift; stop without replay');
   planInventory(shared,provisions,current,scope,hashes);
   for(const t of targets.filter(t=>t.groupId!=='shared'))if(digest(await readConfig(t))!==wiring[t.canisterId])throw Error('Original wiring changed; stop');
+  for(const t of targets.filter(t=>Object.hasOwn(legacySettings,t.canisterId))){const status=await observe(t);if(!status.legacyLifecycleDisabled||status.settingsHash!==legacySettings[t.canisterId])throw Error('Legacy lifecycle settings changed; stop without rewiring');}
   for(const t of targets.filter(t=>t.groupId==='shared'&&t.name!=='identity_access'))if(digest(await readSharedEvidence(t))!==wiring[t.canisterId])throw Error('Shared infrastructure configuration changed; stop without replay');
 };
 const keyGate=(groupId:string,phase:string)=>{
