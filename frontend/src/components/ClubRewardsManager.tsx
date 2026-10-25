@@ -488,7 +488,19 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
         },
       }, writeOnce({ clubId }));
     },
-    onSuccess: () => {
+    onMutate: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      await queryClient.cancelQueries({ queryKey: ["club-rewards", clubId] });
+      const previous = queryClient.getQueriesData<ClubReward[]>({ queryKey: ["club-rewards", clubId] });
+      queryClient.setQueriesData<ClubReward[]>({ queryKey: ["club-rewards", clubId] }, (old) =>
+        Array.isArray(old) ? old.map((r) => (r.id === id ? { ...r, is_active: isActive } : r)) : old,
+      );
+      return { previous };
+    },
+    onError: (_e, _v, context) => {
+      context?.previous?.forEach(([key, data]) => queryClient.setQueryData(key, data));
+      toast({ title: "Couldn't update reward", variant: "destructive" });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
     },
   });
@@ -553,9 +565,23 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
         },
       }, writeOnce({ clubId }));
     },
+    onMutate: async (rewardId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["club-rewards", clubId] });
+      const previous = queryClient.getQueriesData<ClubReward[]>({ queryKey: ["club-rewards", clubId] });
+      queryClient.setQueriesData<ClubReward[]>({ queryKey: ["club-rewards", clubId] }, (old) =>
+        Array.isArray(old) ? old.map((r) => ({ ...r, is_default: r.id === rewardId })) : old,
+      );
+      return { previous };
+    },
+    onError: (_e, _v, context) => {
+      context?.previous?.forEach(([key, data]) => queryClient.setQueryData(key, data));
+      toast({ title: "Couldn't update featured reward", variant: "destructive" });
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
       toast({ title: "Featured reward updated" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
     },
   });
 
