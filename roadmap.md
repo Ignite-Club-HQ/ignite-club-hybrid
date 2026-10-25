@@ -1,5 +1,5 @@
 ## Team-page blocked ICP reads — 25 October 2026
-- [ ] Trace and repair teams, pending invitations, role requests and RPC reads without suppressing team features; run focused dual-mode regressions.
+- [x] Replaced team roster/request/invite-card auth-screen predicates with actual feature routing; restored manager-authorized owning-club pending invitation reads and labels, preserving acknowledgement-only self-request state without the admin-only request directory. 47 unique focused checks pass per configuration (including mounted country/provider mismatch regression), ICP guards pass and preview build OK. No deployment or live timing claim.
 - [ ] Signed-in U10 Hawks acceptance requires Paul's Internet Identity session; screenshots establish blocked requests, not current deployed code.
 
 ## Bottom navigation response — 25 October 2026
