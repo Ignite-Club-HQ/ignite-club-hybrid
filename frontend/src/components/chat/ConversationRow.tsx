@@ -17,7 +17,7 @@ import { formatMessagePreview as stripMentionFormatting } from "@/lib/messagePre
 import { isIgniteSupportUser } from "@/lib/systemUser";
 import { useAuth } from "@/hooks/useAuth";
 import { markChatScopeNotificationsRead } from "@/lib/markChatScopeRead";
-import { isFeatureRoutedToIcp } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 // Lazy import to avoid cycle if MessagePreview imports something heavy.
 import { MessagePreview } from "@/components/chat/MessagePreview";
