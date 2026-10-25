@@ -8,7 +8,7 @@ import {
   refreshTeamRoleChange,
 } from "./teamMembershipCacheCompletion";
 
-const client = () => ({ invalidateQueries: vi.fn() });
+const client = () => ({ invalidateQueries: vi.fn(), removeQueries: vi.fn() });
 
 describe("team membership cache completion", () => {
   it("refreshes only the exact roster after one role changes", () => {
@@ -69,5 +69,13 @@ describe("team membership cache completion", () => {
       ["events"],
       ["user-rsvps-home"],
     ]);
+  });
+
+  it("drops the departed team's cached messages, including the on-device copy", () => {
+    const queryClient = client();
+    refreshAfterLeavingTeam(queryClient, "team-1");
+    expect(queryClient.removeQueries).toHaveBeenCalledWith({
+      queryKey: ["team-messages", "team-1"],
+    });
   });
 });
