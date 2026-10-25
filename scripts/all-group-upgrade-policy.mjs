@@ -12,7 +12,6 @@ export const SCOPES = Object.freeze({
   subscriptions: ['club_domain', 'media_blob_store'],
   events_pitch: ['notification_queue', 'club_domain', 'events_domain'],
   gallery_vault: ['club_domain', 'media_blob_store', 'media_metadata', 'vault_domain', 'messaging_domain', 'notification_queue'],
-  full_backend: ['identity_access', ...GROUP_BUILD_SERVICES],
 });
 export function validateRequest(action, scope, confirmation, checkedPlan) {
   if (!['check', 'upgrade'].includes(action) || !Object.hasOwn(SCOPES, scope)) throw Error('Choose a reviewed scope and check or upgrade');
@@ -27,6 +26,8 @@ export function planInventory(shared, provisions, registry, scope, hashes) {
   if (shared.shard_router !== 'jcdfe-vqaaa-aaaal-qxloq-cai' || shared.identity_access !== 'mq2sj-fiaaa-aaaal-qxlqa-cai' || shared.club_domain !== 'mzzzv-taaaa-aaaal-qxlrq-cai' || shared.pii_access_control !== 'iui5p-aaaaa-aaaal-qxllq-cai' || shared.media_blob_store !== 'jlaoy-dyaaa-aaaal-qxlpa-cai') throw Error('Pinned original mainnet mappings required');
   if (registry.configurationRevision === undefined || registry.groups.length > 99 || !registry.groups.length || registry.placements.length !== registry.groups.length) throw Error('Complete bounded configuration-bound registry required');
   const savedIds = provisions.map(p => p.groupId);
+  const expectedDomains = GROUP_BUILD_SERVICES.filter(n=>n!=='media_blob_store');
+  for (const provision of provisions) if (Object.keys(provision.canisters??{}).length!==expectedDomains.length || Object.keys(provision.canisters).some(n=>!expectedDomains.includes(n)) || new Set(provision.installedDomains??[]).size!==expectedDomains.length || expectedDomains.some(n=>!provision.installedDomains?.includes(n))) throw Error('Exact unique saved domain names required');
   const liveIds = registry.groups.map(g => g.id);
   if (new Set(savedIds).size !== savedIds.length || new Set(liveIds).size !== liveIds.length || registry.placements.some(p => !liveIds.includes(p.group_id)) || new Set(registry.placements.map(p => p.group_id)).size !== liveIds.length || savedIds.some(id => !liveIds.includes(id)) || liveIds.some(id => id !== 'g1' && !savedIds.includes(id))) throw Error('Saved and live group inventory differ');
   const all = [{ id: 'g1', services: GROUP_BUILD_SERVICES.map(name => ({ name, canisterId: shared[name], subnetId: PRIMARY_SUBNET })) },
@@ -72,7 +73,7 @@ export function validateJournal(journal, binding) {
     const r=journal.keys.find(k=>k.groupId===groupId)?.receipt;
     if (!r || r.canisterId!==canisterId || r.governor!==binding.governor || r.host!=='https://icp-api.io' || r.deploymentId!=='mainnet' || r.environment!=='ic' || r.keyName!=='key_1' || !/^[a-f0-9]{192}$/.test(r.publicKeyHex ?? '') || !/^[a-f0-9]{64}$/.test(r.moduleHash ?? '')) throw Error('Original group photo-key receipt required');
   }
-  if (journal.complete && journal.steps.some(s=>s.phase!=='complete') || journal.published && !journal.complete) throw Error('Unsettled journal cannot be complete/published');
+  if (journal.complete && (journal.steps.some(s=>s.phase!=='complete') || journal.snapshotVerified!==true || !Array.isArray(journal.snapshotFiles) || journal.snapshotFiles.length===0 || digest(journal.snapshotFiles)!==journal.snapshotFilesHash) || journal.published && !journal.complete) throw Error('Unsettled journal cannot be complete/published');
 }
 export function requireSettledPredecessor(journal) {
   if (!journal || journal.complete!==true || journal.published!==true || !Array.isArray(journal.steps) || journal.steps.some(s=>s.phase!=='complete')) throw Error('Previous release is unresolved; retain journal and reconcile');

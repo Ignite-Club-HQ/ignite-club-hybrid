@@ -1,7 +1,8 @@
-import { digest, requireSettledPredecessor } from './all-group-upgrade-policy.mjs';
+import { digest } from './all-group-upgrade-policy.mjs';
 /** CAS publication on the exact checked source. No force push and no installed-module replay. */
 export function publishVerifiedFiles(api, { branch, release, journal, files }) {
   if (!/^refs\/heads\/[A-Za-z0-9._/-]+$/.test(branch ?? '') || !/^[a-f0-9]{40}$/.test(release ?? '') || !journal?.complete || journal.snapshotVerified!==true) throw Error('Verified complete release and source branch required');
+  if (!Array.isArray(journal.snapshotFiles) || digest(files)!==journal.snapshotFilesHash || digest(journal.snapshotFiles)!==journal.snapshotFilesHash) throw Error('Publication must use the immutable verified snapshot');
   const ref = branch.slice('refs/'.length);
   const head = api(`git/ref/${ref}`).object.sha;
   if (journal.publication) {

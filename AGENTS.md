@@ -17,7 +17,7 @@
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
 - ICP pitch alerts use livePitchRecipients for club scope/staff/match duties; omit child names. Why: avoid wrong audiences and plaintext PII.
-- Competition: backend/scripts rules. Eight-target releases keep router separate; unsettled broadcasts block erasure and only the original club retires queue proof.
+- Releases: reviewed all-group scopes preserve exact keys/wiring/journals; router stays separate. Unsettled broadcasts block erasure; only original clubs retire queue proof.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
 - Android bars: apply StatusBarBackdrop after SystemBars; keep its remaining CSS inset, no forced floor. Both Codemagic workflows run scripts/configure-android-status-bar.py; preserve keyboard handling. Why: native padding already reserves space.
 - ICP images wait for restored auth, share account-scoped unlocks and retry after cooldown/foreground recovery. Why: avoid false startup failures and duplicate unlocks.
@@ -41,7 +41,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
 - OQL: bounded read-only, allowlisted fields; authorize before filtering/paging/counts; no self-calls.
-- ICP invites use public-source previews and atomic owning-group family receipts, never Supabase; child fields stay encrypted in PII. Use four-target club/mini-league upgrades. Why: bearer location grants no access; retries cannot duplicate children.
+- ICP invites use public-source previews and atomic owning-group family receipts, never Supabase; child fields stay encrypted in PII. Why: bearer location grants no access; retries cannot duplicate children.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages. Policy 2026-10-19: encrypted-media clubs stay put; no re-encryption or reconciliation bypass. Place new clubs into groups. Why: photo keys belong to the creating group.
 - Admission uses the general switch: governor-verified configuration revision, canonical group/placement/policy inventory, hashes and removal wiring must match the live registry; ordinary placements advance only the separate assignment/deletion/session revision. Legacy snapshots need regeneration. Snapshot revisions are decimal text before hashing/emission. Why: new clubs must not invalidate approval, while configuration drift still fails closed.
 - Router-only deploy upgrades the pinned mainnet router: no creation, rewiring or automatic fuel conversion. Why: approval-counter repairs must preserve club services/media keys.
@@ -65,7 +65,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Existing Supabase HTTP functions resolve npm packages through function-local Deno configuration with nodeModulesDir set to none; never depend on the root or frontend node_modules. Why: the preview's split dependency tree is not a deployable Deno package graph.
 - ICP media allowance excludes the SDK's fixed versioned IBE framing, charges unframed legacy bytes in full and rechecks actual assembled size plus other pending uploads before commit; physical capacity still counts ciphertext. Why: customers pay for file bytes, while a spoofed declaration must not bypass quota.
 - New ICP club fulfillment uses distinct usd_v2_* plan identifiers through platform-authorized subscription writes; legacy identifiers retain their existing allowances. Why: new caps must not silently change promo grants.
-- Subscription deployment uses a separate exact four-target Group 1/2 club/media workflow, immutable journal readback and verified snapshot refresh; never reuse the closed thirteen-service runner or broad all-service deploy. Why: preserve unrelated services, routing, photo authorities and unknown upgrade evidence.
+- Subscription/invite upgrades use exact runners or protected all-group scopes with immutable journal readback, original keys and verified snapshot publication; never broad deploy or closed-group runners. Why: cover future groups without losing authorities or uncertain outcomes.
 - Add groups only via Add new group (scripts/add-group.mjs + add-group-plan.mjs); steps must resume safely and retry only idempotent nothing-happened failures. Why: manual multi-workflow openings failed part-way.
 - Router record_routing_approval is governor-only/revision-checked; app acceptance requires matching live configuration revision, group set and canonical hash. Build snapshot pins router/host only. Why: opening needs no app release; drift fails closed.
 - Discovery shares account/full-target reads; incomplete clubs stay display-only. Sessions bind identity objects and retire on typed drift without replay; scope markers copy contexts and writes use operation keys. Why: prevent lost clubs, stale sessions, nested discovery and merged posts; destination authorization remains required.

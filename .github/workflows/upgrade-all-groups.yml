@@ -13,7 +13,7 @@ on:
         type: choice
         required: true
         default: app_admin
-        options: [app_admin, team_invites, messaging, competition, history, subscriptions, events_pitch, gallery_vault, full_backend]
+        options: [app_admin, team_invites, messaging, competition, history, subscriptions, events_pitch, gallery_vault]
       checked_plan:
         description: Paste planHash from check.json; use the SAME branch and source revision
         required: false

@@ -141,10 +141,13 @@ validateJournal(journal,binding);
 const persist=async()=>{stored=persistGroup2Journal(api,path,branch,stored,journal,'all-groups');saveReport('progress.json',journal);};
 const verifyKeys=async()=>{for(const k of journal.keys)keyGate(k.groupId,'after');};
 await persist();await verifyKeys();
-await executeUpgrades(journal,{gate,observe,persist,verifyKeys,install:async(t:Target)=>{
+// Installation completion is not release completion; backfill/snapshot must also pass.
+const moduleJournal={...journal,complete:false};
+await executeUpgrades(moduleJournal,{gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
   const r=spawnSync('icp',installArgs(t,resolve(artifacts,t.name)),{cwd:directory,stdio:'inherit'});
   if(r.status!==0)throw Error('Install reply failed/unknown; pending journal retained, no replay');
 }});
+if(journal.publication || journal.published){validateJournal(journal,binding);console.log('Exact saved snapshot retained for publication resume; modules reverified without reinstall.');process.exit(0);}
 // Metadata's ordered page index is a required, idempotent release prerequisite.
 for(const t of targets.filter(t=>t.name==='media_metadata')){
   const factory=()=>IDL.Service({build_asset_page_index:IDL.Func([],[IDL.Variant({Ok:IDL.Record({scanned:IDL.Nat,complete:IDL.Bool}),Err:IDL.Text})],[])});
@@ -164,5 +167,8 @@ for(const folder of groupFolders){
 const snapshot=spawnSync('npx',['--yes','tsx@4',new URL('produce-routing-gates.ts',import.meta.url).pathname,resolve(pem),join(directory,'routing-gates.json')],{env:{...process.env,RECORD_ROUTING_APPROVAL:'0'},stdio:'inherit'});
 if(snapshot.status!==0)throw Error('Modules settled; snapshot verification failed. Resume same release, do not repeat installs.');
 await gate();for(const t of targets){const s=journal.steps.find((s:Target)=>s.canisterId===t.canisterId);const r=await observe(t);if(!s||r.moduleHash!==t.newHash||r.settingsHash!==s.settingsHash)throw Error('Post-snapshot drift');}
-journal.snapshotVerified=true;await persist();
+const paths=['frontend/src/live/generated/routingGates.ts',...groupFolders.filter(folder=>existsSync(new URL(`${folder.name}/general-opening.json`,groupRoot))).map(folder=>`deploy/groups/${folder.name}/general-opening.json`)];
+journal.snapshotFiles=paths.sort().map(path=>({path,content:readFileSync(new URL(path,root),'utf8')}));
+journal.snapshotFilesHash=digest(journal.snapshotFiles);
+journal.snapshotVerified=true;journal.complete=true;validateJournal(journal,binding);await persist();
 console.log('Every selected module verified. Publish saved fingerprints through the workflow; app release and signed-in acceptance remain separate.');

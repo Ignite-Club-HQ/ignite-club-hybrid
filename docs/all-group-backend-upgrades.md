@@ -18,9 +18,8 @@ Workflow: **Upgrade backend (all mainnet groups)** (`upgrade-all-groups.yml`) in
 | subscriptions | club_domain, media_blob_store | — |
 | events_pitch | notification_queue, club_domain, events_domain | — |
 | gallery_vault | club_domain, media_blob_store, media_metadata, vault_domain, messaging_domain, notification_queue | — |
-| full_backend | all thirteen group services, including each group's existing photo store | identity_access |
 
-`full_backend` is a reviewed module upgrade scope, not “all infrastructure”: router, placement registry, migration coordinator and secret workload identity are excluded. Router changes remain a separately protected prerequisite. It never creates/reinstalls, funds, changes authorities, moves clubs, enables admission/placements, activates Resend or releases permanent discovery. Media metadata index backfill is finished before publication; other separately gated feature activations remain separate.
+Only the listed reviewed scopes are selectable; a generic “upgrade every service” option is deliberately refused. Router, placement registry, migration coordinator, secret workload identity and unrelated services are excluded. Router changes remain a separately protected prerequisite. It never creates/reinstalls, funds, changes authorities, moves clubs, enables admission/placements, activates Resend or releases permanent discovery. Media metadata index backfill is finished before publication; other separately gated feature activations remain separate.
 
 ## Failure and resume
 - Upgrades are not atomic. A failed run may leave versions temporarily mixed; neither a green check nor a partly completed installation proves completion.
