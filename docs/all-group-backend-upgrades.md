@@ -33,4 +33,4 @@ Only the listed reviewed scopes are selectable; a generic “upgrade every servi
 The old **Deploy ICP canisters (mainnet — base/Group 1 only)** remains for explicitly scoped legacy/router operations. Ordinary synchronized releases use the new workflow. Existing narrow workflows are retained, not removed or automatically activated elsewhere.
 
 ## Validation boundary
-Local policy/transport-fake tests verify inventory expansion, shared-once coverage, drift and interruption/publication rules. No mainnet check, upgrade or signed-in acceptance was performed while implementing this workflow. Old/new Candid and application compatibility remains a release requirement; module installation alone cannot prove it.
+43 local policy/transport-fake tests passed, verifying inventory expansion, shared-once coverage, drift and interruption/publication rules. Both runner files passed syntax validation and both workflow files parsed as valid YAML. No mainnet check, upgrade or signed-in acceptance was performed while implementing this workflow. Old/new Candid and application compatibility remains a release requirement; module installation alone cannot prove it.
