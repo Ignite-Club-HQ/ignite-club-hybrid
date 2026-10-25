@@ -1,5 +1,5 @@
 ## Full dual-mode test suite — 25 October 2026
-- [ ] Run the complete configured frontend suite in Supabase and ICP modes; preserve counts, failures, skipped/excluded coverage and error reports without changing application behaviour or deploying.
+- [x] Complete configured frontend suites finished: Supabase 6,624 passed / 15 failed / 376 skipped; ICP 6,243 passed / 11 failed / 761 skipped (805 files, 7,015 tests per mode). Exact failures and logs saved in docs/test-results/2026-10-25/full-suite; separate ICP guard passes, latest preview build OK. No application fixes or deployment performed. Native/e2e/backend suites and live signed-in acceptance are not covered.
 
 ## Codebase-wide ICP dependency audit — 25 October 2026
 - [x] Friendly missing-coverage warning offers Report a problem; prefilled reports save on-chain then call the existing send-feedback-email transport with no recipient override. 28 tests pass in each mode; browser verifies alert-to-dialog and preview builds pass. Unrelated deferred email jobs unchanged.
