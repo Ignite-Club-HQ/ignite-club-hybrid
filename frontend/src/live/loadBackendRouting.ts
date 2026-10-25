@@ -20,6 +20,7 @@ import { isFeatureCanisterConfigured, resolveFeatureBackend, type FeatureArea } 
 import { getActiveIcpTarget, registerIcpEngineResolver, type IcpTargetConfig } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
 import { isSignedInWithEmail } from "./authBackendMode";
+import { shouldBootstrapFromIcp } from "./icpBootstrap";
 
 export { isSignedInWithEmail };
 
@@ -63,7 +64,7 @@ const ON_CHAIN_WAIT_WITH_ROW_MS = 1500;
 export async function fetchStoredBackendRoutingConfig(): Promise<BackendRoutingConfig | null> {
   // Restored II sessions must not depend on a Supabase row at startup.
   // Email users retain the existing dual-provider precedence.
-  if (!isSignedInWithEmail() && hasStoredInternetIdentitySession()) {
+  if (shouldBootstrapFromIcp()) {
     const onChain = decodeOnChain(await readLiveAppConfig(BACKEND_ROUTING_CONFIG_KEY));
     return onChain ? parseBackendRoutingConfig(onChain) : null;
   }
@@ -187,7 +188,7 @@ export function tryGetActiveIcpTarget(): IcpTargetConfig | null {
  */
 export function getEffectiveBackend(): BackendProvider {
   if (isSignedInWithEmail()) return "supabase";
-  if (hasStoredInternetIdentitySession()) return isIcpAvailable() ? "icp" : "supabase";
+  if (hasStoredInternetIdentitySession()) return "icp";
   const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
   return resolveBackendForCountry(config, country, isIcpAvailable());
@@ -217,8 +218,7 @@ export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProv
   // went to the canisters (blank).
   if (isSignedInWithEmail()) return "supabase";
   if (hasStoredInternetIdentitySession()) {
-    const target = tryGetActiveIcpTarget();
-    return target && isFeatureCanisterConfigured(target, feature) ? "icp" : "supabase";
+    return "icp";
   }
   const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
