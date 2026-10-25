@@ -4,15 +4,20 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextUpCarousel } from './NextUpCarousel';
 
-const state = vi.hoisted(() => ({ reads: [] as string[] }));
+const state = vi.hoisted(() => ({ reads: [] as string[], icp: false }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'account-1' } }) }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock('@/hooks/useCanStartGame', () => ({ useCanStartGame: () => ({ canStart: false }) }));
 vi.mock('@/hooks/useEventMembership', () => ({ useEventMembership: () => ({ data: undefined, isFetched: false }) }));
-vi.mock('@/live/authBackendMode', () => ({ resolveAuthBackend: () => 'supabase' }));
-vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: vi.fn() }));
+vi.mock('@/live/authBackendMode', () => ({ resolveAuthBackend: () => state.icp ? 'icp' : 'supabase' }));
+vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: (_: string, handlers: { icp: (ctx: object) => unknown; supabase: () => unknown }) => state.icp ? handlers.icp({}) : handlers.supabase() }));
 vi.mock('@/live/features/vault', () => ({ resolveLivePiiTextBatch: vi.fn() }));
-vi.mock('@/live/features/events', () => ({ setLiveEventRsvp: vi.fn(), adminUpsertLiveRsvp: vi.fn(), getMyLiveChildRsvps: vi.fn() }));
+vi.mock('@/live/features/events', () => ({ setLiveEventRsvp: vi.fn(), adminUpsertLiveRsvp: vi.fn(),
+  getMyLiveChildRsvps: async () => [],
+  listLiveMyRsvps: async () => [{ event_id: 'icp-event', account_id: 'account-1', child_id: [], state: 'going' }],
+  listLiveDuties: async () => [{ event_id: 'icp-event', account_id: 'account-1', duty: 'Referee', completed: true }],
+  getLiveEventRosterDetailed: async () => ({ rsvps: [] }),
+}));
 vi.mock('@/live/features/homeFeed', () => ({ fetchLiveHomeChildren: vi.fn() }));
 vi.mock('@/live/features/miniLeagues', () => ({ listLivePlayers: vi.fn() }));
 vi.mock('@/lib/resolveEventChildScope', () => ({ resolveRsvpChildren: () => new Promise(() => {}) }));
@@ -35,7 +40,7 @@ const event = (id: string, clubId: string) => ({
 function Location() { return <output data-testid="location">{useLocation().pathname}</output>; }
 
 describe('Next Up pending secondary reads', () => {
-  beforeEach(() => { state.reads = []; });
+  beforeEach(() => { state.reads = []; state.icp = false; });
   afterEach(cleanup);
 
   it('opens a known event immediately and after a club switch without waiting for attendance reads', async () => {
@@ -59,6 +64,18 @@ describe('Next Up pending secondary reads', () => {
     render(<QueryClientProvider client={client}><MemoryRouter><NextUpCarousel events={[event('a', 'club-a')]} /></MemoryRouter></QueryClientProvider>);
     await waitFor(() => expect(state.reads).toContain('rsvps:limit:5'));
     expect(client.getQueryState(['rsvp-summary', 'a', 'social'])?.status).toBe('pending');
+    client.clear();
+  });
+
+  it('mounted ICP cards resolve adult RSVP and completed duties without any Supabase reads', async () => {
+    state.icp = true;
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><MemoryRouter><NextUpCarousel events={[event('icp-event', 'club-a')]} /></MemoryRouter></QueryClientProvider>);
+    await waitFor(() => expect(client.getQueryData(['hero-rsvp', 'icp-event', 'account-1'])).toEqual({ id: 'icp-event:account-1', status: 'going' }));
+    await waitFor(() => expect(client.getQueryData(['hero-my-duties', 'icp-event', 'account-1'])).toEqual([
+      { id: 'icp-event:account-1:Referee', name: 'Referee', status: 'completed', start_time: null, end_time: null },
+    ]));
+    expect(state.reads).toEqual([]);
     client.clear();
   });
 });
