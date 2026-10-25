@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { ImageIcon, ChevronRight } from "lucide-react";
 import { memo, useCallback, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveGalleryChatCard } from "@/live/features/media";
 import { getLiveTeam } from "@/live/features/club";
@@ -21,7 +21,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
   const navigate = useNavigate();
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const isIcp = resolveAuthBackend() === "icp";
+  const isIcp = isFeatureRoutedToIcp('media');
   const { user, sessionRestoration } = useAuth();
 
   const { data: card, isLoading } = useQuery({

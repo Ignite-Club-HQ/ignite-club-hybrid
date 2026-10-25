@@ -1,3 +1,7 @@
+## Messages Events/Vault warnings — 25 October 2026
+- [x] Route inbox labels by feature backend/account; restore exact authorized ICP Vault names and owning-event titles instead of suppressed reads. Gallery cards, pinned Vault and chat-detail Vault/mute branches use feature routing rather than auth-screen selection. Mounted inbox tests confirm no old-system readers; 101 checks pass per mode, ICP guards and preview build pass.
+- [ ] Signed-in phone acceptance requires the updated frontend; historical warning counts cannot establish which requests remain after deployment. No canister permissions or deployments changed.
+
 ## Poll vote feedback — 25 October 2026
 - [x] Show ICP selection/counts immediately in the account/chat query cache with pending feedback; restore previous vote on refusal and refresh after acknowledgement. Repeated choices retain single-choice canister semantics rather than falsely unselecting. 7 tests pass per mode, ICP guards and preview build pass; live II vote timing remains unverified, no deployment.
 
