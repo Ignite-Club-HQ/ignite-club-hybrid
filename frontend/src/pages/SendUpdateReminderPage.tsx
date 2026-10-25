@@ -132,7 +132,7 @@ function IcpSendUpdateReminderPage() {
         }
         return [...counts].map(([label, users]) => ({ label, count: users.size })).sort((a, b) => b.count - a.count);
       },
-    }, writeOnce({ clubId: selectedClubId })),
+    }, { clubId: selectedClubId }),
   });
 
   const sendMutation = useMutation({
