@@ -1,5 +1,5 @@
 ## Scoped news codes in inbox previews — 25 October 2026
-- [ ] Consume both legacy and club-scoped news tokens in shared message previews; preserve surrounding text and verify both modes.
+- [x] Shared inbox/team/desktop formatter consumes both legacy and club-scoped news tokens as readable news labels, preserving surrounding text and malformed-token handling. All 21 focused checks pass per mode and preview build OK; no deployment or signed-in inbox claim.
 
 ## Team-page blocked ICP reads — 25 October 2026
 - [x] Replaced team roster/request/invite-card auth-screen predicates with actual feature routing; restored manager-authorized owning-club pending invitation reads and labels, preserving acknowledgement-only self-request state without the admin-only request directory. 47 unique focused checks pass per configuration (including mounted country/provider mismatch regression), ICP guards pass and preview build OK. No deployment or live timing claim.
