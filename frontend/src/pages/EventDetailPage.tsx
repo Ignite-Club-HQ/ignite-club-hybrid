@@ -338,7 +338,12 @@ export default function EventDetailPage() {
               mini_league_players: null,
             };
           });
-          return rows;
+          const { hydrateRsvpDisplayProfiles } = await import("@/features/events/rsvpDisplayProfiles");
+          const profileIds = [...new Set(rows.map(row => row.user_id.replace(/^principal:/, "")))];
+          const profiles = await listLiveProfilesByIds(ctx, profileIds).catch(() => []);
+          return hydrateRsvpDisplayProfiles(rows, profiles.map(p => ({
+            id: p.account_id, display_name: p.display_name, avatar_url: p.avatar_ref[0] ?? null,
+          })), user?.id ? { id: user.id, profile } : undefined);
         },
       }, { eventId: id! });
       if (icpRsvps) return icpRsvps;
@@ -1811,6 +1816,7 @@ export default function EventDetailPage() {
     linkedAdultProfiles,
     reminderMembers,
     eventGuests,
+    currentUser: user?.id ? { id: user.id, profile } : undefined,
   });
 
   if (isLoading) {

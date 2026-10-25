@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { buildEventRsvpBuckets } from "@/features/events/eventRsvpBuckets";
 import { resolveRsvpAudience } from "@/lib/rsvpAudience";
+import { hydrateRsvpDisplayProfiles } from "@/features/events/rsvpDisplayProfiles";
 
 type UseEventAttendanceViewModelArgs = {
   event: any;
@@ -20,6 +21,7 @@ type UseEventAttendanceViewModelArgs = {
   linkedAdultProfiles: any[] | undefined;
   reminderMembers: any[] | undefined;
   eventGuests: any[] | undefined;
+  currentUser?: { id: string; profile: { display_name?: string | null; avatar_url?: string | null } | null | undefined };
 };
 
 export function useEventAttendanceViewModel({
@@ -40,6 +42,7 @@ export function useEventAttendanceViewModel({
   linkedAdultProfiles,
   reminderMembers,
   eventGuests,
+  currentUser,
 }: UseEventAttendanceViewModelArgs) {
   return useMemo(() => {
     const playerUserIds = new Set(playerMembers?.map((member) => member.id) || []);
@@ -60,7 +63,9 @@ export function useEventAttendanceViewModel({
 
     const isTargetedScope = !!targetTeamIdsForFetch;
     const { goingRsvps, maybeRsvps, notGoingRsvps } = buildEventRsvpBuckets({
-      rsvps,
+      rsvps: hydrateRsvpDisplayProfiles(rsvps ?? [], [
+        ...(members ?? []), ...(attendanceMembers ?? []), ...(linkedAdultProfiles ?? []), ...(miniLeagueAdults ?? []),
+      ], currentUser),
       effectiveShowAll,
       isMiniLeagueEvent,
       adultsAreTheAudience,
@@ -199,5 +204,6 @@ export function useEventAttendanceViewModel({
     linkedAdultProfiles,
     reminderMembers,
     eventGuests,
+    currentUser,
   ]);
 }

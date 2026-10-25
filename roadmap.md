@@ -1,3 +1,7 @@
+## Attendance name lost after Going — 25 October 2026
+- [ ] Hydrate ICP RSVP adult profiles and retain known authorized roster/self names when responses move between attendance sections; verify status transitions.
+- [ ] Signed-in phone RSVP readback requires Paul's Internet Identity session.
+
 ## Scoped news codes in inbox previews — 25 October 2026
 - [x] Shared inbox/team/desktop formatter consumes both legacy and club-scoped news tokens as readable news labels, preserving surrounding text and malformed-token handling. All 21 focused checks pass per mode and preview build OK; no deployment or signed-in inbox claim.
 
