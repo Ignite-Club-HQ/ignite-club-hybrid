@@ -1,3 +1,7 @@
+## Home Vault club spinner — 25 October 2026
+- [x] Bound full ICP club reads including routing (12s member/selected, 35s wider admin directory), retain separately subscribed member clubs while admin discovery loads, and disable automatic retry loops. Stalled-read, explicit-retry and non-authorizing tests pass: 72 ICP / 66 Supabase checks, guards and preview build OK. No deployment.
+- [ ] Signed-in Home-to-Vault timing requires Paul's Internet Identity session and the updated frontend.
+
 ## Slow news post opening — 25 October 2026
 - [x] News details reuse fresh fetched account/provider-scoped feed bodies and authorized chat-card results instead of repeating the consensus news inventory on each open; stale/invalidated/other-account data still rechecks audiences. Detail team labels use the post's known club and whole-club posts skip unnecessary team lists. All 23 focused checks pass in both modes, ICP guards and preview build OK. Cold-link discovery retained; no deployment.
 - [ ] Live news opening timing requires Paul's Internet Identity session and updated frontend.
