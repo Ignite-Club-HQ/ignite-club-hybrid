@@ -99,6 +99,20 @@ export async function listLiveEvents(
   clubId?: string | null,
   teamId?: string | null,
 ) {
+  const rows = await listLiveEventsRaw(ctx, clubId, teamId);
+  // Each listed event's club is known here: record it so opening the event
+  // goes straight to its group instead of asking every group first.
+  // Fire-and-forget; location only — the destination still checks access.
+  if (rows.length) void import("@/live/groupDispatch").then(({ clubDispatch }) =>
+    clubDispatch.remember("event", rows.map((e) => [e.id, e.club_id] as const))).catch(() => undefined);
+  return rows;
+}
+
+async function listLiveEventsRaw(
+  ctx: FeatureBackendContext,
+  clubId?: string | null,
+  teamId?: string | null,
+) {
   // Exactly one scope -> coalesce with sibling calls into list_events_multi.
   if (!!clubId !== !!teamId) {
     const key = clubId ? `c:${clubId}` : `t:${teamId}`;
