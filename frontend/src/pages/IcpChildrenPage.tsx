@@ -76,6 +76,11 @@ export default function IcpChildrenPage() {
         isPrimary: r.parent?.[0]?.toText?.() === me,
       }));
     },
+    // Children change rarely; keep the last list for a minute so revisiting
+    // the page (or returning after Add child) is instant while a background
+    // refetch refreshes it.
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
   });
 
   const { data: teams } = useQuery({
@@ -114,8 +119,14 @@ export default function IcpChildrenPage() {
       const child = await club.createMyLiveChild(ctx);
       const me = ctx.identity.getPrincipal();
       await vault.registerLiveChildNamePii(ctx, child.id, trimmed, me);
+      return { id: child.id as string, name: trimmed, teams: [] as string[], isPrimary: true };
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
+      // Show the new child immediately; the background refetch replaces this
+      // optimistic row with the canonical canister record.
+      qc.setQueryData<IcpChild[]>(KEY, (prev) =>
+        prev && !prev.some((c) => c.id === created.id) ? [...prev, created] : prev,
+      );
       invalidate();
       setAddOpen(false);
       setName("");
