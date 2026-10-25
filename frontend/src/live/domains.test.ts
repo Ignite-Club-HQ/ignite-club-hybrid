@@ -9,7 +9,7 @@ import { connectLiveVaultDomain } from './domains';
 
 const target = (host: string): IcpTargetConfig => ({ provider: 'icp', alias: 'test', host,
   networkKind: 'public_mainnet', deploymentClass: 'public_subnet', canisterIds: {} });
-const identity = {} as Identity;
+const identity = { getPrincipal: () => ({ isAnonymous: () => false }) } as unknown as Identity;
 describe('dev-only domain protected reads', () => {
   beforeEach(() => {
     vi.clearAllMocks(); vi.unstubAllEnvs();
@@ -22,6 +22,11 @@ describe('dev-only domain protected reads', () => {
     expect(await connection.actor.get_folder('f')).toEqual({ Ok: [{ id: 'f' }] });
     expect(mocks.actor.get_folder).toHaveBeenCalledWith('f');
     expect(mocks.actor.read_account_get_folder).not.toHaveBeenCalled();
+  });
+  it('public invitation actors never inherit protected account decisions', async () => {
+    const anonymous = { getPrincipal: () => ({ isAnonymous: () => true }) } as unknown as Identity;
+    const connection = await connectLiveVaultDomain(target('https://icp-api.io'), anonymous);
+    expect(connection.actor).toBe(mocks.actor);
   });
   it('retries through the protected twin when a remote canister refuses the legacy query', async () => {
     vi.stubEnv('DEV', true);
