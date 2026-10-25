@@ -1,3 +1,6 @@
+## All-group mainnet release — 25 October 2026
+- [ ] Provide one protected scope-aware workflow covering every registered group and shared services once; preserve exact-target safeguards, durable interruption evidence and verified snapshot refresh. Plan prepared; no live upgrade authorized or performed.
+
 ## App-admin ICP audit — 25 October 2026
 - [x] Repair identified app-admin ICP dependencies locally: narrow authorized live directory/status, canister queue analytics/settings/cleanup, on-chain overrides, no ICP Supabase realtime, paged feedback/preferences and registered-group reads. Dual-mode focused tests, Rust authorization/search, Motoko checks, guards, Candid drift and preview pass; Supabase tools preserved. Exact evidence and reporting limits recorded in docs/app-admin-icp-audit-2026-10-25.md.
 - [ ] Release and signed-in app-admin acceptance: shared identity and both notification groups need protected exact-target upgrades plus app release; no live Internet Identity admin session/deployed versions available here. Verify role-store consistency and queue-specific preference totals; platform reporting parity remains documented, not claimed complete.
