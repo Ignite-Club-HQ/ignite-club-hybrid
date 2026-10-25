@@ -245,6 +245,7 @@ export function CreatePollDialog({ open, onOpenChange, chatType, chatId, onCreat
 
   return (
     <ResponsiveDialog
+      keyboardSafe
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen && !create.isPending) reset();

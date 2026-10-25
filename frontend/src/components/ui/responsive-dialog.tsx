@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useNativeKeyboardBottomInset } from '@/hooks/useNativeKeyboardBottomInset';
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ interface ResponsiveDialogProps {
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
   forceDesktopDialog?: boolean;
+  keyboardSafe?: boolean;
 }
 
 interface ResponsiveDialogContentProps {
@@ -51,7 +53,7 @@ interface ResponsiveDialogDescriptionProps {
   className?: string;
 }
 
-const ResponsiveDialogContext = React.createContext<{ isMobile: boolean }>({
+const ResponsiveDialogContext = React.createContext<{ isMobile: boolean; keyboardSafe?: boolean }>({
   isMobile: false,
 });
 
@@ -79,14 +81,15 @@ export function ResponsiveDialog({
   onOpenChange,
   children,
   forceDesktopDialog = false,
+  keyboardSafe = false,
 }: ResponsiveDialogProps) {
   const isMobile = useIsMobile();
   const useDrawer = isMobile && !forceDesktopDialog;
 
   if (useDrawer) {
     return (
-      <ResponsiveDialogContext.Provider value={{ isMobile: true }}>
-        <Drawer open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContext.Provider value={{ isMobile: true, keyboardSafe }}>
+        <Drawer open={open} onOpenChange={onOpenChange} repositionInputs={!keyboardSafe}>
           {children}
         </Drawer>
       </ResponsiveDialogContext.Provider>
@@ -107,8 +110,27 @@ export function ResponsiveDialogContent({
   className,
   fullScreen = false,
 }: ResponsiveDialogContentProps) {
-  const { isMobile } = React.useContext(ResponsiveDialogContext);
+  const { isMobile, keyboardSafe } = React.useContext(ResponsiveDialogContext);
   const visualHeight = useVisualViewportHeight();
+  const nativeBottom = useNativeKeyboardBottomInset();
+  const [viewportBottom, setViewportBottom] = React.useState(0);
+  React.useEffect(() => {
+    if (!keyboardSafe) return;
+    const sync = () => {
+      const vv = window.visualViewport;
+      setViewportBottom(vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0);
+    };
+    sync();
+    window.visualViewport?.addEventListener('resize', sync);
+    window.visualViewport?.addEventListener('scroll', sync);
+    window.addEventListener('resize', sync);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', sync);
+      window.visualViewport?.removeEventListener('scroll', sync);
+      window.removeEventListener('resize', sync);
+    };
+  }, [keyboardSafe]);
+  const keyboardBottom = Math.max(nativeBottom, viewportBottom);
 
   if (isMobile) {
     return (
@@ -120,7 +142,7 @@ export function ResponsiveDialogContent({
             // browsers may then drop `bottom` and place the action footer below
             // the viewport. `mt-0` also cancels DrawerContent's default offset.
             ? "mt-0"
-            : className
+            : keyboardSafe ? `mt-0 ${className ?? ''}` : className
         }
         style={
           fullScreen
@@ -136,14 +158,18 @@ export function ResponsiveDialogContent({
                 maxHeight:
                   "calc(min(var(--visual-vh, 100dvh), 100vh) - env(safe-area-inset-top,0px))",
               }
-            : undefined
+            : keyboardSafe ? {
+                bottom: keyboardBottom,
+                maxHeight: Math.max(0, Math.min(visualHeight ?? window.innerHeight, window.innerHeight - keyboardBottom) - 8),
+                overflow: 'hidden',
+              } : undefined
         }
 
       >
         <div
           className={fullScreen
             ? "flex flex-1 min-h-0 flex-col w-full overflow-hidden"
-            : "mx-auto w-full max-w-lg px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] max-h-[85vh] overflow-y-auto"
+            : `mx-auto w-full max-w-lg px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] max-h-[85vh] overflow-y-auto ${keyboardSafe ? 'min-h-0 overscroll-contain' : ''}`
           }
           style={
             !fullScreen && visualHeight
