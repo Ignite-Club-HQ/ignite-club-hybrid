@@ -14,7 +14,7 @@ export async function adminMessagingContexts() {
 }
 export async function readAdminPhotoReminderSettings() {
   const contexts = await adminMessagingContexts();
-  return Promise.all(contexts.map(async ctx => ({ service: ctx.target.canisterIds.messaging_domain, policy: await getLiveChatPhotoReminderSettings(ctx) })));
+  return Promise.all(contexts.map(async ctx => ({ service: ctx.target.canisterIds.messaging_domain, policy: await Promise.race([getLiveChatPhotoReminderSettings(ctx), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("A messaging service took too long to answer")), 15_000))]) })));
 }
 export async function saveAdminPhotoReminderSettings(policy: Policy) {
   const contexts = await adminMessagingContexts(); let completed = 0;
