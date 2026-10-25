@@ -27,6 +27,9 @@ const MAX_IOS_NATIVE_BOTTOM_INSET_PX = 60;
 const DEFAULT_NAV_GUARD_MS = 900;
 
 export function BottomNav() {
+  // Warm page code after the shell paints, rather than waiting for the tap.
+  // This does not start page data reads or mount inactive pages.
+  useEffect(() => { warmMainRoutes(); }, []);
   // Club-filtered Messages badge count, shared with the desktop rail. Works
   // in both Supabase and ICP modes — see the hook for the backend branches.
   const unreadMessagesCount = useNavMessagesBadgeCount();
@@ -287,6 +290,8 @@ export function BottomNav() {
               aria-label={label}
               aria-current={undefined}
               onPointerDown={() => prefetchRoute(to)}
+              onPointerEnter={() => prefetchRoute(to)}
+              onFocus={() => prefetchRoute(to)}
               className={({ isActive }) =>
                 cn(
                   "flex flex-col items-center justify-center flex-1 py-2 transition-colors",
