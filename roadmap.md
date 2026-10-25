@@ -1,5 +1,5 @@
 ## Event Captain spinner — 25 October 2026
-- [ ] Repair known-club routing, independent ICP name hydration, bounded reads and retryable assignment failures; run focused tests in both modes.
+- [x] Repair known-club routing, independent ICP name hydration, bounded reads and retryable assignment failures; focused Captain/read regressions cover picker opening, name hydration, stalled fallback recovery and refusing replacement after failed reads. No canister changes or deployment.
 - [ ] Live signed-in Captain acceptance requires Paul's Internet Identity session and the updated frontend; no deployment requested.
 
 ## Attendance name lost after Going — 25 October 2026

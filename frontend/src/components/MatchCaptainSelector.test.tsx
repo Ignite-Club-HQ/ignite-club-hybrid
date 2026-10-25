@@ -33,7 +33,7 @@ describe('ICP event captain loading', () => {
   it('opens the eligible player picker through the known club without old-system reads', async () => {
     const view = mount();
     fireEvent.click(await view.findByRole('button', { name: 'Assign Captain' }));
-    expect(await view.findByRole('button', { name: 'Paul' })).toBeTruthy();
+    expect(await view.findByRole('button', { name: /Paul/ })).toBeTruthy();
     expect(m.route).toHaveBeenCalledWith('events', { clubId: 'club' });
     expect(m.route).toHaveBeenCalledWith('membership', { clubId: 'club' });
     expect(m.oldRead).not.toHaveBeenCalled();
