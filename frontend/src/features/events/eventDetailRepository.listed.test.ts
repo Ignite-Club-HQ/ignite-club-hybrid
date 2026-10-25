@@ -10,7 +10,8 @@ vi.mock("@/live/features/events", () => ({
 vi.mock("@/live/featureRouter", () => ({
   withFeatureBackend: (_f: string, impl: any, scope: unknown) => { scopes.push(scope); return impl.icp({}); },
 }));
-vi.mock("@/lib/teamClubCache", () => ({ getCachedTeam: () => null, getCachedClub: () => ({ name: "Giddy Goat" }) }), { virtual: true });
+vi.mock("@/lib/clubTeamCache", () => ({ getCachedTeam: () => null, getCachedClub: () => ({ name: "Giddy Goat" }) }));
+vi.mock("@/live/features/club", () => ({ getLiveTeam: vi.fn(), getLiveClubProfile: vi.fn() }));
 
 import { fetchEventDetail, listedEventDetailPreview } from "./eventDetailRepository";
 
