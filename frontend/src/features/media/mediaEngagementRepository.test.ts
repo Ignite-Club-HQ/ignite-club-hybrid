@@ -129,6 +129,26 @@ describe.runIf(supabaseMode)("Media engagement repository — Supabase", () => {
       photoId: "photo-a", userId: "user-a", text: "No access",
     }, client)).rejects.toEqual(failure);
   });
+
+  it("lists comment reactions scoped to the comment", async () => {
+    const rows = [{ id: "r1", user_id: "user-a", reaction_type: "like" }];
+    const { client, calls } = scriptedClient({ photo_comment_reactions: [{ data: rows, error: null }] });
+    await expect(listMediaCommentReactions("comment-a", client)).resolves.toEqual(rows);
+    expect(calls).toEqual([
+      { table: "photo_comment_reactions", method: "select", args: ["id, user_id, reaction_type"] },
+      { table: "photo_comment_reactions", method: "eq", args: ["comment_id", "comment-a"] },
+    ]);
+  });
+
+  it("deletes a comment by id and propagates failure", async () => {
+    const failure = { message: "delete denied" };
+    const { client, calls } = scriptedClient({ photo_comments: [{ data: null, error: failure }] });
+    await expect(deleteMediaComment({ commentId: "comment-a" }, client)).rejects.toEqual(failure);
+    expect(calls).toEqual([
+      { table: "photo_comments", method: "delete", args: [] },
+      { table: "photo_comments", method: "eq", args: ["id", "comment-a"] },
+    ]);
+  });
 });
 
 describe.runIf(!supabaseMode)("Media engagement repository — ICP", () => {
@@ -177,6 +197,27 @@ describe.runIf(!supabaseMode)("Media engagement repository — ICP", () => {
     await expect(createMediaComment({ photoId: "photo-a", userId: "principal-a", text: "Denied" }, client))
       .rejects.toBe(denied);
 
+    expect(calls).toEqual([]);
+  });
+
+  it("returns no comment reactions in ICP mode without touching Supabase", async () => {
+    const { client, calls } = scriptedClient({});
+    await expect(listMediaCommentReactions("comment-a", client)).resolves.toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it("deletes a comment through the ICP media adapter", async () => {
+    const { client, calls } = scriptedClient({});
+    await deleteMediaComment({ commentId: "comment-a" }, client);
+    expect(mediaMocks.deleteComment).toHaveBeenCalledWith(icpContext, "comment-a");
+    expect(calls).toEqual([]);
+  });
+
+  it("propagates ICP comment delete denials without Supabase fallback", async () => {
+    const denied = new Error("comment delete denied");
+    mediaMocks.deleteComment.mockRejectedValueOnce(denied);
+    const { client, calls } = scriptedClient({});
+    await expect(deleteMediaComment({ commentId: "comment-a" }, client)).rejects.toBe(denied);
     expect(calls).toEqual([]);
   });
 });
