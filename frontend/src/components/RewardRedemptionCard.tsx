@@ -160,6 +160,7 @@ export default function RewardRedemptionCard() {
       return (data || []) as ClubReward[];
     },
     enabled: !!selectedClubId,
+    staleTime: 2 * 60 * 1000,
   });
 
   // Fetch user's children — both as primary parent AND as a linked guardian

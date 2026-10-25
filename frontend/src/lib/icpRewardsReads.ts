@@ -103,10 +103,13 @@ export function mapLiveReward(r: Awaited<ReturnType<typeof listLiveClubRewards>>
 
 /** Active, redeemable (non player-of-match) rewards for the given clubs. */
 export async function liveRedeemableRewards(ctx: FeatureBackendContext, clubIds: string[]) {
-  const sponsors = await rewardSponsorLookup(ctx, clubIds);
-  const { values: lists } = await settleAll(
-    clubIds.map((id) => readPointsInClub(ctx, id, scoped => listLiveClubRewards(scoped, id, null, true))),
-  );
+  // Sponsors only decorate rewards — fetch them alongside, not before.
+  const [sponsors, { values: lists }] = await Promise.all([
+    rewardSponsorLookup(ctx, clubIds),
+    settleAll(
+      clubIds.map((id) => readPointsInClub(ctx, id, scoped => listLiveClubRewards(scoped, id, null, true))),
+    ),
+  ]);
   return lists
     .flat()
     .filter((r) => r.is_active && r.reward_type !== "player_of_match")
