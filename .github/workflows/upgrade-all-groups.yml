@@ -51,7 +51,9 @@ jobs:
           node --input-type=module <<'JS'
           import {validateRequest,normalizeConfirmation,normalizePlan} from './scripts/all-group-upgrade-policy.mjs';
           if(process.env.ACTION==='upgrade'&&process.env.SCOPE==='full_backend'&&!normalizePlan(process.env.CHECKED_PLAN)){
-            if(normalizeConfirmation(process.env.CONFIRMATION)!=='UPGRADE ALL MAINNET GROUPS')throw Error('Type UPGRADE ALL MAINNET GROUPS');
+            const typed=normalizeConfirmation(process.env.CONFIRMATION);
+            if(typed.startsWith('RECOVER'))throw Error('Action dropdown is still "upgrade". Change Action to "recover" and paste the original checked plan hash into Checked plan');
+            if(typed!=='UPGRADE ALL MAINNET GROUPS')throw Error('Type UPGRADE ALL MAINNET GROUPS');
             validateRequest('check',process.env.SCOPE);
           }else validateRequest(process.env.ACTION,process.env.SCOPE,process.env.CONFIRMATION,process.env.CHECKED_PLAN);
           JS
