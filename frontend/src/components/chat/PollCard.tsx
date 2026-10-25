@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { voteLivePoll, closeLivePoll, deleteLivePoll } from "@/live/features/messaging";
-import { pollQueryOptions } from "@/lib/pollReadRepository";
+import { pollQueryOptions, type PollData } from "@/lib/pollReadRepository";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -85,15 +85,9 @@ export function PollCard({ pollId }: PollCardProps) {
     enabled: votesOpen && voterIds.length > 0,
     staleTime: 60_000,
   });
-  // In ICP mode the canister only tells us aggregate counts, so track the
-  // voter's own selection locally (optimistic, from the vote call result).
-  const [icpMyOptionIndex, setIcpMyOptionIndex] = useState<number | null>(null);
   const myVoteOptionIds = useMemo(() => {
-    if (icpMode) {
-      return new Set(icpMyOptionIndex !== null ? [String(icpMyOptionIndex)] : []);
-    }
     return new Set((data?.votes || []).filter(v => v.user_id === user?.id).map(v => v.option_id));
-  }, [data?.votes, user?.id, icpMode, icpMyOptionIndex]);
+  }, [data?.votes, user?.id]);
 
   const voteCountByOption = useMemo(() => {
     const map = new Map<string, number>();
@@ -104,6 +98,18 @@ export function PollCard({ pollId }: PollCardProps) {
   }, [data?.votes]);
 
   const voteMutation = useMutation({
+    onMutate: async (optionId: string) => {
+      if (!icpMode || !user) return undefined;
+      await qc.cancelQueries({ queryKey: pollKey, exact: true });
+      const previous = qc.getQueryData<PollData | null>(pollKey);
+      if (!previous) return undefined;
+      setBusyOptionId(optionId);
+      qc.setQueryData<PollData>(pollKey, { ...previous, votes: [
+        ...previous.votes.filter(v => v.user_id !== user.id),
+        { id: `${pollId}:${user.id}`, user_id: user.id, option_id: optionId },
+      ] });
+      return { previous };
+    },
     mutationFn: async (optionId: string) => {
       if (icpMode) {
         const optionIndex = Number(optionId);
@@ -113,7 +119,6 @@ export function PollCard({ pollId }: PollCardProps) {
           },
           icp: (ctx) => voteLivePoll(ctx, pollId, optionIndex),
         }, chatWrite(scope));
-        setIcpMyOptionIndex((prev) => (prev === optionIndex ? null : optionIndex));
         return;
       }
       if (!user || !data?.poll) return;
@@ -149,7 +154,8 @@ export function PollCard({ pollId }: PollCardProps) {
     onSuccess: () => {
       refetch();
     },
-    onError: (e: any) => {
+    onError: (e: any, _optionId, context) => {
+      if (context?.previous) qc.setQueryData(pollKey, context.previous);
       toast.error(pollErrorMessage(e, "Failed to record vote"));
     },
     onSettled: () => setBusyOptionId(null),
@@ -290,6 +296,8 @@ export function PollCard({ pollId }: PollCardProps) {
               key={opt.id}
               onClick={() => !disabled && voteMutation.mutate(opt.id)}
               disabled={disabled}
+              aria-pressed={selected}
+              aria-busy={busyOptionId === opt.id}
               className={`relative w-full text-left rounded-xl border overflow-hidden transition-colors min-h-[44px] ${
                 selected ? "border-primary/60" : "border-border"
               } ${disabled && !selected ? "opacity-90" : "hover:bg-muted/40 active:bg-muted/60"} ${
@@ -304,7 +312,9 @@ export function PollCard({ pollId }: PollCardProps) {
               />
               <div className="relative flex items-center justify-between gap-3 px-3 py-2.5">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  {selected ? (
+                  {busyOptionId === opt.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+                  ) : selected ? (
                     <Check className="h-4 w-4 text-primary shrink-0" strokeWidth={2.5} />
                   ) : (
                     <span className="h-4 w-4 rounded-full border border-muted-foreground/40 shrink-0" />
@@ -315,11 +325,6 @@ export function PollCard({ pollId }: PollCardProps) {
                   {count} · {pct}%
                 </span>
               </div>
-              {busyOptionId === opt.id && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/50">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                </div>
-              )}
             </button>
           );
         })}

@@ -1,3 +1,6 @@
+## Poll vote feedback — 25 October 2026
+- [x] Show ICP selection/counts immediately in the account/chat query cache with pending feedback; restore previous vote on refusal and refresh after acknowledgement. Repeated choices retain single-choice canister semantics rather than falsely unselecting. 7 tests pass per mode, ICP guards and preview build pass; live II vote timing remains unverified, no deployment.
+
 ## Poll composer keyboard clipping — 25 October 2026
 - [x] Opt poll composer into keyboard-safe visible-viewport positioning and disable competing Vaul input repositioning; browser fixture at 411×770 with 410px simulated keyboard-free viewport verifies heading/fields and scrolled submit remain above the keyboard. 11 poll regressions and preview build pass. Real Android keyboard and signed-in poll creation remain unverified; no poll logic changed.
 
