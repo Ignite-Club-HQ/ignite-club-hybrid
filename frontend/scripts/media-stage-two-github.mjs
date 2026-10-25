@@ -8,6 +8,7 @@ export function createJournalApi(repo, serialize, execute = spawnSync) {
     const result = execute('gh', args, {
       input: body !== undefined ? serialize(body) : undefined,
       encoding: 'utf8',
+      maxBuffer: 512 * 1024 * 1024,
     });
     if (result.status !== 0) {
       // Never echo process output: it may contain credential-related diagnostics.
