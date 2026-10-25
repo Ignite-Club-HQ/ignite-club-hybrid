@@ -118,10 +118,31 @@ jobs:
             if icp canister top-up frontend --amount "$A" -e ic; then TOPPED="$A"; echo "Topped up $A"; break; fi
           done
           [ -n "$TOPPED" ] || echo "::warning::Top-up skipped — the deploy account needs more cycles (send ICP to it)."
-          # Sync calls require a running canister. A prior interrupted upgrade
-          # may have left it stopped; start existing instances without wiping assets.
+          # Sync calls require a running canister. A prior failed deploy left it
+          # stopped, and a stopped canister refuses every call — start it first
+          # and prove it is running before uploading. Never reinstall: that would
+          # wipe the stored site.
           if [ -f .icp/data/mappings/ic.ids.json ] && jq -e '.frontend // empty' .icp/data/mappings/ic.ids.json >/dev/null; then
-            icp canister start frontend -e ic
+            echo "Ensuring frontend canister is running..."
+            # "already running" is fine; only a real rejection matters.
+            icp canister start frontend -e ic || true
+            sleep 5
+            STATUS_JSON="$(icp canister status frontend -e ic --json 2>/dev/null || true)"
+            echo "Status after start: $STATUS_JSON"
+            if echo "$STATUS_JSON" | grep -qi stopped; then
+              # Start is rejected while the balance sits below the freezing
+              # threshold; top up once and retry.
+              echo "::warning::Canister still stopped — topping up 1T and retrying start."
+              icp canister top-up frontend --amount 1T -e ic || true
+              icp canister start frontend -e ic || true
+              sleep 5
+              STATUS_JSON="$(icp canister status frontend -e ic --json 2>/dev/null || true)"
+              echo "Status after retry: $STATUS_JSON"
+            fi
+            if echo "$STATUS_JSON" | grep -qi stopped; then
+              echo "::error::Frontend canister is stopped and would not start. Top it up with more cycles (Top up canister cycles workflow) and rerun this workflow."
+              exit 1
+            fi
           fi
           # Never reinterpret a sync failure as permission to erase stored files.
           icp deploy -e ic frontend --mode auto --yes --cycles 1000000000000
