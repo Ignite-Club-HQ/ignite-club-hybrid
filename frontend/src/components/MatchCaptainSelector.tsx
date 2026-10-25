@@ -25,8 +25,9 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { withReadDeadline } from "@/live/readDeadline";
 import {
   listLiveMatchCaptains,
   setLiveMatchCaptain,
@@ -55,15 +56,16 @@ export default function MatchCaptainSelector({
   // events_domain has a per-match captain-assignment store
   // (set_match_captain/list_match_captains/remove_match_captain); ICP
   // sessions resolve the captain the same way Supabase ones do.
-  const isIcp = resolveAuthBackend() === "icp";
+  const isIcp = isFeatureRoutedToIcp("events");
   const effectiveIsAdmin = isAdmin;
   const [selectDialogOpen, setSelectDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const { data: captain, isLoading } = useQuery({
-    queryKey: ["match-captain", eventId],
-    queryFn: () => withFeatureBackend("events", {
+  const { data: captain, isLoading, error: captainError, refetch: refetchCaptain } = useQuery({
+    queryKey: ["match-captain", eventId, user?.id, isIcp, clubId],
+    enabled: !!user && !!eventId,
+    queryFn: ({ signal }) => withReadDeadline(withFeatureBackend("events", {
       supabase: async () => {
         const { data, error } = await supabase
           .from("match_captains")
@@ -94,8 +96,7 @@ export default function MatchCaptainSelector({
           const match = rsvps.find((r) => r.child_id === row.ref_id);
           children = match?.children ?? null;
         } else {
-          const { data: profileData } = await selectCachedProfileById(row.ref_id);
-          profile = profileData;
+          profile = rsvps.find((r) => !r.child_id && r.user_id?.replace(/^principal:/, "") === row.ref_id.replace(/^principal:/, ""))?.profiles ?? null;
         }
         return {
           id: `${row.event_id}:${row.ref_kind}:${row.ref_id}:${row.role}`,
@@ -106,18 +107,18 @@ export default function MatchCaptainSelector({
           children,
         };
       },
-    }, clubId ? { clubId } : { eventId: eventId }),
+    }, clubId ? { clubId } : { eventId }), "Captain details", 12_000, signal),
     staleTime: 60_000,
-    retry: 1,
+    retry: false,
   });
 
   // Player-role eligibility is routed: Supabase reads user_roles, ICP reads
   // on-chain role grants (the previous direct query was disabled in ICP,
   // leaving no selectable adults).
   const { data: playerUserIds = [] } = useQuery({
-    queryKey: ["team-player-user-ids", clubId, teamId, isIcp],
+    queryKey: ["team-player-user-ids", clubId, teamId, isIcp, user?.id],
     queryFn: () => readPlayerOfMatchAdults(clubId ?? "", teamId),
-    enabled: !!teamId && !!clubId,
+    enabled: !!user && !!teamId && !!clubId,
   });
 
   // ICP rosters carry no profile enrichment, so hydrate adult names/avatars
@@ -128,26 +129,17 @@ export default function MatchCaptainSelector({
       .map((r) => r.user_id as string),
     [rsvps],
   );
-  const { data: adultProfiles } = useQuery({
-    queryKey: ["roster-profile-names", eventId, goingAdultIds.join(",")],
-    queryFn: () => readProfileSummaries(goingAdultIds),
-    enabled: isIcp && goingAdultIds.length > 0,
-    staleTime: 60_000,
-  });
-  const adultName = (userId: string | null | undefined) =>
-    (userId ? adultProfiles?.get(userId)?.display_name : null) || null;
-  const adultAvatar = (userId: string | null | undefined) =>
-    (userId ? adultProfiles?.get(userId)?.avatar_url : null) || null;
-
-  const { data: seasonCaptain, isLoading: isSeasonCaptainLoading } = useQuery({
-    queryKey: ["team-season-captain", teamId, isIcp],
-    enabled: !!teamId,
-    queryFn: async () => withFeatureBackend("membership", {
+  const { data: seasonCaptain, isLoading: isSeasonCaptainLoading, error: seasonCaptainError, refetch: refetchSeasonCaptain } = useQuery({
+    queryKey: ["team-season-captain", teamId, isIcp, user?.id, clubId],
+    enabled: !!user && !!teamId,
+    queryFn: async ({ signal }) => {
+      if (!teamId) return null;
+      return withReadDeadline(withFeatureBackend("membership", {
       supabase: async () => {
         const { data, error } = await supabase
           .from("team_captains")
           .select("user_id")
-          .eq("team_id", teamId!)
+          .eq("team_id", teamId)
           .order("created_at", { ascending: true })
           .limit(1)
           .maybeSingle();
@@ -157,24 +149,35 @@ export default function MatchCaptainSelector({
         return { user_id: data.user_id, profiles: profile, isSeasonCaptain: true };
       },
       icp: async (ctx) => {
-        const [{ listLiveTeamCaptains }, { listLiveProfilesByIds }] = await Promise.all([
-          import("@/live/features/club"),
-          import("@/live/features/identityAccessClient"),
-        ]);
-        const captains = await listLiveTeamCaptains(ctx, teamId!);
+        const { listLiveTeamCaptains } = await import("@/live/features/club");
+        const captains = await listLiveTeamCaptains(ctx, teamId);
         const principal = captains[0]?.user?.toText?.() ?? String(captains[0]?.user ?? "");
         if (!principal) return null;
-        const [profile] = await listLiveProfilesByIds(ctx, [principal]);
         return {
           user_id: principal,
-          profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_ref?.[0] ?? null } : null,
+          profiles: rsvps.find((r) => !r.child_id && r.user_id?.replace(/^principal:/, "") === principal)?.profiles ?? null,
           isSeasonCaptain: true,
         };
       },
-    }, { teamId: teamId! }),
+    }, clubId ? { clubId } : { teamId }), "Season captain details", 12_000, signal);
+    },
     staleTime: 5 * 60_000,
-    retry: 1,
+    retry: false,
   });
+
+  const profileIds = [...new Set([...goingAdultIds, captain?.user_id, seasonCaptain?.user_id]
+    .filter((id): id is string => !!id).map((id) => id.replace(/^principal:/, "")))];
+  const { data: adultProfiles } = useQuery({
+    queryKey: ["roster-profile-names", eventId, user?.id, isIcp, profileIds.join(",")],
+    queryFn: ({ signal }) => withReadDeadline(readProfileSummaries(profileIds), "Captain names", 12_000, signal),
+    enabled: !!user && isIcp && profileIds.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const adultName = (id: string | null | undefined) =>
+    id ? adultProfiles?.get(id.replace(/^principal:/, ""))?.display_name : null;
+  const adultAvatar = (id: string | null | undefined) =>
+    id ? adultProfiles?.get(id.replace(/^principal:/, ""))?.avatar_url : null;
 
   const assignMutation = useMutation({
     mutationFn: async ({ userId, childId }: { userId?: string; childId?: string }) => {
@@ -186,7 +189,7 @@ export default function MatchCaptainSelector({
             event_id: eventId,
             user_id: userId || null,
             child_id: childId || null,
-            assigned_by: user!.id,
+            assigned_by: user?.id,
           } as any);
           if (error) throw error;
         },
@@ -198,7 +201,8 @@ export default function MatchCaptainSelector({
               .map((r) => removeLiveMatchCaptain(ctx, eventId, r.ref_kind, r.ref_id, "captain" as const)),
           );
           const refKind = userId ? "account" : "child";
-          const refId = (userId || childId)!;
+          const refId = userId || childId;
+          if (!refId) throw new Error("Choose a player first.");
           await setLiveMatchCaptain(ctx, eventId, refKind, refId, "captain");
         },
       }, { eventId: eventId });
@@ -246,10 +250,10 @@ export default function MatchCaptainSelector({
   const goingPlayers = rsvps?.filter((r) => r.status === "going") || [];
   const goingChildren = goingPlayers.filter((r) => r.child_id);
   const goingMembers = goingPlayers.filter(
-    (r) => !r.child_id && r.user_id && playerUserIds.includes(r.user_id)
+    (r) => !r.child_id && r.user_id && playerUserIds.includes(r.user_id.replace(/^principal:/, ""))
   );
 
-  if (isLoading || isSeasonCaptainLoading) {
+  if (isLoading && !captain) {
     return (
       <Card>
         <CardContent className="p-4 flex justify-center">
@@ -275,18 +279,18 @@ export default function MatchCaptainSelector({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10 ring-2 ring-blue-500">
-                  {displayedCaptain.profiles?.avatar_url && (
-                    <AvatarImage src={displayedCaptain.profiles.avatar_url} />
+                  {(displayedCaptain.profiles?.avatar_url || adultAvatar(displayedCaptain.user_id)) && (
+                    <AvatarImage src={displayedCaptain.profiles?.avatar_url || adultAvatar(displayedCaptain.user_id) || undefined} />
                   )}
                   <AvatarFallback className="bg-blue-500/20 text-blue-600">
-                    {(displayedCaptain.profiles?.display_name || displayedCaptain.children?.name || "?")
+                    {(displayedCaptain.profiles?.display_name || displayedCaptain.children?.name || adultName(displayedCaptain.user_id) || "?")
                       .charAt(0)
                       .toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">
-                    {displayedCaptain.profiles?.display_name || displayedCaptain.children?.name || "Team captain"}
+                    {displayedCaptain.profiles?.display_name || displayedCaptain.children?.name || adultName(displayedCaptain.user_id) || "Team captain"}
                   </span>
                   {displayedCaptain.isSeasonCaptain && <Badge variant="secondary">Season captain</Badge>}
                 </div>
@@ -311,6 +315,13 @@ export default function MatchCaptainSelector({
                 </div>
               )}
             </div>
+          ) : captainError || seasonCaptainError ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">We couldn’t check the captain assignment. Please try again.</p>
+              <Button variant="outline" onClick={() => { void refetchCaptain(); void refetchSeasonCaptain(); }}>Try again</Button>
+            </div>
+          ) : isSeasonCaptainLoading ? (
+            <Loader2 aria-label="Checking season captain" className="h-5 w-5 animate-spin text-muted-foreground" />
           ) : effectiveIsAdmin ? (
             <div className="space-y-2">
               <Button
