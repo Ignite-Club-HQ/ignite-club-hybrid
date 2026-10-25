@@ -226,6 +226,17 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
     expect(calls).toEqual([]);
   });
 
+  it("reads selected-club caller roles in that owning group without retaining unrelated grants", async () => {
+    accessMocks.roles.mockResolvedValue([
+      { role: "club_admin", club: ["club-a"], team: [] },
+      { role: "coach", club: ["club-b"], team: ["team-b"] },
+    ]);
+    expect(await fetchVaultUserRoles("principal-a", undefined, "club-a")).toEqual([
+      { role: "club_admin", club_id: "club-a", team_id: null },
+    ]);
+    expect(accessMocks.scopes).toHaveBeenCalledWith({ clubId: "club-a" });
+  });
+
   it("personal Pro does not mark an unpaid club as paid", async () => {
     accessMocks.clubs.mockResolvedValue([{ id: "club-a", name: "Club A" }]);
     accessMocks.clubSubscriptions.mockResolvedValue(new Map([["club-a", null]]));

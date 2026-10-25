@@ -15,7 +15,9 @@ import type { FolderView } from "./useVaultExport";
 import type { VaultClubSummary } from "./vaultAccessRepository";
 
 const fetchVaultAppAdmin = vi.fn<(userId: string) => Promise<boolean>>();
-const fetchVaultUserRoles = vi.fn<(userId: string) => Promise<any[]>>();
+const fetchVaultUserRoles = vi.fn<(userId: string, client?: unknown, selectedClubId?: string | null) => Promise<any[]>>();
+const featureRouting = vi.hoisted(() => ({ icp: false }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => featureRouting.icp }));
 const fetchVaultAccessibleClubs = vi.fn<(userId: string, isAppAdmin: boolean, client?: unknown, selectedClubId?: string | null) => Promise<VaultClubSummary[]>>();
 const fetchVaultClubHasPro = vi.fn<(clubId: string) => Promise<boolean>>();
 const fetchVaultTeamHasPro = vi.fn<(teamId: string) => Promise<boolean>>();
@@ -40,7 +42,7 @@ vi.mock("@/hooks/useIsAppAdmin", async () => {
 
 vi.mock("./vaultAccessRepository", () => ({
   fetchVaultAppAdmin: (...args: [string]) => fetchVaultAppAdmin(...args),
-  fetchVaultUserRoles: (...args: [string]) => fetchVaultUserRoles(...args),
+  fetchVaultUserRoles: (...args: [string, unknown?, (string | null)?]) => fetchVaultUserRoles(...args),
   fetchVaultAccessibleClubs: (...args: [string, boolean, unknown?, (string | null)?]) => fetchVaultAccessibleClubs(...args),
   fetchVaultClubHasPro: (...args: [string]) => fetchVaultClubHasPro(...args),
   fetchVaultTeamHasPro: (...args: [string]) => fetchVaultTeamHasPro(...args),
@@ -89,6 +91,7 @@ function renderAccessModel(overrides: {
 }
 
 beforeEach(() => {
+  featureRouting.icp = false;
   fetchVaultAppAdmin.mockReset().mockResolvedValue(false);
   fetchVaultUserRoles.mockReset().mockResolvedValue([]);
   fetchVaultAccessibleClubs.mockReset().mockResolvedValue([]);
@@ -164,6 +167,49 @@ describe("useVaultAccessModel — access decision", () => {
 });
 
 describe("useVaultAccessModel — scoped Pro entitlement", () => {
+  it("opens a selected ICP club using its exact allowance without waiting for unrelated subscriptions or repeating the allowance", async () => {
+    featureRouting.icp = true;
+    fetchVaultAppAdmin.mockReturnValue(new Promise(() => {}));
+    fetchVaultUserRoles.mockResolvedValue([{ role: "club_admin", club_id: "club-a", team_id: null }]);
+    fetchVaultAccessibleClubs.mockResolvedValue([{ id: "club-a", name: "Club A", is_pro: true, storage_used_bytes: 0 }]);
+    fetchVaultAnyProAccess.mockReturnValue(new Promise(() => {}));
+    fetchVaultClubHasPro.mockReturnValue(new Promise(() => {}));
+    const { result, rerender } = renderAccessModel({ activeClubFilter: "club-a" });
+    await waitFor(() => expect(result.current.canAccessVault).toBe(true));
+    expect(fetchVaultUserRoles).toHaveBeenCalledWith("user-1", undefined, "club-a");
+    rerender({ currentView: clubView, activeClubFilter: "club-a" });
+    await waitFor(() => expect(result.current.currentClubHasPro).toBe(true));
+    expect(result.current.isLoadingAccess).toBe(false);
+    expect(fetchVaultClubHasPro).not.toHaveBeenCalled();
+  });
+  it("does not replace an unrelated club's scoped allowance with the selected club's premium", async () => {
+    featureRouting.icp = true;
+    fetchVaultUserRoles.mockResolvedValue([{ role: "club_admin", club_id: "club-a", team_id: null }]);
+    fetchVaultAccessibleClubs.mockResolvedValue([{ id: "club-b", name: "Club B", is_pro: true, storage_used_bytes: 0 }]);
+    fetchVaultClubHasPro.mockResolvedValue(false);
+    const { result } = renderAccessModel({ currentView: clubView, activeClubFilter: "club-b" });
+    await waitFor(() => expect(result.current.currentClubHasPro).toBe(false));
+    expect(result.current.canAccessVault).toBe(false);
+  });
+  it("does not grant a selected premium Vault before a qualifying role resolves", async () => {
+    featureRouting.icp = true;
+    fetchVaultAppAdmin.mockResolvedValue(false);
+    fetchVaultUserRoles.mockReturnValue(new Promise(() => {}));
+    fetchVaultAccessibleClubs.mockResolvedValue([{ id: "club-a", name: "Club A", is_pro: true, storage_used_bytes: 0 }]);
+    const { result } = renderAccessModel({ activeClubFilter: "club-a" });
+    await waitFor(() => expect(result.current.hasProClub).toBe(true));
+    expect(result.current.canAccessVault).toBe(false);
+    expect(result.current.isLoadingAccess).toBe(true);
+  });
+  it("does not reread a selected ICP club when app-admin status resolves", async () => {
+    featureRouting.icp = true;
+    fetchVaultAppAdmin.mockResolvedValue(true);
+    fetchVaultAccessibleClubs.mockResolvedValue([{ id: "club-a", name: "Club A", is_pro: true, storage_used_bytes: 0 }]);
+    const { result } = renderAccessModel({ activeClubFilter: "club-a" });
+    await waitFor(() => expect(result.current.isAppAdmin).toBe(true));
+    await waitFor(() => expect(result.current.userClubs?.length).toBe(1));
+    expect(fetchVaultAccessibleClubs).toHaveBeenCalledTimes(1);
+  });
   it("opens an authorized club while unrelated any-Pro discovery remains pending", async () => {
     fetchVaultUserRoles.mockResolvedValue([{ role: "coach", club_id: "club-a", team_id: null }]);
     fetchVaultClubHasPro.mockResolvedValue(true);
