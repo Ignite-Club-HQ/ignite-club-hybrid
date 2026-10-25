@@ -1726,6 +1726,7 @@ type Main =
         record {
           accepted_at_ms: nat64;
           accepted_by: principal;
+          already_accepted: bool;
           child_ids: vec text;
           club_id: text;
           team_id: opt text;

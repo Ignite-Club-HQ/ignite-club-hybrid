@@ -1950,6 +1950,7 @@ export interface MainInterface {
             accepted_by: Principal;
             team_id?: string;
             accepted_at_ms: bigint;
+            already_accepted: boolean;
             child_ids: Array<string>;
             club_id: string;
         };
@@ -5887,6 +5888,7 @@ export class Club_domain implements club_domainInterface {
             accepted_by: Principal;
             team_id?: string;
             accepted_at_ms: bigint;
+            already_accepted: boolean;
             child_ids: Array<string>;
             club_id: string;
         };
@@ -8245,12 +8247,14 @@ function from_candid_record_n293(value: {
     accepted_by: Principal;
     team_id: [] | [string];
     accepted_at_ms: bigint;
+    already_accepted: boolean;
     child_ids: Array<string>;
     club_id: string;
 }): {
     accepted_by: Principal;
     team_id?: string;
     accepted_at_ms: bigint;
+    already_accepted: boolean;
     child_ids: Array<string>;
     club_id: string;
 } {
@@ -8258,6 +8262,7 @@ function from_candid_record_n293(value: {
         accepted_by: value.accepted_by,
         team_id: record_opt_to_undefined(from_candid_opt_n6(value.team_id)),
         accepted_at_ms: value.accepted_at_ms,
+        already_accepted: value.already_accepted,
         child_ids: value.child_ids,
         club_id: value.club_id
     };
@@ -10673,6 +10678,7 @@ function from_candid_variant_n292(value: {
         accepted_by: Principal;
         team_id: [] | [string];
         accepted_at_ms: bigint;
+        already_accepted: boolean;
         child_ids: Array<string>;
         club_id: string;
     };
@@ -10684,6 +10690,7 @@ function from_candid_variant_n292(value: {
         accepted_by: Principal;
         team_id?: string;
         accepted_at_ms: bigint;
+        already_accepted: boolean;
         child_ids: Array<string>;
         club_id: string;
     };

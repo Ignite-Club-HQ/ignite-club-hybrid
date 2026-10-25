@@ -2219,6 +2219,7 @@ export const idlFactory = ({ IDL }) => {
               'accepted_by' : IDL.Principal,
               'team_id' : IDL.Opt(IDL.Text),
               'accepted_at_ms' : IDL.Nat64,
+              'already_accepted' : IDL.Bool,
               'child_ids' : IDL.Vec(IDL.Text),
               'club_id' : IDL.Text,
             }),

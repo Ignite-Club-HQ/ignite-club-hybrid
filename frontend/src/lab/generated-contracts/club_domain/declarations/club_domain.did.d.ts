@@ -1553,6 +1553,7 @@ export interface Main {
           'accepted_by' : Principal,
           'team_id' : [] | [string],
           'accepted_at_ms' : bigint,
+          'already_accepted' : boolean,
           'child_ids' : Array<string>,
           'club_id' : string,
         }
