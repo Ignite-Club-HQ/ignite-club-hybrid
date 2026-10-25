@@ -1,0 +1,31 @@
+// Upgrade compatibility is not permission to configure an authority.
+const LEGACY_CLUB = 'mzzzv-taaaa-aaaal-qxlrq-cai';
+const IDENTITY = 'mq2sj-fiaaa-aaaal-qxlqa-cai';
+const LIFECYCLE_SETTINGS = [
+  'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',
+  'IGNITE_ACCOUNT_SERVICE_IDENTITY',
+  'IGNITE_BOUND_DELETION_RELEASE',
+  'IGNITE_NEW_CLUB_PLACEMENT_ROUTER',
+  'IGNITE_NEW_CLUB_PLACEMENT_GROUP',
+  'IGNITE_NEW_CLUB_PLACEMENT_TARGET',
+];
+export function legacyClubLifecycleDisabled(environment) {
+  if (!Array.isArray(environment)) return false;
+  // Only missing settings or explicitly disabled switches qualify. Unknown
+  // values, duplicate settings, identity or placement bindings fail closed.
+  return LIFECYCLE_SETTINGS.every(name => {
+    const entries = environment.filter(row => row.name === name);
+    if (!entries.length) return true;
+    if (entries.length !== 1) return false;
+    return ['IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', 'IGNITE_BOUND_DELETION_RELEASE'].includes(name)
+      && entries[0].value === '0';
+  });
+}
+export function validateClubIdentityWiring(target, rows, identityCanisterId, lifecycleDisabled) {
+  const identities = rows.filter(row => row[0] === 'identity_access');
+  if (identityCanisterId !== IDENTITY || identities.length !== 1) throw Error('Exact club identity wiring required');
+  if (identities[0][1] === identityCanisterId) return;
+  if (target.groupId === 'g1' && target.name === 'club_domain' && target.canisterId === LEGACY_CLUB
+      && identities[0][1] === '' && lifecycleDisabled === true) return;
+  throw Error('Club identity wiring differs; legacy absence is allowed only on pinned Group 1 with lifecycle and placement settings disabled');
+}

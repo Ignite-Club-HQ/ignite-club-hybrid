@@ -61,7 +61,7 @@ jobs:
           node scripts/ensure-frontend-deps.mjs
           icp canister install --help | grep -q -- --wasm-memory-persistence
       - name: Test inventory and interrupted-release safeguards
-        run: node --test scripts/all-group-upgrade-policy.test.mjs scripts/all-group-publication.test.mjs scripts/group2-journal.test.mjs scripts/group2-upgrade-rules.test.mjs scripts/subscription-upgrade-policy.test.mjs scripts/placement-upgrade-evidence.test.mjs
+        run: node --test scripts/all-group-upgrade-policy.test.mjs scripts/all-group-wiring-policy.test.mjs scripts/all-group-publication.test.mjs scripts/group2-journal.test.mjs scripts/group2-upgrade-rules.test.mjs scripts/subscription-upgrade-policy.test.mjs scripts/placement-upgrade-evidence.test.mjs
       - name: Restore existing governor only
         env:
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
