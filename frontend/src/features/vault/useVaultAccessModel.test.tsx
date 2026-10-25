@@ -16,7 +16,7 @@ import type { VaultClubSummary } from "./vaultAccessRepository";
 
 const fetchVaultAppAdmin = vi.fn<(userId: string) => Promise<boolean>>();
 const fetchVaultUserRoles = vi.fn<(userId: string) => Promise<any[]>>();
-const fetchVaultAccessibleClubs = vi.fn<(userId: string, isAppAdmin: boolean) => Promise<VaultClubSummary[]>>();
+const fetchVaultAccessibleClubs = vi.fn<(userId: string, isAppAdmin: boolean, client?: unknown, selectedClubId?: string | null) => Promise<VaultClubSummary[]>>();
 const fetchVaultClubHasPro = vi.fn<(clubId: string) => Promise<boolean>>();
 const fetchVaultTeamHasPro = vi.fn<(teamId: string) => Promise<boolean>>();
 const fetchVaultAnyProAccess = vi.fn<(userId: string) => Promise<boolean>>();
@@ -41,7 +41,7 @@ vi.mock("@/hooks/useIsAppAdmin", async () => {
 vi.mock("./vaultAccessRepository", () => ({
   fetchVaultAppAdmin: (...args: [string]) => fetchVaultAppAdmin(...args),
   fetchVaultUserRoles: (...args: [string]) => fetchVaultUserRoles(...args),
-  fetchVaultAccessibleClubs: (...args: [string, boolean]) => fetchVaultAccessibleClubs(...args),
+  fetchVaultAccessibleClubs: (...args: [string, boolean, unknown?, (string | null)?]) => fetchVaultAccessibleClubs(...args),
   fetchVaultClubHasPro: (...args: [string]) => fetchVaultClubHasPro(...args),
   fetchVaultTeamHasPro: (...args: [string]) => fetchVaultTeamHasPro(...args),
   fetchVaultAnyProAccess: (...args: [string]) => fetchVaultAnyProAccess(...args),
@@ -262,6 +262,7 @@ describe("useVaultAccessModel — root auto-navigation", () => {
     });
     await waitFor(() => expect(onAutoNavigateToClub).toHaveBeenCalledTimes(1));
     expect(onAutoNavigateToClub).toHaveBeenCalledWith("club-x", "Club X");
+    expect(fetchVaultAccessibleClubs).toHaveBeenCalledWith("user-1", false, undefined, "club-x");
     await waitFor(() => expect(result.current.userClubs?.length).toBe(2));
     // A subsequent render (e.g. club list refetch) must not re-fire.
     expect(onAutoNavigateToClub).toHaveBeenCalledTimes(1);

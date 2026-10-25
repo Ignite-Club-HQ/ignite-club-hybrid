@@ -1,3 +1,7 @@
+## Existing theme club missing from Vault — 25 October 2026
+- [ ] Read the selected club directly from its owning group instead of waiting for an all-club directory; treat failed/missing selected-club reads as retryable, not an empty Vault.
+- [ ] Giddy Goat live readback requires Paul's signed-in Internet Identity session; screenshot alone cannot prove the precise failed service.
+
 ## Slow Vault page opening — 25 October 2026
 - [x] Start member club discovery alongside admin detection and reveal established role/entitlement access without waiting for admin/global subscriptions; defer recursive folder inventories to search with search-loading feedback. Preserve background subscription data for existing storage-warning consumers. Final 66 tests pass per mode, ICP guards pass and preview build OK; no deployment or authenticated timing claim.
 - [ ] Signed-in mainnet opening timing requires Paul's Internet Identity session; no authenticated session is available locally.
