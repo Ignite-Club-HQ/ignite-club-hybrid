@@ -96,6 +96,9 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/lib/profileCache", () => ({
   selectCachedProfileById: async () => ({ data: { display_name: "Parent Person" } }),
 }));
+vi.mock("@/live/identityProfile", () => ({
+  fetchIcpIdentityProfile: async () => ({ displayName: "Parent Person", avatarRef: null }),
+}));
 
 import JoinTeamPage from "./JoinTeamPage";
 
@@ -131,6 +134,7 @@ const regularInviteRow = {
 };
 
 beforeEach(() => {
+  sessionStorage.clear();
   membershipRoutedToIcp = false;
   rpcMock.mockReset();
   getLiveTeamInviteMock.mockReset();
