@@ -53,6 +53,12 @@ vi.mock("@/live/identityEntitlements", () => ({ fetchIcpEntitlements: (...args: 
 vi.mock("@/live/features/vault", () => ({ listLiveVaultFolders: (...args: unknown[]) => accessMocks.vaultFolders(...args) }));
 vi.mock("@/live/features/competitions", () => ({ isLiveCompetitionAdmin: (...args: unknown[]) => accessMocks.competitionAdmin(...args) }));
 
+vi.mock("@/live/crossGroupClubs", () => ({
+  readClubsInOwnGroups: async (_ctx: unknown, ids: string[]) => {
+    const rows = (await accessMocks.clubs()) as Array<{ id: string; name: string }>;
+    return { values: rows.filter(r => ids.includes(r.id)), failed: 0 };
+  },
+}));
 vi.mock("@/live/domains", () => ({ connectLiveClubDomain: async () => ({ actor: { get_media_allowance: accessMocks.allowance } }) }));
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
@@ -234,14 +240,13 @@ describe.runIf(!supabaseMode)("Vault access repository — ICP", () => {
     expect(calls).toEqual([]);
   });
 
-  it("lists only member clubs, reading each group independently so one failing group can't empty Vault", async () => {
+  it("lists only member clubs, reading each club in its own group (no every-group club listing)", async () => {
     accessMocks.clubs.mockResolvedValue([{ id: "club-a", name: "Club A" }, { id: "unrelated", name: "Other Club" }]);
     accessMocks.clubSubscriptions.mockResolvedValue(new Map([["club-a", true]]));
     accessMocks.entitlements.mockResolvedValue({ isPro: false });
     const clubs = await fetchVaultAccessibleClubs("principal-a", false);
     expect(clubs.map(club => club.id)).toEqual(["club-a"]);
-    // Partial-failure-tolerant fan-out, not the all-or-nothing member-group read.
-    expect(accessMocks.scopes).toHaveBeenCalledWith(expect.objectContaining({ everyGroup: true }));
+    expect(accessMocks.scopes).not.toHaveBeenCalledWith(expect.objectContaining({ everyGroup: true }));
     expect(accessMocks.clubSubscriptions).toHaveBeenCalledWith(icpContext, ["club-a"]);
   });
 

@@ -82,6 +82,25 @@ export async function fetchVaultAccessibleClubs(
   // Asked once per lookup, not once per group: membership comes from the
   // already-open routing session and the IAP entitlement lives on identity.
   let memberIdsOnce: Promise<string[] | null> | undefined;
+  if (!isAppAdmin) {
+    // Members: read only their own clubs, each in its owning group, instead of
+    // listing every club on every group and waiting for the slowest group.
+    return withFeatureBackend("vault", {
+      supabase: async () => fetchVaultAccessibleClubsSupabase(userId, isAppAdmin, client),
+      icp: async (ctx) => {
+        void import("@/live/features/vault").then(v => v.recoverLiveVaultPendingUploads(ctx)).catch(() => { /* uncertain outcomes stay reserved */ });
+        const [{ clubDispatch }, { readClubsInOwnGroups }, { listLiveClubSubscriptions, liveHasAnyPro }, { withReadDeadline }] = await Promise.all([
+          import("@/live/groupDispatch"), import("@/live/crossGroupClubs"), import("@/live/features/proAccess"), import("@/live/readDeadline")]);
+        return withReadDeadline((async () => {
+          const memberIds = await clubDispatch.memberClubIds();
+          if (memberIds.length === 0) return [];
+          const [profiles, subs] = await Promise.all([readClubsInOwnGroups(ctx, memberIds), listLiveClubSubscriptions(ctx, memberIds)]);
+          if (profiles.values.length === 0 && profiles.failed > 0) throw new Error("Vault clubs could not be loaded");
+          return profiles.values.map((club) => ({ id: club.id, name: club.name, is_pro: liveHasAnyPro(subs.get(club.id)), storage_used_bytes: 0 }));
+        })(), "Vault clubs", VAULT_GROUP_READ_MS);
+      },
+    }, { shared: "person" });
+  }
   return withFeatureBackend("vault", {
     supabase: async () => fetchVaultAccessibleClubsSupabase(userId, isAppAdmin, client),
     icp: async (ctx) => {
