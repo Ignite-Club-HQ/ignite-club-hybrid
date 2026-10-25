@@ -865,6 +865,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       {showVaultPicker && clubId && (
         <>
           <VaultPickerSheet
+            warm={menuOpen || attachChooserOpen}
             open={vaultPickerOpen}
             onOpenChange={setVaultPickerOpen}
             clubId={clubId}

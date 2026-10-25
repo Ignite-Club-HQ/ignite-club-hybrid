@@ -1,3 +1,7 @@
+## Vault attachment delays — 25 October 2026
+- [ ] Warm scoped Vault picker reads when opening attachment choices, reveal folders independently of files, and reuse authorized selected-folder/root names in draft cards; add regressions and verify both modes.
+- [ ] Signed-in phone timing/readback requires Paul's Internet Identity session; local tests cannot certify mainnet latency.
+
 ## Messages Events/Vault warnings — 25 October 2026
 - [x] Route inbox labels by feature backend/account; restore exact authorized ICP Vault names and owning-event titles instead of suppressed reads. Gallery cards, pinned Vault and chat-detail Vault/mute branches use feature routing rather than auth-screen selection. Mounted inbox tests confirm no old-system readers; 101 checks pass per mode, ICP guards and preview build pass.
 - [ ] Signed-in phone acceptance requires the updated frontend; historical warning counts cannot establish which requests remain after deployment. No canister permissions or deployments changed.
