@@ -71,8 +71,14 @@ test('Rust identity and timer omit Motoko persistence while stores preserve memo
 test('complete release upgrades unchanged modules once and never repeats completed steps',async()=>{
   const j=make();j.steps.forEach(s=>s.oldHash=s.newHash);const installed=[];
   const transport={upgradeUnchanged:true,gate:async()=>{},observe:async s=>({moduleHash:s.newHash,settingsHash:s.settingsHash}),persist:async()=>{},verifyKeys:async()=>{},install:async s=>installed.push(s.canisterId)};
-  await executeUpgrades(j,transport);assert.equal(installed.length,5);
-  await executeUpgrades(j,transport);assert.equal(installed.length,5);
+  await executeUpgrades(j,transport);assert.equal(installed.length,4);
+  await executeUpgrades(j,transport);assert.equal(installed.length,4);
+});
+test('unchanged-module lost replies stay locked instead of claiming success from equal hashes',async()=>{
+  const j=make();j.steps.forEach(s=>s.oldHash=s.newHash);let installs=0;
+  const transport={upgradeUnchanged:true,gate:async()=>{},observe:async s=>({moduleHash:s.newHash,settingsHash:s.settingsHash}),persist:async()=>{},verifyKeys:async()=>{},install:async()=>{installs++;throw Error('lost reply');}};
+  await assert.rejects(executeUpgrades(j,transport));assert.equal(j.steps[0].phase,'pending');
+  await assert.rejects(executeUpgrades(j,transport),/hash equality cannot prove/);assert.equal(installs,1);
 });
 function make(){const f=fixture(3),plan=planInventory(shared,f.provisions,f.registry,'app_admin',f.hashes);const binding={...plan,governor:'governor'};return{binding,complete:false,published:false,steps:plan.targets.map(t=>({...t,oldHash:hash(1),settingsHash:hash(3),phase:'ready'})),keys:Object.entries(plan.pii).map(([groupId,canisterId])=>({groupId,receipt:{canisterId,governor:'governor',host:'https://icp-api.io',deploymentId:'mainnet',environment:'ic',keyName:'key_1',moduleHash:hash(4),publicKeyHex:'a'.repeat(192)}}))};}
 test('journal pins every group key and target; incomplete or foreign receipts fail',()=>{

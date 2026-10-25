@@ -5,7 +5,7 @@ export { digest, executeUpgrades };
 export const PRIMARY_SUBNET = 'e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe';
 export const SHARED_SERVICES = Object.freeze(['shard_router', 'identity_access', 'placement_registry', 'migration_coordinator', 'secret_workload_identity']);
 export const SCOPES = Object.freeze({
-  full_backend: [...SHARED_SERVICES, ...GROUP_BUILD_SERVICES],
+  full_backend: [...SHARED_SERVICES.filter(name=>name!=='shard_router'), ...GROUP_BUILD_SERVICES, 'shard_router'],
   app_admin: ['identity_access', 'notification_queue'],
   team_invites: ['club_domain', 'mini_league_domain'],
   messaging: ['messaging_domain'],

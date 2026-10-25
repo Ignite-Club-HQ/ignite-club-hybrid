@@ -49,6 +49,7 @@ export async function executeUpgrades(journal, transport) {
     await transport.gate();
     const before = await transport.observe(step);
     if (before.settingsHash !== step.settingsHash) throw new Error('Settings changed before upgrade');
+    if (transport.upgradeUnchanged === true && step.phase === 'pending' && step.oldHash === step.newHash) throw new Error('Unknown unchanged-module upgrade outcome: hash equality cannot prove installation; retain intent for manual management-history reconciliation');
     Object.assign(step, reconcileUpgradeStep(step, before.moduleHash));
     if (step.phase !== 'complete' && (step.oldHash !== step.newHash || transport.upgradeUnchanged === true)) {
       step.phase = 'pending'; await transport.persist(journal);

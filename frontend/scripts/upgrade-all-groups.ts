@@ -10,6 +10,12 @@ import { readPinnedGroupRegistry } from '../src/live/groupRegistryPager';
 import { groupApprovalConfiguration } from '../src/live/groupApproval';
 import { idlFactory } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import type { _SERVICE } from '../src/lab/bindings/shard_router/declarations/shard_router.did';
+import { idlFactory as placementIdl } from '../src/lab/bindings/placement_registry/declarations/placement_registry.did.js';
+import { idlFactory as migrationIdl } from '../src/lab/bindings/migration_coordinator/declarations/migration_coordinator.did.js';
+import { idlFactory as workloadIdl } from '../src/lab/bindings/secret_workload_identity/declarations/secret_workload_identity.did.js';
+import type { _SERVICE as PlacementService } from '../src/lab/bindings/placement_registry/declarations/placement_registry.did';
+import type { _SERVICE as MigrationService } from '../src/lab/bindings/migration_coordinator/declarations/migration_coordinator.did';
+import type { _SERVICE as WorkloadService } from '../src/lab/bindings/secret_workload_identity/declarations/secret_workload_identity.did';
 import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
@@ -81,6 +87,20 @@ const readConfig=async(t:Target)=>{
   return (Array.isArray(reply)?reply:reply.Ok).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
 };
 const wiring:Record<string,string>={};
+const readSharedEvidence=async(t:Target)=>{
+  if(t.name==='shard_router')return router.read_group_opening_configuration();
+  if(t.name==='placement_registry'){
+    const actor=Actor.createActor<PlacementService>(placementIdl,{agent,canisterId:t.canisterId});
+    return {version:await actor.version(),availability:await actor.get_availability(),governor:await actor.get_operator(identity.getPrincipal())};
+  }
+  if(t.name==='migration_coordinator')return Actor.createActor<MigrationService>(migrationIdl,{agent,canisterId:t.canisterId}).status();
+  if(t.name==='secret_workload_identity'){
+    const rows=await Actor.createActor<WorkloadService>(workloadIdl,{agent,canisterId:t.canisterId}).list_workloads();
+    return rows.map(row=>({principal:row.workload_principal.toText(),name:row.workload_name,scopes:[...row.allowed_scopes].sort(),status:row.status,registered:row.registered_at})).sort((a,b)=>a.principal.localeCompare(b.principal));
+  }
+  return null;
+};
+for(const t of targets.filter(t=>t.groupId==='shared'&&t.name!=='identity_access'))wiring[t.canisterId]=digest(await readSharedEvidence(t));
 for(const t of targets.filter(t=>t.groupId!=='shared')){
   const rows=await readConfig(t);
   const group=inventory.groups.find((g:{id:string})=>g.id===t.groupId);
@@ -100,7 +120,7 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
   }
   wiring[t.canisterId]=digest(rows);
 }
-const binding={repo,release,scope,governor:GROUP2_GOVERNOR,host:'https://icp-api.io',router:shared.shard_router,configurationRevision:String(initial.configurationRevision),configuration,targets,pii:inventory.pii,wiring};
+const binding={repo,release,scope,...(scope==='full_backend'?{upgradeUnchanged:true}:{}),governor:GROUP2_GOVERNOR,host:'https://icp-api.io',router:shared.shard_router,configurationRevision:String(initial.configurationRevision),configuration,targets,pii:inventory.pii,wiring};
 const planHash=digest(binding);
 const same=journal&&digest(journal.binding)===planHash;
 if(journal&&!same)requireSettledPredecessor(journal);
@@ -109,6 +129,7 @@ const gate=async()=>{
   if(current.configurationRevision!==initial.configurationRevision||groupApprovalConfiguration(current.groups,current.placements)!==configuration)throw Error('Routing configuration drift; stop without replay');
   planInventory(shared,provisions,current,scope,hashes);
   for(const t of targets.filter(t=>t.groupId!=='shared'))if(digest(await readConfig(t))!==wiring[t.canisterId])throw Error('Original wiring changed; stop');
+  for(const t of targets.filter(t=>t.groupId==='shared'&&t.name!=='identity_access'))if(digest(await readSharedEvidence(t))!==wiring[t.canisterId])throw Error('Shared infrastructure configuration changed; stop without replay');
 };
 const keyGate=(groupId:string,phase:string)=>{
   const mapping=join(directory,`${groupId}-pii.json`), receipt=join(directory,`${groupId}-original-key.json`);
@@ -169,6 +190,11 @@ const snapshot=spawnSync('npx',['--yes','tsx@4',new URL('produce-routing-gates.t
 if(snapshot.status!==0)throw Error('Modules settled; snapshot verification failed. Resume same release, do not repeat installs.');
 await gate();for(const t of targets){const s=journal.steps.find((s:Target)=>s.canisterId===t.canisterId);const r=await observe(t);if(!s||r.moduleHash!==t.newHash||r.settingsHash!==s.settingsHash)throw Error('Post-snapshot drift');}
 const paths=['frontend/src/live/generated/routingGates.ts',...groupFolders.filter(folder=>existsSync(new URL(`${folder.name}/general-opening.json`,groupRoot))).map(folder=>`deploy/groups/${folder.name}/general-opening.json`)];
+if(scope==='full_backend'){
+  const manifestPath='deploy/mainnet/backend-release.json';
+  writeFileSync(new URL(manifestPath,root),JSON.stringify({sourceRevision:release,planHash,groups:inventory.groups.map((g:{id:string})=>g.id),targets,liveAcceptance:false},null,2)+'\n');
+  paths.push(manifestPath);
+}
 journal.snapshotFiles=paths.sort().map(path=>({path,content:readFileSync(new URL(path,root),'utf8')}));
 journal.snapshotFilesHash=digest(journal.snapshotFiles);
 journal.snapshotVerified=true;journal.complete=true;validateJournal(journal,binding);await persist();
