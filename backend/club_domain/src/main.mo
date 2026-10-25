@@ -3795,7 +3795,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Invite not found") };
       case (?invite) {
         if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
-        #Ok(invite)
+        #Ok({ invite with email = "" })
       };
     }
   };
