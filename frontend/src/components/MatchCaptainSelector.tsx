@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Shield, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,9 +32,11 @@ import {
   setLiveMatchCaptain,
   removeLiveMatchCaptain,
 } from "@/live/features/events";
+import { readPlayerOfMatchAdults, readProfileSummaries } from "@/lib/playerOfMatchReads";
 
 interface MatchCaptainSelectorProps {
   eventId: string;
+  clubId?: string | null;
   teamId?: string | null;
   isAdmin: boolean;
   rsvps: any[];
@@ -42,6 +44,7 @@ interface MatchCaptainSelectorProps {
 
 export default function MatchCaptainSelector({
   eventId,
+  clubId,
   teamId,
   isAdmin,
   rsvps,
@@ -106,20 +109,33 @@ export default function MatchCaptainSelector({
     }, { eventId: eventId }),
   });
 
+  // Player-role eligibility is routed: Supabase reads user_roles, ICP reads
+  // on-chain role grants (the previous direct query was disabled in ICP,
+  // leaving no selectable adults).
   const { data: playerUserIds = [] } = useQuery({
-    queryKey: ["team-player-user-ids", teamId],
-    queryFn: async () => {
-      if (!teamId) return [] as string[];
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("team_id", teamId)
-        .eq("role", "player");
-      if (error) throw error;
-      return (data || []).map((r: any) => r.user_id);
-    },
-    enabled: !!teamId && !isIcp,
+    queryKey: ["team-player-user-ids", clubId, teamId, isIcp],
+    queryFn: () => readPlayerOfMatchAdults(clubId ?? "", teamId),
+    enabled: !!teamId && !!clubId,
   });
+
+  // ICP rosters carry no profile enrichment, so hydrate adult names/avatars
+  // on-chain for the pick list instead of showing "Unknown".
+  const goingAdultIds = useMemo(
+    () => (rsvps || [])
+      .filter((r) => r.status === "going" && !r.child_id && r.user_id)
+      .map((r) => r.user_id as string),
+    [rsvps],
+  );
+  const { data: adultProfiles } = useQuery({
+    queryKey: ["roster-profile-names", eventId, goingAdultIds.join(",")],
+    queryFn: () => readProfileSummaries(goingAdultIds),
+    enabled: isIcp && goingAdultIds.length > 0,
+    staleTime: 60_000,
+  });
+  const adultName = (userId: string | null | undefined) =>
+    (userId ? adultProfiles?.get(userId)?.display_name : null) || null;
+  const adultAvatar = (userId: string | null | undefined) =>
+    (userId ? adultProfiles?.get(userId)?.avatar_url : null) || null;
 
   const { data: seasonCaptain, isLoading: isSeasonCaptainLoading } = useQuery({
     queryKey: ["team-season-captain", teamId, isIcp],
