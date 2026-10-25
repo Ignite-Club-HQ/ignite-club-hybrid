@@ -27,7 +27,6 @@ import { toast } from "sonner";
 import { isVideoUrl } from "@/lib/videoUtils";
 import { cn } from "@/lib/utils";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { setLiveMutePreference, getLiveMutePreference } from "@/live/features/messaging";
 
@@ -120,7 +119,7 @@ export function ChatDetailsSheet({
     staleTime: 60_000,
     queryFn: async () => {
       if (!resolvedTeamIdForClub) return null;
-      if (useIcpLab || resolveAuthBackend() === "icp") {
+      if (useIcpLab || isFeatureRoutedToIcp('messaging')) {
         const { getLiveTeam } = await import("@/live/features/club");
         return withFeatureBackend("membership", {
           supabase: async () => null,
@@ -286,7 +285,7 @@ export function ChatDetailsSheet({
                     <NavRow
                       label="View file vault"
                       onClick={async () => {
-                        if (isGroup && (useIcpLab || resolveAuthBackend() === "icp") && proClubId) {
+                        if (isGroup && (useIcpLab || isFeatureRoutedToIcp('vault')) && proClubId) {
                           try {
                             const { getLivePinnedVault, listLiveVaultFolders } = await import("@/live/features/vault");
                             const folderId = await withFeatureBackend("vault", {
@@ -302,7 +301,7 @@ export function ChatDetailsSheet({
                             if (folderId) { handleNavigate(`/vault/folder/${folderId}`); return; }
                           } catch { toast.error("Could not open the file vault. Please try again."); return; }
                         }
-                        if (isGroup && !useIcpLab && resolveAuthBackend() !== "icp") {
+                        if (isGroup && !useIcpLab && !isFeatureRoutedToIcp('vault')) {
                           // Look up folder linked to this group chat first
                           const { data: folder } = await supabase
                             .from("vault_folders")
