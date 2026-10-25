@@ -1,3 +1,6 @@
+## Gallery uploads across navigation — 25 October 2026
+- [ ] Preserve pending uploads across gallery remounts, reconcile acknowledged asset IDs and invalidate inactive account feeds; verify focused regressions. Live acceptance requires Paul's Internet Identity session and an updated app.
+
 ## Home startup blocked requests — 25 October 2026
 - [x] Repair screenshot-confirmed Player of the Match catalog/player-role requests through owning-club ICP readers; exact-team rewards precede club-only defaults and adult player IDs normalize principals. 30 focused checks pass per mode; ICP guards and preview build pass. No canister changes or deployment; live phone acceptance remains below.
 - [x] Repair nested hero/compact Next Up RSVP/duty/role reads, Watch Live and Home policy-folder reads using existing owning-scope ICP APIs. Focused dual-mode regressions include mounted ICP cards with no Supabase reads; guards remain active. No canister changes/deployments.
