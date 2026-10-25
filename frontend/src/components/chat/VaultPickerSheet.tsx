@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   Folder,
   FileText,
@@ -39,6 +41,7 @@ export type VaultPickerItem =
 
 interface VaultPickerSheetProps {
   open: boolean;
+  warm?: boolean;
   onOpenChange: (open: boolean) => void;
   clubId: string | null | undefined;
   teamId?: string | null;
@@ -79,9 +82,31 @@ function getIconForFile(name: string, fileType: string | null) {
   return FileText;
 }
 
-export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, onPickMany }: VaultPickerSheetProps) {
+export function VaultPickerSheet({ open, warm = false, onOpenChange, clubId, teamId, onPick: pickItem, onPickMany: pickItems }: VaultPickerSheetProps) {
+  const queryClient = useQueryClient();
+  const { user, initialized } = useAuth();
+  const vaultIcp = isFeatureRoutedToIcp("vault");
+  const canRead = (open || warm) && initialized && !!user;
+  const seedSelection = (item: VaultPickerItem) => {
+    if (!user || !clubId) return;
+    if (item.kind === "folder") {
+      const folder = foldersQuery.data?.find((row) => row.id === item.id)
+        ?? pathStack.find((row) => row.id === item.id);
+      if (!folder || !("club_id" in folder)) return;
+      queryClient.setQueryData(["vault-folder-card", item.id, vaultIcp, user.id], {
+        id: item.id, name: folder.name, club_id: folder.club_id, team_id: folder.team_id,
+      });
+    } else if (item.kind === "root") {
+      queryClient.setQueryData(["vault-root-card", item.scope, item.id, vaultIcp, user.id], { name: item.name });
+    }
+  };
+  const onPick = (item: VaultPickerItem) => { seedSelection(item); pickItem(item); };
+  const onPickMany = pickItems ? (items: VaultPickerItem[]) => {
+    items.forEach(seedSelection);
+    pickItems(items);
+  } : undefined;
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-  const [pathStack, setPathStack] = useState<{ id: string | null; name: string }[]>([
+  const [pathStack, setPathStack] = useState<{ id: string | null; name: string; club_id?: string; team_id?: string | null }[]>([
     { id: null, name: "Vault" },
   ]);
   const [search, setSearch] = useState("");
@@ -97,7 +122,7 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
   const rootScope: "team" | "club" | null = teamId ? "team" : clubId ? "club" : null;
   const rootScopeId = teamId || clubId || null;
   const rootScopeQuery = useQuery({
-    queryKey: ["vault-picker-root-name", rootScope, rootScopeId],
+    queryKey: ["vault-picker-root-name", rootScope, rootScopeId, vaultIcp, user?.id],
     queryFn: async () => {
       if (!rootScope || !rootScopeId) return null;
       if (isIcpSession()) {
@@ -121,13 +146,13 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
       if (error) throw error;
       return data?.name as string | null;
     },
-    enabled: open && !!rootScope && !!rootScopeId,
+    enabled: canRead && !!rootScope && !!rootScopeId,
     staleTime: 5 * 60 * 1000,
   });
 
   // Fetch folders in the current view
   const foldersQuery = useQuery({
-    queryKey: ["vault-picker-folders", clubId, teamId, currentFolderId],
+    queryKey: ["vault-picker-folders", clubId, teamId, currentFolderId, vaultIcp, user?.id],
     queryFn: async () => {
       if (!clubId) return [] as VaultFolder[];
       // At root, show club-wide folders plus this team's folders. When
@@ -136,18 +161,18 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
       // (e.g. one "Team Admins" / "Coaches" per team).
       return listVaultPickerFolders({ clubId, teamId: teamId ?? null, parentId: currentFolderId }) as Promise<VaultFolder[]>;
     },
-    enabled: open && !!clubId,
+    enabled: canRead && !!clubId,
     staleTime: 30 * 1000,
   });
 
   // Fetch files in the current folder
   const filesQuery = useQuery({
-    queryKey: ["vault-picker-files", clubId, teamId, currentFolderId],
+    queryKey: ["vault-picker-files", clubId, teamId, currentFolderId, vaultIcp, user?.id],
     queryFn: async () => {
       if (!clubId) return [] as VaultFile[];
       return listVaultPickerFiles({ clubId, teamId: teamId ?? null, folderId: currentFolderId }) as Promise<VaultFile[]>;
     },
-    enabled: open && !!clubId,
+    enabled: canRead && !!clubId,
     staleTime: 30 * 1000,
   });
 
@@ -159,7 +184,7 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
   const folderIds = useMemo(() => folders.map((f) => f.id), [folders]);
 
   const folderChildCountsQuery = useQuery({
-    queryKey: ["vault-picker-folder-counts", clubId, folderIds.join(",")],
+    queryKey: ["vault-picker-folder-counts", clubId, teamId, folderIds.join(","), vaultIcp, user?.id],
     queryFn: async () => {
       if (!clubId || folderIds.length === 0) return new Map<string, { folders: number; files: number }>();
       return listVaultPickerFolderChildCounts({ clubId, teamId: teamId ?? null, folderIds });
@@ -189,7 +214,7 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
 
   const enterFolder = (folder: VaultFolder) => {
     setCurrentFolderId(folder.id);
-    setPathStack((prev) => [...prev, { id: folder.id, name: folder.name }]);
+    setPathStack((prev) => [...prev, { id: folder.id, name: folder.name, club_id: folder.club_id, team_id: folder.team_id }]);
     setSearch("");
     setSelectionMode(false);
     clearSelection();
@@ -378,14 +403,14 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
             </div>
           )}
 
-          {clubId && isLoading && (
+          {clubId && isLoading && folders.length === 0 && files.length === 0 && (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           )}
 
           {/* Share entire team/club vault — only at root, not while searching */}
-          {clubId && !isLoading && currentFolderId === null && !search.trim() && rootScope && rootScopeId && (
+          {clubId && currentFolderId === null && !search.trim() && rootScope && rootScopeId && (
             <div className="mb-2">
               <button
                 type="button"
@@ -417,7 +442,7 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
 
           {/* Share THIS folder card — when user has navigated into a folder
               (hidden in selection mode to keep the focus on bulk picking). */}
-          {clubId && !isLoading && insideFolder && currentFolderId && !search.trim() && !selectionMode && (
+          {clubId && insideFolder && currentFolderId && !search.trim() && !selectionMode && (
             <div className="mb-2">
               <button
                 type="button"
@@ -448,7 +473,7 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
             </div>
           )}
 
-          {clubId && !isLoading && filteredFolders.length > 0 && (
+          {clubId && filteredFolders.length > 0 && (
             <div className="space-y-1 mb-2">
               {filteredFolders.map((folder) => {
                 const counts = folderCounts?.get(folder.id);
@@ -529,7 +554,7 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
             </div>
           )}
 
-          {clubId && !isLoading && filteredFiles.length > 0 && (
+          {clubId && filteredFiles.length > 0 && (
             <div className="space-y-1">
               {filteredFiles.map((file) => {
                 const Icon = getIconForFile(file.name, file.file_type);
