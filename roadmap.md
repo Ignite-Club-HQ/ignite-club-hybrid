@@ -621,3 +621,7 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [x] Event Captain/POTM/Goalkeepers slow or stuck: MatchCaptainSelector and MatchGoalkeepersSelector ICP branches read Supabase children names (blocked, hung the card); now reuse the PII-decrypted names already in the event roster. Captain eligibility used a direct user_roles query disabled in ICP (no selectable adults); now routed via readPlayerOfMatchAdults. Added readProfileSummaries (on-chain identity_access profiles) so adult names/avatars in the captain/POTM/goalkeeper pick lists no longer show "Unknown" in ICP mode.
 - [x] Verification: tsgo clean; playerOfMatchReads + mediaEngagementRepository tests pass in both modes (15/14); ICP guards pass; preview build OK.
 - [ ] Signed-in ICP acceptance on the phone once the frontend canister deploys this build.
+
+## Vault "Loading clubs..." hang — 25 October 2026
+- [x] Vault stuck on "Loading clubs...": the club list query is gated on the app-admin check resolving, and fetchIsAppAdmin had no read deadline — a stuck ICP routing/insights call left isAppAdmin undefined forever, so the clubs query never started. fetchIsAppAdmin is now bounded by withReadDeadline; on timeout it resolves non-admin and Vault loads (with retry on real errors). Added useIsAppAdmin.test.ts (hang rejects within deadline, pass-through, denial propagation). 25 Vault access-model tests pass in both modes; typecheck, ICP guards and build OK.
+- [ ] Signed-in ICP acceptance on the phone once the frontend canister deploys this build.
