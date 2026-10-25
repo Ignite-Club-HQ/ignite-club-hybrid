@@ -532,7 +532,18 @@ function SupabaseJoinTeamPage() {
   const { data: userProfile, isLoading: profileLoading } = useQuery({
     queryKey: membershipKeys.joinProfile(user?.id),
     queryFn: async () => {
-      const { data } = await selectCachedProfileById(user!.id);
+      if (!user) return null;
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Internet Identity required"); },
+          icp: async ctx => {
+            const { fetchIcpIdentityProfile } = await import("@/live/identityProfile");
+            const row = await fetchIcpIdentityProfile(ctx.identity, user.id, ctx.target);
+            return { id: user.id, display_name: row.displayName, avatar_url: row.avatarRef };
+          },
+        }, { shared: "person" });
+      }
+      const { data } = await selectCachedProfileById(user.id);
       return data;
     },
     enabled: !!user,
@@ -692,6 +703,16 @@ function SupabaseJoinTeamPage() {
     queryKey: ["used-invite-membership", user?.id, usedInviteTeamId, usedInviteClubId],
     queryFn: async () => {
       if (!user) return false;
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Internet Identity required"); },
+          icp: async ctx => {
+            const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+            const grants = await getLiveMyRoleGrants(ctx);
+            return grants.some(g => usedInviteTeamId ? g.team[0] === usedInviteTeamId && g.club[0] === usedInviteClubId : g.club[0] === usedInviteClubId && !g.team.length);
+          },
+        }, { shared: "person" });
+      }
       if (usedInviteTeamId) {
         const { data: tm } = await (supabase as any)
           .from("team_memberships")
