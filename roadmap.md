@@ -1,3 +1,7 @@
+## Bottom navigation response — 25 October 2026
+- [ ] Activate existing idle main-page code warming and focus/pointer intent prefetch; preserve native keyboard/scroll handling and test navigation.
+- [ ] Real signed-in phone timing remains unverified without Paul's Internet Identity session.
+
 ## Existing theme club missing from Vault — 25 October 2026
 - [x] Read the selected club directly from its owning group with exact media allowance instead of an all-club directory; missing/rejected selected-club reads stay retryable, not empty successes. 45 Supabase/50 ICP focused checks pass, guards pass and preview build OK; no deployment or live readback claim.
 - [ ] Giddy Goat live readback requires Paul's signed-in Internet Identity session; screenshot alone cannot prove the precise failed service.
