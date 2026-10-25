@@ -11,6 +11,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useClubNewsFeed } from "@/features/news/useClubNews";
+import { useAuth } from "@/hooks/useAuth";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { newsPostKey } from "@/features/news/newsQueryKeys";
 
 interface NewsPickerSheetProps {
   open: boolean;
@@ -28,6 +31,8 @@ interface NewsPickerSheetProps {
 export function NewsPickerSheet({ open, onOpenChange, onSelectNews, clubId }: NewsPickerSheetProps) {
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isIcp = isFeatureRoutedToIcp("news");
   const { data: posts, isLoading } = useClubNewsFeed(clubId ?? undefined, 50);
 
   const filtered = useMemo(() => {
@@ -79,7 +84,10 @@ export function NewsPickerSheet({ open, onOpenChange, onSelectNews, clubId }: Ne
                 onClick={() => {
                   // Seed the post cache so the composer preview, the sent card
                   // and the /news/:id page open instantly on this device.
-                  queryClient.setQueryData(["club-news-post", post.id], post);
+                  const feed = queryClient.getQueryState(["club-news", clubId ?? "all", 50, user?.id, isIcp]);
+                  if (feed?.status === "success" && !feed.isInvalidated) {
+                    queryClient.setQueryData(newsPostKey(post.id, user?.id, isIcp), post, { updatedAt: feed.dataUpdatedAt });
+                  }
                   onSelectNews(post.id);
                   onOpenChange(false);
                 }}

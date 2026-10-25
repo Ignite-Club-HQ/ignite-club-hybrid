@@ -9,6 +9,8 @@ import { getLocalLabNewsPost, getLocalLabNewsPosts, getLocalLabTeamList } from "
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveNews, listLiveNewsMulti, listLiveTeams, getLiveTeam } from "@/live/features/club";
 import { getLiveMyRoleGrants, listLiveMembershipClubs } from "@/live/features/membership";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { newsPostKey, NEWS_POST_FRESH_MS } from "./newsQueryKeys";
 
 const opt = <T,>(v: [] | [T] | null | undefined): T | null =>
   v && v.length ? v[0] : null;
@@ -96,10 +98,12 @@ const isLiveClubDeleted = (club: { deleted_at_ms?: [] | [bigint] }) =>
   (club.deleted_at_ms?.length ?? 0) > 0;
 
 export function useClubNewsFeed(clubId?: string | null, limit = 50) {
+  const { user } = useAuth();
+  const isIcp = isFeatureRoutedToIcp("news");
   const snapshotScope = `${clubId ?? "all"}_${limit}`;
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   return useQuery<ClubNewsRow[]>({
-    queryKey: ["club-news", clubId ?? "all", limit],
+    queryKey: ["club-news", clubId ?? "all", limit, user?.id, isIcp],
     queryFn: async () => {
       if (useIcpLab) {
         return getLocalLabNewsPosts(clubId ?? "club-icp-001").slice(0, limit) as ClubNewsRow[];
@@ -191,10 +195,20 @@ export function useLatestClubNews(clubId?: string | null) {
 }
 
 export function useClubNewsPost(newsId?: string | null, clubIdHint?: string | null) {
+  const { user } = useAuth();
+  const isIcp = isFeatureRoutedToIcp("news");
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const queryClient = useQueryClient();
+  // Only fresh fetched feed data for this caller/provider seeds a detail.
+  // Persisted placeholders and legacy caches remain routing hints only.
+  const freshFeed = queryClient.getQueryCache().findAll({ queryKey: ["club-news"] })
+    .filter((query) => query.queryKey[3] === user?.id && query.queryKey[4] === isIcp &&
+      !query.state.isInvalidated && query.state.status === "success" &&
+      Date.now() - query.state.dataUpdatedAt < NEWS_POST_FRESH_MS)
+    .map((query) => ({ post: (query.state.data as ClubNewsRow[] | undefined)?.find((row) => row.id === newsId), updatedAt: query.state.dataUpdatedAt }))
+    .find((entry) => entry.post);
   return useQuery<ClubNewsRow | null>({
-    queryKey: ["club-news-post", newsId],
+    queryKey: newsPostKey(newsId, user?.id, isIcp),
     queryFn: async () => {
       if (!newsId) return null;
       if (useIcpLab) return getLocalLabNewsPost(newsId) as ClubNewsRow | null;
@@ -242,7 +256,10 @@ export function useClubNewsPost(newsId?: string | null, clubIdHint?: string | nu
         },
       }, routeClubId ? { clubId: routeClubId } : { newsId });
     },
-    enabled: !!newsId,
+    enabled: !!user && !!newsId,
+    initialData: freshFeed?.post,
+    initialDataUpdatedAt: freshFeed?.updatedAt,
+    staleTime: NEWS_POST_FRESH_MS,
   });
 }
 

@@ -1,3 +1,7 @@
+## Slow news post opening — 25 October 2026
+- [ ] Reuse fresh caller-authorized news bodies across feed/card/detail and verify audience refusal/account isolation in both modes; retain full cold-link discovery.
+- [ ] Live news opening timing requires Paul's Internet Identity session and updated frontend.
+
 ## Club Vault opening delay — 25 October 2026
 - [x] Selected ICP Vaults read caller roles in their owning club, use exact positive selected-club allowance without waiting for global subscription discovery, reuse its fresh account/provider-scoped allowance on entering and avoid duplicate club reads when admin lookup settles. Failed/unrelated/pending role checks remain non-authorizing. Focused regressions run in both modes; no deployment.
 - [ ] Live signed-in opening timing requires Paul's Internet Identity session and updated frontend.
