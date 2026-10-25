@@ -1,5 +1,5 @@
 ## All-group gallery finalization recovery — 25 October 2026
-- [x] Add protected recover action using original journal/artifacts and exact checked hash; completed modules verify twice without builds/installs, G1 gallery authorities resolve from planned inventory, and repair-source publication preserves original release binding. Focused validation pending below; no live recovery dispatched.
+- [x] Add protected recover action using original journal/artifacts and exact checked hash; completed modules verify twice without builds/installs, G1 gallery authorities resolve from planned inventory, and repair-source publication preserves original release binding. All 69 focused safeguards pass; both operator scripts parse. No live recovery dispatched.
 - [ ] Mainnet recovery/readback waits for the fixed workflow to sync and protected recovery run with the failed release hash; never restart an unresolved release as a new upgrade.
 
 ## Home Vault club spinner — 25 October 2026
