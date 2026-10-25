@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   releaseCreate: null as null | ((value: { data: string; error: null }) => void),
   withFeatureBackend: vi.fn(
-    (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+    (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }, _scope?: unknown) =>
       providers.supabase(),
   ),
   createLiveChildForParentOnTeam: vi.fn(),
