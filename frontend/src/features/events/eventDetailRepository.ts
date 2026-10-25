@@ -1,5 +1,5 @@
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveEvents } from "@/live/features/events";
+import { getListedLiveEvent, listLiveEvents } from "@/live/features/events";
 import { getCachedTeam, getCachedClub } from "@/lib/clubTeamCache";
 import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
 import { assertReadNotAborted, withReadDeadline } from "@/live/readDeadline";
