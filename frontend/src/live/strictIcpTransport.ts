@@ -37,7 +37,7 @@ async function externalException(url: URL, method: string, input: RequestInfo | 
   if ((method === "GET" || method === "HEAD") && /^\/storage\/v1\/render\/image\//.test(url.pathname)) return true;
   if (method !== "POST") return false;
   const endpoint = url.pathname;
-  if (endpoint !== "/functions/v1/verify-iap-receipt-icp" && endpoint !== "/functions/v1/send-welcome-email-icp") return false;
+   if (endpoint !== "/functions/v1/verify-iap-receipt-icp" && endpoint !== "/functions/v1/send-welcome-email-icp" && endpoint !== "/functions/v1/send-feedback-email") return false;
   let body: Record<string, unknown>;
   try {
     const raw = init?.body ?? (input instanceof Request ? await input.clone().text() : undefined);
@@ -46,6 +46,16 @@ async function externalException(url: URL, method: string, input: RequestInfo | 
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
     body = parsed as Record<string, unknown>;
   } catch { return false; }
+  if (endpoint === "/functions/v1/send-feedback-email") {
+    const keys = ["type", "title", "description", "userEmail", "userName"];
+    return url.search === "" && Object.keys(body).length === keys.length
+      && keys.every(key => Object.prototype.hasOwnProperty.call(body, key))
+      && ["bug", "feature_request", "other"].includes(String(body.type))
+      && typeof body.title === "string" && body.title.trim().length > 0 && body.title.length <= 256
+      && (body.description === null || (typeof body.description === "string" && body.description.length <= 16000))
+      && (body.userEmail === null || (typeof body.userEmail === "string" && body.userEmail.length <= 320))
+      && typeof body.userName === "string" && body.userName.length <= 256;
+  }
   if (endpoint === "/functions/v1/send-welcome-email-icp") {
     // Token-only verified delivery boundary; this does not enable the deferred worker.
     return url.search === "" && Object.keys(body).length === 1 && typeof body.token === "string" && body.token.length > 0;

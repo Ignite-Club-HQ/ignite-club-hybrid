@@ -19,6 +19,7 @@ import { ThemeProvider } from "next-themes";
 import { ClubThemeProvider } from "@/hooks/useClubTheme";
 import { AccessibilityPrefsProvider } from "@/hooks/useAccessibilityPrefs";
 const GlobalSubMonitorGate = lazyWithRetry(() => import("@/components/pitch/GlobalSubMonitorGate"));
+const IcpGapFeedback = lazyWithRetry(() => import("@/components/IcpGapFeedback"));
 import PitchBoardResumeRedirect from "@/components/pitch/PitchBoardResumeRedirect";
 import { MessagesBootstrapPrefetcher } from "@/components/MessagesBootstrapPrefetcher";
 
@@ -514,6 +515,7 @@ const App = () => {
           <DevRibbon />
           <Toaster />
           <Sonner />
+          <Suspense fallback={null}><IcpGapFeedback /></Suspense>
           <IcsPreviewFallbackDialog />
           <NotifDebugOverlay />
           <BrowserRouter>
