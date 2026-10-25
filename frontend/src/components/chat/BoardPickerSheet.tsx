@@ -11,11 +11,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { detectGameBoardKind, type GameBoardKind } from "@/lib/sportDetection";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { readIcpActiveBoards } from "@/lib/activeBoardPicker";
 
 interface BoardPickerSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectBoard: (gameId: string) => void;
+  teamId?: string;
 }
 
 interface ActiveGameRow {
@@ -42,13 +45,16 @@ export function BoardPickerSheet({
   open,
   onOpenChange,
   onSelectBoard,
+  teamId,
 }: BoardPickerSheetProps) {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
 
   const { data: games, isLoading } = useQuery({
-    queryKey: ["board-picker-active-games", user?.id],
+    queryKey: ["board-picker-active-games", user?.id, isIcp, teamId],
     queryFn: async () => {
       if (!user?.id) return [];
+      if (isIcp) return readIcpActiveBoards(teamId);
       const { data, error } = await supabase
         .from("active_games")
         .select(

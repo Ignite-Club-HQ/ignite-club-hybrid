@@ -54,10 +54,10 @@ export function AssignTeamAdminSection({
             import("@/live/features/membership"), import("@/live/features/identityAccessClient"),
           ]);
           const roles = await listLiveRoleGrants(ctx, clubId);
-          const ids = [...new Set(roles.map(role => role.principal.toText()))];
+          const ids = [...new Set(roles.map(role => role.user.toText()))];
           const profiles = await listLiveProfilesByIds(ctx, ids);
           return profiles.filter(p => p.display_name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-            .map(p => ({ id: p.account_id, display_name: p.display_name, avatar_url: p.avatar_url[0] ?? null }));
+            .map(p => ({ id: p.account_id, display_name: p.display_name, avatar_url: p.avatar_ref ?? null }));
         },
         supabase: async () => {
       

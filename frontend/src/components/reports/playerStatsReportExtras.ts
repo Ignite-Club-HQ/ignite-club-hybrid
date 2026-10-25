@@ -202,7 +202,7 @@ async function fetchReportExtrasIcp(
         honours[key] = {
           captain: Number(row.captain_count) || 0,
           pom: Number(row.mvp_count) || 0,
-          gkMatches: Number(row.goalkeeper_count) || 0,
+          gkMatches: 0,
           gkAppointed: Number(row.goalkeeper_count) || 0,
           gkSeconds: 0,
         };
@@ -219,12 +219,14 @@ async function fetchReportExtrasIcp(
         const {resolveLivePiiTextBatch}=await import("@/live/features/vault");
         const childNames=await resolveLivePiiTextBatch(ctx,[...assignments.captains,...assignments.goalkeepers].flatMap(a=>a.ref_kind==="child"?[a.ref_id]:[]),"name","competition_report_honours","Authorized report honours");
         const nameFor=(a:(typeof assignments.captains)[number])=>a.ref_kind==="account"?names.get(a.ref_id)??"Player":childNames.get(a.ref_id)??"Player";
+        const goalkeeperPlayers = new Set<PlayerKey>();
         for(const stat of stats) {
           const key=playerKey(stat.user_id[0],stat.child_id);if(!key)continue;
           const gkSeconds=Object.entries(stat.position_minutes??{}).reduce((total,[position,seconds])=>total+(isGoalkeeperPosition(position)?seconds:0),0);
           if(gkSeconds>0)bump(honours,key,"gkSeconds",gkSeconds);
-          if(gkSeconds>0 || stat.positions_played.some(isGoalkeeperPosition))bump(honours,key,"gkMatches");
+          if(gkSeconds>0 || stat.positions_played.some(isGoalkeeperPosition)) goalkeeperPlayers.add(key);
         }
+        for (const key of goalkeeperPlayers) bump(honours, key, "gkMatches");
         const gr = result && result.length ? result[0] : null;
         const homeScore = gr?.scores_hidden || gr?.home_score[0] == null ? null : Number(gr.home_score[0]);
         const awayScore = gr?.scores_hidden || gr?.away_score[0] == null ? null : Number(gr.away_score[0]);

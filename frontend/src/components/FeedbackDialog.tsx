@@ -16,6 +16,7 @@ import { submitLiveFeedback } from "@/live/features/insights";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
+import { encodeFeedbackMessage } from "@/lib/feedbackFields";
 
 interface FeedbackDialogProps {
   open: boolean;
@@ -63,7 +64,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
           // the canister's required `message`; description rides along as
           // the optional title field so neither field is dropped. Email
           // notification has no canister equivalent and is Supabase-only.
-          await submitLiveFeedback(ctx, type, description.trim() || null, title.trim(), null);
+          await submitLiveFeedback(ctx, type, title.trim(), encodeFeedbackMessage(description), null);
         },
       });
 

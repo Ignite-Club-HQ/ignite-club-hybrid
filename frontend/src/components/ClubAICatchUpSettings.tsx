@@ -38,7 +38,7 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
       icp: async ctx => {
         const { getLiveClubDmSettings } = await import("@/live/features/messaging");
         const settings = await getLiveClubDmSettings(ctx, clubId);
-        return { id: clubId, ai_catch_up_enabled: settings[0]?.ai_catch_up_enabled ?? true };
+        return { id: clubId, ai_catch_up_enabled: settings.ai_catch_up_enabled };
       },
       supabase: async () => {
       const { data, error } = await supabase
@@ -57,7 +57,7 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
     queryFn: () => withFeatureBackend("membership", {
       icp: async ctx => {
         const { listLiveTeams } = await import("@/live/features/club");
-        return (await listLiveTeams(ctx, clubId)).some(team => team.team_type === "junior");
+        return (await listLiveTeams(ctx, clubId)).some(team => team.team_type[0] === "junior");
       },
       supabase: async () => {
       const { data } = await supabase

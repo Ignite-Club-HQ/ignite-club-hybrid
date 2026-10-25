@@ -61,6 +61,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveFeedback, updateLiveFeedbackStatus, deleteLiveFeedback } from "@/live/features/insights";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { readAdminPages } from "@/live/adminPaging";
+import { decodeFeedbackFields } from "@/lib/feedbackFields";
 
 export default function ManageFeedbackPage() {
   return <SupabaseManageFeedbackPage />;
@@ -112,8 +113,7 @@ function SupabaseManageFeedbackPage() {
           return items.map((item) => ({
             id: item.id,
             type: item.kind,
-            title: item.title[0] ?? item.message,
-            description: item.title.length ? item.message : null,
+            ...decodeFeedbackFields(item.title[0], item.message),
             status: fromLiveFeedbackStatus(item.status),
             created_at: new Date(Number(item.created_at_ms)).toISOString(),
             profiles: { display_name: item.user.toText(), avatar_url: null },
