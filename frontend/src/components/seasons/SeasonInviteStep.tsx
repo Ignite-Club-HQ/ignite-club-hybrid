@@ -187,7 +187,6 @@ export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) 
         // join link is returned without the Supabase "send-email" step.
         icp: async (ctx) => {
           if (!row.email.trim()) throw new Error("Enter an email address for this invitation.");
-          const { encryptEmailPayload } = await import("@/live/emailPayload");
           const result = (await createLivePendingInvite(ctx, {
             kind: row.teamId ? "team" : "club",
             clubId,
@@ -198,11 +197,6 @@ export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) 
           const inviteId = result.invite?.id;
           const inviteLink = inviteId ? `${window.location.origin}/join/p/${inviteId}` : "";
           if (!inviteId) throw new Error("Invite was not acknowledged");
-          const ciphertext = await encryptEmailPayload(ctx, { to: row.email.trim(), resource: inviteId, subject: "Invitation", text: "" });
-          const { connectLiveClubDomain } = await import("@/live/domains");
-          const { unwrapCandid } = await import("@/live/features/candid");
-          const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-          await unwrapCandid(actor.queue_pending_invite_email(inviteId, ciphertext), "Queue invitation email");
           return { link: inviteLink, emailFailed: false, emailErrorMsg: undefined as string | undefined };
         },
       }, writeOnce({ clubId }));
@@ -216,7 +210,7 @@ export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) 
       }
 
       patch(row.tempId, { status: "sent", link });
-      toast.success(isIcp ? "Invite email queued" : row.email.trim() ? "Invite sent" : "Invite link ready");
+      toast.success(isIcp ? "Invite link ready" : row.email.trim() ? "Invite sent" : "Invite link ready");
     } catch (e) {
       patch(row.tempId, { status: "error", errorMsg: (e as Error).message });
       toast.error((e as Error).message);

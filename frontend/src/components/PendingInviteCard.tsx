@@ -180,16 +180,16 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
     staleTime: 1000 * 60 * 5,
   });
 
-  const pendingInviteToken = pendingInviteData?.invite_token;
+  const pendingInviteToken = isIcp ? invite.id : pendingInviteData?.invite_token;
   const pendingShortCode = isIcp
     ? (icpShortCode ?? null)
     : ((pendingInviteData as any)?.short_code as string | null);
   const inviteMetadata = pendingInviteData?.metadata as { children?: { name: string }[]; customMessage?: string } | null;
 
   // Use short URL for sharing, full URL for emails/internal
-  const inviteLink = pendingInviteToken ? `https://reference.invalid` : null;
+  const inviteLink = pendingInviteToken ? `${window.location.origin}/join/p/${encodeURIComponent(pendingInviteToken)}` : null;
   const shareLink = pendingShortCode 
-    ? `https://reference.invalid` 
+    ? `${window.location.origin}/j/${encodeURIComponent(pendingShortCode)}` 
     : inviteLink;
 
   // Fetch teams in the club for "Move to Team" (only when teamId is set)

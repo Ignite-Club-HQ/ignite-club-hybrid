@@ -164,12 +164,17 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
     async (opts: { title: string; description?: string; variant?: "default" | "destructive" }) => {
       let pendingCount = 0;
       try {
-        const { count } = await supabase
-          .from("pending_invites")
-          .select("id", { count: "exact", head: true })
-          .eq("team_id", teamId)
-          .eq("status", "pending");
-        pendingCount = count ?? 0;
+        pendingCount = await withFeatureBackend("membership", {
+          icp: async ctx => {
+            const { listLivePendingInvitesByClub } = await import("@/live/features/club");
+            return (await listLivePendingInvitesByClub(ctx, clubId)).filter(i => i.team_id[0] === teamId && (i.status === "pending" || i.status === "resent")).length;
+          },
+          supabase: async () => {
+            const { count, error } = await supabase.from("pending_invites").select("id", { count: "exact", head: true }).eq("team_id", teamId).eq("status", "pending");
+            if (error) throw error;
+            return count ?? 0;
+          },
+        }, { clubId });
       } catch {
         // ignore — fall back to a count-less link
       }
@@ -193,7 +198,7 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
         ) : undefined,
       });
     },
-    [teamId, toast, navigate, location.pathname],
+    [teamId, clubId, toast, navigate, location.pathname],
   );
 
   const [internalOpen, setInternalOpen] = useState(false);

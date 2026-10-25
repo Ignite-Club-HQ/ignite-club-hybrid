@@ -38,6 +38,7 @@ import { getLiveTeamInvite, acceptLiveTeamInvite } from "@/live/features/members
 import { getLivePlayerInvitePreview, claimLiveInvite, getLiveJoinLinkByToken, getLiveMiniLeague, claimLiveAdminJoinLink, joinLiveMiniLeagueByToken } from "@/live/features/miniLeagues";
 import { getLivePendingInvite, getLiveTeamInviteLinkByToken, acceptLiveTeamInviteLink, getLiveClubProfile, getLiveTeam } from "@/live/features/club";
 import { acceptIcpInviteAndWelcome } from "@/features/membership/acceptIcpInviteAndWelcome";
+import { needsInviteChildEntry } from "@/features/membership/inviteFlowRules";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -164,7 +165,7 @@ function SupabaseJoinTeamPage() {
   const { data: pendingInviteData, isLoading: pendingInviteLoading, error: pendingInviteError, isError: pendingInviteIsError } = useQuery({
     queryKey: membershipKeys.pendingInviteToken(token),
     queryFn: async () =>
-      withFeatureBackend("membership", {
+      (await import("@/live/invitePreview")).readInvitePreview(token ?? "", {
         supabase: async () => {
           console.log("[JoinTeam] Fetching pending invite for token:", token);
           try {
@@ -271,7 +272,7 @@ function SupabaseJoinTeamPage() {
             },
           };
         },
-      }, { inviteToken: token! }),
+      }),
     enabled: !!token && isPendingInvite,
     retry: 2,
     retryDelay: 1000,
@@ -312,7 +313,7 @@ function SupabaseJoinTeamPage() {
   const { data: teamInvite, isLoading: teamInviteLoading, error: teamInviteError } = useQuery({
     queryKey: membershipKeys.teamInvite(token),
     queryFn: async () => {
-      return withFeatureBackend("membership", {
+      return (await import("@/live/invitePreview")).readInvitePreview(token ?? "", {
         supabase: async () => {
           const { data, error } = await supabase
             .rpc("get_team_invite_by_token", { _token: token! });
@@ -375,12 +376,12 @@ function SupabaseJoinTeamPage() {
                 },
               };
             }
-          } catch {
-            // Not a TeamInviteLink token — fall through to the TeamInvite store.
+          } catch (error) {
+            if (!(error instanceof Error) || !/failed: Invite link not found$/.test(error.message)) throw error;
           }
           // Legacy TeamInvite record: the `token` route param is the canister
           // invite id (there is no separate short-token lookup for these).
-          const raw = await getLiveTeamInvite(ctx, token!).catch(() => null);
+          const raw = await getLiveTeamInvite(ctx, token ?? "");
           if (!raw) return null;
           return {
             id: raw.id ?? token!,
@@ -408,7 +409,7 @@ function SupabaseJoinTeamPage() {
             },
           };
         },
-      }, { inviteToken: token! });
+      });
     },
     enabled: !!token && !isPendingInvite,
     retry: 2,
@@ -532,7 +533,18 @@ function SupabaseJoinTeamPage() {
   const { data: userProfile, isLoading: profileLoading } = useQuery({
     queryKey: membershipKeys.joinProfile(user?.id),
     queryFn: async () => {
-      const { data } = await selectCachedProfileById(user!.id);
+      if (!user) return null;
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Internet Identity required"); },
+          icp: async ctx => {
+            const { fetchIcpIdentityProfile } = await import("@/live/identityProfile");
+            const row = await fetchIcpIdentityProfile(ctx.identity, user.id, ctx.target);
+            return { id: user.id, display_name: row.displayName, avatar_url: row.avatarRef };
+          },
+        }, { shared: "person" });
+      }
+      const { data } = await selectCachedProfileById(user.id);
       return data;
     },
     enabled: !!user,
@@ -692,6 +704,16 @@ function SupabaseJoinTeamPage() {
     queryKey: ["used-invite-membership", user?.id, usedInviteTeamId, usedInviteClubId],
     queryFn: async () => {
       if (!user) return false;
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Internet Identity required"); },
+          icp: async ctx => {
+            const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+            const grants = await getLiveMyRoleGrants(ctx);
+            return grants.some(g => usedInviteTeamId ? g.team[0] === usedInviteTeamId && g.club[0] === usedInviteClubId : g.club[0] === usedInviteClubId && !g.team.length);
+          },
+        }, { clubId: usedInviteClubId ?? undefined, teamId: usedInviteTeamId ?? undefined });
+      }
       if (usedInviteTeamId) {
         const { data: tm } = await (supabase as any)
           .from("team_memberships")
@@ -745,7 +767,7 @@ function SupabaseJoinTeamPage() {
   // New signups (no display_name yet) are allowed - their name will be auto-set during join
   // A matching email always wins over a name difference.
   useEffect(() => {
-    if (isPendingInvite && pendingInviteData?.invited_label && user && userProfile !== undefined) {
+    if (isPendingInvite && pendingInviteData?.invited_label && user && userProfile !== undefined && (pendingInviteData.metadata as { kind?: string } | null)?.kind !== "mini_league_named_player_invite") {
       // Skip under Internet Identity: `user.email` is always undefined for
       // principal-based II accounts, so this never matches — that's
       // intentional, not a silent failure. II pending-invite joins are
@@ -1568,13 +1590,14 @@ function SupabaseJoinTeamPage() {
 
       // If parent role is selected, check if we need to show consent dialog
       if (rolesToAdd.includes("parent")) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("photo_consent_given_at")
-          .eq("id", user.id)
-          .single();
-
-        if (!profile?.photo_consent_given_at) {
+        const hasConsent = membershipIcpRouted
+          ? await (await import("@/features/membership/invitePhotoConsent")).icpInvitePhotoConsent()
+          : await (async () => {
+              const { data: profile, error } = await supabase.from("profiles").select("photo_consent_given_at").eq("id", user.id).single();
+              if (error) throw error;
+              return !!profile?.photo_consent_given_at;
+            })();
+        if (!hasConsent) {
           setPendingJoinRoles(rolesToAdd);
           setShowPhotoConsent(true);
           return null;
@@ -1601,12 +1624,9 @@ function SupabaseJoinTeamPage() {
         (pendingInviteData?.metadata as any)?.kind === "mini_league_parent_join_link";
       // A reconciled named invite may have already created/linked children —
       // don't ask the parent to add a child that now exists.
-      const childrenAlreadyProvisioned = provisionedChildIdsRef.current.length > 0;
       if (
-        (!isPendingInvite &&
-          rolesToAdd.includes("parent") &&
-          !teamInvite?.metadata &&
-          !childrenAlreadyProvisioned) ||
+        ((!isPendingInvite || (pendingInviteData?.metadata as { icp_pending_invite?: boolean } | null)?.icp_pending_invite) &&
+          needsInviteChildEntry(rolesToAdd, !!(teamInvite?.metadata as { child_name?: string } | null)?.child_name, provisionedChildIdsRef.current.length)) ||
         (isLeagueParentLink && rolesToAdd.includes("parent"))
       ) {
         setShowChildStep(true);
@@ -1708,10 +1728,12 @@ function SupabaseJoinTeamPage() {
   const handlePhotoConsentGiven = async () => {
     if (!user) return;
     
-    await supabase
-      .from("profiles")
-      .update({ photo_consent_given_at: new Date().toISOString() })
-      .eq("id", user.id);
+    if (isFeatureRoutedToIcp("membership")) {
+      await (await import("@/features/membership/invitePhotoConsent")).icpInvitePhotoConsent(true);
+    } else {
+      const { error } = await supabase.from("profiles").update({ photo_consent_given_at: new Date().toISOString() }).eq("id", user.id);
+      if (error) throw error;
+    }
 
     setShowPhotoConsent(false);
 
@@ -1722,9 +1744,7 @@ function SupabaseJoinTeamPage() {
         toast({ title: `Successfully joined as ${roleNames}!` });
         if (
           !isPendingInvite &&
-          result.includes("parent") &&
-          !teamInvite?.metadata &&
-          provisionedChildIdsRef.current.length === 0
+          needsInviteChildEntry(result, !!(teamInvite?.metadata as { child_name?: string } | null)?.child_name, provisionedChildIdsRef.current.length)
         ) {
           setShowChildStep(true);
         } else {

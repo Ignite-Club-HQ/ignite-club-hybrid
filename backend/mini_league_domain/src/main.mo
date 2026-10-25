@@ -958,6 +958,9 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let leagueForAuth = findLeague(mini_league_id) ?? return #Err("Mini-league not found");
+    ignore await* currentClubAdmin(caller, leagueForAuth.club_id);
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) {
@@ -995,6 +998,10 @@ persistent actor class Main(governorInit : Principal) = this {
       case null #Err("Invite not found");
       case (?invite) {
         if (leagueFenced(invite.mini_league_id)) return #Err("Club is temporarily locked for a transfer");
+        let issuerLeague = findLeague(invite.mini_league_id) ?? return #Err("Mini-league not found");
+        ignore await* currentClubAdmin(invite.created_by, issuerLeague.club_id);
+        let currentInvite = invites.find(func i = i.token == token) ?? return #Err("Invite not found");
+        if (currentInvite.status != invite.status or currentInvite.claimed_by != invite.claimed_by or removalReceiver.denied(invite.created_by) or not isLeagueAdmin(invite.created_by, issuerLeague) or leagueFenced(invite.mini_league_id) or removalReceiver.denied(caller)) return #Err("Invite authorization changed");
         if (invite.status != "pending") {
           if (invite.claimed_by == ?caller) switch (invite.player_id, findLeague(invite.mini_league_id)) { case (?pid, ?league) return #Ok({ mini_league_id = league.id; club_id = league.club_id; player_id = pid }); case _ {} };
           return #Err("Invite already claimed")
@@ -1040,7 +1047,7 @@ persistent actor class Main(governorInit : Principal) = this {
   public query func get_player_invite_preview(token : Text) : async { #Ok : ?{ token : Text; mini_league_id : Text; club_id : Text; league_name : Text; player_name : ?Text; status : Text }; #Err : Text } {
     let invite = switch (invites.find(func(i) = i.token == token)) { case null return #Ok(null); case (?i) i };
     let league = switch (findLeague(invite.mini_league_id)) { case null return #Ok(null); case (?l) l };
-    let name = switch (invite.player_id) { case (?id) switch (findPlayer(id)) { case (?p) ?p.name; case null null }; case null null };
+    let name : ?Text = null;
     #Ok(?{ token; mini_league_id = league.id; club_id = league.club_id; league_name = league.name; player_name = name; status = invite.status })
   };
 
@@ -1434,6 +1441,9 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let leagueForAuth = findLeague(mini_league_id) ?? return #Err("Mini-league not found");
+    ignore await* currentClubAdmin(caller, leagueForAuth.club_id);
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) {
@@ -1448,6 +1458,8 @@ persistent actor class Main(governorInit : Principal) = this {
           created_at_ms = nowMs();
           revision = 1;
         };
+        switch (requireLeagueAdmin(caller, mini_league_id)) { case (#Err(e)) return #Err(e); case _ {} };
+        if (leagueFenced(mini_league_id) or joinLinks.any(func l = l.mini_league_id == mini_league_id and l.role == role and not l.revoked)) return #Err("Join link changed");
         joinLinks := joinLinks.concat([link]);
         #Ok(link)
       };
@@ -1463,6 +1475,9 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
+    let leagueForAuth = findLeague(mini_league_id) ?? return #Err("Mini-league not found");
+    ignore await* currentClubAdmin(caller, leagueForAuth.club_id);
+    if (leagueFenced(mini_league_id)) return #Err("Club is temporarily locked for a transfer");
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) {
@@ -1471,6 +1486,9 @@ persistent actor class Main(governorInit : Principal) = this {
           case null #Err("No active join link");
           case (?current) {
             let rotated : Types.MiniLeagueJoinLink = { current with token = do { let removalReply = await randomToken("mljl"); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }; revision = current.revision + 1 };
+            let latest = joinLinks.find(func l = l.token == current.token and not l.revoked) ?? return #Err("Join link changed");
+            switch (requireLeagueAdmin(caller, mini_league_id)) { case (#Err(e)) return #Err(e); case _ {} };
+            if (latest.revision != current.revision or leagueFenced(mini_league_id)) return #Err("Join link changed");
             joinLinks := joinLinks.map(func(item) = if (item.mini_league_id == mini_league_id and item.role == role and not item.revoked) rotated else item);
             #Ok(rotated)
           };
@@ -1521,6 +1539,10 @@ persistent actor class Main(governorInit : Principal) = this {
       case null #Err("Join link not found");
       case (?link) {
         if (link.revoked) return #Err("Join link revoked");
+        let issuerLeague = findLeague(link.mini_league_id) ?? return #Err("Mini-league not found");
+        ignore await* currentClubAdmin(link.created_by, issuerLeague.club_id);
+        let currentLink = joinLinks.find(func l = l.token == token) ?? return #Err("Join link not found");
+        if (currentLink.revoked or currentLink.revision != link.revision or removalReceiver.denied(link.created_by) or not isLeagueAdmin(link.created_by, issuerLeague) or leagueFenced(link.mini_league_id) or removalReceiver.denied(caller)) return #Err("Invite authorization changed");
         if (link.role != "admin") return #Err("Join link is not an admin link");
         switch (findLeague(link.mini_league_id)) {
           case null #Err("Mini-league not found");
@@ -1549,6 +1571,10 @@ persistent actor class Main(governorInit : Principal) = this {
       case null #Err("Join link not found");
       case (?link) {
         if (link.revoked) return #Err("Join link revoked");
+        let issuerLeague = findLeague(link.mini_league_id) ?? return #Err("Mini-league not found");
+        ignore await* currentClubAdmin(link.created_by, issuerLeague.club_id);
+        let currentLink = joinLinks.find(func l = l.token == token) ?? return #Err("Join link not found");
+        if (currentLink.revoked or currentLink.revision != link.revision or removalReceiver.denied(link.created_by) or not isLeagueAdmin(link.created_by, issuerLeague) or leagueFenced(link.mini_league_id) or removalReceiver.denied(caller)) return #Err("Invite authorization changed");
         if (link.role == "admin") return #Err("Use claim_admin_join_link for admin links");
         if (not valid(player_name)) return #Err("Invalid player name");
         switch (findLeague(link.mini_league_id)) {

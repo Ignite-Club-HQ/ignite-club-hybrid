@@ -89,6 +89,9 @@ async function connect<T>(
 ): Promise<LiveDomainConnection<T>> {
   const connection = await createLiveActor<T>(target, identity, domainKey, DOMAIN_LABELS[domainKey] ?? domainKey, idlFactory);
   if (typeof connection.actor !== 'object' || connection.actor === null) throw new Error('Invalid actor');
+  // Public bearer previews must not inherit a device's account-read decisions.
+  // Their deliberately public query verifies only the unguessable capability.
+  if (identity.getPrincipal().isAnonymous()) return connection;
   // Local rehearsal: strict direct mapping to the protected consensus reads.
   if (import.meta.env.DEV && isLoopbackRehearsalHost(target.host)) {
     return { ...connection, actor: adaptLocalAccountReads(connection.actor, idlFactory({ IDL }), target.host) };

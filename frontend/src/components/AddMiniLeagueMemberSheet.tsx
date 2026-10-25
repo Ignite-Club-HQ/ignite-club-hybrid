@@ -160,21 +160,33 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
 
   const { data: clubBranding } = useQuery({
     queryKey: ["club-branding", clubId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("clubs")
-        .select("name, logo_url, contact_email")
-        .eq("id", clubId)
-        .single();
-      return data;
-    },
+    queryFn: () => withFeatureBackend("membership", {
+      icp: async ctx => {
+        const { getLiveClubBranding } = await import("@/live/features/club");
+        const row = await getLiveClubBranding(ctx, clubId);
+        return row ? { name: row.name, logo_url: row.logo_url[0] ?? null, contact_email: row.contact_email[0] ?? null } : null;
+      },
+      supabase: async () => {
+        const { data, error } = await supabase.from("clubs").select("name, logo_url, contact_email").eq("id", clubId).single();
+        if (error) throw error;
+        return data;
+      },
+    }, { clubId }),
     enabled: !!clubId,
   });
 
   // Fetch existing children in this club for player name search
   const { data: clubChildren = [] } = useQuery({
     queryKey: ["mini-league-club-children", clubId],
-    queryFn: async () => {
+    queryFn: () => withFeatureBackend("membership", {
+      icp: async ctx => {
+        const { getLiveClubRoster } = await import("@/live/features/club");
+        const { resolveLivePiiTextBatch } = await import("@/live/features/vault");
+        const roster = await getLiveClubRoster(ctx, clubId);
+        const names = await resolveLivePiiTextBatch(ctx, roster.children.map(c => c.id), "name", "invite-roster", "Invite player names");
+        return roster.children.map(c => ({ id: c.id, name: names.get(c.id) ?? "Player", parent_id: c.parent?.toText() ?? null, parent_name: "" }));
+      },
+      supabase: async () => {
       const { data: teamIds } = await supabase
         .from("teams")
         .select("id")
@@ -225,14 +237,21 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
         parent_id: c.parent_id,
         parent_name: c.parent_id ? parentMap.get(c.parent_id) || "" : "",
       }));
-    },
+      },
+    }, { clubId }),
     enabled: open && inviteByNameExpanded && !!clubId,
   });
 
   // Search invitable parents
   const { data: parentResults = [] } = useQuery({
     queryKey: ["mini-league-parent-search", debouncedParentQuery, clubId],
-    queryFn: async () => {
+    queryFn: () => withFeatureBackend("membership", {
+      icp: async ctx => {
+        if (debouncedParentQuery.trim().length < 2) return [];
+        const { searchLiveInvitableProfiles } = await import("@/live/features/membership");
+        return (await searchLiveInvitableProfiles(ctx, debouncedParentQuery.trim(), 6)).map(p => ({ id: p.id, display_name: p.display_name, masked_email: null, roles: [] as string[] }));
+      },
+      supabase: async () => {
       if (debouncedParentQuery.trim().length < 2) return [];
       const { data } = await supabase.rpc("search_invitable_profiles", {
         _query: debouncedParentQuery.trim(),
@@ -265,7 +284,7 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
       const pushRole = (uid: string, role: string | null) => {
         if (!role) return;
         if (!roleMap.has(uid)) roleMap.set(uid, new Set());
-        roleMap.get(uid)!.add(String(role).replace(/_/g, " "));
+        roleMap.get(uid)?.add(String(role).replace(/_/g, " "));
       };
       (directRolesRes.data || []).forEach((r: any) => pushRole(r.user_id, r.role));
       (teamRolesRes.data || []).forEach((r: any) => pushRole(r.user_id, r.role));
@@ -273,7 +292,8 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
         ...p,
         roles: Array.from(roleMap.get(p.id) || []),
       }));
-    },
+      },
+    }, { shared: "person" }),
     enabled: debouncedParentQuery.trim().length >= 2,
   });
 

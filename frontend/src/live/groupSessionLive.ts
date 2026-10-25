@@ -166,6 +166,7 @@ export async function groupHoldsInvite(ctx: FeatureBackendContext, token: string
   }
   const c = await import('./features/club');
   const probes: Array<() => Promise<unknown>> = [
+    ...(token.startsWith('tinv-') ? [async () => (await import('./features/membership')).getLiveTeamInvite(ctx, token)] : []),
     () => c.getLivePendingInvite(ctx, token),
     () => c.getLiveParentInvite(ctx, token),
     () => c.getLiveTeamInviteLinkByToken(ctx, token),

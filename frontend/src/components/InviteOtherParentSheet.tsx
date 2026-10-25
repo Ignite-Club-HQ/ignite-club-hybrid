@@ -140,7 +140,7 @@ export default function InviteOtherParentSheet({
           await linkLiveGuardian(ctx, childId, guardian);
           await setLiveGuardianRelationship(ctx, childId, guardian, "parent", false);
         },
-      }, writeOnce({ shared: 'person' }));
+      }, writeOnce({ teamId: teamIds[0] ?? '' }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["child_guardians", childId] });

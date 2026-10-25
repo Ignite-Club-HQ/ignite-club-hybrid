@@ -17,8 +17,10 @@ export function PWAPendingInviteHandler() {
     if (!isStandalone) return;
 
     // Check for pending invite
-    const pendingInvite = localStorage.getItem("pwa_pending_invite");
+    let pendingInvite: string | null = null;
+    try { pendingInvite = localStorage.getItem("pwa_pending_invite"); } catch { return; }
     if (!pendingInvite) return;
+    if (!/^\/join\/(?:p\/)?[^/?#]+(?:\?[^#]*)?$/.test(pendingInvite)) return;
 
     // Only redirect if we're on the home page or root
     // Don't redirect if already on the invite page or auth page
@@ -29,7 +31,7 @@ export function PWAPendingInviteHandler() {
       const existingContext = getInviteFlowContext();
       
       // Clear the pending invite so we don't redirect again
-      localStorage.removeItem("pwa_pending_invite");
+      try { localStorage.removeItem("pwa_pending_invite"); } catch { /* URL remains usable */ }
       
       // Only proceed if the invite flow context is still active
       // This prevents redirecting to stale/used invite links

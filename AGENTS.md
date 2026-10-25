@@ -12,7 +12,7 @@
 - Preview: frontend/ via lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY; root stays dependency-free.
 - Health merges every group inventory by ID to prevent unmonitored groups.
 - Install via scripts/ensure-frontend-deps.mjs only: npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
-- Before scoped changes read AGENTS.md in scripts/, frontend/, backend/ and affected backend subdirectories; media_metadata has gallery-specific rules.
+- Read scripts/, frontend/, backend/ and affected nested AGENTS.md before edits.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
@@ -41,12 +41,13 @@ it. Skills are authoritative — prefer them over general knowledge.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
 - OQL: bounded read-only, allowlisted fields; authorize before filtering/paging/counts; no self-calls.
+- ICP invites use complete public-source previews and signed owning-group acceptance, never Supabase; upgrades use the protected four-target club/mini-league journal. Why: bearer location is not authorization; unrelated services stay untouched.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages. Policy 2026-10-19: encrypted-media clubs stay put; no re-encryption or reconciliation bypass. Place new clubs into groups. Why: photo keys belong to the creating group.
 - Admission uses the general switch: governor-verified configuration revision, canonical group/placement/policy inventory, hashes and removal wiring must match the live registry; ordinary placements advance only the separate assignment/deletion/session revision. Legacy snapshots need regeneration. Snapshot revisions are decimal text before hashing/emission. Why: new clubs must not invalidate approval, while configuration drift still fails closed.
 - Router-only deploy upgrades the pinned mainnet router: no creation, rewiring or automatic fuel conversion. Why: approval-counter repairs must preserve club services/media keys.
 
-- Keys: SDK derivation, signed controllers, receipts; engines offline. Fixtures never authorize release.
-- G2 journal readback pins the acknowledged commit; unknown writes stop. Why: branch reads can lag.
+- Keys: SDK derivation, controllers, receipts; engines offline; fixtures never authorize release.
+- Journal readback pins acknowledged commits; unknown writes stop.
 
 - Router index rebuilds from stable rows; writes refresh, picks recheck gates. Never deploy scale-probe.
 - History uses nullable DTOs/exact links and verified humans; PlayHQ keys are tenant-scoped, claims grant no ownership. Deploy history scope upgrades only competition/events, never creates or rewires others. Why: preserve data and isolate releases.
@@ -76,6 +77,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - Media paging releases only via upgrade-media-paging.yml on the exact G1/G2 media_metadata canisters, finishing backfill before snapshot refresh. Why: never hide photos or touch photo stores.
 
-- ICP event setup atomically commits exact dates, first-occurrence duties and reminders under caller/request receipts; configured club/league consensus supplies audiences, relays retain unknown outcomes. Why: prevent partial saves, foreign notices and deleted-request resurrection.
+- ICP events atomically commit dates, duties and reminders under caller receipts; consensus supplies audiences, unknown relays stay locked.
 - Vault recovery reads owner-wide intents and exact decrypted hash markers before strict grants/store acknowledgement; unknown outcomes retain locks/cursors. Erasure scrubs shared ancestors without orphaning others. Cleanup needs age/allowance or erasure receipts; backups commit validated pages to writable sinks, retaining Blob fallback where unsupported. Why: prevent guessed recovery, data loss and partial exports.
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +19,11 @@ export default function ClaimTeamPage() {
   const [status, setStatus] = useState<"idle" | "claiming" | "done" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [teamId, setTeamId] = useState<string | null>(null);
+  const currentToken = useRef(token);
+  useEffect(() => {
+    currentToken.current = token;
+    setStatus("idle"); setErrorMsg(""); setTeamId(null);
+  }, [token]);
   usePageTitle("Claim your team");
 
   useEffect(() => {
@@ -29,8 +34,9 @@ export default function ClaimTeamPage() {
     }
     if (authLoading) return;
     if (!user) {
-      sessionStorage.setItem("redirectAfterAuth", `/claim-team?token=${token}`);
-      navigate("/auth", { replace: true });
+      const destination = `/claim-team?token=${encodeURIComponent(token)}`;
+      try { sessionStorage.setItem("redirectAfterAuth", destination); } catch { /* URL carries intent */ }
+      navigate(`/auth?redirect=${encodeURIComponent(destination)}`, { replace: true });
       return;
     }
     if (status !== "idle") return;
@@ -51,11 +57,13 @@ export default function ClaimTeamPage() {
             const team = await claimLiveShellTeam(ctx, token);
             return (team as { id: string }).id;
           },
-        }, { inviteToken: token! });
+        }, { inviteToken: token });
+        if (currentToken.current !== token) return;
         setTeamId(teamId);
         setStatus("done");
         toast({ title: "Team claimed", description: "You're now the team admin." });
       } catch (error) {
+        if (currentToken.current !== token) return;
         setStatus("error");
         setErrorMsg(error instanceof Error ? error.message : "This invite is invalid or already used.");
       }
@@ -95,6 +103,7 @@ export default function ClaimTeamPage() {
               <AlertCircle className="h-10 w-10 mx-auto text-destructive" />
               <h1 className="text-lg font-semibold">Couldn't claim team</h1>
               <p className="text-sm text-muted-foreground">{errorMsg}</p>
+              <Button onClick={() => setStatus("idle")}>Try again</Button>
               <Button asChild variant="outline">
                 <Link to="/">Back to home</Link>
               </Button>

@@ -14,7 +14,8 @@ vi.mock("@/assets/ignite-icon.png", () => ({ default: "icon.png" }));
 vi.mock("@/live/features/club", () => ({
   resolveLiveInviteShortCode: (...args: unknown[]) => resolveShortCodeMock(...args),
 }));
-vi.mock("@/live/targetRegistry", () => ({ getActiveIcpTarget: () => ({ name: "test-target" }) }));
+vi.mock("@/live/targetRegistry", () => ({ getActiveIcpTarget: () => ({ name: "test-target", canisterIds: {} }) }));
+vi.mock("@/live/publicGroupReads", () => ({ readFreshPublicTargets: async (target: unknown) => [target] }));
 
 import ShortInviteRedirect from "./ShortInviteRedirect";
 
@@ -95,7 +96,7 @@ describe.runIf(icpMode)("ShortInviteRedirect ICP boundary", () => {
     expect(await screen.findByTestId("joined")).toBeInTheDocument();
     expect(resolveShortCodeMock).toHaveBeenCalledWith({
       identity: expect.objectContaining({ getPrincipal: expect.any(Function) }),
-      target: { name: "test-target" },
+      target: { name: "test-target", canisterIds: {} },
     }, "abc");
     expect(rpcMock).not.toHaveBeenCalled();
   });
