@@ -219,7 +219,7 @@ export default function PlacementAdminSettingsPage() {
   const [routingTouched, setRoutingTouched] = useState(false);
 
   const { data: clubs } = useQuery({
-    queryKey: ["admin-clubs-for-backend-overrides"],
+    queryKey: ["admin-clubs-for-backend-overrides", user?.id, isIcp],
     queryFn: async () => {
       const merged = new Map<string, string>();
       // Supabase clubs — best-effort: an Internet Identity app admin has no
@@ -238,14 +238,17 @@ export default function PlacementAdminSettingsPage() {
           supabase: async () => undefined,
           icp: async (ctx) => {
             let cursor: string | null = null;
-            for (let i = 0; i < 20; i++) {
+            for (let i = 0; i < 10000; i++) {
               const batch = await listLiveClubs(ctx, cursor, 50);
               for (const c of batch) {
                 if (c.is_active && c.deleted_at_ms.length === 0) merged.set(c.id, c.name);
               }
-              if (batch.length < 50) break;
-              cursor = batch[batch.length - 1]!.id;
+              if (batch.length < 50) return;
+              const last = batch.at(-1);
+              if (!last || last.id === cursor) throw new Error("Club inventory changed; refresh to retry");
+              cursor = last.id;
             }
+            throw new Error("Club inventory exceeds page budget");
           },
         }, { everyGroup: true, requireComplete: true, merge: () => undefined });
       } catch (error) {
@@ -265,7 +268,7 @@ export default function PlacementAdminSettingsPage() {
   }, [profileCountry]);
 
   const { data: savedOverrides, isLoading: isLoadingSettings } = useQuery({
-    queryKey: ["app-setting", ICP_CANISTER_CONFIG_KEY],
+    queryKey: ["app-setting", ICP_CANISTER_CONFIG_KEY, user?.id, isIcp],
     queryFn: async () => {
       if (isIcp) return withFeatureBackend("membership", {
         supabase: async () => { throw new Error("Internet Identity connection required"); },
@@ -293,7 +296,7 @@ export default function PlacementAdminSettingsPage() {
   }, [savedOverrides, touched]);
 
   const { data: savedRouting, isLoading: isLoadingRouting } = useQuery({
-    queryKey: ["app-setting", BACKEND_ROUTING_CONFIG_KEY],
+    queryKey: ["app-setting", BACKEND_ROUTING_CONFIG_KEY, user?.id, isIcp],
     queryFn: () => fetchStoredBackendRoutingConfig(),
     enabled: !!user && isAppAdmin,
   });
@@ -304,7 +307,7 @@ export default function PlacementAdminSettingsPage() {
   const [giphyKey, setGiphyKey] = useState("");
   const [giphyTouched, setGiphyTouched] = useState(false);
   const { data: savedGiphyKey } = useQuery({
-    queryKey: ["app-setting", GIPHY_API_KEY_CONFIG_KEY],
+    queryKey: ["app-setting", GIPHY_API_KEY_CONFIG_KEY, user?.id, isIcp],
     queryFn: async () => {
       let value: string | null = null;
       if (!isIcp) try {

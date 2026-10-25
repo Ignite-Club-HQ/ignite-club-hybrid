@@ -91,7 +91,7 @@ function SupabaseManageFeedbackPage() {
   const { isAppAdmin } = useIsAppAdmin();
 
   const { data: feedback, isLoading } = useQuery({
-    queryKey: ["all-feedback"],
+    queryKey: ["all-feedback", user?.id],
     queryFn: async () => {
       return withFeatureBackend("admin", {
         supabase: async () => {
