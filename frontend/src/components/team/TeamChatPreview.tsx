@@ -1,3 +1,4 @@
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -59,7 +60,7 @@ export function TeamChatPreview({ teamId }: TeamChatPreviewProps) {
         authorName,
       };
     },
-    enabled: !!teamId,
+    enabled: !!teamId && resolveAuthBackend() !== "icp",
     staleTime: 30 * 1000,
     refetchInterval: isFeatureRoutedToIcp("messaging")
       ? (isDocumentVisible ? CHAT_POLL_INTERVAL_VISIBLE_MS : CHAT_POLL_INTERVAL_HIDDEN_MS)
