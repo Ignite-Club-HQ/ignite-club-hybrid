@@ -3,7 +3,7 @@ import { readClubsInOwnGroups } from "@/live/crossGroupClubs";
 import { writeOnce } from "@/live/clubScope";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isCancelledError, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Filter, Images, Loader2, MessageCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
