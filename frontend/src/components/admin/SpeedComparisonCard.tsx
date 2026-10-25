@@ -25,6 +25,9 @@ export function percentileStat(values: number[]): Stat {
 }
 
 async function loadSupabase(table: string, column: string, sinceIso: string): Promise<Stat | null> {
+  // Internet Identity sessions cannot read Supabase; show "Not available".
+  const { isIcpSession } = await import("@/lib/icpClubTeamLookup");
+  if (isIcpSession()) return null;
   try {
     const { data, error } = await (supabase as any)
       .from(table).select(column).gte("created_at", sinceIso).limit(1000);
