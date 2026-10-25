@@ -6,7 +6,7 @@ ICP invitation creation, manual sharing, previews and acceptance no longer call 
 
 Both club and mini-league canisters enforce current issuer authority, exact scope, revocation, random credentials and caller-bound retry receipts. Historical ordinary invitation email fields are scrubbed by a new migration; public previews redact recipient details.
 
-Parent links show child entry after acceptance. Named mini-league child invites do not compare the child's name with the adult's profile. Unsupported combined children/second-parent creation refuses before the primary invitation is created: create the parent invite, then manage children/other-parent invitations from the roster. This limitation is explicit, not silent data loss.
+Parent links show child entry when no children were supplied. Named mini-league child invites do not compare the child's name with the adult's profile. Family invites retain up to 12 existing/new children, encrypted names/birth-year/jersey details and a distinct optional guardian invitation, including a selected existing-account guardian. All children and both invite records commit together. Existing family relationships remain intact; the second guardian accepts only after the first parent, and retries cannot recreate removed guardian access.
 
 ## Verification
 
@@ -14,7 +14,7 @@ Focused frontend suites pass in ICP and Supabase modes. Real disposable two-grou
 
 ## Deployment blocked pending source synchronization
 
-On 25 October 2026, GitHub API reads returned 404 for `.github/workflows/upgrade-team-invites.yml` on hybrid `main` and `lovable-sync`. Do not run broader workflows instead. Nothing has been upgraded or activated in this task; the prod repository remains untouched.
+The protected invite workflow is now present on hybrid main (HTTP 200 at 01:40 UTC), but the latest family migration `20261118_000000.mo` is still missing (HTTP 404). Do not deploy the earlier partial release or run broader workflows instead. Nothing has been upgraded or activated in this task; the prod repository remains untouched. Wait until the final family contract and matching frontend source are present, then compare source fingerprints before dispatch.
 
 Once the tested files are present on hybrid:
 
