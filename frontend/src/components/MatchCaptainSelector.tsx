@@ -107,9 +107,10 @@ export default function MatchCaptainSelector({
           children,
         };
       },
-    }, clubId ? { clubId } : { eventId }), "Captain details", 12_000, signal),
+    }, clubId ? { clubId } : { eventId }), "Captain details", 30_000, signal),
     staleTime: 60_000,
-    retry: false,
+    retry: 1,
+    retryDelay: 500,
   });
 
   // Player-role eligibility is routed: Supabase reads user_roles, ICP reads
@@ -159,10 +160,11 @@ export default function MatchCaptainSelector({
           isSeasonCaptain: true,
         };
       },
-    }, clubId ? { clubId } : { teamId }), "Season captain details", 12_000, signal);
+    }, clubId ? { clubId } : { teamId }), "Season captain details", 30_000, signal);
     },
     staleTime: 5 * 60_000,
-    retry: false,
+    retry: 1,
+    retryDelay: 500,
   });
 
   const profileIds = [...new Set([...goingAdultIds, captain?.user_id, seasonCaptain?.user_id]
@@ -318,6 +320,8 @@ export default function MatchCaptainSelector({
           ) : captainError || seasonCaptainError ? (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">We couldn’t check the captain assignment. Please try again.</p>
+              {/* Temporary while testing: plain-English reason for the failure. */}
+              <p className="text-xs text-muted-foreground">Reason: {(() => { const e = captainError ?? seasonCaptainError; return e instanceof Error ? e.message : String(e); })()}</p>
               <Button variant="outline" onClick={() => { void refetchCaptain(); void refetchSeasonCaptain(); }}>Try again</Button>
             </div>
           ) : isSeasonCaptainLoading ? (

@@ -690,7 +690,7 @@ export default function TeamDetailPage() {
     queryFn: async () => {
       if (isIcpAccount) {
         if (!id) return [];
-        const roster = await withRosterDeadline(readIcpPitchRoster(id), 15_000, "team player list");
+        const roster = await withRosterDeadline(readIcpPitchRoster(id), 30_000, "team player list");
         return roster.children.map(child => ({ id: child.child_id, child_id: child.child_id, children: { id: child.child_id, name: child.child_name, year_of_birth: null, parent_id: null, profiles: null, allParentNames: [] } }));
       }
       const { data: rpcChildren, error: rpcError } = await supabase.rpc("get_team_children_for_pitch_board", {
@@ -782,7 +782,7 @@ export default function TeamDetailPage() {
           icp: async (ctx) => {
             let grants: Array<{ account_id: string; role: string }>;
             try {
-              grants = (await withRosterDeadline(listLiveTeamRoleGrants(ctx, id ?? ""), 15_000, "team member list")).map(g => ({ account_id: g.account_id.replace(/^principal:/, ""), role: g.role }));
+              grants = (await withRosterDeadline(listLiveTeamRoleGrants(ctx, id ?? ""), 30_000, "team member list")).map(g => ({ account_id: g.account_id.replace(/^principal:/, ""), role: g.role }));
             } catch (err) {
               // Only pre-deploy canisters lacking list_team_role_grants fall
               // back to the caller's own grants. Other failures (wrong group,
