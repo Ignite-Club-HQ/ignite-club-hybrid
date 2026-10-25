@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { reconcileUpgradeStep } from './group2-upgrade-rules.mjs';
 
-export const SUBSCRIPTION_SERVICES = Object.freeze(['club_domain', 'mini_league_domain']);
+export const TEAM_INVITE_SERVICES = Object.freeze(['club_domain', 'mini_league_domain']);
 export const digest = value => createHash('sha256').update(JSON.stringify(value, (_, v) => typeof v === 'bigint' ? String(v) : v)).digest('hex');
 export function validateRequest(action, confirmation) {
   if (!['check', 'upgrade'].includes(action)) throw new Error('Choose check or upgrade');
@@ -9,7 +9,7 @@ export function validateRequest(action, confirmation) {
 }
 export function validateTargets(targets) {
   if (targets.length !== 4 || new Set(targets.map(t => t.canisterId)).size !== 4 ||
-      ['g1', 'g2'].some(groupId => SUBSCRIPTION_SERVICES.some(name => targets.filter(t => t.groupId === groupId && t.name === name).length !== 1)) ||
+      ['g1', 'g2'].some(groupId => TEAM_INVITE_SERVICES.some(name => targets.filter(t => t.groupId === groupId && t.name === name).length !== 1)) ||
       targets.some(t => !t.canisterId || !t.subnetId || !/^[a-f0-9]{64}$/.test(t.newHash))) throw new Error('Exact four existing club/mini-league targets required');
 }
 export function validateRegisteredPair(groupId, targets, groups, placements) {

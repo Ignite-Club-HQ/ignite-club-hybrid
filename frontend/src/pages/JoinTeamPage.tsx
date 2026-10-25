@@ -711,7 +711,7 @@ function SupabaseJoinTeamPage() {
             const grants = await getLiveMyRoleGrants(ctx);
             return grants.some(g => usedInviteTeamId ? g.team[0] === usedInviteTeamId && g.club[0] === usedInviteClubId : g.club[0] === usedInviteClubId && !g.team.length);
           },
-        }, { shared: "person" });
+        }, { clubId: usedInviteClubId ?? undefined, teamId: usedInviteTeamId ?? undefined });
       }
       if (usedInviteTeamId) {
         const { data: tm } = await (supabase as any)
