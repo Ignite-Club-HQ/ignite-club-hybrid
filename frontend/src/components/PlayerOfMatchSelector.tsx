@@ -33,6 +33,7 @@ import { awardLivePoints, subjectForChild, subjectForUser } from "@/live/feature
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { getLiveEventChild, getLiveGameResult, saveLiveGameResult } from "@/live/features/events";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
+import { readPlayerOfMatchAdults, readPlayerOfMatchRewards } from "@/lib/playerOfMatchReads";
 
 interface PlayerOfMatchSelectorProps {
   eventId: string;
@@ -186,37 +187,8 @@ export default function PlayerOfMatchSelector({
 
   // Fetch POM rewards - team-specific first, then club-level fallback
   const { data: pomRewards = [] } = useQuery({
-    queryKey: ["pom-rewards", clubId, teamId],
-    queryFn: async () => {
-      // First try team-specific rewards
-      if (teamId) {
-        const { data: teamRewards, error: teamError } = await supabase
-          .from("club_rewards")
-          .select("*")
-          .eq("club_id", clubId)
-          .eq("team_id", teamId)
-          .eq("reward_type", "player_of_match")
-          .eq("is_active", true)
-          .order("created_at", { ascending: true });
-        
-        if (!teamError && teamRewards && teamRewards.length > 0) {
-          return teamRewards;
-        }
-      }
-      
-      // Fall back to club-level rewards (team_id is null)
-      const { data, error } = await supabase
-        .from("club_rewards")
-        .select("*")
-        .eq("club_id", clubId)
-        .is("team_id", null)
-        .eq("reward_type", "player_of_match")
-        .eq("is_active", true)
-        .order("created_at", { ascending: true });
-      
-      if (error) throw error;
-      return data || [];
-    },
+    queryKey: ["pom-rewards", clubId, teamId, user?.id],
+    queryFn: () => readPlayerOfMatchRewards(clubId, teamId),
   });
 
   // Rehydrate last-used reward when rewards load / dialog opens
@@ -659,17 +631,8 @@ export default function PlayerOfMatchSelector({
   // Fetch user_ids that have the 'player' role on this team so we can exclude
   // parents, coaches, admins etc. from the POM list. Children are always players.
   const { data: playerUserIds = [] } = useQuery({
-    queryKey: ["team-player-user-ids", teamId],
-    queryFn: async () => {
-      if (!teamId) return [] as string[];
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("team_id", teamId)
-        .eq("role", "player");
-      if (error) throw error;
-      return (data || []).map((r: any) => r.user_id);
-    },
+    queryKey: ["team-player-user-ids", teamId, user?.id],
+    queryFn: () => readPlayerOfMatchAdults(clubId, teamId),
     enabled: !!teamId,
   });
 
