@@ -193,6 +193,13 @@ function IcpNotificationPreferencesPage() {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
+          ) : error && !data ? (
+            <div className="py-6 text-center space-y-3">
+              <p className="text-sm text-muted-foreground">We couldn't load notification settings right now. Please try again.</p>
+              <button type="button" className="text-sm font-medium text-primary underline" disabled={isFetching} onClick={() => refetch()}>
+                {isFetching ? "Trying…" : "Try again"}
+              </button>
+            </div>
           ) : (
             <Tabs defaultValue="push" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4">
