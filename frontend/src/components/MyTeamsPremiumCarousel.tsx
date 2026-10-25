@@ -575,8 +575,6 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   const { user, initialized } = useAuth();
   const isIcp = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const incompleteItemsRef = useRef(false);
   const { activeClubFilter } = useClubTheme();
 
   // Hydrate from localStorage so cold opens paint real cards instantly
