@@ -15,13 +15,13 @@
 # Then: Actions tab → "Deploy ICP canisters (mainnet)" → Run workflow.
 # Safe to re-run; the canister ID table is attached as an artifact.
 
-name: Deploy ICP canisters (mainnet)
+name: Deploy ICP canisters (mainnet — base/Group 1 only)
 
 on:
   workflow_dispatch:
     inputs:
       scope:
-        description: "Upgrade scope (router only fixes group approvals; history only leaves media/scaling untouched)"
+        description: "LEGACY base/Group 1 ONLY. Use Upgrade backend (all mainnet groups) for synchronized feature releases. Router remains isolated."
         type: choice
         required: true
         default: history
