@@ -15,11 +15,11 @@ on:
         default: full_backend
         options: [full_backend, app_admin, team_invites, messaging, competition, history, subscriptions, events_pitch, gallery_vault]
       checked_plan:
-        description: Optional for full_backend upgrade; recover requires the original failed run's checked plan hash
+        description: "CHECKED PLAN HASH (64 letters/numbers) - required for recover; optional for upgrade"
         required: false
         default: ''
       confirmation:
-        description: Type UPGRADE ALL MAINNET GROUPS for upgrade, RECOVER COMPLETED MAINNET RELEASE for recover; empty for check
+        description: "CONFIRMATION WORDS - UPGRADE ALL MAINNET GROUPS (upgrade) or RECOVER COMPLETED MAINNET RELEASE (recover); empty for check"
         required: false
         default: ''
 permissions:
