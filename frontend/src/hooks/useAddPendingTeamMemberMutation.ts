@@ -87,7 +87,7 @@ export function useAddPendingTeamMemberMutation({
     const { Principal } = await import("@icp-sdk/core/principal");
 
     const dedupeEmail = customEmail.trim().toLowerCase();
-    if (dedupeEmail) {
+    if (false && dedupeEmail) {
       const { lookupInvitableUserByEmail } = await import("@/lib/inviteEmailDedupe");
       const match = await lookupInvitableUserByEmail({
         email: dedupeEmail,

@@ -164,7 +164,7 @@ function SupabaseJoinTeamPage() {
   const { data: pendingInviteData, isLoading: pendingInviteLoading, error: pendingInviteError, isError: pendingInviteIsError } = useQuery({
     queryKey: membershipKeys.pendingInviteToken(token),
     queryFn: async () =>
-      withFeatureBackend("membership", {
+      (await import("@/live/invitePreview")).readInvitePreview(token ?? "", {
         supabase: async () => {
           console.log("[JoinTeam] Fetching pending invite for token:", token);
           try {
@@ -271,7 +271,7 @@ function SupabaseJoinTeamPage() {
             },
           };
         },
-      }, { inviteToken: token! }),
+      }),
     enabled: !!token && isPendingInvite,
     retry: 2,
     retryDelay: 1000,

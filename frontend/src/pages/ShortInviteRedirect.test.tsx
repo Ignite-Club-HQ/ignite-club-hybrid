@@ -15,6 +15,7 @@ vi.mock("@/live/features/club", () => ({
   resolveLiveInviteShortCode: (...args: unknown[]) => resolveShortCodeMock(...args),
 }));
 vi.mock("@/live/targetRegistry", () => ({ getActiveIcpTarget: () => ({ name: "test-target" }) }));
+vi.mock("@/live/publicGroupReads", () => ({ readFreshPublicTargets: async (target: unknown) => [target] }));
 
 import ShortInviteRedirect from "./ShortInviteRedirect";
 
