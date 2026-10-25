@@ -393,6 +393,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in club_domain");
 
     var changed = 0;
+    changed += familyInvites.filter(func f = f.created_by == old or f.bound_secondary == ?old).size();
     for((key,_) in cloneUpdates.values())if(Text.startsWith(key,#text(oldText # "\u{1f}")))changed+=1;
 
     // ---- acl ----

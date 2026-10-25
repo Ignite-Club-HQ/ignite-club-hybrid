@@ -163,7 +163,7 @@ export function useAddPendingTeamMemberMutation({
       secondParentName: secondParentStatus === "invited" ? secondParentName.trim() : "",
       secondParentAddedDirectly: false,
       secondParentStatus,
-      secondParentLabel: null as string | null,
+      secondParentLabel: selectedSecondParent?.display_name ?? secondParentName.trim() ?? null,
       secondParentFailure,
     };
   };
