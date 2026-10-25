@@ -51,3 +51,37 @@ export async function readPlayerOfMatchAdults(clubId: string, teamId?: string | 
     },
   }, { clubId });
 }
+
+export interface ProfileSummary {
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+/**
+ * Display names/avatars for a set of account IDs, routed by backend. ICP
+ * event rosters carry no profile enrichment, so award dialogs (captain,
+ * player of the match) hydrate names through this reader instead of showing
+ * "Unknown" for every adult.
+ */
+export async function readProfileSummaries(ids: string[]): Promise<Map<string, ProfileSummary>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  return withFeatureBackend('membership', {
+    supabase: async () => {
+      const { selectCachedProfilesByIds } = await import('@/lib/profileCache');
+      const { data } = await selectCachedProfilesByIds(unique);
+      return new Map((data ?? []).map((p: any) => [p.id as string, {
+        display_name: p.display_name ?? null,
+        avatar_url: p.avatar_url ?? null,
+      }]));
+    },
+    icp: async (ctx) => {
+      const { listLiveProfilesByIds } = await import('@/live/features/identityAccessClient');
+      const profiles = await listLiveProfilesByIds(ctx, unique);
+      return new Map((profiles as any[]).map((p) => [p.account_id as string, {
+        display_name: p.display_name ?? null,
+        avatar_url: p.avatar_ref?.[0] ?? null,
+      }]));
+    },
+  }, {});
+}
