@@ -11,6 +11,7 @@ import { activationStatus, SHIPPED_GATES, type ActivationGates } from './groupAc
 import { generalRoutingStatus, generalRoutingDeploymentAlias } from './generalActivation';
 import { clearOwnerTestRouting, readOwnerTestRouteCached } from './ownerTestRouting';
 import { markScopedContext } from './scopedContext';
+const READ_ACROSS_LEG_MS = 15_000;
 import { clearRoleGrantsMemo } from './roleGrantsMemo';
 
 type Session = { readClub<T>(c: string, d: GroupDomain, r: (ctx: FeatureBackendContext) => Promise<T>): Promise<T>;
@@ -221,8 +222,11 @@ export function createClubDispatcher(deps: DispatchDeps) {
       // Each group answers for itself: one failing group no longer empties
       // every other group's results. All failing still throws (keeps cache).
       type Part = { ok: true; value: T } | { ok: false; error: unknown };
-      const attempt = async (ctx: FeatureBackendContext): Promise<Part> => { try { return { ok: true, value: await fn(ctx) }; } catch (error) { return { ok: false, error }; } };
-      const [shared, groups] = await Promise.all([deps.legacy(feature, '', fn).then((value): Part => ({ ok: true, value }), (error): Part => ({ ok: false, error })), s.readEveryGroup(domain, async ctx => [await attempt(ctx)], Number.MAX_SAFE_INTEGER)]);
+      // A stalled group must not hold the whole screen: after the leg deadline it
+      // counts as failed (partial results still show; requireComplete throws).
+      const legDeadline = <V,>(p: Promise<V>) => { let t: ReturnType<typeof setTimeout> | undefined; return Promise.race([p, new Promise<never>((_, rej) => { t = setTimeout(() => rej(new Error('A club group took too long to answer')), READ_ACROSS_LEG_MS); })]).finally(() => clearTimeout(t)); };
+      const attempt = async (ctx: FeatureBackendContext): Promise<Part> => { try { return { ok: true, value: await legDeadline(fn(ctx)) }; } catch (error) { return { ok: false, error }; } };
+      const [shared, groups] = await Promise.all([legDeadline(deps.legacy(feature, '', fn)).then((value): Part => ({ ok: true, value }), (error): Part => ({ ok: false, error })), s.readEveryGroup(domain, async ctx => [await attempt(ctx)], Number.MAX_SAFE_INTEGER)]);
       const parts = [shared, ...groups];
       if (requireComplete) {
         const failure = parts.find(p => !p.ok);
