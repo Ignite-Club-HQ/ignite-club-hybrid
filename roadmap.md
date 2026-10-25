@@ -1,3 +1,6 @@
+## Poll vote feedback — 25 October 2026
+- [ ] Show the ICP selection and counts immediately with pending feedback; roll back refusals and retain authoritative post-save refresh without replaying votes.
+
 ## Poll composer keyboard clipping — 25 October 2026
 - [x] Opt poll composer into keyboard-safe visible-viewport positioning and disable competing Vaul input repositioning; browser fixture at 411×770 with 410px simulated keyboard-free viewport verifies heading/fields and scrolled submit remain above the keyboard. 11 poll regressions and preview build pass. Real Android keyboard and signed-in poll creation remain unverified; no poll logic changed.
 

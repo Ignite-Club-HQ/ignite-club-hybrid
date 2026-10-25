@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), results: vi.fn(), vote: vi.fn(), icp: true, channel: vi.fn(), removeChannel: vi.fn() }));
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { channel: mocks.channel, removeChannel: mocks.removeChannel } }));
@@ -25,6 +25,34 @@ beforeEach(() => {
   });
 });
 describe('poll scope and recovery', () => {
+  it('updates the choice and count while an ICP vote is pending and restores the previous vote on refusal', async () => {
+    window.history.replaceState({}, '', '/groups/peanut');
+    mocks.dispatch.mockImplementation(async (_feature, providers) => providers.icp({ target: 'group-1' }));
+    let rejectVote: ((reason: Error) => void) | undefined;
+    mocks.vote.mockImplementation(() => new Promise((_resolve, reject) => { rejectVote = reject; }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const key = ['poll', 'fast-vote', 'parent', JSON.stringify({ conversationId: 'peanut' })];
+    client.setQueryData(key, {
+      poll: { id: 'fast-vote', question: 'Training day?', allow_multiple: false, created_by: 'coach', created_at: '2026-10-23T00:00:00Z', closed_at: null, closes_at: null },
+      options: [{ id: '0', label: 'Saturday', position: 0 }, { id: '1', label: 'Sunday', position: 1 }],
+      votes: [{ id: 'mine', option_id: '0', user_id: 'parent' }], closed: false,
+    });
+    render(<QueryClientProvider client={client}><PollCard pollId="fast-vote" /></QueryClientProvider>);
+    const saturday = screen.getByRole('button', { name: /Saturday/ });
+    const sunday = screen.getByRole('button', { name: /Sunday/ });
+    expect(saturday).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(sunday);
+    await waitFor(() => expect(sunday).toHaveAttribute('aria-pressed', 'true'));
+    expect(sunday).toHaveAttribute('aria-busy', 'true');
+    expect(saturday).toHaveAttribute('aria-pressed', 'false');
+    expect(client.getQueryData<{ votes: unknown[] }>(key)?.votes).toHaveLength(1);
+    expect(mocks.vote).toHaveBeenCalledTimes(1);
+    await act(async () => rejectVote?.(new Error('Poll closed')));
+    await waitFor(() => expect(saturday).toHaveAttribute('aria-pressed', 'true'));
+    expect(sunday).toHaveAttribute('aria-pressed', 'false');
+    expect(sunday).toHaveAttribute('aria-busy', 'false');
+    client.clear();
+  });
   it('shows Supabase voters using the already-loaded poll votes', async () => {
     mocks.icp = false;
     window.history.replaceState({}, '', '/groups/peanut');
