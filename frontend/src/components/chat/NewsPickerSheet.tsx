@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { Newspaper, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ interface NewsPickerSheetProps {
  */
 export function NewsPickerSheet({ open, onOpenChange, onSelectNews, clubId }: NewsPickerSheetProps) {
   const [search, setSearch] = useState("");
+  const queryClient = useQueryClient();
   const { data: posts, isLoading } = useClubNewsFeed(clubId ?? undefined, 50);
 
   const filtered = useMemo(() => {
@@ -75,6 +77,9 @@ export function NewsPickerSheet({ open, onOpenChange, onSelectNews, clubId }: Ne
                 key={post.id}
                 type="button"
                 onClick={() => {
+                  // Seed the post cache so the composer preview, the sent card
+                  // and the /news/:id page open instantly on this device.
+                  queryClient.setQueryData(["club-news-post", post.id], post);
                   onSelectNews(post.id);
                   onOpenChange(false);
                 }}
