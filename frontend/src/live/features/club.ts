@@ -616,6 +616,11 @@ export async function revokeLiveTeamInviteLink(ctx: FeatureBackendContext, linkI
 
 export async function getLiveTeamInviteLinkByToken(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  if (ctx.identity.getPrincipal().isAnonymous()) {
+    const row = await actor.get_team_invite_link_by_token(token);
+    if ("Err" in row) throw new Error(`Load team invite link failed: ${row.Err}`);
+    return row.Ok;
+  }
   return unwrapCandid(
     actor.get_team_invite_link_by_token(token),
     "Load team invite link",
