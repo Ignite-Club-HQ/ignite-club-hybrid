@@ -84,6 +84,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var playhqMatchMetadata : [Types.PlayHQMatchMeta];
   var playhqStats : [Types.PlayHQStat];
   var playhqClaims : [Types.PlayHQClaim];
+  var playhqCompetitionLinks : [Types.PlayHQCompetitionLink];
   func readableMatch(game : Types.Match, manager : Bool) : Types.MatchRead {
     ScorePrivacy.mask(game, not manager and ScorePrivacy.hidden(scorePrivacySettings, game.competition_id, game.division_id))
   };
@@ -301,7 +302,7 @@ persistent actor class Main(governorInit : Principal) = this {
   func fenceSnapshot(c : Text) : FenceSnapshot {
     let rootC = competitions.filter(func(x) = x.club_id == c);
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
-    { recovery = ?clubRecovery(c); playhq_metadata=?playhqMatchMetadata.filter(func(x)=inC(x.competition_id));playhq_stats=?playhqStats.filter(func(x)=inC(x.competition_id));score_privacy = ?scorePrivacySettings.filter(func(x) = inC(x.competition_id));
+    { recovery = ?clubRecovery(c); playhq_links = ?playhqCompetitionLinks.filter(func x = x.club_id == c); playhq_metadata=?playhqMatchMetadata.filter(func(x)=inC(x.competition_id));playhq_stats=?playhqStats.filter(func(x)=inC(x.competition_id));score_privacy = ?scorePrivacySettings.filter(func(x) = inC(x.competition_id));
       competitions = competitions.filter(func(x) = x.club_id == c);
       roles = roles.filter(func(x) = inC(x.competition_id));
       entries = entries.filter(func(x) = inC(x.competition_id));
@@ -334,6 +335,7 @@ persistent actor class Main(governorInit : Principal) = this {
     scorePrivacySettings := scorePrivacySettings.filter(func(x) = not inC(x.competition_id));
     playhqMatchMetadata:=playhqMatchMetadata.filter(func(x)=not inC(x.competition_id));
     playhqStats:=playhqStats.filter(func(x)=not inC(x.competition_id));
+    playhqCompetitionLinks := playhqCompetitionLinks.filter(func x = x.club_id != c);
     competitions := competitions.filter(func(x) = not (x.club_id == c));
     roles := roles.filter(func(x) = not (inC(x.competition_id)));
     entries := entries.filter(func(x) = not (inC(x.competition_id)));
@@ -369,9 +371,13 @@ persistent actor class Main(governorInit : Principal) = this {
     if (broadcastErasureSubjects.entries().any(func pair = fenceBlobHas(snapshot, pair.0.toText()))) return #Err("Snapshot restores broadcast-erasure subject");
     let privacy = switch (s.score_privacy) { case (?rows) rows; case null [] };
     let phqMeta=s.playhq_metadata??[];let phqStats=s.playhq_stats??[];
+    let phqLinks = s.playhq_links ?? [];
+    if (s.playhq_links == null and playhqCompetitionLinks.any(func x = x.club_id == club)) return #Err("Legacy snapshot omits existing PlayHQ links");
+    if (ClubSnapshot.duplicateKeys(phqLinks.map(func x = x.competition_id)) or ClubSnapshot.duplicateKeys(phqLinks.map(func x = x.tenant # "\u{1f}" # x.grade_id))) return #Err("Duplicate PlayHQ links");
     let c = club;
     let rootC = s.competitions;
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
+    if (phqLinks.any(func x = x.club_id != club or not inC(x.competition_id) or not valid(x.tenant) or not valid(x.grade_id))) return #Err("Foreign or invalid PlayHQ links");
     let existingRecovery = clubRecovery(club);
     if (s.recovery == null and (existingRecovery.email_jobs.size() > 0 or existingRecovery.fixture_receipts.size() > 0 or existingRecovery.broadcast_deliveries.size() > 0)) return #Err("Legacy snapshot omits existing recovery records");
     let recovery : ClubSnapshot.Recovery = s.recovery ?? ({ email_jobs = []; fixture_receipts = []; broadcast_deliveries = []; broadcast_plans = [] });
@@ -413,6 +419,7 @@ persistent actor class Main(governorInit : Principal) = this {
     fenceDrop(club); // idempotent replace
     scorePrivacySettings := scorePrivacySettings.concat(privacy);
     playhqMatchMetadata:=playhqMatchMetadata.concat(phqMeta);playhqStats:=playhqStats.concat(phqStats);
+    playhqCompetitionLinks := playhqCompetitionLinks.concat(phqLinks);
     competitions := competitions.concat(s.competitions);
     roles := roles.concat(s.roles);
     entries := entries.concat(s.entries);
@@ -2812,17 +2819,57 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(requester) };
   };
 
+  // The competition and its immutable source configuration commit together.
+  // The club/tenant/grade tuple is the durable receipt: retries return the same
+  // current competition and cannot create another competition after a lost reply.
+  public shared ({ caller }) func link_playhq_competition(club_id : Text, name : Text, season : Text, tenant : Text, grade_id : Text, sport : ?Text) : async { #Ok : Types.Competition; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+      auth(caller);
+      if (not valid(club_id) or not valid(name) or season.size() > 128 or not valid(tenant) or not valid(grade_id) or Text.contains(tenant, #text "\u{1f}") or Text.contains(grade_id, #text "\u{1f}")) return #Err("Invalid PlayHQ link");
+      switch (sport) { case (?value) if (not valid(value)) return #Err("Invalid sport"); case null {} };
+      await admitAccount(caller);
+      await syncClubAdmin(caller, club_id);
+      if (removalReceiver.denied(caller) or isFenced(club_id) or not canManageClub(caller, club_id)) return #Err("Club admin required or authority changed");
+      switch (playhqCompetitionLinks.find(func x = x.club_id == club_id and x.tenant == tenant and x.grade_id == grade_id)) {
+        case (?existing) { return switch (competitions.find(func c = c.id == existing.competition_id and c.club_id == club_id)) { case (?c) #Ok(c); case null #Err("PlayHQ link requires reconciliation") } };
+        case null {};
+      };
+      let id = "cmp-" # club_id # "-" # Nat.toText(competitions.size() + 1);
+      if (competitions.any(func c = c.id == id)) return #Err("Competition identifier conflict");
+      let competition : Types.Competition = { id; club_id; name; season; status = "active"; description = null; visibility = "public"; points_win = 3; points_draw = 1; points_loss = 0; revision = 1 };
+      competitions := competitions.concat([competition]);
+      playhqCompetitionLinks := playhqCompetitionLinks.concat([{ competition_id = id; club_id; tenant; grade_id; sport; last_synced_at_ms = null }]);
+      #Ok(competition)
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func list_playhq_competitions(club_id : Text) : async { #Ok : [{ competition : Types.Competition; link : Types.PlayHQCompetitionLink }]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+      auth(caller); if (not valid(club_id)) return #Err("Invalid club");
+      await admitAccount(caller); await syncClubAdmin(caller, club_id);
+      if (removalReceiver.denied(caller) or isFenced(club_id)) return #Err("Club access changed");
+      let manager = canManageClub(caller, club_id);
+      let rows = playhqCompetitionLinks.filter(func x = x.club_id == club_id);
+      #Ok(rows.flatMap(func link = switch (competitions.find(func c = c.id == link.competition_id and c.club_id == club_id and (c.visibility == "public" or manager))) { case (?competition) [{ competition; link }]; case null [] }))
+    } finally { removalReceiver.leave(caller) }
+  };
+
   public shared ({caller}) func sync_playhq_grade(competition_id:Text,tenant:Text,grade:Text) : async {#Ok:Nat;#Err:Text} {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
     auth(caller);do { let removalReply = await admitAccount(caller); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };do { let removalReply = await syncForCompetition(caller,competition_id); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if(compFenced(competition_id) or not canManageCompetition(caller,competition_id)) return #Err("Competition manager required");
+    let sourceLink = playhqCompetitionLinks.find(func x = x.competition_id == competition_id);
+    switch (sourceLink) { case (?link) if (link.tenant != tenant or link.grade_id != grade) return #Err("PlayHQ source does not match the saved link"); case null {} };
     let authority=switch(eventsDomainCanister){case null return #Err("Events authority unavailable");case(?id)id};
     let service:actor{fetch_playhq_grade:shared(Text,Text)->async{#Ok:Types.PlayHQFeed;#Err:Text}}=actor(authority.toText());
     let feed=switch(try{do { let removalReply = await(with timeout=120)service.fetch_playhq_grade(tenant,grade); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }}catch(_){return #Err("PlayHQ synchronization unavailable")}){case(#Err(e))return #Err(e);case(#Ok(f))f};
     do { let removalReply = await syncForCompetition(caller,competition_id); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply };
     if(eventsDomainCanister!=?authority or compFenced(competition_id) or not canManageCompetition(caller,competition_id)) return #Err("Competition access changed");
+    if (playhqCompetitionLinks.find(func x = x.competition_id == competition_id) != sourceLink) return #Err("PlayHQ source changed");
     if (feed.games.size() > 200 or feed.stats.size() > 2000) return #Err("Feed exceeds import bounds");
     var incoming:[Types.PlayHQMatchMeta]=[];var imported:[Types.Match]=[];var statRows:[Types.PlayHQStat]=[];
     for(g in feed.games.values()) {
@@ -2844,6 +2891,7 @@ persistent actor class Main(governorInit : Principal) = this {
     matches:=matches.filter(func(m)=not imported.any(func(i)=i.id==m.id)).concat(imported);
     playhqMatchMetadata:=playhqMatchMetadata.filter(func(m)=not incoming.any(func(i)=i.match_id==m.match_id)).concat(incoming);
     playhqStats:=playhqStats.filter(func(s)=not incoming.any(func(i)=i.match_id==s.match_id)).concat(statRows);
+    playhqCompetitionLinks := playhqCompetitionLinks.map(func x = if (x.competition_id == competition_id) { x with last_synced_at_ms = ?nowMs() } else x);
     #Ok(imported.size())
   
     } finally { removalReceiver.leave(caller) };
