@@ -15,8 +15,9 @@ import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import { createLiveChildForParentOnTeam } from "@/live/features/club";
+import { createLiveChildForParentOnTeam, getLiveClubRoster } from "@/live/features/club";
 import { grantLiveClubChildNameRead, registerLiveChildNamePii } from "@/live/features/vault";
+import { fetchProfilesWithCache } from "@/lib/profileCache";
 
 interface ParentCandidate {
   user_id: string;
@@ -75,18 +76,20 @@ export default function AddPlayerToParentSheet({
   const [confirmNew, setConfirmNew] = useState(false);
   const debouncedName = useDebounce(childName, 300);
   const isIcp = resolveAuthBackend() === "icp";
+  const parentId = (id: string) => isIcp && id.startsWith("principal:") ? id.slice("principal:".length) : id;
 
   const teamParents: ParentCandidate[] = useMemo(() => {
     const map = new Map<string, ParentCandidate>();
     for (const m of rawMembers) {
       if (!m.user_id || !PARENT_ROLES.has(m.role)) continue;
-      const existing = map.get(m.user_id);
+      const id = parentId(m.user_id);
+      const existing = map.get(id);
       if (existing) {
         if (m.role === "parent") existing.role = "parent";
         continue;
       }
-      map.set(m.user_id, {
-        user_id: m.user_id,
+      map.set(id, {
+        user_id: id,
         display_name: m.profiles?.display_name ?? null,
         avatar_url: m.profiles?.avatar_url ?? null,
         role: m.role,
@@ -94,11 +97,31 @@ export default function AddPlayerToParentSheet({
       });
     }
     return [...map.values()];
-  }, [rawMembers]);
+  }, [rawMembers, isIcp]);
 
   const { data: clubParents = [], isLoading: isClubParentsLoading } = useQuery({
-    queryKey: ["club-parents-for-team", teamId],
-    queryFn: async () => {
+    queryKey: ["club-parents-for-team", teamId, clubId, isIcp ? "icp" : "supabase"],
+    queryFn: () => withFeatureBackend("membership", {
+      icp: async ctx => {
+        const roster = await getLiveClubRoster(ctx, clubId);
+        const parents = new Map<string, ParentCandidate>();
+        for (const grant of roster.roles) {
+          if (!PARENT_ROLES.has(grant.role)) continue;
+          const id = grant.user.toText();
+          const existing = parents.get(id);
+          parents.set(id, {
+            user_id: id, display_name: existing?.display_name ?? null, avatar_url: null,
+            role: grant.role === "parent" ? "parent" : existing?.role ?? grant.role,
+            onThisTeam: existing?.onThisTeam === true || grant.team === teamId,
+          });
+        }
+        const profiles = await fetchProfilesWithCache([...parents.keys()]);
+        return [...parents.values()].map(parent => ({ ...parent,
+          display_name: profiles.get(parent.user_id)?.display_name ?? parent.user_id,
+          avatar_url: profiles.get(parent.user_id)?.avatar_url ?? null,
+        }));
+      },
+      supabase: async () => {
       const { data, error } = await supabase.rpc("list_club_parents_for_team", {
         p_team_id: teamId,
       });
@@ -110,7 +133,8 @@ export default function AddPlayerToParentSheet({
         role: row.role as string,
         onThisTeam: false,
       })) as ParentCandidate[];
-    },
+      },
+    }, { clubId }),
     enabled: open,
     staleTime: 60_000,
   });
@@ -138,8 +162,8 @@ export default function AddPlayerToParentSheet({
 
 
   const selectedParent =
-    teamParents.find((p) => p.user_id === selectedParentId) ??
-    clubParents.find((p) => p.user_id === selectedParentId) ??
+    teamParents.find((p) => p.user_id === parentId(selectedParentId ?? "")) ??
+    clubParents.find((p) => p.user_id === parentId(selectedParentId ?? "")) ??
     null;
 
   const reset = () => {
@@ -147,6 +171,7 @@ export default function AddPlayerToParentSheet({
     setSearch("");
     setChildName("");
     setYearOfBirth("");
+    setConfirmNew(false);
   };
 
 
@@ -178,7 +203,7 @@ export default function AddPlayerToParentSheet({
         },
         icp: async (ctx) => {
           const { Principal } = await import("@icp-sdk/core/principal");
-          const parentPrincipal = Principal.fromText(selectedParentId);
+          const parentPrincipal = Principal.fromText(parentId(selectedParentId));
           const child = await createLiveChildForParentOnTeam(
             ctx,
             clubId,
@@ -194,7 +219,7 @@ export default function AddPlayerToParentSheet({
           await grantLiveClubChildNameRead(ctx, childId, clubId);
           return childId;
         },
-      }, writeOnce({ clubId: clubId! }));
+      }, writeOnce({ clubId }));
     },
     onSuccess: () => {
       toast({
