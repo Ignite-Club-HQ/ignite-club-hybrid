@@ -17,6 +17,7 @@ import { formatMessagePreview as stripMentionFormatting } from "@/lib/messagePre
 import { isIgniteSupportUser } from "@/lib/systemUser";
 import { useAuth } from "@/hooks/useAuth";
 import { markChatScopeNotificationsRead } from "@/lib/markChatScopeRead";
+import { isFeatureRoutedToIcp } from "@/live/featureRouter";
 
 // Lazy import to avoid cycle if MessagePreview imports something heavy.
 import { MessagePreview } from "@/components/chat/MessagePreview";
@@ -92,9 +93,27 @@ function ConversationRowImpl({
     });
   }, [user, item.type, item.id, queryClient, decrementUnreadCount, refreshUnreadCount]);
 
+  // ICP: start loading the chat the moment a finger touches the row, so the
+  // canister read is already underway when the chat page opens.
+  const handleWarm = useCallback(() => {
+    if (!user?.id || !isFeatureRoutedToIcp("messaging")) return;
+    const userId = user.id;
+    if (item.type === "team") {
+      void import("@/features/messaging/thread/icpTeamThreadPage")
+        .then(({ prefetchIcpTeamThreads }) => prefetchIcpTeamThreads(queryClient, userId, [{ id: item.id }], 1))
+        .catch(() => undefined);
+      return;
+    }
+    const kind = item.type === "club" ? "club" : item.type === "dm" ? "dm" : item.type === "group" || item.type === "league" ? "group" : null;
+    if (!kind) return;
+    void import("@/features/messaging/thread/icpConversationWarm")
+      .then(({ warmIcpConversations }) => warmIcpConversations(queryClient, userId, [{ kind, id: item.id } as never]))
+      .catch(() => undefined);
+  }, [user?.id, item.type, item.id, queryClient]);
+
   if (item.type === 'broadcast') {
     return (
-      <Link to={item.link} onClick={handleOpen}>
+      <Link to={item.link} onClick={handleOpen} onPointerDown={handleWarm}>
 
         <Card className="hover:border-primary/50 transition-colors bg-primary/5">
           <CardContent className="py-[18px] px-3 flex items-center gap-3">
@@ -143,7 +162,7 @@ function ConversationRowImpl({
 
   if (item.type === 'support') {
     return (
-      <Link to={item.link} onClick={handleOpen}>
+      <Link to={item.link} onClick={handleOpen} onPointerDown={handleWarm}>
         <Card className="hover:border-primary/50 transition-colors" style={accentStyle}>
           <CardContent className="py-[18px] px-3 flex items-center gap-3">
             <ConversationAvatar type="support" name="Ignite Support" className="h-9 w-9" />
@@ -173,7 +192,7 @@ function ConversationRowImpl({
         ? 'Club Pro required for club-wide chat'
         : 'Club Pro required for this group';
     return (
-      <Link to={item.link} onClick={handleOpen}>
+      <Link to={item.link} onClick={handleOpen} onPointerDown={handleWarm}>
         <Card className="opacity-70 hover:border-primary/50 transition-colors">
           <CardContent className="py-3 px-2.5 flex items-center gap-2">
             <div className="relative">
@@ -213,7 +232,7 @@ function ConversationRowImpl({
     const isSupport = isIgniteSupportUser(conv?.other_user?.id);
 
     const dmCard = (
-      <Link to={item.link} onClick={handleOpen}>
+      <Link to={item.link} onClick={handleOpen} onPointerDown={handleWarm}>
         <Card className="hover:border-primary/50 transition-colors">
           <CardContent className="py-[18px] px-3 flex items-center gap-3">
             <div className="shrink-0">
@@ -289,6 +308,7 @@ function ConversationRowImpl({
         className="hover:border-primary/50 transition-colors cursor-pointer"
         style={accentStyle}
         onClick={() => { handleOpen(); navigate(item.link); }}
+        onPointerDown={handleWarm}
         tabIndex={0}
         role="link"
       >
@@ -340,6 +360,7 @@ function ConversationRowImpl({
         className="hover:border-primary/50 transition-colors cursor-pointer"
         style={accentStyle}
         onClick={() => { handleOpen(); navigate(item.link); }}
+        onPointerDown={handleWarm}
         tabIndex={0}
         role="link"
       >
@@ -409,7 +430,7 @@ function ConversationRowImpl({
 
   // Club / Team default
   return (
-    <Link to={item.link} onClick={handleOpen}>
+    <Link to={item.link} onClick={handleOpen} onPointerDown={handleWarm}>
       <Card className="hover:border-primary/50 transition-colors" style={accentStyle}>
         <CardContent className="py-[18px] px-3 flex items-center gap-3">
           <div className="shrink-0">
