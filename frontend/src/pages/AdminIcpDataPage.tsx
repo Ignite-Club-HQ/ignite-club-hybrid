@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 import { tryGetActiveIcpTarget } from "@/live/loadBackendRouting";
-import type { FeatureBackendContext } from "@/live/featureRouter";
+import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
 import { listLiveClubs, listLiveTeams, listLiveNews, listLiveSponsors } from "@/live/features/club";
 import { listLiveEvents } from "@/live/features/events";
 import { listLiveRoleGrants } from "@/live/features/membership";
@@ -72,7 +72,11 @@ function ClubTable({ name, clubId, load, filter }: { name: string; clubId: strin
   const q = useQuery({
     queryKey: ["admin-icp-data", name, clubId],
     enabled: !!clubId,
-    queryFn: async () => (await load(await getCtx(), clubId)) as Record<string, unknown>[],
+    // Read from the group that owns this club (Group 2 clubs refuse on Group 1).
+    queryFn: async () => (await withFeatureBackend(name === "events" ? "events" : "membership", {
+      supabase: async () => { throw new Error("Sign in with Internet Identity to browse on-chain data."); },
+      icp: (ctx) => load(ctx, clubId),
+    }, { clubId })) as Record<string, unknown>[],
   });
   if (!clubId) return <p className="text-sm text-muted-foreground py-6 text-center">Pick a club first.</p>;
   if (q.isLoading) return <Loader2 className="h-5 w-5 animate-spin mx-auto my-6" />;
