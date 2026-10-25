@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), results: vi.fn(), vote: vi.fn(), icp: true }));
+const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), results: vi.fn(), vote: vi.fn(), icp: true, channel: vi.fn(), removeChannel: vi.fn() }));
+vi.mock('@/integrations/supabase/client', () => ({ supabase: { channel: mocks.channel, removeChannel: mocks.removeChannel } }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'parent' } }) }));
 vi.mock('@/live/loadBackendRouting', () => ({ isFeatureRoutedToIcp: () => mocks.icp }));
 vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: mocks.dispatch }));
@@ -13,7 +14,16 @@ vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: async () => new M
 import { PollCard } from './PollCard';
 import { prefetchMessagePolls } from '@/lib/pollReadRepository';
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
-beforeEach(() => { mocks.icp = true; });
+beforeEach(() => {
+  mocks.icp = true;
+  mocks.channel.mockImplementation(() => {
+    if (mocks.icp) throw new Error('ICP poll must not subscribe to Supabase');
+    const channel = { on: vi.fn(), subscribe: vi.fn() };
+    channel.on.mockReturnValue(channel);
+    channel.subscribe.mockReturnValue(channel);
+    return channel;
+  });
+});
 describe('poll scope and recovery', () => {
   it('shows Supabase voters using the already-loaded poll votes', async () => {
     mocks.icp = false;
@@ -30,6 +40,7 @@ describe('poll scope and recovery', () => {
     expect((await screen.findByText('Paul')).closest('section')?.textContent).toContain('Saturday');
     expect((await screen.findByText('Alex')).closest('section')?.textContent).toContain('Sunday');
     expect(mocks.results).not.toHaveBeenCalled();
+    expect(mocks.channel).toHaveBeenCalledTimes(1);
     client.clear();
   });
   it('opens the bottom drawer with voters under their selected option', async () => {
@@ -47,6 +58,7 @@ describe('poll scope and recovery', () => {
     const alex = await screen.findByText('Alex');
     expect(alex.closest('section')?.textContent).toContain('Sunday');
     expect(screen.getByText('Paul').closest('section')?.textContent).toContain('Saturday');
+    expect(mocks.channel).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Close votes' }));
     await waitFor(() => expect(screen.getByRole('dialog')).toHaveAttribute('data-state', 'closed'));
     client.clear();
