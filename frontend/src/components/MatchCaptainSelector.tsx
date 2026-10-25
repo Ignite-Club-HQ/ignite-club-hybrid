@@ -85,8 +85,11 @@ export default function MatchCaptainSelector({
         let profile = null;
         let children = null;
         if (isChild) {
-          const { data: kid } = await supabase.from("children").select("id, name").eq("id", row.ref_id).maybeSingle();
-          children = kid;
+          // Child names are PII and already decrypted into the event roster
+          // the page passes in as `rsvps`; reuse that instead of a Supabase
+          // children read, which strict ICP transport blocks.
+          const match = rsvps.find((r) => r.child_id === row.ref_id);
+          children = match?.children ?? null;
         } else {
           const { data: profileData } = await selectCachedProfileById(row.ref_id);
           profile = profileData;
