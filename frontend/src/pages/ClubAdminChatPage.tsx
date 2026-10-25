@@ -915,7 +915,7 @@ function SupabaseClubAdminChatPage() {
             : (() => {
                 const poll = /\[poll:([^\]]+)\]/.exec(text);
                 if (poll) return { kind: "poll", refId: poll[1], url: null };
-                const news = /\[news:([^\]]+)\]/.exec(text);
+                const news = /\[news:(?:[0-9a-fA-F-]{36}:)?([^\]]+)\]/.exec(text);
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
