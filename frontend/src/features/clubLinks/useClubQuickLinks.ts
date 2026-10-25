@@ -84,6 +84,32 @@ export function useClubPolicyDocs(clubId?: string | null) {
   return useQuery<ClubPolicyDoc[]>({
     queryKey: ["club-policy-docs", clubId ?? "all"],
     queryFn: async () => {
+      const { resolveAuthBackend } = await import('@/live/authBackendMode');
+      if (resolveAuthBackend() === 'icp') {
+        const { withFeatureBackend } = await import('@/live/featureRouter');
+        const { listLiveVaultFolders, listLiveVaultFiles } = await import('@/live/features/vault');
+        const { mapLiveVaultFile } = await import('@/features/vault/vaultReadRepository');
+        const clubIds = clubId ? [clubId] : await withFeatureBackend('membership', {
+          supabase: async () => { throw new Error('ICP membership read required'); },
+          icp: async ctx => {
+            const { getLiveMyRoleGrants } = await import('@/live/features/membership');
+            return [...new Set((await getLiveMyRoleGrants(ctx)).flatMap(g => g.club))];
+          },
+        }, { shared: 'person' });
+        const lists = await Promise.all(clubIds.map(id => withFeatureBackend('vault', {
+          supabase: async () => { throw new Error('ICP policy read required'); },
+          icp: async ctx => {
+            const folders = (await listLiveVaultFolders(ctx, id, null)).filter(f =>
+              !f.deleted_at_ms.length && !f.team.length && !f.competition_id.length && !f.mini_league_id.length &&
+              POLICY_FOLDER_PATTERNS.some(p => f.name.toLowerCase().includes(p)));
+            const files = await Promise.all(folders.map(f => listLiveVaultFiles(ctx, f.id)));
+            return files.flat().filter(f => !f.deleted_at_ms.length).map(mapLiveVaultFile);
+          },
+        }, { clubId: id })));
+        const rows = lists.flat().sort((a, b) => a.name.localeCompare(b.name));
+        writeHomeSectionSnapshot('club-policy-docs', clubId, rows);
+        return rows;
+      }
       let folderQuery = supabase
         .from("vault_folders")
         .select("id, name, club_id")
