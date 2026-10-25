@@ -20,7 +20,7 @@ import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
 import { placementOperatorEvidenceIdl, normalizePlacementOperatorEvidence } from '../../scripts/placement-upgrade-evidence.mjs';
-import { legacyClubLifecycleDisabled, validateClubIdentityWiring } from '../../scripts/all-group-wiring-policy.mjs';
+import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement } from '../../scripts/all-group-wiring-policy.mjs';
 import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades } from '../../scripts/all-group-upgrade-policy.mjs';
 
 const [action, scope, artifacts, pem, directory] = process.argv.slice(2);
@@ -114,8 +114,8 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
   if(!group)throw Error('Missing owning group');
   const own=(name:string)=>group.services.find((s:{name:string})=>s.name===name)?.canisterId;
   const requireRow=(name:string,expected:string|undefined)=>{if(!expected||rows.filter(r=>r[0]===name&&r[1]===expected).length!==1)throw Error(`Owning-group wiring differs: ${t.groupId}/${t.name}/${name}; expected ${expected??'missing inventory'}, reported ${JSON.stringify(rows.filter(r=>r[0]===name))}. Full readback saved in ${t.groupId}-${t.name}-wiring.json; no authority changes applied.`);};
-  if(!['timer_jobs','insights_domain'].includes(t.name))requireRow('club_domain',own('club_domain'));
-  if(t.name==='insights_domain')requireRow('permission_source','local_club_roles');
+  const permission=groupPermissionRequirement(t.name,own('club_domain'));
+  if(permission)requireRow(permission[0],permission[1]);
   if(t.name==='club_domain'){
     // The original G1 authority predates group lifecycle wiring. Its empty
     // singleton must be preserved, never configured by an upgrade. Verify

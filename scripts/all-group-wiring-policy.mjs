@@ -1,4 +1,16 @@
 // Upgrade compatibility is not permission to configure an authority.
+export function groupPermissionRequirement(service, clubCanisterId) {
+  if (service === 'timer_jobs') return null;
+  if (['media_metadata', 'insights_domain'].includes(service)) return ['permission_source', 'local_club_roles'];
+  return ['club_domain', clubCanisterId];
+}
+export function validateGroupPermissionWiring(service, rows, clubCanisterId) {
+  const requirement = groupPermissionRequirement(service, clubCanisterId);
+  if (!requirement) return;
+  const [name, expected] = requirement;
+  const matches = rows.filter(row => row[0] === name);
+  if (!expected || matches.length !== 1 || matches[0][1] !== expected) throw Error(`Permission wiring differs: ${service}/${name}`);
+}
 const LEGACY_CLUB = 'mzzzv-taaaa-aaaal-qxlrq-cai';
 const IDENTITY = 'mq2sj-fiaaa-aaaal-qxlqa-cai';
 const LIFECYCLE_SETTINGS = [
