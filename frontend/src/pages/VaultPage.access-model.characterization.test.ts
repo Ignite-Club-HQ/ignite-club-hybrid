@@ -35,7 +35,8 @@ describe("VaultPage access/entitlement/root-navigation data-model contract", () 
 
   it("keeps the eligible-clubs query branching on app-admin and scoping to the exact user id", () => {
     expect(clusterSource).toContain('"vault-clubs"');
-    expect(clusterSource).toMatch(/isAppAdmin\s*!==\s*undefined/);
+    expect(accessModelHookSource).toContain("vaultKeys.clubsForUser(userId, !!isAppAdmin)");
+    expect(accessModelHookSource).toContain("fetchVaultAccessibleClubs(userId, !!isAppAdmin)");
   });
 
   it("keeps the root auto-navigation once-only, Pro-gated, and scoped to the theme filter's club", () => {

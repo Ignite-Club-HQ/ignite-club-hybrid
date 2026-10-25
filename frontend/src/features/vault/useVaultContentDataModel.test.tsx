@@ -132,6 +132,13 @@ describe("useVaultContentDataModel — active-view queries", () => {
     expect(fetchVaultItems).not.toHaveBeenCalled();
   });
 
+  it("does not start a recursive folder inventory just to open a club", async () => {
+    const { result } = renderContentDataModel({ currentView: clubView, isClubAdmin: true });
+    await waitFor(() => expect(result.current.vaultItems).toEqual([]));
+    expect(fetchVaultSubfolders).toHaveBeenCalled();
+    expect(fetchVaultFolderTree).not.toHaveBeenCalled();
+  });
+
   it("fetches subfolders for a non-root view, passing the resolved role/admin flags", async () => {
     fetchVaultSubfolders.mockResolvedValue([folderRow()]);
     const { result } = renderContentDataModel({

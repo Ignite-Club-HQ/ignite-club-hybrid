@@ -157,7 +157,7 @@ export function useVaultContentDataModel({
   }, [currentView]);
 
   // Folder tree cache (per scope) — used for path display and descendant set.
-  const { data: folderTree } = useQuery({
+  const { data: folderTree, isFetching: isFetchingFolderTree } = useQuery({
     queryKey: vaultKeys.folderTree(
       recursiveScope.type,
       recursiveScope.clubId,
@@ -173,7 +173,7 @@ export function useVaultContentDataModel({
         isPrivilegedViewer: (isAppAdmin ?? false) || isClubAdmin,
         clubRoles: userClubRoleSet,
       }),
-    enabled: recursiveScope.type === "club" || recursiveScope.type === "team" || (recursiveScope.type === "competition" && !useIcpVault),
+    enabled: recursiveEnabled && (recursiveScope.type === "club" || recursiveScope.type === "team" || (recursiveScope.type === "competition" && !useIcpVault)),
     staleTime: 60_000,
   });
 
@@ -232,7 +232,7 @@ export function useVaultContentDataModel({
     files,
     normalizedSearch,
     recursiveEnabled,
-    isFetchingRecursive,
+    isFetchingRecursive: recursiveEnabled && (isFetchingFolderTree || isFetchingRecursive),
     displaySubfolders,
     displayPhotos,
     displayFiles,
