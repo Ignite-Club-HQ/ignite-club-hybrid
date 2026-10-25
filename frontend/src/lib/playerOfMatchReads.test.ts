@@ -36,4 +36,21 @@ describe('ICP match rewards and player eligibility', () => {
     await expect(readPlayerOfMatchRewards('club', 'team')).rejects.toThrow('denied');
     expect(m.from).not.toHaveBeenCalled();
   });
+  it('hydrates profile summaries on-chain without Supabase', async () => {
+    m.profiles.mockResolvedValue([
+      { account_id: 'paul', display_name: 'Paul', avatar_ref: ['avatar-ref'] },
+      { account_id: 'sam', display_name: 'Sam', avatar_ref: [] },
+    ]);
+    const result = await readProfileSummaries(['paul', 'sam', 'paul']);
+    expect(result.get('paul')).toEqual({ display_name: 'Paul', avatar_url: 'avatar-ref' });
+    expect(result.get('sam')).toEqual({ display_name: 'Sam', avatar_url: null });
+    expect(m.profiles).toHaveBeenCalledWith(expect.anything(), ['paul', 'sam']);
+    expect(m.from).not.toHaveBeenCalled();
+  });
+  it('returns an empty summary map without any backend call for no ids', async () => {
+    const result = await readProfileSummaries([]);
+    expect(result.size).toBe(0);
+    expect(m.profiles).not.toHaveBeenCalled();
+    expect(m.from).not.toHaveBeenCalled();
+  });
 });

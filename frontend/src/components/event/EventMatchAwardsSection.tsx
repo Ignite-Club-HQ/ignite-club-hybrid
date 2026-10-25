@@ -48,6 +48,7 @@ export function EventMatchAwardsSection({
       <Separator />
       <MatchCaptainSelector
         eventId={eventId}
+        clubId={event.club_id}
         teamId={event.team_id}
         isAdmin={canManageEvent}
         rsvps={rsvps}
