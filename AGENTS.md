@@ -10,7 +10,7 @@
 <!-- LOVABLE:END -->
 
 - Preview: frontend/ via lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY; root stays dependency-free.
-- Health merges every group inventory by ID to prevent unmonitored groups.
+- Health merges group IDs; Vault bounds routed reads, retaining member lists during admin discovery.
 - Install via scripts/ensure-frontend-deps.mjs only: npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
 - Read nested AGENTS.md before edits. Poll uses keyboardSafe to avoid competing offsets.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
@@ -21,7 +21,7 @@
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
 - Android bars: apply StatusBarBackdrop after SystemBars; keep its remaining CSS inset, no forced floor. Both Codemagic workflows run scripts/configure-android-status-bar.py; preserve keyboard handling. Why: native padding already reserves space.
 - ICP images wait for restored auth, share account-scoped unlocks and retry after cooldown/foreground recovery. Why: avoid false startup failures and duplicate unlocks.
-- Documents use authorized/decrypted URLs, preserve extension/MIME, cache WebView blobs natively. Why: raw ICP URLs are ciphertext.
+- Documents use decrypted URLs, preserve MIME/extensions and cache native blobs; ICP URLs are ciphertext.
 - ICP rewards verify roles via governor-configured club_domain; catalog/settings reads refresh caller role mirrors first. Why: club creation needs no manual points-service grant.
 - ICP messaging uses authorized DM/window/presence APIs, scoped previews and encrypted files; labels never block attachments. Why: prevent Supabase leakage and stalled threads.
 - Club setup uses active membership backend; palettes/logo count separately from entitlement; sponsor/theme saves invalidate it. Why: ICP free setup has no Supabase rows.
