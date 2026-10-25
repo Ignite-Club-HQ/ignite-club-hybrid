@@ -2974,6 +2974,9 @@ persistent actor class Main(governorInit : Principal) = this {
     if (principals.any(func(p) = p.equal(governor))) return #Err("Governor account cannot be erased");
     let erasedInvites=pendingInvites.filter(func i = principals.any(func p = p==i.invited_by or i.accepted_by==?p)).map(func i = i.id);
     ignore emailOutbox.scrub(func j = erasedInvites.any(func id = id==j.resource));
+    let retiredFamilies = familyInvites.filter(func f = principals.any(func p = p == f.created_by or f.bound_secondary == ?p) or erasedInvites.any(func id = id == f.primary or f.secondary == ?id));
+    pendingInvites := pendingInvites.map(func i = if (retiredFamilies.any(func f = f.primary == i.id or f.secondary == ?i.id)) ({ i with status = "revoked" }) else i);
+    familyInvites := familyInvites.filter(func f = not retiredFamilies.any(func r = r.primary == f.primary));
     for((key,r) in Map.entries(seasonCloneReceipts).toArray().values()) {
       if(principals.any(func p = Text.startsWith(key,#text(p.toText() # "\u{1f}")))) {
         Map.remove(seasonCloneReceipts,Text.compare,key);Map.add(seasonCloneReceipts,Text.compare,"erased:" # r.season_id,r)
@@ -4213,6 +4216,19 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) }
   };
 
+  public shared ({ caller }) func read_family_invite_receipt(id : Text) : async { #Ok : { child_ids : [Text]; accepted_by : Principal; accepted_at_ms : Nat64; team_id : ?Text; club_id : Text }; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      let invite = pendingInvites.find(func i = i.id == id) ?? return #Err("Invite not found");
+      if (invite.status != "accepted" or invite.accepted_by != ?caller or isExcluded(caller, invite.club_id)) return #Err("Accepted invitation required");
+      let family = familyInvites.find(func f = f.primary == id or f.secondary == ?id);
+      let ids = switch (family) { case (?f) f.children; case null switch (invite.child_id) { case (?cid) [cid]; case null [] } };
+      if (ids.any(func cid = not parentInviteScopeValid(invite.club_id, invite.team_id, cid) or not acl.guardians.any(func g = g.child == cid and g.user == caller))) return #Err("Family access changed");
+      #Ok({ child_ids = ids; accepted_by = caller; accepted_at_ms = invite.accepted_at_ms ?? 0; team_id = invite.team_id; club_id = invite.club_id })
+    } finally { removalReceiver.leave(caller) }
+  };
+
   public query ({ caller }) func list_pending_invites_by_club(club_id : Text) : async { #Ok : [Types.PendingInvite]; #Err : Text } {
     denyLegacyAccountQuery();
     if (not isAdmin(caller, club_id) and not acl.teams.any(func t = t.club == club_id and canManageTeam(caller, club_id, ?t.id))) return #Err("Invite manager required");
@@ -4347,7 +4363,8 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not validPendingInviteRole(invite.kind, invite.team_id, invite.role)) return #Err("Invalid invitation role or scope");
         if (invite.status == "accepted") {
           let retained = if (invite.kind == "guardian") (switch (invite.child_id) { case (?cid) acl.guardians.any(func g = g.child == cid and g.user == caller); case null false }) else acl.roles.any(func g = g.user == caller and g.club == ?invite.club_id and g.team == invite.team_id and ?g.role == invite.role);
-          if (invite.accepted_by == ?caller and retained and not isExcluded(caller, invite.club_id)) return #Ok(invite);
+          let familyRetained = switch (familyInvites.find(func f = f.primary == id or f.secondary == ?id)) { case (?f) f.children.all(func cid = parentInviteScopeValid(invite.club_id, invite.team_id, cid) and acl.guardians.any(func g = g.child == cid and g.user == caller)); case null true };
+          if (invite.accepted_by == ?caller and retained and familyRetained and not isExcluded(caller, invite.club_id)) return #Ok(invite);
           return #Err("Invite already accepted");
         };
         let epoch = membershipEpoch();
