@@ -1,5 +1,5 @@
 ## Slow Vault page opening — 25 October 2026
-- [x] Start member club discovery alongside admin detection and reveal established role/entitlement access without waiting for admin/global subscriptions; defer recursive folder inventories to search with search-loading feedback. Preserve background subscription data for existing storage-warning consumers. Focused 66 tests pass per mode; final recheck pending below.
+- [x] Start member club discovery alongside admin detection and reveal established role/entitlement access without waiting for admin/global subscriptions; defer recursive folder inventories to search with search-loading feedback. Preserve background subscription data for existing storage-warning consumers. Final 66 tests pass per mode, ICP guards pass and preview build OK; no deployment or authenticated timing claim.
 - [ ] Signed-in mainnet opening timing requires Paul's Internet Identity session; no authenticated session is available locally.
 
 ## Vault attachment delays — 25 October 2026
