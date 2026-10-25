@@ -1,3 +1,6 @@
+## Gallery notification warning — 25 October 2026
+- [ ] Preserve the actual notification outcome in the consolidated testing screen instead of a generic popup; verify regressions. Live refusal/wiring cause remains unverified without signed-in II evidence.
+
 ## Gallery uploads across navigation — 25 October 2026
 - [x] Preserve pending uploads across gallery remounts in account/QueryClient-scoped session state; reconcile exact acknowledged asset IDs and invalidate inactive account feeds, including partial successes. Actual deferred-upload/remount regression and focused gallery tests pass in both modes (21 checks each); ICP guards and preview build OK. No deployment or canister changes.
 - [ ] Live gallery upload/navigation acceptance needs Paul's Internet Identity session and an updated app; local mocked upload tests do not establish mainnet readback.
