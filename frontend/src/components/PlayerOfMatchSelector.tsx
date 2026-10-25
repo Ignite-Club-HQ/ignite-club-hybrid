@@ -858,12 +858,12 @@ export default function PlayerOfMatchSelector({
                   disabled={awardMutation.isPending || (pomRewards.length > 1 && !activePomReward)}
                 >
                   <Avatar className="h-10 w-10 mr-3">
-                    <AvatarImage src={rsvp.profiles?.avatar_url} />
+                    <AvatarImage src={rsvp.profiles?.avatar_url || adultAvatar(rsvp.user_id) || undefined} />
                     <AvatarFallback>
-                      {rsvp.profiles?.display_name?.charAt(0)?.toUpperCase() || "?"}
+                      {(rsvp.profiles?.display_name || adultName(rsvp.user_id))?.charAt(0)?.toUpperCase() || "?"}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="text-base">{rsvp.profiles?.display_name || "Unknown"}</span>
+                  <span className="text-base">{rsvp.profiles?.display_name || adultName(rsvp.user_id) || "Unknown"}</span>
                   {awardMutation.isPending && pendingId === rsvp.user_id && (
                     <Loader2 className="h-4 w-4 animate-spin ml-auto" />
                   )}
