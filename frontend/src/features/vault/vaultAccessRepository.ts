@@ -82,7 +82,7 @@ export async function fetchVaultAccessibleClubs(
   // Asked once per lookup, not once per group: membership comes from the
   // already-open routing session and the IAP entitlement lives on identity.
   let memberIdsOnce: Promise<string[] | null> | undefined;
-  if (!isAppAdmin && resolveVaultBackendIsIcp()) {
+  if (!isAppAdmin) {
     // Members: read only their own clubs, each in its owning group, instead of
     // listing every club on every group and waiting for the slowest group.
     return withFeatureBackend("vault", {
