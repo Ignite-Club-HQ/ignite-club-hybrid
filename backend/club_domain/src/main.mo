@@ -4431,7 +4431,7 @@ persistent actor class Main(governorInit : Principal) = this {
         switch (family) {
           case (?f) {
             for (cid in f.children.values()) {
-              if (f.primary == id) acl := { acl with children = acl.children.map(func c = if (c.id == cid) { c with parent = ?caller } else c) };
+              if (f.primary == id) acl := { acl with children = acl.children.map(func c = if (c.id == cid) ({ c with parent = ?caller }) else c) };
               if (not acl.guardians.any(func g = g.child == cid and g.user == caller)) acl := { acl with guardians = acl.guardians.concat([{ child = cid; user = caller }]) };
               if (not accountFamilies.any(func g = g.child_id == cid and g.account_id == accountIdFor(caller))) accountFamilies := accountFamilies.concat([{ child_id = cid; account_id = accountIdFor(caller) }]);
             };
