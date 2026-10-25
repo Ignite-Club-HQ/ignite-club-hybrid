@@ -312,7 +312,7 @@ function SupabaseJoinTeamPage() {
   const { data: teamInvite, isLoading: teamInviteLoading, error: teamInviteError } = useQuery({
     queryKey: membershipKeys.teamInvite(token),
     queryFn: async () => {
-      return withFeatureBackend("membership", {
+      return (await import("@/live/invitePreview")).readInvitePreview(token ?? "", {
         supabase: async () => {
           const { data, error } = await supabase
             .rpc("get_team_invite_by_token", { _token: token! });
@@ -375,12 +375,12 @@ function SupabaseJoinTeamPage() {
                 },
               };
             }
-          } catch {
-            // Not a TeamInviteLink token — fall through to the TeamInvite store.
+          } catch (error) {
+            if (!(error instanceof Error) || !/failed: Invite link not found$/.test(error.message)) throw error;
           }
           // Legacy TeamInvite record: the `token` route param is the canister
           // invite id (there is no separate short-token lookup for these).
-          const raw = await getLiveTeamInvite(ctx, token!).catch(() => null);
+          const raw = await getLiveTeamInvite(ctx, token ?? "");
           if (!raw) return null;
           return {
             id: raw.id ?? token!,
@@ -408,7 +408,7 @@ function SupabaseJoinTeamPage() {
             },
           };
         },
-      }, { inviteToken: token! });
+      });
     },
     enabled: !!token && !isPendingInvite,
     retry: 2,

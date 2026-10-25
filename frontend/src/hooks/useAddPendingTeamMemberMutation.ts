@@ -84,44 +84,6 @@ export function useAddPendingTeamMemberMutation({
    */
   const mutationIcp = async (ctx: FeatureBackendContext) => {
     if (!nameInput.trim()) throw new Error("Please enter a name");
-    const { Principal } = await import("@icp-sdk/core/principal");
-
-    const dedupeEmail = customEmail.trim().toLowerCase();
-    if (false && dedupeEmail) {
-      const { lookupInvitableUserByEmail } = await import("@/lib/inviteEmailDedupe");
-      const match = await lookupInvitableUserByEmail({
-        email: dedupeEmail,
-        clubId,
-        teamId,
-      });
-      if (match?.already_in_team && selectedRole !== "parent") {
-        throw new Error(`${match.display_name || dedupeEmail} is already on this team.`);
-      }
-      if (match) {
-        await bulkAddLiveTeamMembers(ctx, clubId, teamId, selectedRole, [
-          Principal.fromText(match.user_id),
-        ]);
-        return {
-          link: "",
-          shareLink: "",
-          email: "",
-          childrenCount: 0,
-          childrenNames: [] as string[],
-          secondParentLink: null as string | null,
-          secondParentEmail: "",
-          secondParentName: "",
-          secondParentAddedDirectly: false,
-          secondParentStatus: "skipped" as const,
-          secondParentLabel: null as string | null,
-          secondParentFailure: null as string | null,
-          existingUserAdded: {
-            name: match.display_name || dedupeEmail,
-            notificationFailed: false,
-            notificationError: null as string | null,
-          },
-        };
-      }
-    }
 
     // Dedupe against existing pending invites for the same email+club — the
     // ICP equivalent of the Supabase email dedupe. Account matching has no
