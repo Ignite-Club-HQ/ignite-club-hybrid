@@ -26,6 +26,7 @@ mod membership_runtime;
 mod membership_locations;
 mod membership_wire;
 mod membership_acceptance;
+mod admin_accounts;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -1953,6 +1954,14 @@ fn export_state() -> Outcome<State> {
         attestation_secret: core.attestation_secret,
         next_challenge: core.next_challenge,
     })
+}
+
+/// Bounded authenticated admin directory; full export stays governor-only.
+#[ic_cdk::update]
+fn list_admin_accounts(query: String, after: Option<String>, limit: u16) -> Outcome<admin_accounts::AdminAccountPage> {
+    let core = state();
+    admin_accounts::authorize(&core, ic_cdk::api::msg_caller())?;
+    admin_accounts::page(&core, query, after, limit)
 }
 
 #[ic_cdk::query]
