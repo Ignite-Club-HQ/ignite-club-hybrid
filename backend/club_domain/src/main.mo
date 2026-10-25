@@ -611,6 +611,8 @@ persistent actor class Main(governorInit : Principal) = this {
 
   // Club admin, or a team admin/coach of the specific team.
   func canManageTeam(caller : Principal, club : Text, team_id : ?Text) : Bool {
+    if (isExcluded(caller, club) or removalReceiver.denied(caller)) return false;
+    switch (team_id) { case (?id) { if (not inviteTeamValid(club, id)) return false }; case null {} };
     if (isAdmin(caller, club)) return true;
     switch (team_id) {
       case null { false };
@@ -619,7 +621,7 @@ persistent actor class Main(governorInit : Principal) = this {
           grant.user.equal(caller) and
           (grant.role == "team_admin" or grant.role == "coach") and
           (grant.club == ?club or grant.club == null) and
-          (grant.team == ?team or grant.team == null))
+          (grant.team == ?team))
       };
     }
   };
@@ -630,10 +632,10 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { false };
       case (?canister) {
         let competitionDomain : actor {
-          is_competition_invite_manager : shared query (Text, Principal) -> async Bool;
+          read_account_is_competition_invite_manager : shared (Text, Principal) -> async Bool;
         } = actor (Principal.toText(canister));
         try {
-          await competitionDomain.is_competition_invite_manager(team_id, caller)
+          await (with timeout = 10) competitionDomain.read_account_is_competition_invite_manager(team_id, caller)
         } catch (_) {
           false
         }
@@ -641,8 +643,16 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   };
 
+  func inviteTeamValid(club : Text, team : Text) : Bool {
+    acl.teams.any(func t = t.id == team and t.club == club) and not teams.any(func t = t.id == team and (t.club_id != club or t.deleted_at_ms != null or not t.is_active))
+  };
+  func validTeamInviteRole(role : Text) : Bool { role == "player" or role == "parent" or role == "coach" or role == "team_admin" };
+  func localInviteRoleAllowed(caller : Principal, club : Text, team : Text, role : Text) : Bool {
+    validTeamInviteRole(role) and canManageTeam(caller, club, ?team) and ((role != "coach" and role != "team_admin") or isAdmin(caller, club) or acl.roles.any(func g = g.user == caller and g.club == ?club and g.team == ?team and g.role == "team_admin"))
+  };
   func canCreateTeamRosterInvite(caller : Principal, club_id : Text, team_id : Text, role : Text) : async Bool {
-    if (canManageTeam(caller, club_id, ?team_id)) return true;
+    if (not validTeamInviteRole(role) or not inviteTeamValid(club_id, team_id) or isExcluded(caller, club_id) or removalReceiver.denied(caller)) return false;
+    if (localInviteRoleAllowed(caller, club_id, team_id, role)) return true;
     if (role != "player" and role != "parent") return false;
     await canInviteEntrantTeamPlayers(caller, club_id, team_id)
   };
@@ -3515,7 +3525,8 @@ persistent actor class Main(governorInit : Principal) = this {
     await admitAccount(caller);
     if (isTransferFenced(club)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
-    if (role == "") return #Err("Invalid role");
+    if (not validPendingInviteRole(if (team == null) "club" else "team", team, ?role) or (switch (team) { case (?id) not inviteTeamValid(club, id); case null not acl.clubs.any(func c = c == club) })) return #Err("Invalid role or scope");
+    if (roleRequests.any(func r = r.user == caller and r.club == club and r.team == team and r.role == role and r.status == "pending")) return #Err("Request already pending");
     if (isExcluded(caller, club)) return #Err("Forbidden");
     let now = nowMs();
     let request : Types.RoleRequest = {
@@ -3550,6 +3561,9 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?req) {
         if (not isAdmin(caller, req.club)) return #Err("Club admin required");
         if (req.status != "pending") return #Err("Request already processed");
+        if (isExcluded(req.user, req.club) or removalReceiver.denied(req.user) or isTransferFenced(req.club) or not validPendingInviteRole(if (req.team == null) "club" else "team", req.team, ?req.role)) return #Err("Request no longer eligible");
+        switch (req.team) { case (?id) { if (not inviteTeamValid(req.club, id)) return #Err("Team no longer available") }; case null {} };
+        if (acl.roles.any(func g = g.user == req.user and g.role == req.role and g.club == ?req.club and g.team == req.team)) return #Err("Role already granted");
         bumpMembershipDiscovery();
         acl := { acl with roles = acl.roles.concat([{ user = req.user; role = req.role; club = ?req.club; team = req.team }]) };
         accountRoles := accountRoles.concat([{ account_id = req.account_id; club = ?req.club; role = req.role; team = req.team }]);
@@ -3750,10 +3764,13 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     if (not (await canCreateTeamRosterInvite(caller, club_id, team_id, role))) return #Err("Team or competition admin required for player/parent invites");
     if (email == "" or email.size() > 320) return #Err("Invalid email");
-    if (role == "") return #Err("Invalid role");
+    let epoch = membershipEpoch();
+    let id = await genToken("tinv");
+    if (epoch != membershipEpoch() or isTransferFenced(club_id) or removalReceiver.denied(caller) or not inviteTeamValid(club_id, team_id)) return #Err("Invite authorization changed");
+    if (teamInvites.any(func i = i.id == id)) return #Err("Credential collision; retry");
     let now = nowMs();
     let invite : Types.TeamInvite = {
-      id = "tinv-" # team_id # "-" # Nat.toText(teamInvites.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
+      id;
       club_id; team_id; email; role;
       invited_by = caller;
       created_at_ms = now;
@@ -3794,7 +3811,12 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Invite not found") };
       case (?invite) {
         if (invite.revoked) return #Err("Invite revoked");
+        if (invite.accepted_by == ?caller and acl.roles.any(func g = g.user == caller and g.role == invite.role and g.club == ?invite.club_id and g.team == ?invite.team_id)) return #Ok(invite);
         if (invite.accepted_by != null) return #Err("Invite already accepted");
+        let epoch = membershipEpoch();
+        if (not (await canCreateTeamRosterInvite(invite.invited_by, invite.club_id, invite.team_id, invite.role)) or epoch != membershipEpoch() or isTransferFenced(invite.club_id) or removalReceiver.denied(caller)) return #Err("Invite authorization changed");
+        let current = teamInvites.find(func i = i.id == id) ?? return #Err("Invite not found");
+        if (current.revoked or current.accepted_by != null) return #Err("Invite changed");
         if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
         bumpMembershipDiscovery();
@@ -3889,6 +3911,8 @@ persistent actor class Main(governorInit : Principal) = this {
     switch (teams.find(func(t) = t.shell_claim_token == ?token)) {
       case null { #Err("Shell invite not found") };
       case (?team) {
+        if (isExcluded(caller, team.club_id) or isTransferFenced(team.club_id)) return #Err("Forbidden");
+        if (team.shell_claimed_by == ?caller and canManageTeam(caller, team.club_id, ?team.id)) return #Ok(team);
         if (team.shell_claimed_by != null) return #Err("Shell team already claimed");
         if (team.deleted_at_ms != null) return #Err("Team no longer available");
         let updated : Types.ClubTeam = { team with shell_claimed_at_ms = ?nowMs(); shell_claimed_by = ?caller };
@@ -3942,12 +3966,15 @@ persistent actor class Main(governorInit : Principal) = this {
     if (isTransferFenced(club_id)) return #Err("Club is temporarily locked for a transfer");
     auth(caller);
     if (not (await canCreateTeamRosterInvite(caller, club_id, team_id, role))) return #Err("Team or competition admin required for player/parent invites");
-    if (role == "") return #Err("Invalid role");
+    let epoch = membershipEpoch();
+    let token = await genToken("tok");
+    if (epoch != membershipEpoch() or isTransferFenced(club_id) or removalReceiver.denied(caller) or not inviteTeamValid(club_id, team_id)) return #Err("Invite authorization changed");
+    if (teamInviteLinks.any(func l = l.token == token)) return #Err("Credential collision; retry");
     let now = nowMs();
     let link : Types.TeamInviteLink = {
-      id = "tlink-" # team_id # "-" # Nat.toText(teamInviteLinks.size() + 1);
+      id = "tlink-" # token;
       club_id; team_id; role;
-      token = await genToken("tok");
+      token;
       created_by = caller;
       created_at_ms = now;
       rotated_at_ms = null;
@@ -3989,7 +4016,12 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Invite link not found") };
       case (?link) {
         if (not (await canCreateTeamRosterInvite(caller, link.club_id, link.team_id, link.role))) return #Err("Team or competition admin required for player/parent invites");
-        let updated : Types.TeamInviteLink = { link with token = await genToken("tok"); rotated_at_ms = ?nowMs() };
+        let epoch = membershipEpoch();
+        let token = await genToken("tok");
+        let current = teamInviteLinks.find(func l = l.id == id) ?? return #Err("Invite link not found");
+        if (current.revoked or current.token != link.token or epoch != membershipEpoch() or isTransferFenced(link.club_id) or removalReceiver.denied(caller)) return #Err("Invite link changed");
+        if (teamInviteLinks.any(func l = l.token == token)) return #Err("Credential collision; retry");
+        let updated : Types.TeamInviteLink = { current with token; rotated_at_ms = ?nowMs() };
         teamInviteLinks := teamInviteLinks.map(func(l) = if (l.id == id) updated else l);
         #Ok(updated)
       };
@@ -4041,10 +4073,15 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?link) {
         if (link.revoked) return #Err("Invite link revoked");
         if (isExcluded(caller, link.club_id)) return #Err("Forbidden");
+        let epoch = membershipEpoch();
+        if (not (await canCreateTeamRosterInvite(link.created_by, link.club_id, link.team_id, link.role)) or epoch != membershipEpoch() or isTransferFenced(link.club_id) or removalReceiver.denied(caller)) return #Err("Invite authorization changed");
+        let current = teamInviteLinks.find(func l = l.token == token) ?? return #Err("Invite link not found");
+        if (current.revoked) return #Err("Invite link revoked");
         if (not acl.roles.any(func(g) = g.user.equal(caller) and g.role == link.role and g.club == ?link.club_id and g.team == ?link.team_id)) {
           let grant : Types.RoleGrant = { user = caller; role = link.role; club = ?link.club_id; team = ?link.team_id };
           bumpMembershipDiscovery();
           acl := { acl with roles = acl.roles.concat([grant]) };
+          accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); role = link.role; club = ?link.club_id; team = ?link.team_id }]);
         };
         #Ok(link)
       };
@@ -4102,7 +4139,10 @@ persistent actor class Main(governorInit : Principal) = this {
       };
       case null { if (not isAdmin(caller, club_id)) return #Err("Club admin required") };
     };
+    let epoch = membershipEpoch();
     let token = "pinv-" # (await randomHex(16));
+    if (epoch != membershipEpoch() or pendingInvites.any(func i = i.id == token)) return #Err("Invite authorization changed; retry");
+    switch (team_id, role) { case (?team, ?value) { if (not inviteTeamValid(club_id, team) or (kind == "team" and not validTeamInviteRole(value))) return #Err("Invalid team scope") }; case _ {} };
     if (removalReceiver.denied(caller)) return #Err("Invite authorization changed");
     if (kind == "guardian") {
       if (not canManageTeam(caller, club_id, team_id)) return #Err("Invite authorization changed");
@@ -4116,7 +4156,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let now = nowMs();
     let invite : Types.PendingInvite = {
       id = token;
-      kind; club_id; team_id; child_id; email; role;
+      kind; club_id; team_id; child_id; email = "pii:email"; role;
       invited_by = caller;
       created_at_ms = now;
       status = "pending";
@@ -4132,8 +4172,8 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public query ({ caller }) func list_pending_invites_by_club(club_id : Text) : async { #Ok : [Types.PendingInvite]; #Err : Text } {
     denyLegacyAccountQuery();
-    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
-    #Ok(pendingInvites.filter(func(i) = i.club_id == club_id))
+    if (not isAdmin(caller, club_id) and not acl.teams.any(func t = t.club == club_id and canManageTeam(caller, club_id, ?t.id))) return #Err("Invite manager required");
+    #Ok(pendingInvites.filter(func i = i.club_id == club_id and canManageTeam(caller, club_id, i.team_id)))
   };
 
   // Short invite links: an 8-char hex code resolving to a PendingInvite id,
@@ -4146,13 +4186,17 @@ persistent actor class Main(governorInit : Principal) = this {
     auth(caller);
     switch (pendingInvites.find(func(i) = i.id == invite_id)) {
       case null { return #Err("Invite not found") };
-      case (?invite) { if (not isAdmin(caller, invite.club_id)) return #Err("Club admin required") };
+      case (?invite) { if (not canManageTeam(caller, invite.club_id, invite.team_id) or invite.status == "revoked" or invite.status == "accepted") return #Err("Pending invite manager required") };
     };
     switch (inviteShortCodes.find(func(e) = e.1 == invite_id)) {
       case (?existing) { return #Ok(existing.0) };
       case null {};
     };
-    let code = Text.toUpper(await randomHex(4));
+    let code = Text.toUpper(await randomHex(16));
+    let invite = pendingInvites.find(func i = i.id == invite_id) ?? return #Err("Invite not found");
+    if (not canManageTeam(caller, invite.club_id, invite.team_id) or invite.status == "revoked" or invite.status == "accepted") return #Err("Invite changed");
+    switch (inviteShortCodes.find(func e = e.1 == invite_id)) { case (?existing) return #Ok(existing.0); case null {} };
+    if (inviteShortCodes.any(func e = e.0 == code)) return #Err("Credential collision; retry");
     inviteShortCodes := inviteShortCodes.concat([(code, invite_id)]);
     #Ok(code)
   
@@ -4177,7 +4221,8 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     auth(caller);
-    if (not acl.roles.any(func(grant) = grant.user.equal(caller) and grant.club == ?club_id)) return #Err("Club staff required");
+    let invite = pendingInvites.find(func i = i.id == invite_id) ?? return #Err("Invite not found");
+    if (invite.club_id != club_id or not canManageTeam(caller, club_id, invite.team_id) or hash.size() != 64) return #Err("Invite manager and exact scope required");
     pendingInviteEmailHashes := pendingInviteEmailHashes.filter(func(h) = h.invite_id != invite_id).concat([{ invite_id; club_id; hash }]);
     #Ok
   
@@ -4199,7 +4244,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Invite not found") };
       case (?invite) {
         if (invite.status == "revoked") return #Err("Invite revoked");
-        #Ok(invite)
+        #Ok({ invite with email = ""; child_id = null })
       };
     }
   };
@@ -4214,7 +4259,8 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?invite) {
         if (not isAdmin(caller, invite.club_id)) return #Err("Club admin required");
         if (invite.status == "revoked") return #Err("Invite revoked");
-        let updated : Types.PendingInvite = { invite with status = "resent"; resent_at_ms = ?nowMs() };
+        if (invite.status == "accepted") return #Err("Invite already accepted");
+        let updated : Types.PendingInvite = { invite with status = "pending"; resent_at_ms = ?nowMs() };
         pendingInvites := pendingInvites.map(func(i) = if (i.id == id) updated else i);
         #Ok({ invite = updated; payload = invitePayloadFor(updated) })
       };
@@ -4256,8 +4302,15 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?invite) {
         if (isTransferFenced(invite.club_id)) return #Err("Club is temporarily locked for a transfer");
         if (not validPendingInviteRole(invite.kind, invite.team_id, invite.role)) return #Err("Invalid invitation role or scope");
-        if (isExcluded(invite.invited_by, invite.club_id) or removalReceiver.denied(invite.invited_by) or not canManageTeam(invite.invited_by, invite.club_id, invite.team_id)) return #Err("Invite authorization changed");
-        if (invite.status == "accepted") return #Err("Invite already accepted");
+        if (invite.status == "accepted") {
+          let retained = if (invite.kind == "guardian") (switch (invite.child_id) { case (?cid) acl.guardians.any(func g = g.child == cid and g.user == caller); case null false }) else acl.roles.any(func g = g.user == caller and g.club == ?invite.club_id and g.team == invite.team_id and ?g.role == invite.role);
+          if (invite.accepted_by == ?caller and retained and not isExcluded(caller, invite.club_id)) return #Ok(invite);
+          return #Err("Invite already accepted");
+        };
+        let epoch = membershipEpoch();
+        let authorized = switch (invite.team_id, invite.role) { case (?team, ?role) { if (invite.kind == "team") await canCreateTeamRosterInvite(invite.invited_by, invite.club_id, team, role) else canManageTeam(invite.invited_by, invite.club_id, invite.team_id) }; case _ canManageTeam(invite.invited_by, invite.club_id, invite.team_id) };
+        let current = pendingInvites.find(func i = i.id == id) ?? return #Err("Invite not found");
+        if (not authorized or epoch != membershipEpoch() or removalReceiver.denied(caller) or removalReceiver.denied(invite.invited_by) or current.status != invite.status or isTransferFenced(invite.club_id)) return #Err("Invite authorization changed");
         if (invite.status == "revoked") return #Err("Invite revoked");
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
         if (invite.kind == "guardian") {
@@ -4312,6 +4365,7 @@ persistent actor class Main(governorInit : Principal) = this {
                 let grant : Types.RoleGrant = { user = caller; role; club = ?invite.club_id; team = invite.team_id };
                 bumpMembershipDiscovery();
                 acl := { acl with roles = acl.roles.concat([grant]) };
+                accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?invite.club_id; role; team = invite.team_id }]);
               };
             };
             case null {};
@@ -5041,6 +5095,9 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?req) {
         if (not isAdmin(caller, req.club_id)) return #Err("Club admin required");
         if (req.status != "pending") return #Err("Request already processed");
+        if (isExcluded(req.user, req.club) or removalReceiver.denied(req.user) or isTransferFenced(req.club) or not validPendingInviteRole(if (req.team == null) "club" else "team", req.team, ?req.role)) return #Err("Request no longer eligible");
+        switch (req.team) { case (?id) { if (not inviteTeamValid(req.club, id)) return #Err("Team no longer available") }; case null {} };
+        if (acl.roles.any(func g = g.user == req.user and g.role == req.role and g.club == ?req.club and g.team == req.team)) return #Err("Role already granted");
         bumpMembershipDiscovery();
         acl := { acl with roles = acl.roles.concat([{ user = req.user; role = "member"; club = ?req.club_id; team = null }]) };
         accountRoles := accountRoles.concat([{ account_id = accountIdFor(req.user); club = ?req.club_id; role = "member"; team = null }]);
@@ -7475,8 +7532,8 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await admitAccount(caller);
-    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
-    #Ok(pendingInvites.filter(func(i) = i.club_id == club_id))
+    if (not isAdmin(caller, club_id) and not acl.teams.any(func t = t.club == club_id and canManageTeam(caller, club_id, ?t.id))) return #Err("Invite manager required");
+    #Ok(pendingInvites.filter(func i = i.club_id == club_id and canManageTeam(caller, club_id, i.team_id)))
   
     } finally { removalReceiver.leave(caller) };
   };
