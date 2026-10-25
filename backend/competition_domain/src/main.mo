@@ -378,6 +378,8 @@ persistent actor class Main(governorInit : Principal) = this {
     let rootC = s.competitions;
     let inC = func(k : Text) : Bool = rootC.any(func(x) = x.id == k);
     if (phqLinks.any(func x = x.club_id != club or not inC(x.competition_id) or not valid(x.tenant) or not valid(x.grade_id))) return #Err("Foreign or invalid PlayHQ links");
+    if (phqLinks.any(func x = playhqCompetitionLinks.any(func old = old.competition_id == x.competition_id and (old.club_id != x.club_id or old.tenant != x.tenant or old.grade_id != x.grade_id or old.sport != x.sport)))) return #Err("PlayHQ source binding conflict");
+    if (phqMeta.any(func x = phqLinks.any(func link = link.competition_id == x.competition_id and (link.tenant != x.tenant or link.grade_id != x.grade_id)))) return #Err("PlayHQ metadata source mismatch");
     let existingRecovery = clubRecovery(club);
     if (s.recovery == null and (existingRecovery.email_jobs.size() > 0 or existingRecovery.fixture_receipts.size() > 0 or existingRecovery.broadcast_deliveries.size() > 0)) return #Err("Legacy snapshot omits existing recovery records");
     let recovery : ClubSnapshot.Recovery = s.recovery ?? ({ email_jobs = []; fixture_receipts = []; broadcast_deliveries = []; broadcast_plans = [] });
@@ -2832,7 +2834,10 @@ persistent actor class Main(governorInit : Principal) = this {
       await syncClubAdmin(caller, club_id);
       if (removalReceiver.denied(caller) or isFenced(club_id) or not canManageClub(caller, club_id)) return #Err("Club admin required or authority changed");
       switch (playhqCompetitionLinks.find(func x = x.club_id == club_id and x.tenant == tenant and x.grade_id == grade_id)) {
-        case (?existing) { return switch (competitions.find(func c = c.id == existing.competition_id and c.club_id == club_id)) { case (?c) #Ok(c); case null #Err("PlayHQ link requires reconciliation") } };
+        case (?existing) {
+          if (existing.sport != sport) return #Err("PlayHQ sport binding conflict");
+          return switch (competitions.find(func c = c.id == existing.competition_id and c.club_id == club_id)) { case (?c) #Ok(c); case null #Err("PlayHQ link requires reconciliation") }
+        };
         case null {};
       };
       let id = "cmp-" # club_id # "-" # Nat.toText(competitions.size() + 1);
