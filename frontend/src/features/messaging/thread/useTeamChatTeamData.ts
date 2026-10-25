@@ -74,7 +74,7 @@ export function useTeamChatTeamData({
           },
         };
           },
-        }, { teamId });
+        }, getCachedTeam(teamId)?.club_id ? { clubId: getCachedTeam(teamId)!.club_id } : { teamId });
       }
 
       const { data, error } = await supabaseClient

@@ -474,6 +474,31 @@ export default function MessagesPage() {
     teamsWithMessages?.latestMessages,
   );
 
+  // ICP: load the newest page of the most recently active team chats in the
+  // background, so opening one shows its messages immediately.
+  const teamPrefetchIds = useMemo(() => {
+    if (!teams?.length) return "";
+    const latest = (teamsWithMessages?.latestMessages ?? {}) as Record<string, { created_at?: string } | undefined>;
+    return (teams as Array<{ id: string; club_id?: string | null }>)
+      .slice()
+      .sort((a, b) => String(latest[b.id]?.created_at ?? "").localeCompare(String(latest[a.id]?.created_at ?? "")))
+      .slice(0, 5)
+      .map((t) => `${t.id}|${t.club_id ?? ""}`)
+      .join(",");
+  }, [teams, teamsWithMessages?.latestMessages]);
+  useEffect(() => {
+    if (!teamPrefetchIds || !user?.id || !isFeatureRoutedToIcp("messaging")) return;
+    const userId = user.id;
+    const timer = window.setTimeout(() => {
+      void import("@/features/messaging/thread/icpTeamThreadPage").then(({ prefetchIcpTeamThreads }) =>
+        prefetchIcpTeamThreads(queryClient, userId, teamPrefetchIds.split(",").map((pair) => {
+          const [id, clubId] = pair.split("|");
+          return { id, clubId: clubId || null };
+        }))).catch(() => undefined);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [teamPrefetchIds, user?.id, queryClient]);
+
   const {
     isAppAdmin, isAppAdminFetching, adminClubs, adminTeamIds,
     isCommitteeMember, isCommitteeMemberFetching, userAllRoles, userAllRolesFetching,
