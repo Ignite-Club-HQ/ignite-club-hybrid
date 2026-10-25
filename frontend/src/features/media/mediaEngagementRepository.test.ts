@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
-import { createMediaComment, removeMediaReaction, replaceMediaReaction } from "./mediaEngagementRepository";
+import { createMediaComment, deleteMediaComment, listMediaCommentReactions, removeMediaReaction, replaceMediaReaction } from "./mediaEngagementRepository";
 
 const mediaMocks = vi.hoisted(() => ({
   backend: (process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase") as "supabase" | "icp",
@@ -9,6 +9,7 @@ const mediaMocks = vi.hoisted(() => ({
   listReactions: vi.fn(),
   removeReaction: vi.fn(),
   addComment: vi.fn(),
+  deleteComment: vi.fn(),
 }));
 
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
@@ -27,6 +28,7 @@ vi.mock("@/live/features/media", () => ({
   listLiveReactions: (...args: unknown[]) => mediaMocks.listReactions(...args),
   removeLiveReaction: (...args: unknown[]) => mediaMocks.removeReaction(...args),
   addLiveComment: (...args: unknown[]) => mediaMocks.addComment(...args),
+  deleteLiveComment: (...args: unknown[]) => mediaMocks.deleteComment(...args),
 }));
 
 type Client = SupabaseClient<Database>;
@@ -42,7 +44,7 @@ function scriptedClient(script: Record<string, Result[]>) {
       calls.push({ table, method, args });
       return query;
     };
-    for (const method of ["delete", "insert", "eq"]) query[method] = record(method);
+    for (const method of ["delete", "insert", "select", "eq"]) query[method] = record(method);
     query.then = (resolve: (value: Result) => unknown, reject: (reason: unknown) => unknown) =>
       Promise.resolve(result).then(resolve, reject);
     return query;
