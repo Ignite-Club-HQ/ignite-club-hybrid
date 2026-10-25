@@ -80,6 +80,7 @@ import {
 } from "@/live/features/notifications";
 
 export default function PushAnalyticsPage() {
+  if (resolveAuthBackend() === "icp") return <IcpPushAnalyticsPage />;
   return <SupabasePushAnalyticsPage />;
 }
 
