@@ -455,11 +455,11 @@ export function useNewsPublishableCompetitions() {
  * always name the targeted teams, even before/without the club team list
  * (e.g. an article opened by deep link before `club_id` teams have loaded).
  */
-export function useTeamNamesByIds(teamIds?: string[] | null) {
+export function useTeamNamesByIds(teamIds?: string[] | null, clubIdHint?: string | null) {
   const ids = Array.from(new Set((teamIds || []).filter(Boolean)));
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   return useQuery<Array<{ id: string; name: string }>>({
-    queryKey: ["news-team-names", ids.slice().sort().join(",")],
+    queryKey: ["news-team-names", ids.slice().sort().join(","), clubIdHint ?? null],
     queryFn: async () => {
       if (useIcpLab) {
         return getLocalLabTeamList()
@@ -478,7 +478,7 @@ export function useTeamNamesByIds(teamIds?: string[] | null) {
           const teams = await Promise.all(ids.map(id => getLiveTeam(ctx, id)));
           return teams.flatMap(t => t[0] ? [{ id: t[0].id, name: t[0].name }] : []);
         }
-      }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map((row) => [row.id, row])).values()] });
+      }, clubIdHint ? { clubId: clubIdHint } : { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map((row) => [row.id, row])).values()] });
     },
     enabled: ids.length > 0,
     staleTime: 5 * 60 * 1000,
