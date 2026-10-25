@@ -57,6 +57,7 @@ import { compressImage } from "@/lib/imageCompression";
 import { PointsIconGallery } from "@/components/PointsIconGallery";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { useAuth } from "@/hooks/useAuth";
+import { invalidateRewardCatalog } from "@/lib/invalidateRewardCatalog";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import {
   createLiveClubReward,
@@ -352,7 +353,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
       }, writeOnce({ clubId }));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
+      void invalidateRewardCatalog(queryClient, clubId);
     },
   });
 
@@ -393,7 +394,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
       }, writeOnce({ clubId }));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
+      void invalidateRewardCatalog(queryClient, clubId);
       resetForm();
       setDialogOpen(false);
       toast({ title: "Reward added" });
@@ -445,7 +446,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
       }, writeOnce({ clubId }));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
+      void invalidateRewardCatalog(queryClient, clubId);
       resetForm();
       setDialogOpen(false);
       toast({ title: "Reward updated" });
@@ -501,7 +502,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
       toast({ title: "Couldn't update reward", variant: "destructive" });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
+      return invalidateRewardCatalog(queryClient, clubId);
     },
   });
 
@@ -581,7 +582,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
       toast({ title: "Featured reward updated" });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
+      return invalidateRewardCatalog(queryClient, clubId);
     },
   });
 
@@ -598,7 +599,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
       }, writeOnce({ clubId }));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
+      void invalidateRewardCatalog(queryClient, clubId);
       toast({ title: "Reward deleted" });
     },
   });
