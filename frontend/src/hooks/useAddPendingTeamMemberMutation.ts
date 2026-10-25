@@ -1,6 +1,6 @@
 import { writeOnce } from "@/live/clubScope";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { assertSimpleIcpInvite } from "@/features/membership/inviteFlowRules";
+import { useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import type { BulkChild } from "@/components/members/ChildAndSecondGuardianFields";
@@ -74,6 +74,7 @@ export function useAddPendingTeamMemberMutation({
   setCustomEmail,
   setIsSendingNotification,
 }: Args) {
+  const familyOperation = useRef<{ fingerprint: string; requestId: string; children: { id: string; existing: boolean; name: string }[] } | null>(null);
   /**
    * ICP path: composes what club_domain actually supports —
    * `bulk_add_team_members` (role grant) for an existing-user match, or
@@ -86,7 +87,11 @@ export function useAddPendingTeamMemberMutation({
    */
   const mutationIcp = async (ctx: FeatureBackendContext) => {
     if (!nameInput.trim()) throw new Error("Please enter a name");
-    assertSimpleIcpInvite(singleChildren, !!selectedSecondParent || !!secondParentEmail.trim() || !!secondParentName.trim());
+    const childInputs = singleChildren.filter(c => c.name.trim() || c.existingChildId);
+    const hasSecond = !!selectedSecondParent || !!secondParentEmail.trim() || !!secondParentName.trim();
+    if (hasSecond && !childInputs.length) throw new Error("Add the children shared with the other parent");
+    if (childInputs.length && selectedRole !== "parent") throw new Error("Children require a parent invitation");
+    if (childInputs.length > 12) throw new Error("Invite up to 12 children at once");
 
     // Dedupe against existing pending invites for the same email+club — the
     // ICP equivalent of the Supabase email dedupe. Account matching has no
@@ -104,13 +109,31 @@ export function useAddPendingTeamMemberMutation({
       }
     }
 
-    const { invite } = await createLivePendingInvite(ctx, {
+    let secondaryId: string | null = null;
+    let invite;
+    if (childInputs.length) {
+      const fingerprint = JSON.stringify({ clubId, teamId, childInputs, email: inviteEmail, second: selectedSecondParent?.id, secondParentEmail, hasSecond });
+      if (!familyOperation.current || familyOperation.current.fingerprint !== fingerprint) {
+        familyOperation.current = { fingerprint, requestId: crypto.randomUUID(), children: childInputs.map(c => ({
+          id: c.existingChildId || `child-${crypto.randomUUID()}`, existing: !!c.existingChildId, name: c.name.trim(),
+        })) };
+      }
+      const { createLiveFamilyInvite } = await import("@/live/features/club");
+      const result = await createLiveFamilyInvite(ctx, {
+        requestId: familyOperation.current.requestId, clubId, teamId, children: familyOperation.current.children,
+        second: hasSecond, boundSecondary: selectedSecondParent?.id, email: inviteEmail, secondaryEmail: secondParentEmail.trim(),
+      });
+      invite = result.invite;
+      secondaryId = result.secondary[0]?.id ?? null;
+    } else {
+      ({ invite } = await createLivePendingInvite(ctx, {
       kind: "team",
       clubId,
       email: inviteEmail,
       teamId,
       role: selectedRole,
-    });
+      }));
+    }
     const link = `${window.location.origin}/join/p/${invite.id}`;
 
     // Short invite link, same as the Supabase path's short_code: shorter,
@@ -123,40 +146,18 @@ export function useAddPendingTeamMemberMutation({
       console.warn("[ICP invite] short code creation failed:", err);
     }
 
-    // Second-parent invite: club_domain has no dedicated "second parent" op,
-    // but a "guardian" kind pending invite against the (first) child id is
-    // the closest real equivalent — it lands a real, acceptable invite on
-    // the canister instead of silently dropping the second parent.
-    let secondParentLink: string | null = null;
-    let secondParentStatus: "skipped" | "invited" | "failed" = "skipped";
-    let secondParentFailure: string | null = null;
+    const secondParentLink = secondaryId ? `${window.location.origin}/join/p/${secondaryId}` : null;
+    const secondParentStatus = secondaryId ? "invited" as const : "skipped" as const;
+    const secondParentFailure = null;
     const secondParentEmailTrimmed = secondParentEmail.trim().toLowerCase();
-    if (secondParentEmailTrimmed) {
-      try {
-        const { createLivePendingInvite: createLiveGuardianInvite } = await import("@/live/features/club");
-        const childId = singleChildren.find((c) => c.existingChildId)?.existingChildId || null;
-        const { invite: guardianInvite } = await createLiveGuardianInvite(ctx, {
-          kind: "guardian",
-          clubId,
-          email: secondParentEmailTrimmed,
-          childId,
-        });
-        secondParentLink = `${window.location.origin}/join/p/${guardianInvite.id}`;
-        secondParentStatus = "invited";
-      } catch (err) {
-        console.warn("[ICP invite] second parent guardian invite failed:", err);
-        secondParentFailure = secondParentName.trim() || secondParentEmailTrimmed;
-        secondParentStatus = "failed";
-      }
-    }
 
     return {
       backend: "icp" as const,
       link,
       shareLink,
       email: customEmail.trim(),
-      childrenCount: 0,
-      childrenNames: [] as string[],
+      childrenCount: childInputs.length,
+      childrenNames: childInputs.map(c => c.name.trim()),
       secondParentLink,
       secondParentEmail: secondParentStatus === "invited" ? secondParentEmailTrimmed : "",
       secondParentName: secondParentStatus === "invited" ? secondParentName.trim() : "",
