@@ -294,6 +294,23 @@ export const appCacheReady: Promise<void> = import("@/lib/icpQueryCachePersist")
   })
   .catch(() => undefined);
 
+// ICP mode: open the group-routing session in the background once an Internet
+// Identity session exists. Without this, the first chat/event/gallery tap pays
+// the cold registry + membership sweep (~10s) before any content read starts.
+// Best-effort: real reads still surface their own errors.
+appCacheReady
+  .then(() => {
+    try {
+      if (!localStorage.getItem("ignite_icp_internet_identity_session")) return;
+    } catch {
+      return;
+    }
+    void import("@/live/groupDispatch")
+      .then((m) => m.clubDispatch.memberClubIds())
+      .catch(() => undefined);
+  })
+  .catch(() => undefined);
+
 // Configure React Query to refetch on reconnect/resume in native apps
 setupReactQueryNativeAdapter(queryClient);
 // Wire the Realtime channel registry to the QueryClient so revoked channels
