@@ -1,4 +1,5 @@
 import { writeOnce } from "@/live/clubScope";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useMutation } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import type { BulkChild } from "@/components/members/ChildAndSecondGuardianFields";
@@ -450,7 +451,7 @@ export function useAddPendingTeamMemberMutation({
 
       secondParentOutcomeToast();
 
-      if (result.backend === "icp") {
+      if (result.backend === "icp" || resolveAuthBackend() === "icp") {
         setInviteSent(false);
         void toastInviteSuccess({ title: "Invite created", description: "Share the invitation link." });
         return;
