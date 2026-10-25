@@ -22,17 +22,57 @@ export function TeamNextEventCard({ teamId, clubId }: TeamNextEventCardProps) {
   const { data: nextEvent, isLoading } = useQuery({
     queryKey: ["team-next-event", teamId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("events")
-        .select("id, title, event_date, start_time, end_time, location_name, location, type, opponent, is_home_game, mini_league_id, is_cancelled, arrival_minutes_before, teams (name, default_match_arrival_minutes)")
-        .eq("team_id", teamId)
-        .eq("is_cancelled", false)
-        .gte("event_date", today)
-        .order("event_date", { ascending: true })
-        .order("start_time", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      return data;
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("events")
+            .select("id, title, event_date, start_time, end_time, location_name, location, type, opponent, is_home_game, mini_league_id, is_cancelled, arrival_minutes_before, teams (name, default_match_arrival_minutes)")
+            .eq("team_id", teamId)
+            .eq("is_cancelled", false)
+            .gte("event_date", today)
+            .order("event_date", { ascending: true })
+            .order("start_time", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          return data;
+        },
+        icp: async (ctx) => {
+          // Internet Identity: the team's events live on the events canister.
+          const [{ listLiveEvents }, { getCachedTeam }] = await Promise.all([
+            import("@/live/features/events"),
+            import("@/lib/clubTeamCache"),
+          ]);
+          const events = await listLiveEvents(ctx, null, teamId);
+          const teamName = getCachedTeam(teamId)?.name ?? null;
+          const upcoming = (events as any[])
+            .filter((e) => !e.cancelled)
+            .map((e) => {
+              const startsAt = new Date(Number(e.starts_at_ms));
+              const opponent = e.opponent?.[0] ?? null;
+              return {
+                id: e.id as string,
+                title: (e.title as string).trim()
+                  || (teamName && opponent ? `${teamName} vs ${opponent}` : teamName ?? opponent ?? ""),
+                event_date: startsAt.toISOString(),
+                start_time: startsAt.toISOString(),
+                end_time: e.ends_at_ms?.[0] ? new Date(Number(e.ends_at_ms[0])).toISOString() : null,
+                location_name: e.location?.[0] ?? null,
+                location: e.address?.[0] ?? null,
+                type: e.event_type as string,
+                opponent,
+                is_home_game: e.is_home_game?.[0] ?? null,
+                mini_league_id: e.mini_league_id?.[0] ?? null,
+                is_cancelled: !!e.cancelled,
+                arrival_minutes_before: null,
+                teams: teamName ? { name: teamName, default_match_arrival_minutes: null } : null,
+              };
+            })
+            .filter((e) => e.event_date.slice(0, 10) >= today)
+            .sort((a, b) => a.event_date.localeCompare(b.event_date));
+          return upcoming[0] ?? null;
+        },
+      }, { teamId });
     },
     enabled: !!teamId,
     staleTime: 2 * 60 * 1000,
