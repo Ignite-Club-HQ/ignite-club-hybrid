@@ -1305,7 +1305,8 @@ export default function GroupChatPage() {
         ? (baseText ? `${baseText} [poll:${pendingPollId}]` : `[poll:${pendingPollId}]`)
         : baseText;
       if (pendingNewsId) {
-        finalText = finalText ? `${finalText} [news:${pendingNewsId}]` : `[news:${pendingNewsId}]`;
+        const newsToken = buildNewsShareToken(queryClient, pendingNewsId);
+        finalText = finalText ? `${finalText} ${newsToken}` : newsToken;
       }
       sendMessageMutation.mutate({
         text: finalText,

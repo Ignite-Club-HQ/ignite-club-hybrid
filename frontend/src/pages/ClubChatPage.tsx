@@ -1740,7 +1740,8 @@ export default function ClubChatPage() {
       ? (baseText ? `${baseText} [poll:${pendingPollId}]` : `[poll:${pendingPollId}]`)
       : baseText;
     if (pendingNewsId) {
-      finalText = finalText ? `${finalText} [news:${pendingNewsId}]` : `[news:${pendingNewsId}]`;
+      const newsToken = buildNewsShareToken(queryClient, pendingNewsId);
+      finalText = finalText ? `${finalText} ${newsToken}` : newsToken;
     }
     const hadImage = !!imageUrl;
     sendMutation.mutate({ text: finalText, image_url: imageUrl, reply_to_id: replyingTo?.id || null });

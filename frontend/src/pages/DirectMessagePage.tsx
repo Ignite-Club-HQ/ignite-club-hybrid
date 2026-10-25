@@ -1405,8 +1405,9 @@ export default function DirectMessagePage() {
     }
     stopTyping();
     const baseText = message.trim();
-    const finalText = pendingNewsId
-      ? (baseText ? `${baseText} [news:${pendingNewsId}]` : `[news:${pendingNewsId}]`)
+    const newsToken = pendingNewsId ? buildNewsShareToken(queryClient, pendingNewsId) : null;
+    const finalText = newsToken
+      ? (baseText ? `${baseText} ${newsToken}` : newsToken)
       : baseText;
     sendMessageMutation.mutate({
       text: finalText,
