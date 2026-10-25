@@ -47,7 +47,7 @@ import {
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
 import { getLiveClubProfile, getLiveTeam, listLiveClubs, listLiveTeams } from "@/live/features/club";
-import { requestLiveRole } from "@/live/features/membership";
+import { requestLiveRole, listLiveRoleRequests } from "@/live/features/membership";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { isLiveAppAdmin } from "@/live/features/insights";
 import {
@@ -1959,7 +1959,28 @@ export default function HomePage() {
       // ICP has no caller-own request list; never fall back to the old database.
       // Requests sent this session are remembered in the cache (see onSuccess).
       if (resolveAuthBackend() === "icp") {
-        return queryClient.getQueryData<TeamRole[]>(["pending-role-requests-for-team", user?.id, selectedTeam, "icp"]) ?? [];
+        const sessionKnown = queryClient.getQueryData<TeamRole[]>(["pending-role-requests-for-team", user?.id, selectedTeam, "icp"]) ?? [];
+        const team = teams?.find((t) => t.id === selectedTeam);
+        if (!team?.club_id) return sessionKnown;
+        const strip = (v: string) => v.replace(/^(icp:|ii:)/, "").trim().toLowerCase();
+        const me = strip(String(user!.id));
+        try {
+          // Club admins can read the club's request list on-chain; keep only
+          // this account's pending requests for the selected team.
+          const rows = await withFeatureBackend("membership", {
+            supabase: async () => [] as any[],
+            icp: (ctx) => listLiveRoleRequests(ctx, team.club_id),
+          }, { clubId: team.club_id });
+          const mine = (rows as any[]).filter((r) => {
+            const who = strip(String(r?.user?.toText?.() ?? r?.user ?? r?.account_id ?? ""));
+            const teamId = Array.isArray(r?.team) ? r.team[0] : r?.team;
+            return who === me && teamId === selectedTeam && String(r?.status).toLowerCase() === "pending";
+          }).map((r) => r.role as TeamRole);
+          return Array.from(new Set([...sessionKnown, ...mine]));
+        } catch {
+          // Non-admins cannot list club requests; fall back to this session's record.
+          return sessionKnown;
+        }
       }
       const { data, error } = await supabase
         .from("role_requests")
