@@ -20,7 +20,9 @@ export async function loadIcpAdminOverrides(): Promise<void> {
   try {
     if (!isSignedInWithEmail() && hasStoredInternetIdentitySession()) {
       const raw = await readLiveAppConfig(ICP_CANISTER_CONFIG_KEY);
-      applyIcpAdminOverrides(raw ? await parseIcpAdminOverrides(JSON.parse(raw)) : null);
+      // The anonymous helper returns null on outage as well as absence. Keep
+      // an applied target on ambiguous reads; an explicit empty object clears.
+      if (raw !== null) applyIcpAdminOverrides(await parseIcpAdminOverrides(JSON.parse(raw)));
       return;
     }
     const { data, error } = await supabase

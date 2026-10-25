@@ -54,6 +54,9 @@ pub fn page(core: &CoreState, query: String, after: Option<String>, limit: u16) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn empty_core_state(governor: Principal) -> CoreState {
+        CoreState { schema: SCHEMA, governor, roles: vec![], families: vec![], exclusions: vec![], challenges: vec![], external_bindings: vec![], privacy_consents: vec![], terms_acceptances: vec![], verifiers: vec![], attestation_secret: vec![], next_challenge: 0 }
+    }
     #[test]
     fn admin_directory_authorizes_existing_global_roles_not_scoped_or_suspended() {
         let governor = Principal::self_authenticating(b"admin-directory-governor");
