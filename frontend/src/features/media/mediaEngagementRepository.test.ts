@@ -158,6 +158,7 @@ describe.runIf(!supabaseMode)("Media engagement repository — ICP", () => {
     mediaMocks.listReactions.mockReset();
     mediaMocks.removeReaction.mockReset();
     mediaMocks.addComment.mockReset();
+    mediaMocks.deleteComment.mockReset();
   });
 
   it("replaces a reaction through the ICP media adapter", async () => {
