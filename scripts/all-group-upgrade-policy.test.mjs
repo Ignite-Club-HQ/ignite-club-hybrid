@@ -34,8 +34,16 @@ test('future Group 3 and Group 4 cannot be silently skipped',()=>{
   assert.throws(()=>planInventory(shared,f.provisions.slice(0,1),f.registry,'messaging',f.hashes));
   assert.throws(()=>planInventory(shared,f.provisions,{...f.registry,groups:f.registry.groups.slice(0,1),placements:f.registry.placements.slice(0,1)},'messaging',f.hashes));
 });
-test('unreviewed full-service scope is refused while gallery/vault covers all groups',()=>{
-  const f=fixture(3);assert.throws(()=>planInventory(shared,f.provisions,f.registry,'full_backend',f.hashes));
+test('complete release includes all 18 original and every future group service exactly once',()=>{
+  const f=fixture(4),full=planInventory(shared,f.provisions,f.registry,'full_backend',f.hashes);
+  assert.equal(full.targets.length,57);
+  assert.deepEqual(new Set(full.targets.filter(t=>t.groupId==='g1'||t.groupId==='shared').map(t=>t.canisterId)),new Set(Object.values(shared)));
+  for(const name of ['shard_router','identity_access','placement_registry','migration_coordinator','secret_workload_identity'])assert.equal(full.targets.filter(t=>t.name===name).length,1);
+  for(const groupId of ['g1','g2','g3','g4'])assert.deepEqual(full.targets.filter(t=>t.groupId===groupId).map(t=>t.name),[...GROUP_BUILD_SERVICES]);
+  assert.throws(()=>planInventory({...shared,unknown_service:'unknown-service-cai'},f.provisions,f.registry,'full_backend',f.hashes));
+});
+test('gallery/vault remains a narrow all-group release',()=>{
+  const f=fixture(3);
   const plan=planInventory(shared,f.provisions,f.registry,'gallery_vault',f.hashes);
   assert.equal(plan.targets.length,18);assert.equal(plan.targets.filter(t=>t.name==='shard_router').length,0);
   for(const g of ['g1','g2','g3'])assert.equal(plan.targets.filter(t=>t.groupId===g).length,6);
@@ -56,7 +64,15 @@ test('Rust identity and timer omit Motoko persistence while stores preserve memo
   const identity=installArgs({name:'identity_access',canisterId:shared.identity_access},'/tmp/identity');assert.equal(identity.includes('--wasm-memory-persistence'),false);assert.match(identity[identity.indexOf('--args')+1],/^\(record \{ governor/);
   assert.equal(installArgs({name:'timer_jobs',canisterId:'timer'},'/tmp/timer').includes('--wasm-memory-persistence'),false);
   const store=installArgs({name:'media_blob_store',canisterId:'store'},'/tmp/store');assert.equal(store[store.indexOf('--wasm-memory-persistence')+1],'keep');assert.equal(store.includes('--args'),false);
-  assert.throws(()=>installArgs({name:'shard_router'},'/tmp/router'));
+  for(const name of ['shard_router','placement_registry']){const args=installArgs({name,canisterId:shared[name]},'/tmp/shared');assert.equal(args.includes('--wasm-memory-persistence'),false);assert.match(args[args.indexOf('--args')+1],/^\(record \{ governor/);}
+  for(const name of ['migration_coordinator','secret_workload_identity','pii_access_control'])assert.equal(installArgs({name,canisterId:shared[name]},'/tmp/shared').includes('--wasm-memory-persistence'),true);
+  assert.throws(()=>installArgs({name:'unknown'},'/tmp/unknown'));
+});
+test('complete release upgrades unchanged modules once and never repeats completed steps',async()=>{
+  const j=make();j.steps.forEach(s=>s.oldHash=s.newHash);const installed=[];
+  const transport={upgradeUnchanged:true,gate:async()=>{},observe:async s=>({moduleHash:s.newHash,settingsHash:s.settingsHash}),persist:async()=>{},verifyKeys:async()=>{},install:async s=>installed.push(s.canisterId)};
+  await executeUpgrades(j,transport);assert.equal(installed.length,5);
+  await executeUpgrades(j,transport);assert.equal(installed.length,5);
 });
 function make(){const f=fixture(3),plan=planInventory(shared,f.provisions,f.registry,'app_admin',f.hashes);const binding={...plan,governor:'governor'};return{binding,complete:false,published:false,steps:plan.targets.map(t=>({...t,oldHash:hash(1),settingsHash:hash(3),phase:'ready'})),keys:Object.entries(plan.pii).map(([groupId,canisterId])=>({groupId,receipt:{canisterId,governor:'governor',host:'https://icp-api.io',deploymentId:'mainnet',environment:'ic',keyName:'key_1',moduleHash:hash(4),publicKeyHex:'a'.repeat(192)}}))};}
 test('journal pins every group key and target; incomplete or foreign receipts fail',()=>{

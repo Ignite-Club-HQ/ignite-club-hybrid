@@ -87,7 +87,8 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
   if(!group)throw Error('Missing owning group');
   const own=(name:string)=>group.services.find((s:{name:string})=>s.name===name)?.canisterId;
   const requireRow=(name:string,expected:string|undefined)=>{if(!expected||rows.filter(r=>r[0]===name&&r[1]===expected).length!==1)throw Error(`Owning-group wiring differs: ${t.groupId}/${t.name}/${name}`);};
-  if(t.name!=='timer_jobs')requireRow('club_domain',own('club_domain'));
+  if(!['timer_jobs','insights_domain'].includes(t.name))requireRow('club_domain',own('club_domain'));
+  if(t.name==='insights_domain')requireRow('permission_source','local_club_roles');
   if(t.name==='club_domain'){requireRow('identity_access',shared.identity_access);requireRow('notification_queue',own('notification_queue'));requireRow('events_domain',own('events_domain'));}
   if(t.name==='notification_queue'){requireRow('identity_access',shared.identity_access);requireRow('messaging_domain',own('messaging_domain'));}
   if(t.name==='events_domain'){requireRow('notification_queue',own('notification_queue'));requireRow('competition_domain',own('competition_domain'));}
@@ -143,7 +144,7 @@ const verifyKeys=async()=>{for(const k of journal.keys)keyGate(k.groupId,'after'
 await persist();await verifyKeys();
 // Installation completion is not release completion; backfill/snapshot must also pass.
 const moduleJournal={...journal,complete:false};
-await executeUpgrades(moduleJournal,{gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
+await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend',gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
   const r=spawnSync('icp',installArgs(t,resolve(artifacts,t.name)),{cwd:directory,stdio:'inherit'});
   if(r.status!==0)throw Error('Install reply failed/unknown; pending journal retained, no replay');
 }});

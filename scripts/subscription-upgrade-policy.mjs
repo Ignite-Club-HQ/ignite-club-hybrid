@@ -50,7 +50,7 @@ export async function executeUpgrades(journal, transport) {
     const before = await transport.observe(step);
     if (before.settingsHash !== step.settingsHash) throw new Error('Settings changed before upgrade');
     Object.assign(step, reconcileUpgradeStep(step, before.moduleHash));
-    if (step.phase !== 'complete' && step.oldHash !== step.newHash) {
+    if (step.phase !== 'complete' && (step.oldHash !== step.newHash || transport.upgradeUnchanged === true)) {
       step.phase = 'pending'; await transport.persist(journal);
       await transport.install(step);
     }
