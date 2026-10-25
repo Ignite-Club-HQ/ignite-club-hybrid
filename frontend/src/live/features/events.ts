@@ -100,12 +100,32 @@ export async function listLiveEvents(
   teamId?: string | null,
 ) {
   const rows = await listLiveEventsRaw(ctx, clubId, teamId);
+  rememberLiveEvents(rows);
   // Each listed event's club is known here: record it so opening the event
   // goes straight to its group instead of asking every group first.
   // Fire-and-forget; location only — the destination still checks access.
   if (rows.length) void import("@/live/groupDispatch").then(({ clubDispatch }) =>
     clubDispatch.remember("event", rows.map((e) => [e.id, e.club_id] as const))).catch(() => undefined);
   return rows;
+}
+
+// Events already listed this session (Schedule, Next Up, Home), so opening one
+// can show it at once and refresh only its own club. Session memory only;
+// it is a display hint, never an access decision.
+type ListedLiveEvent = Awaited<ReturnType<typeof listLiveEventsRaw>>[number];
+const listedEvents = new Map<string, ListedLiveEvent>();
+function rememberLiveEvents(rows: readonly ListedLiveEvent[]) {
+  for (const row of rows) {
+    listedEvents.delete(row.id);
+    listedEvents.set(row.id, row);
+  }
+  while (listedEvents.size > 2000) listedEvents.delete(listedEvents.keys().next().value as string);
+}
+export function getListedLiveEvent(eventId: string): ListedLiveEvent | null {
+  return listedEvents.get(eventId) ?? null;
+}
+export function clearListedLiveEvents() {
+  listedEvents.clear();
 }
 
 async function listLiveEventsRaw(

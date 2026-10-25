@@ -37,12 +37,28 @@ export async function fetchEventDetail(client: any, eventId: string, signal?: Ab
     supabase: () => fetchEventDetailFromSupabase(client, eventId, signal),
     icp: async (ctx) => {
       assertReadNotAborted(signal);
-      const events = await listLiveEvents(ctx);
+      // Read only the event's own club when it is already known from a list.
+      const known = getListedLiveEvent(eventId);
+      const events = await listLiveEvents(ctx, known?.club_id ?? null);
       assertReadNotAborted(signal);
       const raw = events.find((event) => event.id === eventId);
       return raw ? toEventDetailShape(raw, signal) : null;
     },
-  }, { eventId }), 'Event loading', 20_000, signal);
+  }, getListedLiveEvent(eventId)?.club_id ? { clubId: getListedLiveEvent(eventId)!.club_id } : { eventId }), 'Event loading', 20_000, signal);
+}
+
+/**
+ * Instant first paint for an event already listed this session: the same
+ * shape as the detail read, using only labels already cached on the device.
+ * The detail read still runs and replaces it.
+ */
+export function listedEventDetailPreview(eventId: string) {
+  const e = getListedLiveEvent(eventId);
+  if (!e) return undefined;
+  const opt = (v: unknown) => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+  const teamId = opt(e.team_id) as string | null;
+  const team = teamId ? getCachedTeam(teamId) : null;
+  return shapeEvent(e, team?.club_id === e.club_id ? team : null, getCachedClub(e.club_id)?.name ?? null);
 }
 
 /**
@@ -70,6 +86,12 @@ async function toEventDetailShape(e: any, signal?: AbortSignal) {
     }, { clubId: e.club_id }), 'Event club label', 1500, signal).catch(() => null),
   ]);
   assertReadNotAborted(signal);
+  return shapeEvent(e, team, clubName);
+}
+
+function shapeEvent(e: any, team: { name: string } | null, clubName: string | null) {
+  const opt = (v: unknown) => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+  const teamId = opt(e.team_id) as string | null;
   const type = ["game", "training", "social", "mini_league"].includes(e.event_type) ? e.event_type : "training";
   return {
     id: e.id,
