@@ -39,6 +39,13 @@ describe("strict ICP fallback boundary", () => {
     await expect(assertStrictIcpRequest(host + "/functions/v1/send-welcome-email-icp", post({ token: "job-token" }))).resolves.toBeUndefined();
     await expect(assertStrictIcpRequest(host + "/functions/v1/send-welcome-email-icp", post({ token: "job-token", to: "private" }))).rejects.toThrow("blocked");
   });
+  it("allows the existing support feedback transport but never arbitrary recipient fields or queries", async () => {
+    const body = { type: "bug", title: "Cannot open page", description: "Please check", userEmail: null, userName: "Ignite member" };
+    await expect(assertStrictIcpRequest(host + "/functions/v1/send-feedback-email", post(body))).resolves.toBeUndefined();
+    await expect(assertStrictIcpRequest(host + "/functions/v1/send-feedback-email", post({ ...body, to: "other@example.com" }))).rejects.toThrow("blocked");
+    await expect(assertStrictIcpRequest(host + "/functions/v1/send-feedback-email?to=other", post(body))).rejects.toThrow("blocked");
+    await expect(assertStrictIcpRequest(host + "/functions/v1/send-feedback-email", post({ ...body, description: "x".repeat(16001) }))).rejects.toThrow("blocked");
+  });
   it("preserves external file byte reads, uploads, deletion and signing, not inventory", async () => {
     await expect(assertStrictIcpRequest(host + "/storage/v1/object/public/photos/file.jpg")).resolves.toBeUndefined();
     await expect(assertStrictIcpRequest(host + "/storage/v1/object/sign/photos/file.jpg", post({ expiresIn: 60 }))).resolves.toBeUndefined();
