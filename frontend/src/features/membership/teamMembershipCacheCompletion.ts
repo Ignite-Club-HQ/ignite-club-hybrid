@@ -39,6 +39,9 @@ export function refreshChatRemovedTeamMember(
 /** Preserve all existing cross-surface refreshes after the current user leaves. */
 export function refreshAfterLeavingTeam(queryClient: any, teamId: string): void {
   refreshTeamRoleChange(queryClient, teamId);
+  // Drop the departed team's messages, including the on-device persisted
+  // copy (the persist subscriber deletes the snapshot on query removal).
+  queryClient.removeQueries({ queryKey: ["team-messages", teamId] });
   for (const queryKey of [
     membershipKeys.userRoles(),
     ["user-memberships-for-events"] as const,

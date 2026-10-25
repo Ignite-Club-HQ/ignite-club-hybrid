@@ -1368,8 +1368,13 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     queryClient.clear();
     void import("@/live/features/events").then((m) => m.clearListedLiveEvents()).catch(() => undefined);
     void import("@/live/features/messaging").then((m) => m.clearWarmLiveLatestPages()).catch(() => undefined);
-    const { clearPersistedIcpQueryCache } = await import('@/lib/icpQueryCachePersist');
-    await clearPersistedIcpQueryCache();
+    // Phone apps keep the on-device read cache (scoped per account, access
+    // re-verified by fresh reads on next sign-in); browsers must wipe it
+    // because sign-out is the only reliable delete on a shared computer.
+    if (!isNativePlatform()) {
+      const { clearPersistedIcpQueryCache } = await import('@/lib/icpQueryCachePersist');
+      await clearPersistedIcpQueryCache();
+    }
     setSession(null);
   }, [queryClient]);
   useEffect(() => {
@@ -1600,8 +1605,12 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     void import("@/live/features/messaging").then((m) => m.clearWarmLiveLatestPages()).catch(() => undefined);
       const { clearIcpIdentityProfileCache } = await import("@/live/identityProfileCache");
       clearIcpIdentityProfileCache();
-      const { clearPersistedIcpQueryCache } = await import("@/lib/icpQueryCachePersist");
-      await clearPersistedIcpQueryCache();
+      // Phone apps keep the on-device read cache across sign-out (scoped per
+      // account, re-verified on next sign-in); browsers must wipe it.
+      if (!isNativePlatform()) {
+        const { clearPersistedIcpQueryCache } = await import("@/lib/icpQueryCachePersist");
+        await clearPersistedIcpQueryCache();
+      }
       const [{ clearGroupDispatchCache }, { clearPiiVetKeyCache }] = await Promise.all([
         import('@/live/groupDispatch'), import('@/live/piiVetKeys'),
       ]);
