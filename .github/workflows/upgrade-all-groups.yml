@@ -1,0 +1,104 @@
+name: Upgrade backend (all mainnet groups)
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Check first; upgrade uses the exact plan hash from its report
+        type: choice
+        required: true
+        default: check
+        options: [check, upgrade]
+      scope:
+        description: Reviewed services across EVERY registered group; shared identity once
+        type: choice
+        required: true
+        default: app_admin
+        options: [app_admin, team_invites, messaging, competition, history, subscriptions, events_pitch, gallery_vault]
+      checked_plan:
+        description: Paste planHash from check.json; use the SAME branch and source revision
+        required: false
+        default: ''
+      confirmation:
+        description: Type UPGRADE ALL MAINNET GROUPS for upgrade; empty for check
+        required: false
+        default: ''
+permissions:
+  contents: write
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    environment: group-2-admin-controls
+    timeout-minutes: 360
+    env:
+      ACTION: ${{ inputs.action }}
+      SCOPE: ${{ inputs.scope }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      CHECKED_PLAN: ${{ inputs.checked_plan }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Validate reviewed scope and exact confirmation
+        run: node --input-type=module -e 'import {validateRequest} from "./scripts/all-group-upgrade-policy.mjs";validateRequest(process.env.ACTION,process.env.SCOPE,process.env.CONFIRMATION,process.env.CHECKED_PLAN)'
+      - name: Install pinned tools and existing dependencies
+        run: |
+          npm install -g @icp-sdk/icp-cli@1.7.0 @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
+          node scripts/ensure-frontend-deps.mjs
+          icp canister install --help | grep -q -- --wasm-memory-persistence
+      - name: Test inventory and interrupted-release safeguards
+        run: node --test scripts/all-group-upgrade-policy.test.mjs scripts/all-group-publication.test.mjs scripts/group2-journal.test.mjs scripts/group2-upgrade-rules.test.mjs scripts/subscription-upgrade-policy.test.mjs
+      - name: Restore existing governor only
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM"
+          umask 077
+          export ICP_HOME="$RUNNER_TEMP/all-group-icp-home"
+          echo "ICP_HOME=$ICP_HOME" >> "$GITHUB_ENV"
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$RUNNER_TEMP/all-group.pem"
+          icp identity import --from-pem "$RUNNER_TEMP/all-group.pem" --storage plaintext ignite-governor
+          icp identity default ignite-governor
+          test "$(icp identity principal)" = vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae
+      - name: Resolve existing delivery identity without changing grants
+        env:
+          ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
+          PUSH_WORKER_PRINCIPAL: ${{ vars.PUSH_WORKER_PRINCIPAL }}
+        run: bash scripts/resolve-group-push-worker.sh
+      - name: Build selected recipe artifacts once
+        run: |
+          node --input-type=module <<'JS'
+          import { spawnSync } from 'node:child_process';
+          import { mkdirSync, copyFileSync } from 'node:fs';
+          import { SCOPES } from './scripts/all-group-upgrade-policy.mjs';
+          const names=SCOPES[process.env.SCOPE];
+          if(!names)throw Error('Unsupported scope');
+          const result=spawnSync('icp',['build',...names],{cwd:'deploy/mainnet',stdio:'inherit'});
+          if(result.status!==0)process.exit(1);
+          const dest=process.env.RUNNER_TEMP+'/all-group-wasm';mkdirSync(dest,{recursive:true});
+          for(const name of names)copyFileSync('deploy/mainnet/.icp/cache/artifacts/'+name,dest+'/'+name);
+          JS
+      - name: Check or upgrade the complete existing mainnet inventory
+        working-directory: frontend
+        run: npx --yes tsx@4 scripts/upgrade-all-groups.ts "$ACTION" "$SCOPE" "$RUNNER_TEMP/all-group-wasm" "$RUNNER_TEMP/all-group.pem" "$RUNNER_TEMP/all-group-report"
+      - name: Publish verified fingerprints with source-branch compare and readback
+        if: inputs.action == 'upgrade'
+        working-directory: frontend
+        run: npx --yes tsx@4 scripts/publish-all-group-upgrade.ts
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/all-group.pem"; rm -rf "$RUNNER_TEMP/all-group-icp-home"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: all-group-upgrade-report
+          path: ${{ runner.temp }}/all-group-report
+          if-no-files-found: warn
