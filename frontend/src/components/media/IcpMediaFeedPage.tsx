@@ -292,11 +292,7 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
   }
   const sourceRead = readMediaSources(clubIds, async clubId => {
       // Each profile gates only its own assets, never another club's source.
-      // Keep the authorized owning-group profile/tombstone check before media
-      // is shown. For direct members, ask for the first page at the same time
-      // (the canister authorizes it); its rows are only used if the check passes.
-      const earlyPage = verifiedIds.includes(clubId) || grantClubIds.has(clubId) ? fetchPage(clubId, null) : undefined;
-      earlyPage?.catch(() => undefined);
+      // Keep the authorized owning-group profile/tombstone check before media.
       const profiles = await readClubsInOwnGroups(ctx, [clubId]);
       const club = profiles.values[0];
       if (!club) return;
@@ -316,7 +312,7 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
         readContentInScope(ctx, "competitions", { clubId: club.id }, scoped => listLiveCompetitions(scoped, club.id)),
       ]);
       metadata.catch(() => undefined);
-      await readPage(club.id, null, earlyPage);
+      await readPage(club.id, null);
       const [teams, miniLeagues, competitions] = await metadata;
       for (const team of teams as unknown as {
         id: string;
