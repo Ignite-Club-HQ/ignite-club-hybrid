@@ -55,13 +55,14 @@ export function BoardPickerSheet({
     queryFn: async () => {
       if (!user?.id) return [];
       if (isIcp) return readIcpActiveBoards(teamId);
-      const { data, error } = await supabase
+      let query = supabase
         .from("active_games")
         .select(
           "id, team_id, updated_at, pitch_state, timer_state, teams!inner(id, name, club_id, clubs!club_id(sport))"
         )
-        .eq("is_active", true)
-        .order("updated_at", { ascending: false })
+        .eq("is_active", true);
+      if (teamId) query = query.eq("team_id", teamId);
+      const { data, error } = await query.order("updated_at", { ascending: false })
         .limit(20);
       if (error) {
         console.error("[BoardPickerSheet] load failed", error);

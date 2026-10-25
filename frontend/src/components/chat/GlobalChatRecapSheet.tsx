@@ -102,6 +102,7 @@ async function parseInvokeError(error: any): Promise<string> {
 }
 
 async function getLLMFnName(): Promise<string> {
+  if (resolveAuthBackend() === "icp") throw new Error("Internet Identity recaps must use the on-chain service");
   try {
     const { data: prov } = await supabase
       .from("app_settings")
@@ -136,7 +137,7 @@ function parseIcpRecapMarkdown(markdown: string): ChatSummaryResult {
 }
 
 async function fetchOne(ref: RecapScopeRef, lookbackHours: number): Promise<{ result: ChatSummaryResult | null; error: string | null }> {
-  if (isFeatureRoutedToIcp("messaging")) {
+  if (resolveAuthBackend() === "icp" || isFeatureRoutedToIcp("messaging")) {
     try {
       const sinceMs = BigInt(Date.now() - lookbackHours * 3600_000);
       const markdown = await withFeatureBackend("messaging", {

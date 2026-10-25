@@ -135,6 +135,7 @@ export default function AdminChatPhotoRemindersPage() {
 
   const handleRunNow = async () => {
     if (inFlight.current || settingsError || settingsLoading || unconfirmed) return;
+    if (settingRow && "mixed" in settingRow && settingRow.mixed) { toast.error("Save a consistent policy before running reminders."); return; }
     const err = validate();
     if (err) { toast.error(err); return; }
     setRunning(true);
@@ -249,7 +250,7 @@ export default function AdminChatPhotoRemindersPage() {
                   <Save className="h-4 w-4 mr-2" />
                   {saving ? "Saving…" : "Save settings"}
                 </Button>
-                <Button variant="outline" onClick={handleRunNow} disabled={saving || running || !!settingsError || unconfirmed}>
+                <Button variant="outline" onClick={handleRunNow} disabled={saving || running || !!settingsError || unconfirmed || !!(settingRow && "mixed" in settingRow && settingRow.mixed)}>
                   <Play className="h-4 w-4 mr-2" />
                   {running ? "Running…" : "Run now"}
                 </Button>
