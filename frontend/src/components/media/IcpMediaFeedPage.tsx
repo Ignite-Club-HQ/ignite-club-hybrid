@@ -277,9 +277,12 @@ export async function loadLiveMediaFeed(ctx: FeatureBackendContext, onUpdate?: (
   let sources: MediaSourceStatus[] = clubIds.map(clubId => ({ clubId, state: "loading" }));
   const cursors = new Map<string, MediaPageCursor>();
   const publish = () => { if (!signal?.aborted) onUpdate?.(buildFeed()); };
-  async function readPage(clubId: string, cursor: MediaPageCursor | null) {
+  const fetchPage = (clubId: string, cursor: MediaPageCursor | null) => {
     if (signal?.aborted) throw new Error('Media request cancelled');
-    const page = await readContentInScope(ctx, 'media', { clubId }, scoped => listLiveAssetsPage(scoped, clubId, cursor));
+    return readContentInScope(ctx, 'media', { clubId }, scoped => listLiveAssetsPage(scoped, clubId, cursor));
+  };
+  async function readPage(clubId: string, cursor: MediaPageCursor | null, prefetched?: ReturnType<typeof fetchPage>) {
+    const page = await (prefetched ?? fetchPage(clubId, cursor));
     if (signal?.aborted) throw new Error('Media request cancelled');
     for (const asset of page.assets as unknown as (typeof rawAssets)[number][]) {
       if (!asset.deleted && (asset.kind === 'photo' || asset.kind === 'video')) rawAssets.push(asset);
