@@ -4205,7 +4205,7 @@ persistent actor class Main(governorInit : Principal) = this {
         let row = acl.children.find(func child = child.id == c.id);
         if (c.existing) {
           let child = row ?? return #Err("Child missing");
-          if (not parentInviteScopeValid(club_id, ?team_id, c.id) or child.parent != null or acl.guardians.any(func g = g.child == c.id)) return #Err("Child already has a family or wrong scope");
+          if (not parentInviteScopeValid(club_id, ?team_id, c.id)) return #Err("Child in wrong scope");
         } else if (row != null) return #Err("Child ID already exists");
       };
       let invite : Types.PendingInvite = { id = token; kind = "team"; club_id; team_id = ?team_id; child_id = null; email = "pii:email"; role = ?"parent"; invited_by = caller; created_at_ms = nowMs(); status = "pending"; resent_at_ms = null; accepted_at_ms = null; accepted_by = null };
@@ -4384,8 +4384,7 @@ persistent actor class Main(governorInit : Principal) = this {
             for (cid in f.children.values()) {
               let child = acl.children.find(func c = c.id == cid) ?? return #Err("Child missing");
               if (not parentInviteScopeValid(invite.club_id, invite.team_id, cid)) return #Err("Child scope changed");
-              if (f.primary == id and (child.parent != null or acl.guardians.any(func g = g.child == cid))) return #Err("Child already has a family");
-              if (f.secondary == ?id and child.parent != primary.accepted_by) return #Err("Child family changed");
+              if (f.secondary == ?id and not acl.guardians.any(func g = g.child == cid and ?g.user == primary.accepted_by)) return #Err("Child family changed");
             };
           }; case null {};
         };
@@ -4450,7 +4449,7 @@ persistent actor class Main(governorInit : Principal) = this {
         switch (family) {
           case (?f) {
             for (cid in f.children.values()) {
-              if (f.primary == id) acl := { acl with children = acl.children.map(func c = if (c.id == cid) ({ c with parent = ?caller }) else c) };
+              if (f.primary == id) acl := { acl with children = acl.children.map(func c = if (c.id == cid and c.parent == null) ({ c with parent = ?caller }) else c) };
               if (not acl.guardians.any(func g = g.child == cid and g.user == caller)) acl := { acl with guardians = acl.guardians.concat([{ child = cid; user = caller }]) };
               if (not accountFamilies.any(func g = g.child_id == cid and g.account_id == accountIdFor(caller))) accountFamilies := accountFamilies.concat([{ child_id = cid; account_id = accountIdFor(caller) }]);
             };
