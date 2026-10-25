@@ -124,7 +124,7 @@ export function ChatDetailsSheet({
   const resolvedTeamIdForClub = chatType === "team" ? chatId : teamId;
   const { data: derivedClubId } = useQuery({
     queryKey: ["chat-details-sheet-club-id", resolvedTeamIdForClub, clubId, chatType, chatId, user?.id, useIcpLab],
-    enabled: open && initialized && !!user && !clubId && (chatType === "team" || (chatType === "group" && !!resolvedTeamIdForClub)),
+    enabled: (open || warm) && initialized && !!user && !clubId && (chatType === "team" || (chatType === "group" && !!resolvedTeamIdForClub)),
     staleTime: 60_000,
     queryFn: async () => {
       if (!resolvedTeamIdForClub) return null;
