@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubProfile, getLiveClubKind } from "@/live/features/club";
+import { readIcpAssociationPlayhq, linkIcpAssociationPlayhq, syncIcpAssociationPlayhq } from "@/lib/associationPlayhqRepository";
 
 const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -222,7 +223,7 @@ function SupabaseAssociationDetailPage() {
         </TabsContent>
 
         <TabsContent value="playhq" className="space-y-3">
-          {isIcpPageMode() ? <p role="status" className="text-sm text-muted-foreground">PlayHQ association linking is paused until its on-chain connection settings are available.</p> : <PlayHQPanel associationId={id!} isAdmin={isAdmin} />}
+          <PlayHQPanel associationId={id!} isAdmin={isAdmin} />
         </TabsContent>
 
         <TabsContent value="events" className="space-y-3">
@@ -533,7 +534,7 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
   );
 }
 
-function PlayHQPanel({ associationId, isAdmin }: { associationId: string; isAdmin: boolean }) {
+export function PlayHQPanel({ associationId, isAdmin }: { associationId: string; isAdmin: boolean }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -545,10 +546,13 @@ function PlayHQPanel({ associationId, isAdmin }: { associationId: string; isAdmi
   const [sport, setSport] = useState("");
   const [season, setSeason] = useState("");
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState<string | null>(null);
+  const isIcp = isIcpPageMode();
 
-  const { data: comps = [], isLoading } = useQuery({
-    queryKey: ["association-playhq-comps", associationId],
+  const { data: comps = [], isLoading, error: loadError } = useQuery({
+    queryKey: ["association-playhq-comps", associationId, user?.id, isIcp],
     queryFn: async () => {
+      if (isIcp) return readIcpAssociationPlayhq(associationId);
       const { data } = await supabase
         .from("competitions")
         .select("id, name, sport, season, status, external_tenant, last_synced_at")
@@ -587,6 +591,18 @@ function PlayHQPanel({ associationId, isAdmin }: { associationId: string; isAdmi
       return;
     }
     setSaving(true);
+    if (isIcp) {
+      try {
+        const linked = await linkIcpAssociationPlayhq({ clubId: associationId, name, season, tenant, gradeId: extId, sport: sport.trim() || null });
+        toast({ title: "PlayHQ competition linked" });
+        setName(""); setUrl(""); setTenant(""); setSport(""); setSeason(""); setOpen(false);
+        await qc.invalidateQueries({ queryKey: ["association-playhq-comps", associationId] });
+        navigate(`/competitions/${linked.id}`);
+      } catch (error) {
+        toast({ title: "Could not confirm PlayHQ link", description: error instanceof Error ? error.message : "Refresh the linked competitions before trying again.", variant: "destructive" });
+      } finally { setSaving(false); }
+      return;
+    }
     const { data, error } = await supabase
       .from("competitions")
       .insert({
@@ -666,14 +682,17 @@ function PlayHQPanel({ associationId, isAdmin }: { associationId: string; isAdmi
         </CardContent>
       </Card>
 
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+      {loadError ? (
+        <p role="alert" className="text-sm text-destructive">Could not load linked competitions. Please try again.</p>
+      ) : isLoading ? (
+        null
       ) : comps.length === 0 ? (
         <p className="text-sm text-muted-foreground">No PlayHQ competitions linked yet.</p>
       ) : (
         <div className="space-y-2">
           {comps.map((c: any) => (
-            <Link key={c.id} to={`/competitions/${c.id}`} className="block">
+            <div key={c.id}>
+            <Link to={`/competitions/${c.id}`} className="block">
               <Card className="hover:border-primary transition-colors">
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
@@ -686,6 +705,13 @@ function PlayHQPanel({ associationId, isAdmin }: { associationId: string; isAdmi
                 </CardContent>
               </Card>
             </Link>
+            {isIcp && isAdmin && <Button size="sm" variant="ghost" disabled={syncing !== null} onClick={async () => {
+              setSyncing(c.id);
+              try { await syncIcpAssociationPlayhq(associationId, c.id, c.external_tenant, c.external_id); await qc.invalidateQueries({ queryKey: ["association-playhq-comps", associationId] }); toast({ title: "PlayHQ synchronized" }); }
+              catch (error) { toast({ title: "Could not synchronize PlayHQ", description: error instanceof Error ? error.message : "Try again later", variant: "destructive" }); }
+              finally { setSyncing(null); }
+            }}>{syncing === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sync PlayHQ"}</Button>}
+            </div>
           ))}
         </div>
       )}
