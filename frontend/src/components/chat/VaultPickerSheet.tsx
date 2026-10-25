@@ -90,9 +90,11 @@ export function VaultPickerSheet({ open, warm = false, onOpenChange, clubId, tea
   const seedSelection = (item: VaultPickerItem) => {
     if (!user || !clubId) return;
     if (item.kind === "folder") {
+      const folder = foldersQuery.data?.find((row) => row.id === item.id)
+        ?? pathStack.find((row) => row.id === item.id);
+      if (!folder || !("club_id" in folder)) return;
       queryClient.setQueryData(["vault-folder-card", item.id, vaultIcp, user.id], {
-        id: item.id, name: item.name, club_id: clubId,
-        team_id: foldersQuery.data?.find((folder) => folder.id === item.id)?.team_id ?? teamId ?? null,
+        id: item.id, name: folder.name, club_id: folder.club_id, team_id: folder.team_id,
       });
     } else if (item.kind === "root") {
       queryClient.setQueryData(["vault-root-card", item.scope, item.id, vaultIcp, user.id], { name: item.name });
@@ -104,7 +106,7 @@ export function VaultPickerSheet({ open, warm = false, onOpenChange, clubId, tea
     pickItems(items);
   } : undefined;
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-  const [pathStack, setPathStack] = useState<{ id: string | null; name: string }[]>([
+  const [pathStack, setPathStack] = useState<{ id: string | null; name: string; club_id?: string; team_id?: string | null }[]>([
     { id: null, name: "Vault" },
   ]);
   const [search, setSearch] = useState("");
@@ -212,7 +214,7 @@ export function VaultPickerSheet({ open, warm = false, onOpenChange, clubId, tea
 
   const enterFolder = (folder: VaultFolder) => {
     setCurrentFolderId(folder.id);
-    setPathStack((prev) => [...prev, { id: folder.id, name: folder.name }]);
+    setPathStack((prev) => [...prev, { id: folder.id, name: folder.name, club_id: folder.club_id, team_id: folder.team_id }]);
     setSearch("");
     setSelectionMode(false);
     clearSelection();
