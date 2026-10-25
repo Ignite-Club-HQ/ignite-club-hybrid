@@ -1,12 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { planInventory, SCOPES, PRIMARY_SUBNET, validateRequest, installArgs, digest, assertCheckedPlan, validateJournal, requireSettledPredecessor, executeUpgrades } from './all-group-upgrade-policy.mjs';
+import { planInventory, SCOPES, PRIMARY_SUBNET, validateRequest, installArgs, digest, assertCheckedPlan, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, executeUpgrades } from './all-group-upgrade-policy.mjs';
 import { GROUP_BUILD_SERVICES } from './stage-group-wasm.mjs';
 const shared=JSON.parse(readFileSync(new URL('../deploy/mainnet/.icp/data/mappings/ic.ids.json',import.meta.url)));
 const original=JSON.parse(readFileSync(new URL('../deploy/groups/g2/provision.json',import.meta.url)));
 const hash=n=>String(n).repeat(64);
 const p=id=>({toText:()=>id});
+function completedLookup(){
+  const targets=[{name:'identity_access',canisterId:shared.identity_access,newHash:hash(2)},{name:'club_domain',canisterId:shared.club_domain,newHash:hash(2)},{name:'club_domain',canisterId:original.canisters.club_domain,newHash:hash(2)}];
+  return {binding:{release:'b'.repeat(40),sources:[{groupId:'g1'},{groupId:'g2'}],targets},complete:true,ready:false,published:false,steps:targets.map(t=>({...t,phase:'complete'})),fill:{g1:true,g2:true},ownership:{complete:true},replicaAcceptance:{snapshotVerified:true,restorationGuardVerified:true},activation:{release:'b'.repeat(40),phase:'complete'}};
+}
+test('settled three-target lookup with ready:false and legacy published:false does not block successor or change readiness',()=>{
+  const j=completedLookup(),before=JSON.stringify(j);
+  requireSettledNarrowRelease('membership-lookup-release-receipts',j);
+  assert.equal(JSON.stringify(j),before);assert.equal(j.ready,false);assert.equal(j.published,false);
+});
+test('lookup pending installation still blocks the complete upgrade',()=>{
+  const j=completedLookup();j.steps[1].phase='pending';assert.throws(()=>requireSettledNarrowRelease('membership-lookup-release-receipts',j));
+});
+test('lookup missing source fill or unsettled activation cannot bypass the gate',()=>{
+  for(const mutate of [j=>{j.fill.g2=false;},j=>{delete j.fill.g2;},j=>{j.activation.phase='pending';},j=>{j.activation.release='c'.repeat(40);},j=>{j.replicaAcceptance.snapshotVerified=false;},j=>{j.ownership.complete=false;},j=>{j.steps.pop();}]){const j=completedLookup();mutate(j);assert.throws(()=>requireSettledNarrowRelease('membership-lookup-release-receipts',j));}
+});
+test('other narrow releases retain readiness and backfill refusal',()=>{
+  const j=completedLookup();assert.throws(()=>requireSettledNarrowRelease('media-paging-upgrade-receipts',j));j.ready=true;j.backfill={g1:false};assert.throws(()=>requireSettledNarrowRelease('media-paging-upgrade-receipts',j));
+});
 function fixture(count=2){
   const provisions=Array.from({length:count-1},(_,i)=>{
     const provision=structuredClone(original), id=`g${i+2}`;
