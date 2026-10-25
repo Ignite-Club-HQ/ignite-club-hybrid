@@ -39,7 +39,7 @@ export async function fetchEventDetail(client: any, eventId: string, signal?: Ab
       assertReadNotAborted(signal);
       // Read only the event's own club when it is already known from a list.
       const known = getListedLiveEvent(eventId);
-      const events = await listLiveEvents(ctx, known?.club_id ?? null);
+      const events = known?.club_id ? await listLiveEvents(ctx, known.club_id) : await listLiveEvents(ctx);
       assertReadNotAborted(signal);
       const raw = events.find((event) => event.id === eventId);
       return raw ? toEventDetailShape(raw, signal) : null;
