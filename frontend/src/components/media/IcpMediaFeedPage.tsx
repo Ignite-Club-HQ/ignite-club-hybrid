@@ -524,6 +524,10 @@ export function IcpMediaFeedPage() {
       return retained;
     },
   });
+  // A load interrupted by an instant on-screen update is not a failure: restart it quietly.
+  useEffect(() => {
+    if (feedQuery.isError && isCancelledError(feedQuery.error) && !feedQuery.isFetching) void feedQuery.refetch();
+  }, [feedQuery.isError, feedQuery.error, feedQuery.isFetching]);
 
   const loadOlder = async () => {
     const continuation = continuationRef.current;
