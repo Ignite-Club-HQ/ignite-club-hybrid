@@ -1,5 +1,5 @@
 ## Poll composer keyboard clipping — 25 October 2026
-- [ ] Keep poll drawer within the visible keyboard-free area and disable competing automatic input repositioning; verify heading, options and action remain scrollable.
+- [x] Opt poll composer into keyboard-safe visible-viewport positioning and disable competing Vaul input repositioning; browser fixture at 411×770 with 410px simulated keyboard-free viewport verifies heading/fields and scrolled submit remain above the keyboard. 11 poll regressions and preview build pass. Real Android keyboard and signed-in poll creation remain unverified; no poll logic changed.
 
 ## Gallery inbox preview — 25 October 2026
 - [x] Format ICP gallery-card identifiers as readable photo previews instead of raw codes; shared parser regressions pass in both modes (20 checks each), ICP guards and preview build pass. No chat data, notification permissions or deployment changed; signed-in inbox acceptance remains unverified.
