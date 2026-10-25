@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import {
   GIPHY_API_KEY_CONFIG_KEY,
   decodeStoredConfigText,
@@ -38,23 +39,19 @@ type GiphyApiItem = {
  * club_domain.get_app_config("giphy_api_key") (anonymous public query, works
  * pre-auth and for Internet Identity sessions), then the Supabase
  * app_settings mirror for Supabase-mode admins. */
-let cachedGiphyKey: string | null = null;
-let giphyKeyResolved = false;
-
-async function resolveGiphyApiKey(): Promise<string | null> {
+export async function resolveGiphyApiKey(): Promise<string | null> {
   const envKey = String(import.meta.env.IGNITE_LIVE_GIPHY_API_KEY ?? "").trim();
   if (envKey) return envKey;
-  if (giphyKeyResolved) return cachedGiphyKey;
-  giphyKeyResolved = true;
   try {
     const fromCanister = decodeStoredConfigText(await readLiveAppConfig(GIPHY_API_KEY_CONFIG_KEY));
     if (fromCanister) {
-      cachedGiphyKey = fromCanister;
-      return cachedGiphyKey;
+      return fromCanister;
     }
   } catch {
     // best-effort — fall through to the Supabase mirror
   }
+  if (resolveAuthBackend() === "icp") return null;
+  let cachedGiphyKey: string | null = null;
   try {
     const { data, error } = await supabase
       .from("app_settings")

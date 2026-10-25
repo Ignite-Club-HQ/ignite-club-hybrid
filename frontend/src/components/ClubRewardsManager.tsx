@@ -56,6 +56,8 @@ function RewardImage({ src, alt, className }: { src: string; alt: string; classN
 import { compressImage } from "@/lib/imageCompression";
 import { PointsIconGallery } from "@/components/PointsIconGallery";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { useAuth } from "@/hooks/useAuth";
+import { readMembershipInScope } from "@/live/membershipRouting";
 import {
   createLiveClubReward,
   deleteLiveClubReward,
@@ -99,6 +101,7 @@ interface ClubRewardsManagerProps {
 }
 
 export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -253,8 +256,14 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
 
   // Fetch sponsors for this club
   const { data: sponsors = [] } = useQuery({
-    queryKey: ["sponsors", clubId],
-    queryFn: async () => {
+    queryKey: ["sponsors", clubId, user?.id, resolveAuthBackend()],
+    queryFn: () => withFeatureBackend("membership", {
+      icp: async ctx => {
+        const { listLiveSponsors } = await import("@/live/features/club");
+        return (await listLiveSponsors(ctx, clubId)).filter(s => s.is_active && s.club_id === clubId)
+          .sort((a, b) => a.sort_order - b.sort_order).map(s => ({ id: s.id, name: s.name, logo_url: s.logo_url[0] ?? null }));
+      },
+      supabase: async () => {
       const { data, error } = await supabase
         .from("sponsors")
         .select("id, name, logo_url")
@@ -263,11 +272,12 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
         .order("display_order", { ascending: true });
       if (error) throw error;
       return data as Sponsor[];
-    },
+      },
+    }, { clubId }),
   });
 
   const { data: rewards = [], isLoading } = useQuery({
-    queryKey: ["club-rewards", clubId],
+    queryKey: ["club-rewards", clubId, user?.id, resolveAuthBackend()],
     queryFn: async () => {
       return withFeatureBackend("points", {
         supabase: async () => {
@@ -282,6 +292,11 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
         },
         icp: async (ctx) => {
           const liveRewards = await listLiveClubRewards(ctx, clubId, null, false);
+          const sponsorRows = await readMembershipInScope(ctx, { clubId }, async scoped => {
+            const { listLiveSponsors } = await import("@/live/features/club");
+            return listLiveSponsors(scoped, clubId);
+          });
+          const sponsorById = new Map(sponsorRows.filter(s => s.club_id === clubId).map(s => [s.id, { id: s.id, name: s.name, logo_url: s.logo_url[0] ?? null }]));
           return liveRewards
             .sort((a, b) => Number(b.is_default) - Number(a.is_default) || Number(a.created_at_ms) - Number(b.created_at_ms))
             .map((r) => ({
@@ -299,7 +314,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
               sponsor_id: r.sponsor_id[0] ?? null,
               created_at: new Date(Number(r.created_at_ms)).toISOString(),
               // No canister-side sponsor join — see live/features/points.ts doc comment.
-              sponsors: null,
+              sponsors: r.sponsor_id[0] ? sponsorById.get(r.sponsor_id[0]) ?? null : null,
             })) as ClubReward[];
         },
       }, { clubId });

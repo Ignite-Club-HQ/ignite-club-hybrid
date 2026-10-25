@@ -11,11 +11,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { detectGameBoardKind, type GameBoardKind } from "@/lib/sportDetection";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { readIcpActiveBoards } from "@/lib/activeBoardPicker";
 
 interface BoardPickerSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectBoard: (gameId: string) => void;
+  teamId?: string;
 }
 
 interface ActiveGameRow {
@@ -42,20 +45,24 @@ export function BoardPickerSheet({
   open,
   onOpenChange,
   onSelectBoard,
+  teamId,
 }: BoardPickerSheetProps) {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
 
   const { data: games, isLoading } = useQuery({
-    queryKey: ["board-picker-active-games", user?.id],
+    queryKey: ["board-picker-active-games", user?.id, isIcp, teamId],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data, error } = await supabase
+      if (isIcp) return readIcpActiveBoards(teamId);
+      let query = supabase
         .from("active_games")
         .select(
           "id, team_id, updated_at, pitch_state, timer_state, teams!inner(id, name, club_id, clubs!club_id(sport))"
         )
-        .eq("is_active", true)
-        .order("updated_at", { ascending: false })
+        .eq("is_active", true);
+      if (teamId) query = query.eq("team_id", teamId);
+      const { data, error } = await query.order("updated_at", { ascending: false })
         .limit(20);
       if (error) {
         console.error("[BoardPickerSheet] load failed", error);

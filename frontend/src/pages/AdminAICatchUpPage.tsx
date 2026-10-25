@@ -26,6 +26,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { readMembershipInScope } from "@/live/membershipRouting";
 import { writeOnce } from "@/live/clubScope";
+import { readAdminProCatchUpClubs, enableAdminProCatchUpClubs } from "@/live/adminAiCatchUpOperations";
 
 interface ProClubRow {
   id: string;
@@ -54,6 +55,7 @@ function IcpAdminAICatchUpPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [scope, setScope] = useState<"all" | "selected">("selected");
+  const [unconfirmed, setUnconfirmed] = useState(false);
 
   const { data: enabled, isLoading, error: settingError } = useQuery({
     queryKey: ["icp-ai-catch-up-rollout-setting"],
@@ -89,54 +91,7 @@ function IcpAdminAICatchUpPage() {
   // messaging_domain's club DM settings.
   const { data: clubs = [], isLoading: isLoadingClubs, error: clubsError, refetch } = useQuery({
     queryKey: ["icp-admin-pro-clubs-ai-catchup"],
-    queryFn: () =>
-      withFeatureBackend("membership", {
-        supabase: async (): Promise<ProClubRow[]> => { throw new Error("Internet Identity connection required"); },
-        icp: async (ctx): Promise<ProClubRow[]> => {
-          const { listLiveClubs } = await import("@/live/features/club");
-          const { listLiveClubSubscriptions } = await import("@/live/features/proAccess");
-          const { listLiveAllClubDmSettings } = await import("@/live/features/messaging");
-
-          const allClubs: { id: string; name: string }[] = [];
-          let cursor: string | null = null;
-          for (let i = 0; i < 40; i++) {
-            const batch = await listLiveClubs(ctx, cursor, 50);
-            for (const c of batch) {
-              if (c.is_active && c.deleted_at_ms.length === 0) allClubs.push({ id: c.id, name: c.name });
-            }
-            if (batch.length < 50) break;
-            if (i === 39) throw new Error('Club directory exceeds page budget');
-            const last = batch.at(-1);
-            if (!last) break;
-            cursor = last.id;
-          }
-
-          const [subsById, dmSettings] = await Promise.all([
-            listLiveClubSubscriptions(ctx, allClubs.map((c) => c.id)),
-            listLiveAllClubDmSettings(ctx),
-          ]);
-          const aiEnabledById = new Map(dmSettings.map((s) => [s.clubId, s.aiCatchUpEnabled]));
-
-          const now = Date.now();
-          const rows: ProClubRow[] = [];
-          for (const c of allClubs) {
-            const sub = subsById.get(c.id);
-            if (!sub) continue;
-            const isPro = sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override;
-            if (!isPro) continue;
-            const expiresMs = sub.expires_at_ms.length ? Number(sub.expires_at_ms[0]) : null;
-            const active = expiresMs === null || expiresMs > now;
-            if (!active) continue;
-            rows.push({
-              id: c.id,
-              name: c.name,
-              ai_catch_up_enabled: aiEnabledById.get(c.id) ?? false,
-              is_pro_football: !!(sub.is_pro_football || sub.admin_pro_football_override),
-            });
-          }
-          return rows.sort((a, b) => a.name.localeCompare(b.name));
-        },
-      }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map((row) => [row.id, row])).values()].sort((a, b) => a.name.localeCompare(b.name)) }),
+    queryFn: readAdminProCatchUpClubs,
   });
 
   const filtered = useMemo(() => {
@@ -146,25 +101,8 @@ function IcpAdminAICatchUpPage() {
   }, [clubs, search]);
 
   const enableMutation = useMutation({
-    mutationFn: async (payload: { all: boolean; ids: string[] }) =>
-      withFeatureBackend("membership", {
-        supabase: async () => { throw new Error("Internet Identity connection required"); },
-        icp: async (ctx) => {
-          const { setLiveClubAiCatchUp, enableLiveAiCatchUpForAllMembers } = await import("@/live/features/messaging");
-          const ids = payload.all ? clubs.map((c) => c.id) : payload.ids;
-          let clubsUpdated = 0;
-          let membersUpdated = 0;
-          for (const id of ids) {
-            const count = await readMembershipInScope(ctx, writeOnce({ clubId: id }), async scoped => {
-              await setLiveClubAiCatchUp(scoped, id, true);
-              return enableLiveAiCatchUpForAllMembers(scoped, id);
-            });
-            clubsUpdated += 1;
-            membersUpdated += count;
-          }
-          return { clubs_updated: clubsUpdated, members_updated: membersUpdated, total_pro_clubs: ids.length };
-        },
-      }, { shared: 'app' }),
+    retry: false,
+    mutationFn: (payload: { all: boolean; ids: string[] }) => enableAdminProCatchUpClubs(payload.all ? clubs.map(c => c.id) : payload.ids, payload.all),
     onSuccess: (r) => {
       toast.success(
         `Enabled on ${r.total_pro_clubs} Pro club${r.total_pro_clubs === 1 ? "" : "s"} · ${r.members_updated} member${r.members_updated === 1 ? "" : "s"} switched on`
@@ -173,7 +111,7 @@ function IcpAdminAICatchUpPage() {
       setSelected(new Set());
       refetch();
     },
-    onError: (e: Error) => toast.error("Failed: " + e.message),
+    onError: (e: Error) => { if (e.message.includes("unconfirmed")) setUnconfirmed(true); toast.error("Failed: " + e.message); },
   });
 
   const toggle = (id: string) => {
@@ -195,6 +133,7 @@ function IcpAdminAICatchUpPage() {
   };
 
   const openConfirm = (s: "all" | "selected") => {
+    if (unconfirmed || clubsError || isLoadingClubs) return;
     if (s === "selected" && selected.size === 0) {
       toast.error("Select at least one club");
       return;
@@ -264,14 +203,14 @@ function IcpAdminAICatchUpPage() {
           <div className="flex gap-2">
             <Button
               onClick={() => openConfirm("all")}
-              disabled={enableMutation.isPending || clubs.length === 0}
+              disabled={enableMutation.isPending || clubs.length === 0 || unconfirmed || !!clubsError}
             >
               Enable for ALL Pro clubs ({clubs.length})
             </Button>
             <Button
               variant="outline"
               onClick={() => openConfirm("selected")}
-              disabled={enableMutation.isPending || selected.size === 0}
+              disabled={enableMutation.isPending || selected.size === 0 || unconfirmed || !!clubsError}
             >
               Enable for selected ({selected.size})
             </Button>
@@ -287,6 +226,7 @@ function IcpAdminAICatchUpPage() {
             />
           </div>
 
+          {unconfirmed && <p role="alert" className="text-destructive">An update is unconfirmed. Further batch changes are paused.</p>}
           {clubsError ? (
             <p role="alert" className="text-destructive">Could not load Pro clubs: {clubsError.message}</p>
           ) : isLoadingClubs ? (

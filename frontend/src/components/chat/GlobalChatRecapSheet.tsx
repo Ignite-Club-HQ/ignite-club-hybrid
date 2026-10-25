@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { generateLiveChatRecap } from "@/live/features/messaging";
@@ -100,6 +102,7 @@ async function parseInvokeError(error: any): Promise<string> {
 }
 
 async function getLLMFnName(): Promise<string> {
+  if (resolveAuthBackend() === "icp") throw new Error("Internet Identity recaps must use the on-chain service");
   try {
     const { data: prov } = await supabase
       .from("app_settings")
@@ -134,7 +137,7 @@ function parseIcpRecapMarkdown(markdown: string): ChatSummaryResult {
 }
 
 async function fetchOne(ref: RecapScopeRef, lookbackHours: number): Promise<{ result: ChatSummaryResult | null; error: string | null }> {
-  if (isFeatureRoutedToIcp("messaging")) {
+  if (resolveAuthBackend() === "icp" || isFeatureRoutedToIcp("messaging")) {
     try {
       const sinceMs = BigInt(Date.now() - lookbackHours * 3600_000);
       const markdown = await withFeatureBackend("messaging", {
@@ -262,6 +265,8 @@ function normalise(summary: ChatSummaryPayload | undefined) {
 }
 
 export function GlobalChatRecapSheet({ open, onOpenChange, scopes }: GlobalChatRecapSheetProps) {
+  const { user } = useAuth();
+  const backend = resolveAuthBackend();
   const [perScope, setPerScope] = useState<PerScope[]>([]);
   const [runId, setRunId] = useState(0);
   const [myNames, setMyNames] = useState<string[]>([]);
@@ -279,16 +284,28 @@ export function GlobalChatRecapSheet({ open, onOpenChange, scopes }: GlobalChatR
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    setMyNames([]);
     (async () => {
       try {
-        const { data: auth } = await supabase.auth.getUser();
-        const uid = auth?.user?.id;
-        if (!uid) return;
-        const { data: prof } = await supabase
+        const prof = await withFeatureBackend("membership", {
+          icp: async ctx => {
+            const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
+            const profiles = await listLiveProfilesByIds(ctx, [ctx.identity.getPrincipal().toText()]);
+            return profiles[0] ? { display_name: profiles[0].display_name, first_name: null } : null;
+          },
+          supabase: async () => {
+            const { data: auth } = await supabase.auth.getUser();
+            const uid = auth?.user?.id;
+            if (!uid) return null;
+            const { data, error } = await supabase
           .from("profiles")
           .select("display_name, first_name")
           .eq("id", uid)
           .maybeSingle();
+            if (error) throw error;
+            return data;
+          },
+        }, { shared: "person" });
         if (cancelled) return;
         const tokens = new Set<string>();
         const push = (v: string | null | undefined) => {
@@ -304,7 +321,7 @@ export function GlobalChatRecapSheet({ open, onOpenChange, scopes }: GlobalChatR
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
-  }, [open]);
+  }, [open, user?.id, backend]);
 
   // Kick off batched fetches whenever the sheet opens with a fresh set of scopes.
   useEffect(() => {

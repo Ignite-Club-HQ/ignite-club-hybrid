@@ -91,6 +91,17 @@ export async function listLiveClubSubscriptions(
 }
 
 /** Maps a canister team subscription onto the Supabase `team_subscriptions` row shape. */
+export async function listLiveClubSubscriptionsStrict(ctx: FeatureBackendContext, clubIds: readonly string[]) {
+  const result = new Map<string, LiveClubSubscription | null>();
+  const ids = [...new Set(clubIds)];
+  for (let offset = 0; offset < ids.length; offset += 8) {
+    await Promise.all(ids.slice(offset, offset + 8).map(async id => {
+      result.set(id, await readMembershipInScope(ctx, { clubId: id }, scoped => getLiveClubSubscription(scoped, id)));
+    }));
+  }
+  return result;
+}
+
 export function mapLiveTeamSubscriptionToRow(sub: LiveTeamSubscription) {
   return {
     team_id: sub.team_id,

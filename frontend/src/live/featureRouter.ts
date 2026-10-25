@@ -7,6 +7,7 @@ import { clubDispatch } from "./groupDispatch";
 import type { GroupDomain } from "./groupRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 import { readOwnerTestRouteCached, nextOwnerTestClubId } from './ownerTestRouting';
+import { hasInternetIdentitySessionStored, readAuthChoice } from "./authBackendMode";
 
 /**
  * Runtime dispatcher that connects feature repositories to the hybrid
@@ -66,6 +67,14 @@ export async function withFeatureBackend<T>(
   scope?: ClubScope,
 ): Promise<T> {
   if (isSignedInWithEmail()) return providers.supabase();
+  const knownIcpSession = hasInternetIdentitySessionStored() || readAuthChoice() === "icp";
+  if (knownIcpSession) {
+    const target = tryGetActiveIcpTarget();
+    if (!target || !isFeatureCanisterConfigured(target, feature)) throw new Error(`The ${feature} connection is not configured. Try again after the connection is restored.`);
+    const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
+    if (!identity) throw new Error("No active Internet Identity session. Sign in again to continue.");
+    return dispatchIcp(feature, providers, { identity, target }, scope);
+  }
   if (getEffectiveBackendForFeature(feature) !== "icp") {
     // An Internet Identity user has no Supabase account or data: if routing
     // momentarily resolves to Supabase (club-membership pin not loaded yet,

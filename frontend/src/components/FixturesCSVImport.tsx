@@ -21,6 +21,8 @@ import { validateFixtureImportAuthorization } from "@/lib/fixtureImportAuthoriza
 import { isPlayHQFormat, playHQToDriblShape } from "@/lib/playhqFixtureImport";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { buildLiveFixtureEventInput } from "@/lib/fixtureLiveEventMapping";
+import { importIcpFixtureOnce } from "@/lib/fixtureImportProgress";
+import { writeOnce } from "@/live/clubScope";
 import ExcelJS from "exceljs";
 
 interface Team {
@@ -725,12 +727,21 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
         // same fields the Supabase insert above writes (title/opponent,
         // start/end window, location, team).
         icp: async (ctx) => {
-          const { createLiveEvent } = await import("@/live/features/events");
+          const { createLiveEventWithSetup } = await import("@/live/features/events");
           for (const fixture of fixturesToInsert) {
-            await createLiveEvent(ctx, buildLiveFixtureEventInput(fixture, clubId, teamId));
+            const input = buildLiveFixtureEventInput(fixture, clubId, teamId);
+            const reminder = fixture.reminderHours ?? null;
+            await importIcpFixtureOnce(ctx, input, reminder, async requestId => {
+              const result = await createLiveEventWithSetup(ctx, {
+                ...input, requestId,
+                occurrences: [{ startsAtMs: Number(input.startsAtMs), endsAtMs: Number(input.endsAtMs) }],
+                duties: [], dutyTeamId: input.teamId ?? null, reminderHours: reminder,
+              });
+              return result.event_ids;
+            });
           }
         },
-      }, { clubId: clubId });
+      }, writeOnce({ clubId }));
 
       toast({
         title: "Fixtures imported",
@@ -747,7 +758,7 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
       console.error('Error importing fixtures:', error);
       toast({
         title: "Import failed",
-        description: "Failed to import fixtures. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to import fixtures. Check the schedule before trying again.",
         variant: "destructive",
       });
     } finally {

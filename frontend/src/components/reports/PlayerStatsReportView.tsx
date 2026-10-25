@@ -355,7 +355,7 @@ export default function PlayerStatsReportView({
                       <td style="text-align: center;">${stat.substitutions_count}</td>
                       <td style="text-align: center;">${honoursFor(stat).captain}</td>
                       <td style="text-align: center;">${honoursFor(stat).pom}</td>
-                      <td style="text-align: center;">${Math.max(honoursFor(stat).gkMatches, honoursFor(stat).gkAppointed)}</td>
+                      <td style="text-align: center;">${honoursFor(stat).gkMatches}</td>
                       <td style="text-align: center;">${formatMinutes(honoursFor(stat).gkSeconds)}</td>
                       ${dateRange
                         ? `<td style="text-align: center;">${stat.games_played ?? 1}</td><td style="text-align: center;">${stat.starts_count ?? (stat.started_on_pitch ? 1 : 0)}</td>`
@@ -445,7 +445,7 @@ export default function PlayerStatsReportView({
         String(stat.substitutions_count),
         String(h.captain),
         String(h.pom),
-        String(Math.max(h.gkMatches, h.gkAppointed)),
+        String(h.gkMatches),
         formatMinutes(h.gkSeconds),
         String(stat.games_played ?? 1),
         String(stat.starts_count ?? (stat.started_on_pitch ? 1 : 0)),
@@ -709,7 +709,7 @@ export default function PlayerStatsReportView({
                   <TableCell className="text-center font-mono">{honoursFor(stat).captain}</TableCell>
                   <TableCell className="text-center font-mono">{honoursFor(stat).pom}</TableCell>
                   <TableCell className="text-center font-mono hidden sm:table-cell">
-                    {Math.max(honoursFor(stat).gkMatches, honoursFor(stat).gkAppointed)}
+                    {honoursFor(stat).gkMatches}
                   </TableCell>
                   <TableCell className="text-center font-mono hidden sm:table-cell">
                     {formatMinutes(honoursFor(stat).gkSeconds)}

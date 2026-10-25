@@ -10,6 +10,11 @@ vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => "icp" }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_: string, handlers: { icp: (ctx: unknown) => unknown }) => handlers.icp({}) }));
 vi.mock("@/live/features/appSettings", () => ({ getLiveAppSetting: m.get, setLiveAppSetting: m.set }));
 vi.mock("@/live/features/messaging", () => ({ runLiveChatPhotoGalleryReminders: m.run, getLiveChatPhotoReminderSettings: m.get, setLiveChatPhotoReminderSettings: m.set }));
+vi.mock("@/live/adminMessagingOperations", () => ({
+  readAdminPhotoReminderSettings: async () => [{ service: "messaging", policy: await m.get() }],
+  saveAdminPhotoReminderSettings: (policy: unknown) => m.set({}, policy),
+  runAdminPhotoReminders: (policy: { window_start_hours: number; window_end_hours: number; cooldown_days: number }) => m.run({}, Date.now(), policy.window_start_hours, policy.window_end_hours, policy.cooldown_days),
+}));
 vi.mock("sonner", () => ({ toast: { success: m.success, error: m.error } }));
 import Page from "./AdminChatPhotoRemindersPage";
 function open() {

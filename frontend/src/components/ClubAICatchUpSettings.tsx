@@ -19,18 +19,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { setLiveClubAiCatchUp, enableLiveAiCatchUpForAllMembers } from "@/live/features/messaging";
+import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface Props {
   clubId: string;
 }
 
 export function ClubAICatchUpSettings({ clubId }: Props) {
+  const { user } = useAuth();
+  const backend = resolveAuthBackend();
   const queryClient = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const { data: club, isLoading } = useQuery({
-    queryKey: ["club-ai-catchup", clubId],
-    queryFn: async () => {
+  const { data: club, isLoading, error: clubError } = useQuery({
+    queryKey: ["club-ai-catchup", clubId, backend, user?.id],
+    queryFn: () => withFeatureBackend("messaging", {
+      icp: async ctx => {
+        const { getLiveClubDmSettings } = await import("@/live/features/messaging");
+        const settings = await getLiveClubDmSettings(ctx, clubId);
+        return { id: clubId, ai_catch_up_enabled: settings.ai_catch_up_enabled };
+      },
+      supabase: async () => {
       const { data, error } = await supabase
         .from("clubs")
         .select("id, ai_catch_up_enabled")
@@ -38,12 +48,18 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
         .maybeSingle();
       if (error) throw error;
       return data;
-    },
+      },
+    }, { clubId }),
   });
 
   const { data: hasJuniorTeams } = useQuery({
-    queryKey: ["club-has-junior-teams", clubId],
-    queryFn: async () => {
+    queryKey: ["club-has-junior-teams", clubId, backend, user?.id],
+    queryFn: () => withFeatureBackend("membership", {
+      icp: async ctx => {
+        const { listLiveTeams } = await import("@/live/features/club");
+        return (await listLiveTeams(ctx, clubId)).some(team => team.team_type[0] === "junior");
+      },
+      supabase: async () => {
       const { data } = await supabase
         .from("teams")
         .select("id")
@@ -51,7 +67,8 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
         .eq("team_type", "junior")
         .limit(1);
       return (data?.length ?? 0) > 0;
-    },
+      },
+    }, { clubId }),
   });
 
   const updateMutation = useMutation({
@@ -127,6 +144,7 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {clubError && <p role="alert" className="text-sm text-destructive">Could not load AI Chat Recap settings.</p>}
         {hasJuniorTeams && (
           <div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
             <ShieldAlert className="h-4 w-4 shrink-0 text-amber-600" />
@@ -148,7 +166,7 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
             id="ai-catchup-enabled"
             checked={enabled}
             onCheckedChange={(v) => updateMutation.mutate(v)}
-            disabled={updateMutation.isPending}
+            disabled={updateMutation.isPending || !!clubError}
           />
         </div>
         {updateMutation.isPending && (

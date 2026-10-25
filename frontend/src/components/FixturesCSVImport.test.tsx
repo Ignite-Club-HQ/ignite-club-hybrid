@@ -15,7 +15,7 @@ const insertMock = vi.fn();
 const toastMock = vi.fn();
 const backendMocks = vi.hoisted(() => ({
   mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
-  context: { identity: {}, target: {} },
+  context: { identity: { getPrincipal: () => ({ toText: () => "user-1" }) }, target: { host: "https://icp-api.io", networkKind: "mainnet", canisterIds: { events_domain: "events" } } },
   listLiveEvents: vi.fn(),
   createEventTransaction: vi.fn(),
 }));
@@ -29,12 +29,12 @@ vi.mock("@/integrations/supabase/client", () => {
       in: vi.fn(() => chain),
       gte: vi.fn(() => chain),
       lte: vi.fn(() => chain),
-      insert: (rows: unknown) => insertMock(rows),
+      insert: (rows: unknown) => ({ select: () => insertMock(rows) }),
       then: (resolve: (v: unknown) => unknown) => resolve({ data: [], error: null }),
     };
     return chain;
   };
-  return { supabase: { from: vi.fn(() => builder()) } };
+  return { supabase: { from: vi.fn(() => builder()), rpc: vi.fn(async () => ({ error: null })) } };
 });
 
 vi.mock("@/hooks/useAuth", () => ({
@@ -51,6 +51,7 @@ vi.mock("@/live/featureRouter", () => ({
 vi.mock("@/live/features/events", () => ({
   listLiveEvents: (...args: unknown[]) => backendMocks.listLiveEvents(...args),
   createLiveEvent: (...args: unknown[]) => backendMocks.createEventTransaction(...args),
+  createLiveEventWithSetup: (...args: unknown[]) => backendMocks.createEventTransaction(...args),
 }));
 vi.mock("@/features/events/createEventWorkflow", () => ({
   createEventTransaction: (...args: unknown[]) => backendMocks.createEventTransaction(...args),
@@ -107,11 +108,12 @@ function importButton() {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   insertMock.mockReset();
   insertMock.mockResolvedValue({ error: null });
   toastMock.mockReset();
   backendMocks.listLiveEvents.mockReset().mockResolvedValue([]);
-  backendMocks.createEventTransaction.mockReset().mockResolvedValue("event-live-1");
+  backendMocks.createEventTransaction.mockReset().mockResolvedValue({ event_ids: ["event-live-1"] });
 });
 
 describe("validateFixtureImportAuthorization", () => {
