@@ -1,5 +1,5 @@
 ## Bottom navigation response — 25 October 2026
-- [ ] Activate existing idle main-page code warming and focus/pointer intent prefetch; preserve native keyboard/scroll handling and test navigation.
+- [x] Activated previously unused idle main-page code warming and focus/pointer intent prefetch; tab clicks never await imports. All 11 navigation/native scroll/safe-area checks pass in each mode and preview build OK; no deployment or signed-in timing claim.
 - [ ] Real signed-in phone timing remains unverified without Paul's Internet Identity session.
 
 ## Existing theme club missing from Vault — 25 October 2026
