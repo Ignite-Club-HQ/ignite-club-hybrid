@@ -684,6 +684,43 @@ export async function listLivePendingInvitesByClub(ctx: FeatureBackendContext, c
   return unwrapCandid(actor.list_pending_invites_by_club(clubId), "List pending invites");
 }
 
+export async function createLiveFamilyInvite(ctx: FeatureBackendContext, input: {
+  requestId: string; clubId: string; teamId: string;
+  children: { id: string; existing: boolean; name: string; yearOfBirth?: string; jerseyNumber?: string }[];
+  second: boolean; boundSecondary?: string | null; email: string; secondaryEmail?: string;
+}) {
+  const { registerLivePii, grantLivePiiReadClub } = await import("./vault");
+  // Strict: no invitation is issued when a supplied new child's encrypted name
+  // could not be saved. Stable IDs let the same operation retry without duplicates.
+  for (const child of input.children) {
+    if (!child.existing) {
+      if (!child.name.trim()) throw new Error("Child name required");
+      await registerLivePii(ctx, child.id, "name", new TextEncoder().encode(child.name), ctx.identity.getPrincipal());
+      await grantLivePiiReadClub(ctx, child.id, "name", input.clubId);
+      for (const [field, value] of [["year_of_birth", child.yearOfBirth], ["jersey_number", child.jerseyNumber]]) {
+        if (value) {
+          await registerLivePii(ctx, child.id, field, new TextEncoder().encode(value), ctx.identity.getPrincipal());
+          await grantLivePiiReadClub(ctx, child.id, field, input.clubId);
+        }
+      }
+    }
+  }
+  const { Principal } = await import("@icp-sdk/core/principal");
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const result = await unwrapCandid(actor.create_family_invite(input.requestId, input.clubId, input.teamId,
+    input.children.map(c => ({ id: c.id, existing: c.existing })), input.second,
+    input.boundSecondary ? [Principal.fromText(input.boundSecondary.replace(/^principal:/, ""))] : []), "Create family invite");
+  if (input.email) await registerLivePiiText(ctx, result.invite.id, "email", input.email);
+  const secondary = result.secondary[0];
+  if (secondary && input.secondaryEmail) await registerLivePiiText(ctx, secondary.id, "email", input.secondaryEmail);
+  return result;
+}
+
+export async function readLiveFamilyInviteReceipt(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.read_family_invite_receipt(id), "Read accepted invitation receipt");
+}
+
 export async function resendLivePendingInvite(ctx: FeatureBackendContext, inviteId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.resend_pending_invite(inviteId), "Resend pending invite");

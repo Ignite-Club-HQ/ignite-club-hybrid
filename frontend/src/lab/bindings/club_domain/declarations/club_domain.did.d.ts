@@ -457,6 +457,24 @@ export interface Main {
     { 'Ok' : ClubProfile } |
       { 'Err' : string }
   >,
+  'create_family_invite' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      Array<{ 'id' : string, 'existing' : boolean }>,
+      boolean,
+      [] | [Principal],
+    ],
+    {
+        'Ok' : {
+          'secondary' : [] | [PendingInvite],
+          'invite' : PendingInvite,
+          'child_ids' : Array<string>,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'create_invite_short_code' : ActorMethod<
     [string],
     { 'Ok' : string } |
@@ -1524,6 +1542,20 @@ export interface Main {
               'club_id' : string,
             }
           >,
+        }
+      } |
+      { 'Err' : string }
+  >,
+  'read_family_invite_receipt' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'accepted_by' : Principal,
+          'team_id' : [] | [string],
+          'accepted_at_ms' : bigint,
+          'already_accepted' : boolean,
+          'child_ids' : Array<string>,
+          'club_id' : string,
         }
       } |
       { 'Err' : string }

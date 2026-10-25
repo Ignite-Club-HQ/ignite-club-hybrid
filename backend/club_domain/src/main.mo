@@ -203,6 +203,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var teamInvites : [Types.TeamInvite];
   var teamInviteLinks : [Types.TeamInviteLink];
   var pendingInvites : [Types.PendingInvite];
+  var familyInvites : [{ request_id : Text; created_by : Principal; primary : Text; secondary : ?Text; children : [Text]; bound_secondary : ?Principal }];
   var emailJobs : Map.Map<Text, EmailOutbox.Job>;
   var emailWorkers : [Principal];
   var broadcastRelayReceipts : Map.Map<Text, BroadcastRelay.Receipt>;
@@ -344,6 +345,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
     let oldText = Principal.toText(old);
     let newText = Principal.toText(new);
+    if (familyInvites.any(func f = f.created_by == old and familyInvites.any(func g = g.created_by == new and g.request_id == f.request_id and g.primary != f.primary))) return #err("Family invitation request conflict");
     let oldTag = "principal:" # oldText;
     let newTag = "principal:" # newText;
     let cloneUpdates=Map.entries(seasonCloneReceipts).toArray();
@@ -380,6 +382,7 @@ persistent actor class Main(governorInit : Principal) = this {
     conflicts += teamInvites.filter(func(i) = i.invited_by.equal(new) or i.accepted_by == ?new).size();
     conflicts += teamInviteLinks.filter(func(l) = l.created_by.equal(new)).size();
     conflicts += pendingInvites.filter(func(i) = i.invited_by.equal(new) or i.accepted_by == ?new).size();
+    conflicts += familyInvites.filter(func i = i.created_by == new or i.bound_secondary == ?new).size();
     conflicts += teamCreationRequests.filter(func(r) = r.requested_by.equal(new) or r.decided_by == ?new).size();
     conflicts += teamCaptains.filter(func(c) = c.user.equal(new)).size();
     conflicts += clubJoinRequests.filter(func(r) = r.user.equal(new) or r.decided_by == ?new).size();
@@ -391,6 +394,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in club_domain");
 
     var changed = 0;
+    changed += familyInvites.filter(func f = f.created_by == old or f.bound_secondary == ?old).size();
     for((key,_) in cloneUpdates.values())if(Text.startsWith(key,#text(oldText # "\u{1f}")))changed+=1;
 
     // ---- acl ----
@@ -529,6 +533,7 @@ persistent actor class Main(governorInit : Principal) = this {
       teamInvites := newTeamInvites;
       teamInviteLinks := newTeamInviteLinks;
       pendingInvites := newPendingInvites;
+      familyInvites := familyInvites.map(func i = { i with created_by = if (i.created_by == old) new else i.created_by; bound_secondary = if (i.bound_secondary == ?old) ?new else i.bound_secondary });
       teamCreationRequests := newTeamCreationRequests;
       teamCaptains := newTeamCaptains;
       clubJoinRequests := newClubJoinRequests;
@@ -1895,6 +1900,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?invite) {
         if (not isAdmin(caller, invite.club_id)) return #Err("Club admin required");
         if (invite.status == "accepted" or invite.status == "revoked") return #Err("Invite no longer pending");
+        if (familyInvites.any(func f = f.primary == id or f.secondary == ?id)) return #Err("Family invite scope is immutable; revoke and reissue");
         let updated : Types.PendingInvite = { invite with role };
         pendingInvites := pendingInvites.map(func(i) = if (i.id == id) updated else i);
         #Ok(updated)
@@ -1915,6 +1921,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not canManageTeam(caller, invite.club_id, invite.team_id)) return #Err("Team or club admin required");
         if (not canManageTeam(caller, invite.club_id, team_id)) return #Err("Team or club admin required");
         if (invite.status == "accepted" or invite.status == "revoked") return #Err("Invite no longer pending");
+        if (familyInvites.any(func f = f.primary == id or f.secondary == ?id)) return #Err("Family invite scope is immutable; revoke and reissue");
         let updated : Types.PendingInvite = { invite with team_id };
         pendingInvites := pendingInvites.map(func(i) = if (i.id == id) updated else i);
         #Ok(updated)
@@ -2971,6 +2978,9 @@ persistent actor class Main(governorInit : Principal) = this {
     if (principals.any(func(p) = p.equal(governor))) return #Err("Governor account cannot be erased");
     let erasedInvites=pendingInvites.filter(func i = principals.any(func p = p==i.invited_by or i.accepted_by==?p)).map(func i = i.id);
     ignore emailOutbox.scrub(func j = erasedInvites.any(func id = id==j.resource));
+    let retiredFamilies = familyInvites.filter(func f = principals.any(func p = p == f.created_by or f.bound_secondary == ?p) or erasedInvites.any(func id = id == f.primary or f.secondary == ?id));
+    pendingInvites := pendingInvites.map(func i = if (retiredFamilies.any(func f = f.primary == i.id or f.secondary == ?i.id)) ({ i with status = "revoked" }) else i);
+    familyInvites := familyInvites.filter(func f = not retiredFamilies.any(func r = r.primary == f.primary));
     for((key,r) in Map.entries(seasonCloneReceipts).toArray().values()) {
       if(principals.any(func p = Text.startsWith(key,#text(p.toText() # "\u{1f}")))) {
         Map.remove(seasonCloneReceipts,Text.compare,key);Map.add(seasonCloneReceipts,Text.compare,"erased:" # r.season_id,r)
@@ -4167,6 +4177,63 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  // Opaque child IDs only: names are encrypted by the client before commit.
+  // All validation precedes one no-await commit of children and both invitations.
+  public shared ({ caller }) func create_family_invite(request_id : Text, club_id : Text, team_id : Text, children : [{ id : Text; existing : Bool }], second : Bool, bound_secondary : ?Principal) : async { #Ok : { invite : Types.PendingInvite; secondary : ?Types.PendingInvite; child_ids : [Text] }; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      if (not canManageTeam(caller, club_id, ?team_id) or isTransferFenced(club_id)) return #Err("Team manager required");
+      if (request_id.size() < 16 or request_id.size() > 100 or children.size() == 0 or children.size() > 12) return #Err("Invalid family invitation");
+      switch (familyInvites.find(func i = i.created_by == caller and i.request_id == request_id)) {
+        case (?receipt) {
+          let original = pendingInvites.find(func i = i.id == receipt.primary) ?? return #Err("Invitation retired");
+          if (original.club_id != club_id or original.team_id != ?team_id or receipt.children != children.map(func c = c.id) or (receipt.secondary != null) != second or receipt.bound_secondary != bound_secondary) return #Err("Request changed");
+          if (original.status == "revoked") return #Err("Invite revoked");
+          return #Ok({ invite = original; secondary = switch (receipt.secondary) { case (?id) pendingInvites.find(func i = i.id == id); case null null }; child_ids = receipt.children });
+        }; case null {};
+      };
+      let epoch = membershipEpoch();
+      let token = "pinv-" # (await randomHex(16));
+      let secondaryToken = if (second) ?("pinv-" # (await randomHex(16))) else null;
+      if (epoch != membershipEpoch() or not canManageTeam(caller, club_id, ?team_id) or isTransferFenced(club_id) or removalReceiver.denied(caller)) return #Err("Invite authorization changed");
+      if (familyInvites.any(func i = i.created_by == caller and i.request_id == request_id)) return #Err("Request already committed; read original receipt");
+      if (pendingInvites.any(func i = i.id == token or ?i.id == secondaryToken)) return #Err("Token collision");
+      switch (bound_secondary) { case (?p) { if (p == Principal.anonymous() or not second or isExcluded(p, club_id) or removalReceiver.denied(p)) return #Err("Invalid guardian") }; case null {} };
+      var seen : [Text] = [];
+      for (c in children.values()) {
+        if (seen.any(func id = id == c.id) or c.id.size() < 8 or c.id.size() > 100) return #Err("Invalid child selection");
+        seen := seen.concat([c.id]);
+        let row = acl.children.find(func child = child.id == c.id);
+        if (c.existing) {
+          let child = row ?? return #Err("Child missing");
+          if (not parentInviteScopeValid(club_id, ?team_id, c.id)) return #Err("Child in wrong scope");
+        } else if (row != null) return #Err("Child ID already exists");
+      };
+      let invite : Types.PendingInvite = { id = token; kind = "team"; club_id; team_id = ?team_id; child_id = null; email = "pii:email"; role = ?"parent"; invited_by = caller; created_at_ms = nowMs(); status = "pending"; resent_at_ms = null; accepted_at_ms = null; accepted_by = null };
+      let secondary = switch (secondaryToken) { case (?id) ?{ invite with id; kind = "guardian"; child_id = ?children[0].id; role = null }; case null null };
+      let added : [Types.Child] = children.filter(func c = not c.existing).map(func c = { id = c.id; teams = [team_id]; parent = null; club_id = ?club_id });
+      bumpMembershipDiscovery(); acl := { acl with children = acl.children.concat(added) };
+      pendingInvites := pendingInvites.concat([invite]).concat(switch (secondary) { case (?i) [i]; case null [] });
+      familyInvites := familyInvites.concat([{ request_id; created_by = caller; primary = token; secondary = secondaryToken; children = seen; bound_secondary }]);
+      #Ok({ invite; secondary; child_ids = seen })
+    } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func read_family_invite_receipt(id : Text) : async { #Ok : { child_ids : [Text]; accepted_by : Principal; accepted_at_ms : Nat64; team_id : ?Text; club_id : Text; already_accepted : Bool }; #Err : Text } {
+    if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      let invite = pendingInvites.find(func i = i.id == id) ?? return #Err("Invite not found");
+      if (invite.status != "accepted" or invite.accepted_by != ?caller or isExcluded(caller, invite.club_id)) return #Err("Accepted invitation required");
+      if (invite.kind != "guardian" and not acl.roles.any(func g = g.user == caller and g.club == ?invite.club_id and g.team == invite.team_id and ?g.role == invite.role)) return #Err("Membership access changed");
+      let family = familyInvites.find(func f = f.primary == id or f.secondary == ?id);
+      let ids = switch (family) { case (?f) f.children; case null switch (invite.child_id) { case (?cid) [cid]; case null [] } };
+      if (ids.any(func cid = not parentInviteScopeValid(invite.club_id, invite.team_id, cid) or not acl.guardians.any(func g = g.child == cid and g.user == caller))) return #Err("Family access changed");
+      #Ok({ child_ids = ids; accepted_by = caller; accepted_at_ms = invite.accepted_at_ms ?? 0; team_id = invite.team_id; club_id = invite.club_id; already_accepted = true })
+    } finally { removalReceiver.leave(caller) }
+  };
+
   public query ({ caller }) func list_pending_invites_by_club(club_id : Text) : async { #Ok : [Types.PendingInvite]; #Err : Text } {
     denyLegacyAccountQuery();
     if (not isAdmin(caller, club_id) and not acl.teams.any(func t = t.club == club_id and canManageTeam(caller, club_id, ?t.id))) return #Err("Invite manager required");
@@ -4301,7 +4368,8 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not validPendingInviteRole(invite.kind, invite.team_id, invite.role)) return #Err("Invalid invitation role or scope");
         if (invite.status == "accepted") {
           let retained = if (invite.kind == "guardian") (switch (invite.child_id) { case (?cid) acl.guardians.any(func g = g.child == cid and g.user == caller); case null false }) else acl.roles.any(func g = g.user == caller and g.club == ?invite.club_id and g.team == invite.team_id and ?g.role == invite.role);
-          if (invite.accepted_by == ?caller and retained and not isExcluded(caller, invite.club_id)) return #Ok(invite);
+          let familyRetained = switch (familyInvites.find(func f = f.primary == id or f.secondary == ?id)) { case (?f) f.children.all(func cid = parentInviteScopeValid(invite.club_id, invite.team_id, cid) and acl.guardians.any(func g = g.child == cid and g.user == caller)); case null true };
+          if (invite.accepted_by == ?caller and retained and familyRetained and not isExcluded(caller, invite.club_id)) return #Ok(invite);
           return #Err("Invite already accepted");
         };
         let epoch = membershipEpoch();
@@ -4310,6 +4378,19 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not authorized or epoch != membershipEpoch() or removalReceiver.denied(caller) or removalReceiver.denied(invite.invited_by) or current.status != invite.status or isTransferFenced(invite.club_id)) return #Err("Invite authorization changed");
         if (invite.status == "revoked") return #Err("Invite revoked");
         if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
+        let family = familyInvites.find(func f = f.primary == id or f.secondary == ?id);
+        switch (family) {
+          case (?f) {
+            let primary = pendingInvites.find(func i = i.id == f.primary) ?? return #Err("Primary invitation retired");
+            if (primary.status == "revoked") return #Err("Primary invite revoked");
+            if (f.secondary == ?id and (primary.status != "accepted" or (f.bound_secondary != null and f.bound_secondary != ?caller))) return #Err("Primary parent must accept first or guardian account differs");
+            for (cid in f.children.values()) {
+              let child = acl.children.find(func c = c.id == cid) ?? return #Err("Child missing");
+              if (not parentInviteScopeValid(invite.club_id, invite.team_id, cid)) return #Err("Child scope changed");
+              if (f.secondary == ?id and not acl.guardians.any(func g = g.child == cid and ?g.user == primary.accepted_by)) return #Err("Child family changed");
+            };
+          }; case null {};
+        };
         if (invite.kind == "guardian") {
           if (isExcluded(invite.invited_by, invite.club_id) or not canManageTeam(invite.invited_by, invite.club_id, invite.team_id)) return #Err("Invite authorization changed");
           switch (invite.child_id) {
@@ -4367,6 +4448,16 @@ persistent actor class Main(governorInit : Principal) = this {
             };
             case null {};
           };
+        };
+        switch (family) {
+          case (?f) {
+            for (cid in f.children.values()) {
+              if (f.primary == id) acl := { acl with children = acl.children.map(func c = if (c.id == cid and c.parent == null) ({ c with parent = ?caller }) else c) };
+              if (not acl.guardians.any(func g = g.child == cid and g.user == caller)) acl := { acl with guardians = acl.guardians.concat([{ child = cid; user = caller }]) };
+              if (not accountFamilies.any(func g = g.child_id == cid and g.account_id == accountIdFor(caller))) accountFamilies := accountFamilies.concat([{ child_id = cid; account_id = accountIdFor(caller) }]);
+            };
+            bumpMembershipDiscovery();
+          }; case null {};
         };
         let accepted : Types.PendingInvite = { invite with status = "accepted"; accepted_at_ms = ?nowMs(); accepted_by = ?caller };
         pendingInvites := pendingInvites.map(func(i) = if (i.id == id) accepted else i);
@@ -5841,6 +5932,7 @@ persistent actor class Main(governorInit : Principal) = this {
     teamInvites := teamInvites.filter(func(i) = i.team_id != teamId);
     teamInviteLinks := teamInviteLinks.filter(func(l) = l.team_id != teamId);
     pendingInvites := pendingInvites.filter(func(i) = i.team_id != ?teamId);
+    familyInvites := familyInvites.filter(func f = pendingInvites.any(func i = i.id == f.primary));
     teamPlayerPositions := teamPlayerPositions.filter(func(p) = p.team_id != teamId);
     teamCaptains := teamCaptains.filter(func(c) = c.team_id != teamId);
     teamSponsorAllocations := teamSponsorAllocations.filter(func(a) = a.team_id != teamId);
@@ -5886,6 +5978,7 @@ persistent actor class Main(governorInit : Principal) = this {
     teamInvites := teamInvites.filter(func(i) = i.club_id != id);
     teamInviteLinks := teamInviteLinks.filter(func(l) = l.club_id != id);
     pendingInvites := pendingInvites.filter(func(i) = i.club_id != id);
+    familyInvites := familyInvites.filter(func f = pendingInvites.any(func i = i.id == f.primary));
     teamCreationRequests := teamCreationRequests.filter(func(r) = r.club_id != id);
     teamPlayerPositions := teamPlayerPositions.filter(func(p) = not isClubTeam(p.team_id));
     teamCaptains := teamCaptains.filter(func(c) = not isClubTeam(c.team_id));

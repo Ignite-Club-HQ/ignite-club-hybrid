@@ -868,6 +868,27 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubProfile, 'Err' : IDL.Text })],
         [],
       ),
+    'create_family_invite' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(IDL.Record({ 'id' : IDL.Text, 'existing' : IDL.Bool })),
+          IDL.Bool,
+          IDL.Opt(IDL.Principal),
+        ],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'secondary' : IDL.Opt(PendingInvite),
+              'invite' : PendingInvite,
+              'child_ids' : IDL.Vec(IDL.Text),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'create_invite_short_code' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
@@ -2184,6 +2205,23 @@ export const idlFactory = ({ IDL }) => {
                   'club_id' : IDL.Text,
                 })
               ),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_family_invite_receipt' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'accepted_by' : IDL.Principal,
+              'team_id' : IDL.Opt(IDL.Text),
+              'accepted_at_ms' : IDL.Nat64,
+              'already_accepted' : IDL.Bool,
+              'child_ids' : IDL.Vec(IDL.Text),
+              'club_id' : IDL.Text,
             }),
             'Err' : IDL.Text,
           }),

@@ -1568,7 +1568,8 @@ function SupabaseJoinTeamPage() {
           return withFeatureBackend("membership", {
             supabase: async () => [] as AppRole[],
             icp: async () => {
-              await acceptIcpInviteAndWelcome(token!);
+              const receipt = await acceptIcpInviteAndWelcome(token ?? "");
+              provisionedChildIdsRef.current = receipt.child_ids;
               return [(pendingInviteData?.role ?? "player") as AppRole];
             },
           }, { inviteToken: token! });

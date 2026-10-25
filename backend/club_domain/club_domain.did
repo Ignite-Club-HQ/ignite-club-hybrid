@@ -633,6 +633,20 @@ type Main =
                            Err: text;
                            Ok: ClubProfile;
                          });
+   create_family_invite: (request_id: text, club_id: text, team_id: text,
+    children: vec record {
+                    existing: bool;
+                    id: text;
+                  }, second: bool, bound_secondary: opt principal) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          child_ids: vec text;
+          invite: PendingInvite;
+          secondary: opt PendingInvite;
+        };
+     });
    create_invite_short_code: (invite_id: text) ->
     (variant {
        Err: text;
@@ -1703,6 +1717,19 @@ type Main =
               team_id: opt text;
               user: principal;
             };
+        };
+     });
+   read_family_invite_receipt: (id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          accepted_at_ms: nat64;
+          accepted_by: principal;
+          already_accepted: bool;
+          child_ids: vec text;
+          club_id: text;
+          team_id: opt text;
         };
      });
    /// Bounded consensus configuration evidence; never changes or grants access.

@@ -7,7 +7,10 @@ const mocks = vi.hoisted(() => ({
   addLiveGuardianRelationship: vi.fn(async (_ctx?: unknown, _guardian?: unknown, _childId?: string) => undefined),
   grantLivePiiRead: vi.fn(async (_ctx?: unknown, _piiId?: string, _fieldId?: string, _reader?: unknown) => undefined),
   supabaseRpc: vi.fn(),
+  acceptPending: vi.fn(),
+  receipt: vi.fn(),
 }));
+vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.backend }));
 
 vi.mock("@/live/featureRouter", () => ({
   withFeatureBackend: async (_feature: string, providers: any) => {
@@ -21,6 +24,8 @@ vi.mock("@/live/featureRouter", () => ({
 
 vi.mock("@/live/features/club", () => ({
   acceptLiveParentInvite: (...args: unknown[]) => mocks.acceptLiveParentInvite(...args),
+  acceptPendingLiveInvite: (...args: unknown[]) => mocks.acceptPending(...args),
+  readLiveFamilyInviteReceipt: (...args: unknown[]) => mocks.receipt(...args),
 }));
 
 vi.mock("@/live/features/vault", () => ({
@@ -115,18 +120,13 @@ describe("acceptParentTeamInvite", () => {
       expect(mocks.grantLivePiiRead).not.toHaveBeenCalled();
     });
 
-    it("falls through to the Supabase RPC when there is no invite token in ICP mode", async () => {
-      mocks.supabaseRpc.mockResolvedValueOnce({
-        data: { child_ids: ["child-x"], already_accepted: true, team_id: null, club_id: null },
-        error: null,
-      });
+    it("accepts ID-only pending family invitations on ICP without a Supabase fallback", async () => {
+      mocks.acceptPending.mockResolvedValueOnce({});
+      mocks.receipt.mockResolvedValueOnce({ child_ids: ["child-x", "child-y"], accepted_at_ms: 7n, team_id: ["team"], club_id: "club" });
       const result = await acceptParentTeamInvite({ inviteId: "invite-1" });
       expect(mocks.acceptLiveParentInvite).not.toHaveBeenCalled();
-      expect(mocks.supabaseRpc).toHaveBeenCalledWith("accept_parent_team_invite", {
-        _invite_id: "invite-1",
-        _invite_token: null,
-      });
-      expect(result.alreadyAccepted).toBe(true);
+      expect(mocks.supabaseRpc).not.toHaveBeenCalled();
+      expect(result.childIds).toEqual(["child-x", "child-y"]);
     });
   });
 

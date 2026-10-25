@@ -2,6 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { acceptLiveParentInvite } from "@/live/features/club";
 import { addLiveGuardianRelationship, grantLivePiiRead } from "@/live/features/vault";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { acceptIcpInviteAndWelcome } from "./acceptIcpInviteAndWelcome";
 
 /**
  * Transactional acceptance of a parent invitation that carries child metadata.
@@ -70,13 +72,18 @@ export async function acceptParentTeamInvite(params: {
   inviteId?: string | null;
   inviteToken?: string | null;
 }): Promise<AcceptParentInviteResult> {
+  const pendingId = params.inviteId ?? (params.inviteToken?.startsWith("pinv-") ? params.inviteToken : null);
+  if (resolveAuthBackend() === "icp" && pendingId) {
+    const receipt = await acceptIcpInviteAndWelcome(pendingId);
+    return { childIds: receipt.child_ids, teamId: receipt.team_id[0] ?? null, clubId: receipt.club_id, alreadyAccepted: receipt.already_accepted };
+  }
   // ICP branch: the club_domain canister mints token-based parent invites;
   // acceptance atomically links the guardian after the canister verifies
   // current issuer authority and the existing child's exact club/team scope.
   const icpResult = await withFeatureBackend("membership", {
     supabase: () => null as AcceptParentInviteResult | null,
     icp: async (ctx): Promise<AcceptParentInviteResult | null> => {
-      if (!params.inviteToken) return null;
+      if (!params.inviteToken) throw new Error("Invitation token required");
       const invite = await acceptLiveParentInvite(ctx, params.inviteToken);
       const childId = invite?.child_id ?? null;
       if (childId) {
@@ -107,6 +114,7 @@ export async function acceptParentTeamInvite(params: {
     },
   }, { inviteToken: params.inviteToken ?? '' });
   if (icpResult) return icpResult;
+  if (resolveAuthBackend() === "icp") throw new Error("Invitation acceptance unavailable; retry the original link");
 
   const { data, error } = await supabase.rpc("accept_parent_team_invite" as any, {
     _invite_id: params.inviteId ?? null,
