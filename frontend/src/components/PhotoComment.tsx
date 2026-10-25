@@ -526,31 +526,35 @@ export const PhotoComment = memo(function PhotoComment({
                 </span>
               )}
             </p>
-            <MessageReactionsPopover
+            {!isIcp && (
+              <MessageReactionsPopover
+                reactions={optimisticReactions}
+                currentUserId={currentUserId}
+                onReact={handleReactionClick}
+                onRemove={handleRemoveReaction}
+                isMutating={reactionMutation.isPending}
+                isOpen={showReactionPicker}
+                preventIfGuarded={preventIfGuarded}
+                onOpenChange={(open) => {
+                  if (open) {
+                    setShowMenu(true);
+                    setShowReactionPicker(true);
+                    return;
+                  }
+                  closeInteraction();
+                }}
+                isOwnMessage={isOwn}
+                anchorRef={commentRef}
+              />
+            )}
+          </div>
+          {!isIcp && (
+            <CommentReactionsDisplay
               reactions={optimisticReactions}
               currentUserId={currentUserId}
-              onReact={handleReactionClick}
-              onRemove={handleRemoveReaction}
-              isMutating={reactionMutation.isPending}
-              isOpen={showReactionPicker}
-              preventIfGuarded={preventIfGuarded}
-              onOpenChange={(open) => {
-                if (open) {
-                  setShowMenu(true);
-                  setShowReactionPicker(true);
-                  return;
-                }
-                closeInteraction();
-              }}
-              isOwnMessage={isOwn}
-              anchorRef={commentRef}
+              onReactionClick={handleReactionClick}
             />
-          </div>
-          <CommentReactionsDisplay
-            reactions={optimisticReactions}
-            currentUserId={currentUserId}
-            onReactionClick={handleReactionClick}
-          />
+          )}
         </div>
       </div>
 
@@ -566,7 +570,7 @@ export const PhotoComment = memo(function PhotoComment({
         }}
         isOwn={isOwn}
         canReply={!!onReply}
-        canEdit={isOwn}
+        canEdit={isOwn && !isIcp}
         canDelete={isOwn}
         isSystemMessage={false}
         onReply={() => onReply?.(id, displayName || "Unknown")}
