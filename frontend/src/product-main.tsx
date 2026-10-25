@@ -9,6 +9,9 @@ import { installSupabaseAuthRetry } from "./lib/supabaseAuthRetry";
 import { initDeepLinkHandler } from "./lib/deepLinkHandler";
 import { ICP_FALLBACK_BLOCKED_EVENT, installStrictIcpTransport } from "./live/strictIcpTransport";
 import { toast } from "./hooks/use-toast";
+import { createElement } from "react";
+import { ToastAction } from "./components/ui/toast";
+import { requestGapReport } from "./lib/gapFeedback";
 import "./index.css";
 
 installSupabaseAuthRetry();
@@ -22,7 +25,13 @@ window.addEventListener(ICP_FALLBACK_BLOCKED_EVENT, event => {
   if (message === lastBlocked && Date.now() - lastBlockedAt < 5000) return;
   lastBlocked = message;
   lastBlockedAt = Date.now();
-  toast({ title: "ICP fallback blocked", description: message, variant: "destructive" });
+  toast({
+    title: "Something isn’t working yet",
+    description: "Please report this problem so the Ignite team can look into it.",
+    variant: "destructive",
+    duration: 15000,
+    action: createElement(ToastAction, { altText: "Report this problem", onClick: () => requestGapReport(message) }, "Report a problem"),
+  });
 });
 initWebVitalsTelemetry();
 // Native only: resolves the cold-start launch URL and releases the startup

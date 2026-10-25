@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   ResponsiveDialog,
@@ -21,20 +21,38 @@ import { encodeFeedbackMessage } from "@/lib/feedbackFields";
 interface FeedbackDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  gapDiagnostic?: string;
 }
 
-export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
+export function FeedbackDialog({ open, onOpenChange, gapDiagnostic }: FeedbackDialogProps) {
   const [type, setType] = useState<string>("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuth();
+  useEffect(() => {
+    if (open && gapDiagnostic) {
+      setType("bug");
+      setTitle("Something isn’t working");
+      setDescription("");
+    }
+  }, [open, gapDiagnostic]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !type || !title.trim()) return;
 
     setIsSubmitting(true);
+    const reportDescription = [description.trim(), gapDiagnostic ? `Support reference: ${gapDiagnostic}` : ""].filter(Boolean).join("\n\n");
+    let emailFailed = false;
+    const notifySupport = async () => {
+      try {
+        const { error } = await supabase.functions.invoke("send-feedback-email", {
+          body: { type, title: title.trim(), description: reportDescription || null, userEmail: user.email ?? null, userName: user.user_metadata?.display_name || user.email || "Ignite member" },
+        });
+        emailFailed = Boolean(error);
+      } catch { emailFailed = true; }
+    };
     try {
       await withFeatureBackend("admin", {
         supabase: async () => {
@@ -43,32 +61,22 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
             type,
             message: title.trim(),
             title: title.trim(),
-            description: description.trim() || null,
+            description: reportDescription || null,
           });
 
           if (feedbackError) throw feedbackError;
 
-          // Send email notification (fire-and-forget)
-          supabase.functions.invoke("send-feedback-email", {
-            body: {
-              type,
-              title: title.trim(),
-              description: description.trim() || null,
-              userEmail: user.email,
-              userName: user.user_metadata?.display_name || user.email,
-            },
-          }).catch((err) => console.error("Failed to send feedback email:", err));
+          await notifySupport();
         },
         icp: async (ctx) => {
-          // Provisional mapping: `type` -> feedback kind, `title` doubles as
-          // the canister's required `message`; description rides along as
-          // the optional title field so neither field is dropped. Email
-          // notification has no canister equivalent and is Supabase-only.
-          await submitLiveFeedback(ctx, type, title.trim(), encodeFeedbackMessage(description), null);
+          await submitLiveFeedback(ctx, type, title.trim(), encodeFeedbackMessage(reportDescription), null);
+          // Explicit fixed-purpose support transport; feedback stays on-chain.
+          await notifySupport();
         },
       });
 
-      toast.success("Thanks for your feedback!");
+      if (emailFailed) toast.warning("Your feedback was saved, but the support email could not be confirmed.");
+      else toast.success("Thanks for your feedback!");
       onOpenChange(false);
       setType("");
       setTitle("");

@@ -8,6 +8,7 @@ import type { GroupDomain } from "./groupRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 import { readOwnerTestRouteCached, nextOwnerTestClubId } from './ownerTestRouting';
 import { hasInternetIdentitySessionStored, readAuthChoice } from "./authBackendMode";
+import { reportBlockedFallback } from "./strictIcpTransport";
 
 /**
  * Runtime dispatcher that connects feature repositories to the hybrid
@@ -70,7 +71,10 @@ export async function withFeatureBackend<T>(
   const knownIcpSession = hasInternetIdentitySessionStored() || readAuthChoice() === "icp";
   if (knownIcpSession) {
     const target = tryGetActiveIcpTarget();
-    if (!target || !isFeatureCanisterConfigured(target, feature)) throw new Error(`The ${feature} connection is not configured. Try again after the connection is restored.`);
+    if (!target || !isFeatureCanisterConfigured(target, feature)) {
+      reportBlockedFallback(`coverage ${feature}`);
+      throw new Error(`The ${feature} connection is not configured. Please report this problem to Ignite.`);
+    }
     const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
     if (!identity) throw new Error("No active Internet Identity session. Sign in again to continue.");
     return dispatchIcp(feature, providers, { identity, target }, scope);
