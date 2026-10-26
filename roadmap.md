@@ -1,3 +1,8 @@
+## Bounded device caching — 26 October 2026
+- [ ] Bound saved page/message/list information and viewed photos, evict older copies, and add a safe clear-downloads control without deleting authentication, photo keys or upload recovery.
+- [ ] Improve existing Schedule/Home/Clubs/team/Vault snapshot reuse without authorizing from cached labels or downloading private files; run focused dual-mode storage/lifecycle and UI checks.
+- [ ] Signed-in phone timing requires Paul's Internet Identity session and updated frontend; no deployment requested.
+
 ## Stable background refresh — 26 October 2026
 - [x] ICP inbox sections, gallery and schedule lists retain active placement, update content/badges and append additions; missing rows disappear and hidden-page/filter/account changes reset order. Targeted card anchoring compensates size changes without smooth scroll. Calendar membership stays live and Supabase ordering is unchanged.
 - [x] 40 focused checks passed per mode plus 36 ICP page/cache checks; isolation guard and preview build OK. Browser fixture verified fresh text, stable ordering, compensation for an 80px resize above the reader and latest order on page return, with no page errors. Fixture does not establish signed-in production timing.
