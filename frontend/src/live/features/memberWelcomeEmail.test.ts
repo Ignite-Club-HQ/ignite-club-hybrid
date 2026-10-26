@@ -68,7 +68,7 @@ describe("maybeSendLiveMemberWelcomeEmail", () => {
 });
 
 describe("private contact email save",()=>{
-  beforeEach(()=>m.prepare.mockReset());
+  beforeEach(()=>{ m.prepare.mockReset(); m.prepare.mockResolvedValue("prepared"); });
   it("uses the strict original-field preparer for saving and explicit clearing",async()=>{
     await saveLiveContactEmail(ctx,"coach@example.test");
     await saveLiveContactEmail(ctx,"");
@@ -76,7 +76,7 @@ describe("private contact email save",()=>{
     expect(m.prepare).toHaveBeenNthCalledWith(2,ctx,"");
   });
   it("does not report a failed private write as a successful profile save",async()=>{
-    m.prepare.mockRejectedValue(new Error("Private readback unconfirmed"));
+    m.prepare.mockImplementation(async () => { throw new Error("Private readback unconfirmed"); });
     const failure = await saveLiveContactEmail(ctx,"coach@example.test").then(() => null, error => error);
     expect(failure).toBeInstanceOf(Error);
     expect(failure.message).toBe("Private readback unconfirmed");
