@@ -50,7 +50,7 @@ import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
-import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors, listLiveTeams } from "@/live/features/club";
+import { getLiveClubProfile, listLiveSponsors, listLiveTeams } from "@/live/features/club";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 import { useInAppPurchase } from "@/hooks/useInAppPurchase";
@@ -918,7 +918,7 @@ export default function ClubUpgradePage() {
           <Icon className={`h-12 w-12 ${isPro ? "text-yellow-500" : "text-emerald-500"} mx-auto`} />
           <div>
             <h2 className="text-xl font-bold">{title}</h2>
-            {isOnTrial && !isIcpRouted && !useIcpLab && (
+            {isOnTrial && (
               <Badge className="mt-2 bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30">
                 Free Trial
               </Badge>
@@ -1000,7 +1000,7 @@ export default function ClubUpgradePage() {
           )}
 
           <div className="flex flex-col gap-2">
-            {isOnTrial && (
+            {isOnTrial && !isIcpRouted && !useIcpLab && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10">
