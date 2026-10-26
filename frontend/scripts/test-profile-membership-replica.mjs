@@ -41,7 +41,10 @@ try {
     a.setPrincipal(governor);ok(await a.remove_member(id,member));a.setPrincipal(identity);
     assert.ok('Err'in await a.read_profile_membership_batch(requester,id,subjects,[first.revision]),'Stale first observation must reject the whole batch');
     const removed=ok(await a.read_profile_membership_batch(requester,id,subjects,[]));assert.deepEqual(removed.members,[false,false,true]);
-    a.setPrincipal(governor);ok(await a.restore_member(id,member));a.setPrincipal(identity);
+    a.setPrincipal(governor);ok(await a.restore_member(id,member));
+    // Restore removes the exclusion marker; it intentionally does not recreate
+    // removed role grants. Explicit re-grant supplies the positive ABA control.
+    ok(await a.add_role_grant(member,id,'member',[]));a.setPrincipal(identity);
     assert.ok('Err'in await a.read_profile_membership_batch(requester,id,subjects,[removed.revision]),'Remove/restore ABA must not resurrect old revision');
     const restored=ok(await a.read_profile_membership_batch(requester,id,subjects,[]));assert.deepEqual(restored.members,[true,false,true]);
     await pic.upgradeCanister({canisterId:f.canisterId,wasm,sender:governor,arg,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
