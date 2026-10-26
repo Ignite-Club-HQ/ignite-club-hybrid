@@ -34,6 +34,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ClubTeamFilter } from "@/components/ClubTeamFilter";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { useAuth } from "@/hooks/useAuth";
+import { useStableVisibleList } from "@/hooks/useStableVisibleList";
 import { AlbumCarousel } from "@/components/AlbumCarousel";
 import { EmojiReactions } from "@/components/EmojiReactions";
 import { MediaCommentSheet } from "@/components/MediaCommentSheet";
@@ -752,7 +753,7 @@ export function IcpMediaFeedPage() {
     && (selectedTeamId === 'all' || row.teamId === selectedTeamId)
     && (!competitionId || row.competitionId === competitionId));
   const resolvedUrls = useResolvedAssetUrls(allFeedPosts);
-  const posts = useMemo(() => {
+  const freshPosts = useMemo(() => {
     const all = allFeedPosts;
     return all
       .filter((post) => {
@@ -776,6 +777,11 @@ export function IcpMediaFeedPage() {
         ),
       }));
   }, [allFeedPosts, link.photoId, effectiveClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url, isBlocked, link.eventId, link.cardId, galleryCardQuery.data]);
+  const posts = useStableVisibleList(freshPosts, {
+    enabled: true,
+    scope: JSON.stringify([principal, effectiveClubId, selectedTeamId, competitionId, link.photoId, link.eventId, link.cardId]),
+    key: post => `${post.clubId}:${post.id}`,
+  });
 
   // Read comments from the freshest feed copy, not the snapshot taken when
   // the sheet opened, and keep just-sent comments until the canister has them.

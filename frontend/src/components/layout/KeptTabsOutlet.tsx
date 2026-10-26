@@ -10,6 +10,7 @@ import {
 import { useContext } from "react";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { TabPagePlaceholder } from "./TabPagePlaceholder";
+import { KeptPageActivity } from "./KeptPageActivity";
 
 /**
  * Keeps the bottom-tab pages (Home, Messages, Schedule, Media) mounted once
@@ -49,6 +50,7 @@ const KeptTab = memo(function KeptTab({ path, location, active }: { path: TabPat
   return (
     <div className={active ? "contents" : "hidden"} aria-hidden={!active || undefined} data-kept-tab={path}>
       <FrozenNavigation frozen={!active}>
+        <KeptPageActivity.Provider value={active}>
         <Suspense
           fallback={active ? <TabPagePlaceholder /> : null}
         >
@@ -56,6 +58,7 @@ const KeptTab = memo(function KeptTab({ path, location, active }: { path: TabPat
             <Route path={path} element={<Page />} />
           </Routes>
         </Suspense>
+        </KeptPageActivity.Provider>
       </FrozenNavigation>
     </div>
   );

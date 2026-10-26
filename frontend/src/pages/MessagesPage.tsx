@@ -1,5 +1,6 @@
 import { useStickyList } from "@/hooks/useStickyList";
 import { useStableInboxReadModel } from "@/hooks/useStableInboxReadModel";
+import { useStableVisibleList } from "@/hooks/useStableVisibleList";
 import {
   conversationTypeAccentStyle,
   conversationTypeActiveStyle,
@@ -1880,10 +1881,23 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
     [unifiedConversations, typeFilter],
   );
 
-  const { unread: unreadItems, recent: recentItems } = useMemo(
+  const freshSections = useMemo(
     () => partitionInboxByReadState(typeFilteredConversations),
     [typeFilteredConversations],
   );
+  // Placement includes the section: fresh unread badges must not move a row
+  // from Recent to Unread while someone is reading further down the inbox.
+  const placedRows = useStableVisibleList([
+    ...freshSections.unread.map(item => ({ item, section: "unread" as const })),
+    ...freshSections.recent.map(item => ({ item, section: "recent" as const })),
+  ], {
+    enabled: useIcpLab,
+    scope: JSON.stringify([user?.id, effectiveClubFilter, query, typeFilter, showAllOps]),
+    key: row => row.item.key,
+    merge: (old, fresh) => ({ ...fresh, section: old.section }),
+  });
+  const unreadItems = placedRows.filter(row => row.section === "unread").map(row => row.item);
+  const recentItems = placedRows.filter(row => row.section === "recent").map(row => row.item);
 
   const { visibleRecent, hiddenOps } = useMemo(
     () => resolveOperationalConversationDisclosure(recentItems, {
