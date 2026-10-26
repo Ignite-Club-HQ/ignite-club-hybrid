@@ -56,17 +56,16 @@ export async function decodeSnapshot(require, schemaFile, blob) {
 }
 
 /**
- * Export every domain, decode, count and compare against the journal.
- * `deps`: { exportSnapshot(domain) -> Uint8Array (messaging: full concatenated
- * pages already assembled by the caller) }. Returns a per-domain report;
- * throws on the first mismatch.
+ * Read every domain back, count and compare against the journal.
+ * `deps`: { readSnapshot(domain) -> decoded snapshot object } — the caller
+ * handles export paging (messaging) and decoding. Returns a per-domain
+ * report; throws on the first mismatch.
  */
 export async function reconcileClub(ctx, journal, deps) {
   const expected = expectedCounts(journal);
   const report = [];
   for (const [domain, want] of Object.entries(expected)) {
-    const blob = await deps.exportSnapshot(domain);
-    const snap = await decodeSnapshot(ctx.require, ctx.schemaFile(domain), blob);
+    const snap = await deps.readSnapshot(domain);
     const got = countSnapshot(domain, snap);
     report.push({ domain, expected: want, actual: got, ok: got === want });
     if (got !== want) throw Error(`Reconciliation failed for ${domain}: destination has ${got}, writers acknowledged ${want}`);
@@ -74,8 +73,7 @@ export async function reconcileClub(ctx, journal, deps) {
   // media_bytes: every photo/Vault record must point at on-chain bytes.
   if (journal.steps?.media_bytes?.state === 'done') {
     for (const domain of ['media_metadata', 'vault_domain']) {
-      const blob = await deps.exportSnapshot(domain);
-      const snap = await decodeSnapshot(ctx.require, ctx.schemaFile(domain), blob);
+      const snap = await deps.readSnapshot(domain);
       const rows = domain === 'media_metadata' ? snap.assets ?? [] : snap.files ?? [];
       const missing = rows.filter((r) => !(r.blob_ref?.length)).length;
       report.push({ domain: `${domain} blob_refs`, expected: rows.length, actual: rows.length - missing, ok: missing === 0 });
