@@ -263,9 +263,22 @@ export async function publishLiveGalleryChatCard(ctx: FeatureBackendContext, inp
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
   const card = await unwrapCandid(actor.save_gallery_chat_card([], input.clubId, input.teamId,
     candidOpt(input.eventId), input.receipt, candidOpt(input.assetIds[0]), [input.heroUrl], input.assetIds.length, input.assetIds, false, false), 'Save gallery chat card');
-  const { sendLiveMessage } = await import('./messaging');
+  const { sendLiveMessage, isLiveConversationAbsent, ensureLiveClubConversations } = await import('./messaging');
   const { readContentInScope } = await import('../contentRouting');
-  await readContentInScope(ctx, 'messaging', { clubId: input.clubId }, scoped =>
+  const { writeOnce } = await import('../clubScope');
+  // Uploading does not open the team thread, so older teams may never have
+  // provisioned their deterministic conversation. Only confirmed absence
+  // authorizes repair; denied/unknown reads must stop before any write.
+  const absent = await readContentInScope(ctx, 'messaging', { clubId: input.clubId }, scoped =>
+    isLiveConversationAbsent(scoped, input.teamId));
+  if (absent) {
+    await readContentInScope(ctx, 'membership', writeOnce({ clubId: input.clubId }), scoped =>
+      ensureLiveClubConversations(scoped, input.clubId));
+    const stillAbsent = await readContentInScope(ctx, 'messaging', { clubId: input.clubId }, scoped =>
+      isLiveConversationAbsent(scoped, input.teamId));
+    if (stillAbsent) throw new Error('Team chat could not be prepared');
+  }
+  await readContentInScope(ctx, 'messaging', writeOnce({ clubId: input.clubId }), scoped =>
     sendLiveMessage(scoped, input.teamId, `[gallery:${card.id}]`, input.receipt));
   return card;
 }

@@ -1,3 +1,6 @@
+## Gallery team-chat announcement failure — 26 October 2026
+- [x] Upload announcement omitted existing missing-only conversation preparation. Added exact authorized absence check, one owning-club membership repair only when absent, closing presence check and single-attempt messaging write; existing threads skip provisioning, denied/unknown reads stop and sends never replay. Focused verification pending; no deployment.
+
 ## Media upload publishing and post controls — 26 October 2026
 - [x] Cause: separate upload preview omitted controls and waited for batch completion/aggregate rediscovery. Asset+scope receipts now enter normal interactive posts immediately, reuse phone bytes, group albums and survive refresh delays; registration-only/unknown scopes remain noninteractive. Removed per-photo/repeated success invalidations, parallelized independent Vault/chat/notice work, corrected single-photo chat receipt collisions and routed key warmup to owning club. Mounted gallery opens comments on exact acknowledged asset before feed/details complete; 28 targeted tests/ICP guards pass; preview build OK. No backend/deployment changes; real signed-in phone upload duration remains unverified.
 
