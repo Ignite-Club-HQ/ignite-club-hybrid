@@ -141,6 +141,12 @@ persistent actor class Main(governorInit : Principal) = this {
   public type GuardianRelationship = {
     guardian : Principal;
     children : [Text]; // pii_id set
+    // Optional display metadata preserved from the source system during
+    // migration (e.g. "parent"/"guardian", primary-contact flag). Never
+    // gates access — only the children set does. Null for self-registered
+    // relationships.
+    label : ?Text;
+    is_primary : ?Bool;
   };
 
   // A club-scoped read grant: members of `club_id` (per club_domain) may
@@ -858,7 +864,7 @@ persistent actor class Main(governorInit : Principal) = this {
       };
       case null {
         mediaAuthEpoch += 1;
-        guardian_relationships := guardian_relationships.concat([{ guardian = guardian; children = [child_id] }]);
+        guardian_relationships := guardian_relationships.concat([{ guardian = guardian; children = [child_id]; label = null; is_primary = null }]);
       };
     };
     log_audit(caller, child_id, "guardian_relationship", "add", true, "Guardian relationship registered");

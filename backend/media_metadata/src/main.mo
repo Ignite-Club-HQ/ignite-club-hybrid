@@ -77,6 +77,9 @@ persistent actor class Main(governorInit : Principal) = this {
   var roles : [Types.RoleGrant];
   var bulkAccessPrincipals : [Principal];
   var galleryChatCards : [Types.GalleryChatCard];
+  // Photo albums (migration 20261110_000000): named groupings referenced by
+  // Asset.album_id.
+  var albums : [Types.Album];
   var transferFences : [Text];
 
   transient let MAX_ASSETS = 20_000;
