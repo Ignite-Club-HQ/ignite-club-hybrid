@@ -118,8 +118,20 @@ describe('rehearsal chat relationship names', () => {
     await expect(readChatRelationshipProfiles(owner, 'chat', ['person'])).rejects.toThrow('changed');
     expect(mocks.metadata).toHaveBeenCalledTimes(1);
   });
-  it('refuses unsupported/admin scopes and mismatched returned subjects', async () => {
-    mocks.metadata.mockResolvedValue({ ...metadata(), kind: 'competition_admin', clubId: null });
+  it('delegates admin chat IDs without guessing their owning competition or using ordinary roles', async () => {
+    mocks.metadata.mockResolvedValue({ ...metadata(), kind: 'competition_admin', clubId: null, teamId: null });
+    await readChatRelationshipProfiles(context(), 'chat', ['person']);
+    expect(mocks.profiles.mock.calls[0][2]).toEqual({ kind: 'competition_admin', resource: 'chat' });
+    expect(mocks.cards).not.toHaveBeenCalled(); expect(mocks.chats).not.toHaveBeenCalled(); expect(mocks.legacy).not.toHaveBeenCalled();
+  });
+  it('withholds admin names when the owning service refuses a stale role', async () => {
+    mocks.metadata.mockResolvedValue({ ...metadata(), kind: 'competition_admin', clubId: null, teamId: null });
+    mocks.profiles.mockRejectedValueOnce(new Error('Admin thread membership changed'));
+    await expect(readChatRelationshipProfiles(context(), 'chat', ['person'])).rejects.toThrow('membership changed');
+    expect(mocks.metadata).toHaveBeenCalledTimes(1); expect(mocks.legacy).not.toHaveBeenCalled();
+  });
+  it('refuses ambiguous admin metadata and mismatched returned subjects', async () => {
+    mocks.metadata.mockResolvedValue({ ...metadata(), kind: 'competition_admin', teamId: 'foreign' });
     await expect(readChatRelationshipProfiles(context(), 'chat', ['person'])).rejects.toThrow('unavailable');
     expect(mocks.profiles).not.toHaveBeenCalled();
     mocks.metadata.mockResolvedValue(metadata());

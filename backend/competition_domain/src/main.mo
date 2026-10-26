@@ -37,6 +37,7 @@ persistent actor class Main(governorInit : Principal) = this {
   transient let accountAdmissionAuthority = switch (Runtime.envVar<system>("IGNITE_ACCOUNT_SERVICE_IDENTITY")) {
     case (?id) ?Principal.fromText(id); case null null
   };
+  transient let privateMessagingAuthority = Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_MESSAGING");
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
   var removal_intents : Map.Map<Text, RemovalReceiver.Request>;
   var removal_subjects : Map.Map<Principal, Text>;
@@ -3016,7 +3017,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // membership and stale role mirrors cannot stand in for a private inbox.
   public shared ({ caller }) func read_profile_admin_thread_batch(requester : Principal, competition_id : Text, member : Principal, subjects : [Principal], expected : ?Nat) : async { #Ok : { revision : Nat; requester : Principal; club : Text; subjects : [Principal]; members : [Bool] }; #Err : Text } {
     if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1"
-      or Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_MESSAGING") != ?caller.toText() or caller.isAnonymous()) return #Err("Configured private messaging authority required");
+      or privateMessagingAuthority != ?caller.toText() or caller.isAnonymous()) return #Err("Configured private messaging authority required");
     if (competition_id == "" or competition_id.size() > 128 or not competitions.any(func c = c.id == competition_id)) return #Err("Exact existing competition required");
     func admins() : [Principal] {
       roles.filter(func r = r.competition_id == competition_id and (r.role == "competition_admin" or r.role == "admin" or r.role == "owner")).map(func r = r.user)
@@ -3028,7 +3029,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let pinned = snapshot();
       if (Text.encodeUtf8(pinned).size() > 32_768) return #Err("Bounded competition evidence required");
       func active() : Bool = pinned == snapshot() and not compFenced(competition_id)
-        and Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_MESSAGING") == ?caller.toText()
+        and privateMessagingAuthority == ?caller.toText()
         and not removalReceiver.denied(requester) and not removalReceiver.denied(member)
         and not subjects.any(func p = removalReceiver.denied(p));
       let people = [requester, member].concat(subjects).filter(func p = not p.isAnonymous());
