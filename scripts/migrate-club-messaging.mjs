@@ -13,9 +13,8 @@ export const CHAT_PAGE_SIZE = 500;
  * first messages; later pages carry messages only, in per-conversation order.
  * `claims` maps Supabase user id -> verified destination Principal.
  */
-export function buildChatPages({ clubId, teams = [], teamMessages = [], clubMessages = [], chatGroups = [], groupMessages = [], clubAdminConversations = [], clubAdminMessages = [], polls = [], claims, creator }) {
+export function buildChatPages({ clubId, teams = [], teamMessages = [], clubMessages = [], chatGroups = [], groupMessages = [], clubAdminConversations = [], clubAdminMessages = [], polls = [], pollVotes = [], claims, creator }) {
   if (!creator) throw Error('Creator principal required');
-  if (polls.length) throw Error('Poll votes have no snapshot contract; refusing to drop them');
   const teamIds = new Set(teams.map((t) => t.id));
   for (const m of teamMessages) if (!teamIds.has(m.team_id)) throw Error('Foreign team message refused');
   for (const m of clubMessages) if (m.club_id !== clubId) throw Error('Foreign club message refused');
@@ -62,11 +61,42 @@ export function buildChatPages({ clubId, teams = [], teamMessages = [], clubMess
   });
   for (const c of conversations) c.next_sequence = BigInt((sequences.get(c.id) ?? 0) + 1);
 
+  // Polls and votes travel on page 0 with the conversations. Every vote must
+  // reference an included poll, within its option range, one per voter.
+  const convIds = new Set(conversations.map((c) => c.id));
+  const pollRows = polls.filter((p) => !p.deleted_at).map((p) => {
+    if (!convIds.has(p.chat_id)) throw Error('Foreign poll refused');
+    const options = Array.isArray(p.options) ? p.options.map(String) : null;
+    if (!options || options.length < 2) throw Error('Poll without options refused');
+    return {
+      id: p.id, conversation_id: p.chat_id, message_id: opt(p.message_id),
+      question: String(p.question ?? ''), options,
+      creator: claimedPrincipal(claims, p.created_by), closed: !!(p.closed ?? p.is_closed),
+      created_at_ms: timestamp(p.created_at),
+    };
+  });
+  const pollById = new Map(pollRows.map((p) => [p.id, p]));
+  const seenVotes = new Set();
+  const voteRows = pollVotes.map((v) => {
+    const poll = pollById.get(v.poll_id);
+    if (!poll) throw Error('Vote for unknown poll refused');
+    const idx = Number(v.option_index ?? v.selected_option_index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= poll.options.length) throw Error('Vote outside poll options refused');
+    const key = `${v.poll_id}${v.user_id}`;
+    if (seenVotes.has(key)) throw Error('Duplicate poll vote refused');
+    seenVotes.add(key);
+    return { poll_id: v.poll_id, user: claimedPrincipal(claims, v.user_id), option_index: idx };
+  });
+
   const pages = [];
   for (let offset = 0; ; offset += CHAT_PAGE_SIZE) {
     const slice = messages.slice(offset, offset + CHAT_PAGE_SIZE);
     const end = offset + slice.length;
-    pages.push({ conversations: offset === 0 ? conversations : [], messages: slice, next: end < messages.length ? [BigInt(end)] : [] });
+    pages.push({
+      conversations: offset === 0 ? conversations : [], messages: slice,
+      polls: offset === 0 ? [pollRows] : [], poll_votes: offset === 0 ? [voteRows] : [],
+      next: end < messages.length ? [BigInt(end)] : [],
+    });
     if (end >= messages.length) return pages;
   }
 }

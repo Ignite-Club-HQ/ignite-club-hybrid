@@ -87,6 +87,17 @@ module {
     created_at_ms : Nat64;
     updated_at_ms : Nat64;
   };
+  // A photo album: named grouping referenced by Asset.album_id. Mirrors the
+  // Supabase photo_albums row shape so album names/covers survive migration
+  // instead of being dropped. cover_asset_id references an Asset id.
+  public type Album = {
+    id : Text;
+    club_id : Text;
+    title : Text;
+    cover_asset_id : ?Text;
+    created_by : Principal;
+    created_at_ms : Nat64;
+  };
   public type State = {
     schema : Nat32;
     governor : Principal;
@@ -96,5 +107,6 @@ module {
     comments : [Comment];
     roles : [RoleGrant];
     galleryChatCards : [GalleryChatCard];
+    albums : [Album];
   };
 }

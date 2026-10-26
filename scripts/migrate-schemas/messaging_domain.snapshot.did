@@ -1229,6 +1229,8 @@ type ChatPage =
    conversations: vec Conversation;
    messages: vec Message;
    next: opt nat;
+   poll_votes: opt vec PollVote;
+   polls: opt vec Poll;
  };
 type CanisterWsOpenResult = 
  variant {

@@ -12,12 +12,23 @@ export function mimeFromUrl(url) {
 }
 
 export function buildMediaSnapshot({ clubId, photos = [], albums = [], claims }) {
-  // Album names/covers have no field in the asset snapshot; never drop them.
-  if (albums.length) throw Error('Photo album metadata has no snapshot contract; refusing to drop it');
   for (const p of photos) if (p.club_id !== clubId) throw Error('Foreign photo refused');
   const ids = photos.map((p) => p.id);
   if (new Set(ids).size !== ids.length) throw Error('Duplicate photo id refused');
+  const photoIds = new Set(ids);
+  // Album names/covers carry over; covers must point at a migrated photo.
+  const mappedAlbums = albums.filter((a) => !a.deleted_at).map((a) => {
+    if (a.club_id !== clubId) throw Error('Foreign photo album refused');
+    const cover = a.cover_photo_id ?? null;
+    if (cover && !photoIds.has(cover)) throw Error('Album cover references an unknown photo');
+    return {
+      id: a.id, club_id: clubId, title: String(a.name ?? a.title ?? 'Album'),
+      cover_asset_id: opt(cover), created_by: claimedPrincipal(claims, a.created_by),
+      created_at_ms: timestamp(a.created_at),
+    };
+  });
   return {
+    albums: [mappedAlbums],
     assets: photos.map((p) => ({
       id: p.id, club_id: clubId, owner: claimedPrincipal(claims, p.uploader_id),
       kind: 'photo', mime: mimeFromUrl(p.image_url), checksum: '', storage_path: p.image_url, blob_ref: [],

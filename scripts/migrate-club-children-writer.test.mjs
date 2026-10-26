@@ -75,10 +75,27 @@ test('children writer encrypts names, uses the principal account convention and 
   assert.equal(prepared.domain.children[0].parent[0].toText(), member.toText());
 });
 
-test('children writer refuses guardian metadata it cannot preserve', async () => {
+test('children writer preserves guardian labels through the display-only sidecar', async () => {
   const ctx = fakeCtx({
     ...sourceRows,
-    'child_guardians:child_id': [{ id: 'g1', child_id: 'ch1', guardian_id: 'u1', relationship_type: 'mother', is_primary: false, created_at: now }],
+    'child_guardians:child_id': [{ id: 'g1', child_id: 'ch1', guardian_id: 'u1', relationship_type: 'mother', is_primary: true, created_at: now }],
   });
-  await assert.rejects(() => WRITERS.children(ctx), /Guardian relationship metadata/);
+  const { prepareFamilyCopy } = await import('./migrate-club-family.mjs');
+  const accounts = new Map([...claims.entries()].map(([u, p]) => [u, { principal: p.toText(), accountId: `principal:${p.toText()}` }]));
+  const prepared = await prepareFamilyCopy({
+    clubId: 'c1', groupId: 'g9', target: ctx.target,
+    destination: { clubId: 'c1', groupId: 'g9', clubDomain: ctx.target.canisters.club_domain, piiDomain: ctx.target.canisters.pii_access_control, childIds: new Set(), piiIds: new Set() },
+    claims, accounts, teams: sourceRows.teams, children: sourceRows['children:id'],
+    assignments: sourceRows['child_team_assignments:team_id'], guardians: ctx.rows ? [{ id: 'g1', child_id: 'ch1', guardian_id: 'u1', relationship_type: 'mother', is_primary: true, created_at: now }] : [],
+    userRoles: sourceRows.user_roles, exclusions: [], publicKey: await productionPiiPublicKey(ctx.target),
+  });
+  // Labels ride the guardian-label sidecar, never the access-gating relationship.
+  assert.deepEqual(prepared.pii.guardians[0], { guardian: member, children: ['ch1'] });
+  assert.deepEqual(prepared.pii.guardian_labels[0][0].rel_label, ['mother']);
+  assert.deepEqual(prepared.pii.guardian_labels[0][0].is_primary, [true]);
+  // The PII snapshot with labels encodes against the real canister schema.
+  const type = await snapshotType(require, new URL('./migrate-schemas/pii_access_control.snapshot.did.js', import.meta.url).href);
+  const { IDL } = require('@icp-sdk/core/candid');
+  const [back] = IDL.decode([type], IDL.encode([type], [prepared.pii]));
+  assert.deepEqual(back.guardian_labels[0][0].rel_label, ['mother']);
 });

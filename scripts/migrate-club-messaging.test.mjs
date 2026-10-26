@@ -55,8 +55,16 @@ test('paging splits messages at the page size with conversations on page zero on
   assert.deepEqual(pages[1].next, []);
 });
 
-test('refuses polls, foreign messages and unclaimed authors rather than dropping data', () => {
-  assert.throws(() => buildChatPages({ ...base, polls: [{ id: 'p1' }] }), /Poll votes/);
+test('polls and votes travel on page zero; foreign rows and unclaimed authors refuse', () => {
+  const pages = buildChatPages({ ...base, clubMessages: [],
+    polls: [{ id: 'p1', chat_id: 't1', question: 'Bring oranges?', options: ['Yes', 'No'], created_by: 'u1', closed: false, created_at: now }],
+    pollVotes: [{ poll_id: 'p1', user_id: 'u1', option_index: 0 }] });
+  assert.equal(pages[0].polls[0][0].question, 'Bring oranges?');
+  assert.equal(pages[0].polls[0][0].creator.toText(), member.toText());
+  assert.equal(pages[0].poll_votes[0][0].option_index, 0);
+  assert.throws(() => buildChatPages({ ...base, polls: [{ id: 'p1', chat_id: 'other', question: 'Q', options: ['a', 'b'], created_by: 'u1', created_at: now }] }), /Foreign poll/);
+  assert.throws(() => buildChatPages({ ...base, polls: [{ id: 'p1', chat_id: 't1', question: 'Q', options: ['a', 'b'], created_by: 'u1', created_at: now }], pollVotes: [{ poll_id: 'p1', user_id: 'u1', option_index: 5 }] }), /outside poll options/);
+  assert.throws(() => buildChatPages({ ...base, pollVotes: [{ poll_id: 'unknown', user_id: 'u1', option_index: 0 }] }), /unknown poll/);
   assert.throws(() => buildChatPages({ ...base, teamMessages: [{ id: 'x', team_id: 'other', author_id: 'u1', text: '', created_at: now }] }), /Foreign team message/);
   assert.throws(() => buildChatPages({ ...base, clubMessages: [{ id: 'x', club_id: 'other', author_id: 'u1', text: '', created_at: now }] }), /Foreign club message/);
   assert.throws(() => buildChatPages({ ...base, teamMessages: [{ id: 'x', team_id: 't1', author_id: 'stranger', text: '', created_at: now }] }), /claim/);

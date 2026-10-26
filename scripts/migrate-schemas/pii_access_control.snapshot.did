@@ -217,9 +217,16 @@ type GuardianRelationship =
    children: vec text;
    guardian: principal;
  };
+type GuardianLabel = 
+ record {
+   guardian: principal;
+   is_primary: opt bool;
+   rel_label: opt text;
+ };
 type FenceSnapshot = 
  record {
    grants: vec ClubReadGrant;
+   guardian_labels: opt vec GuardianLabel;
    guardians: vec GuardianRelationship;
    records: vec PiiRecord;
  };

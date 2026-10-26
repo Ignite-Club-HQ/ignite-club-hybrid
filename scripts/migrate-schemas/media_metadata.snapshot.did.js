@@ -60,6 +60,14 @@ export const idlFactory = ({ IDL }) => {
     'purpose' : IDL.Text,
     'expires_at_ms' : IDL.Nat64,
   });
+  const Album = IDL.Record({
+    'id' : IDL.Text,
+    'title' : IDL.Text,
+    'cover_asset_id' : IDL.Opt(IDL.Text),
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'club_id' : IDL.Text,
+  });
   const GalleryChatCard = IDL.Record({
     'id' : IDL.Text,
     'uploader_id' : IDL.Principal,
@@ -84,6 +92,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const State = IDL.Record({
     'capabilities' : IDL.Vec(Capability),
+    'albums' : IDL.Vec(Album),
     'schema' : IDL.Nat32,
     'assets' : IDL.Vec(Asset),
     'governor' : IDL.Principal,
@@ -129,6 +138,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const FenceSnapshot = IDL.Record({
     'capabilities' : IDL.Vec(Capability),
+    'albums' : IDL.Opt(IDL.Vec(Album)),
     'cards' : IDL.Vec(GalleryChatCard),
     'assets' : IDL.Vec(Asset),
     'comments' : IDL.Vec(Comment),

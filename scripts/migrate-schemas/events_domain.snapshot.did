@@ -1700,6 +1700,18 @@ type GamePlayerStatInput =
    substitutions_count: nat16;
    user_id: opt text;
  };
+type GamePlayerStatExtra = 
+ record {
+   assists: opt nat16;
+   child_id: opt text;
+   event_id: text;
+   position_minutes: opt vec record {
+                               text;
+                               nat16;
+                             };
+   team_id: text;
+   user_id: opt text;
+ };
 type GamePlayerStat = 
  record {
    event_id: text;
@@ -1724,23 +1736,31 @@ type GamePlayerDetail =
  };
 type EventsSnapshot = 
  record {
+   captains: opt vec EventCaptain;
+   duties: opt vec Duty;
+   duty_teams: opt vec EventDutyTeam;
    events: vec Event;
+   goalkeepers: opt vec EventGoalkeeper;
    group_duties: opt vec EventGroupDuty;
    group_players: opt vec EventGroupPlayer;
    groups: opt vec EventGroup;
+   guests: opt vec EventGuest;
    match_links: opt vec CompetitionEventLink;
    materializations: opt vec record {
                                text;
                                MaterializationReceipt;
                              };
+   open_duties: opt vec OpenDuty;
    operations: opt vec CompetitionEventOperation;
    player_details: opt vec record {
                              text;
                              vec GamePlayerDetail;
                            };
+   player_of_match: opt vec EventPotm;
    results: opt vec GameResult;
    rsvps: vec Rsvp;
    series: vec EventSeries;
+   stat_extras: opt vec GamePlayerStatExtra;
    stats: opt vec GamePlayerStat;
    summaries: opt vec GameSummary;
  };
@@ -1791,6 +1811,13 @@ type EventRoster =
    guests: vec EventGuest;
    rsvps: vec RsvpWithChild;
  };
+type EventPotm = 
+ record {
+   child_id: opt text;
+   event_id: text;
+   team_id: opt text;
+   user_id: opt text;
+ };
 type EventGuest = 
  record {
    added_by: principal;
@@ -1828,10 +1855,24 @@ type EventGroup =
    team_letter: opt text;
    timer_state_json: opt text;
  };
+type EventGoalkeeper = 
+ record {
+   child_id: opt text;
+   event_id: text;
+   team_id: text;
+   user_id: opt text;
+ };
 type EventDutyTeam = 
  record {
    event_id: text;
    team_id: text;
+ };
+type EventCaptain = 
+ record {
+   child_id: opt text;
+   event_id: text;
+   team_id: text;
+   user_id: opt text;
  };
 type EventAttendance = 
  record {

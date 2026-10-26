@@ -40,6 +40,14 @@ module {
   public type LineupSnapshot = { event_id : Text; team_id : ?Text; formation : ?Text; team_size : Nat16; ball_x : ?Float; ball_y : ?Float; players : [LineupPlayer]; updated_by : Principal; updated_at_ms : Nat64; revision : Nat64 };
   public type Duty = { event_id : Text; account_id : Text; duty : Text; completed : Bool };
   public type EventDutyTeam = { event_id : Text; team_id : Text };
+  // ---- Match officials preservation (migration 20261116_000000) ----
+  // Captain/goalkeeper/player-of-the-match assignments per event. References
+  // only: user_id is the destination principal text of a claimed account,
+  // child_id a migrated child. Plaintext names never appear here — private
+  // names stay in pii_access_control under the club's key.
+  public type EventCaptain = { event_id : Text; team_id : Text; user_id : ?Text; child_id : ?Text };
+  public type EventGoalkeeper = { event_id : Text; team_id : Text; user_id : ?Text; child_id : ?Text };
+  public type EventPotm = { event_id : Text; team_id : ?Text; user_id : ?Text; child_id : ?Text };
   public type CompetitionEventTarget = { team_id : Text; club_id : Text };
   public type CompetitionEventOperation = { operation_id : Text; competition_id : Text; event_ids : [Text] };
   public type CompetitionEventLink = { event_id : Text; competition_id : Text; match_id : Text; team_id : Text };
@@ -160,6 +168,11 @@ module {
     goals_scored : Nat16;
   };
   public type GamePlayerDetail = { user_id : ?Text; child_id : ?Text; position_seconds : ?[(Text, Nat32)] };
+  // Sidecar for stat fields the structured record predates (migration
+  // 20261116_000000): assists and the source-unit position_minutes map,
+  // correlated to a stat row by (event_id, team_id, subject). Keeps the
+  // stored GamePlayerStat/GamePlayerDetail shapes untouched.
+  public type GamePlayerStatExtra = { event_id : Text; team_id : Text; user_id : ?Text; child_id : ?Text; assists : ?Nat16; position_minutes : ?[(Text, Nat16)] };
   public type DetailedGamePlayerStat = { stat : GamePlayerStat; detail : ?GamePlayerDetail };
 
   // Mirrors Supabase game_results. period_scores/player_stats are opaque

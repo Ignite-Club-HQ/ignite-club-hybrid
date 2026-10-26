@@ -143,6 +143,16 @@ persistent actor class Main(governorInit : Principal) = this {
     children : [Text]; // pii_id set
   };
 
+  // Display-only guardian metadata preserved from the source system during
+  // migration (e.g. "parent"/"guardian", primary-contact flag). Sidecar to
+  // GuardianRelationship so the stored relationship shape stays untouched;
+  // never gates access — only the children set does.
+  public type GuardianLabel = {
+    guardian : Principal;
+    rel_label : ?Text;
+    is_primary : ?Bool;
+  };
+
   // A club-scoped read grant: members of `club_id` (per club_domain) may
   // read the (pii_id, field_id) record via the decrypt methods.
   public type ClubReadGrant = {
@@ -208,6 +218,8 @@ persistent actor class Main(governorInit : Principal) = this {
   // grant_pii_read authorization. Seeded empty, populated via
   // add_guardian_relationship.
   var guardian_relationships : [GuardianRelationship];
+  // Display-only guardian metadata sidecar (migration 20261110_000000).
+  var guardianLabels : [GuardianLabel];
 
   // Club-scoped read grants: any principal holding a role in `club_id`
   // (verified via club_domain's has_club_staff_role at read time) may read
@@ -259,13 +271,15 @@ persistent actor class Main(governorInit : Principal) = this {
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
   };
-  type FenceSnapshot = { grants : [ClubReadGrant]; records : [PiiRecord]; guardians : [GuardianRelationship] };
+  type FenceSnapshot = { grants : [ClubReadGrant]; records : [PiiRecord]; guardians : [GuardianRelationship]; guardian_labels : ?[GuardianLabel] };
   func fenceSnapshot(c : Text) : FenceSnapshot {
     let rootG = club_read_grants.filter(func(x) = x.club_id == c);
     let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
+    let gs = guardian_relationships.filter(func(x) = x.children.any(inG));
     { grants = club_read_grants.filter(func(x) = x.club_id == c);
       records = pii_records.filter(func(x) = inG(x.pii_id));
-      guardians = guardian_relationships.filter(func(x) = x.children.any(inG)) }
+      guardians = gs;
+      guardian_labels = ?guardianLabels.filter(func(x) = gs.any(func(g) = g.guardian.equal(x.guardian))) }
   };
   func fenceDrop(c : Text) {
     let rootG = club_read_grants.filter(func(x) = x.club_id == c);
@@ -292,6 +306,8 @@ persistent actor class Main(governorInit : Principal) = this {
         or s.records.any(func(x) = reservedMediaIdentity(x.pii_id, x.field_id))
         or s.records.any(func(x) = not (inG(x.pii_id)))
         or s.guardians.any(func(x) = not (x.children.any(inG)))) return #Err("Snapshot contains foreign records");
+    let incomingLabels = s.guardian_labels ?? [];
+    if (incomingLabels.any(func(x) = not s.guardians.any(func(g) = g.guardian.equal(x.guardian)))) return #Err("Guardian label without a relationship");
     if (s.records.any(func(e) = pii_records.any(func(x) = x.pii_id == e.pii_id and x.field_id == e.field_id and x.ciphertext != e.ciphertext))) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
     mediaAuthEpoch += 1;
@@ -303,8 +319,17 @@ persistent actor class Main(governorInit : Principal) = this {
       let kids = g.children.filter(inG);
       mediaAuthEpoch += 1;
       guardian_relationships := switch (guardian_relationships.find(func(y) = y.guardian.equal(g.guardian))) {
+        // Existing destination entry stays authoritative for label/primary;
+        // only the child set merges.
         case (?cur) guardian_relationships.map(func(y) = if (y.guardian.equal(g.guardian)) { { y with children = y.children.concat(kids.filter(func(k) = not y.children.any(func(z) = z == k))) } } else y);
         case null guardian_relationships.concat([{ g with children = kids }]);
+      };
+    };
+    // Display-only labels: an existing destination entry stays authoritative.
+    for (l in incomingLabels.values()) {
+      if (not guardianLabels.any(func(y) = y.guardian.equal(l.guardian))) {
+        mediaAuthEpoch += 1;
+        guardianLabels := guardianLabels.concat([l]);
       };
     };
     #Ok(s.grants.size())
@@ -883,6 +908,10 @@ persistent actor class Main(governorInit : Principal) = this {
       guardian_relationships.map(func(g) = if (g.guardian.equal(guardian)) { { g with children = g.children.filter(func(c) = c != child_id) } } else { g }),
       func(g) = g.children.size() > 0
     );
+    // Drop the display-only label when the guardian has no children left.
+    if (not guardian_relationships.any(func(g) = g.guardian.equal(guardian))) {
+      guardianLabels := guardianLabels.filter(func(l) = not l.guardian.equal(guardian));
+    };
     log_audit(caller, child_id, "guardian_relationship", "remove", true, "Guardian relationship removed");
     #Ok
   
@@ -1256,12 +1285,27 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { guardian_relationships };
     };
 
+    // Display-only guardian labels follow the rekey; an existing label on the
+    // new principal stays authoritative.
+    let newGuardianLabels = switch (guardianLabels.find(func(l : GuardianLabel) : Bool = l.guardian.equal(old))) {
+      case (?ol) {
+        changed += 1;
+        if (guardianLabels.any(func(l : GuardianLabel) : Bool = l.guardian.equal(new))) {
+          guardianLabels.filter(func(l : GuardianLabel) : Bool = not l.guardian.equal(old))
+        } else {
+          guardianLabels.map(func(l : GuardianLabel) : GuardianLabel = if (l.guardian.equal(old)) { { l with guardian = new } } else l)
+        };
+      };
+      case null { guardianLabels };
+    };
+
     if (not dry_run) {
       mediaAuthEpoch += 1;
       pii_records := newPiiRecords;
       audit_log := newAuditLog;
       mediaAuthEpoch += 1;
       guardian_relationships := newGuardianRelationships;
+      guardianLabels := newGuardianLabels;
     };
 
     #ok(changed)
