@@ -5,6 +5,7 @@ import { markChatFetch } from "@/hooks/useChatPerfMarks";
 import { splitPageWindow } from "@/lib/chatPageWindow";
 import { getCachedMessages, cacheMessages } from "@/lib/messageCache";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
+import { readChatRelationshipProfiles } from "@/live/chatRelationshipProfiles";
 import { isUsableCachedThread } from "@/lib/chatThreadLoadState";
 import { assertReadNotAborted } from "@/live/readDeadline";
 import { groupChatReadScope } from './groupChatScope';
@@ -73,7 +74,7 @@ export const mapLiveGroupRows = async (
     }));
   }
   const [profilesMap, liveReactions] = await Promise.all([
-    fetchProfilesWithCache(authorIds),
+    readChatRelationshipProfiles(ctx, groupId, authorIds, signal),
     listLiveReactions(ctx, groupId).catch(() => []),
   ]);
   assertReadNotAborted(signal);
