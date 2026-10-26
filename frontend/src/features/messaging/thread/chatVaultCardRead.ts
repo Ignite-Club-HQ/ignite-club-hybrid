@@ -2,12 +2,17 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { ClubScope } from "@/live/featureRouter";
 import { chatScopeFromPath } from "@/live/chatScope";
 import { groupChatReadScope } from "./groupChatScope";
+import { getCachedTeam } from "@/lib/clubTeamCache";
 
 /** A chat location is a routing hint, never proof of file ownership/access. */
 export function chatVaultLocation(client: QueryClient, userId: string | undefined, pathname: string): ClubScope | undefined {
   const scope = chatScopeFromPath(pathname);
   if (!scope) return undefined;
-  if ("clubId" in scope || "teamId" in scope) return scope;
+  if ("clubId" in scope) return scope;
+  if ("teamId" in scope) {
+    const clubId = getCachedTeam(scope.teamId)?.club_id;
+    return clubId ? { clubId } : scope;
+  }
   if ("conversationId" in scope && pathname.startsWith("/groups/")) {
     const owner = groupChatReadScope(client, userId, scope.conversationId);
     if ("clubId" in owner) return owner;
