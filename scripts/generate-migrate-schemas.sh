@@ -9,7 +9,7 @@ gen() { # canister SnapshotType
   local c=$1 t=$2 d="$ROOT/backend/$1"; local tmp="$d/src/zz_migrate_schema.mo"
   python3 - "$d/src/main.mo" "$tmp" "$t" <<'PY'
 import sys; s=open(sys.argv[1]).read(); i=s.rstrip().rfind('}')
-open(sys.argv[2],'w').write(s[:i]+f"\n  public query func schema(_ : {sys.argv[3]}) : async () {{}};\n"+s[i:])
+open(sys.argv[2],'w').write(s[:i]+f"\n  public query func zz_migrate_schema(_ : {sys.argv[3]}) : async () {{}};\n"+s[i:])
 PY
   (cd "$d" && "$MOC" $(for p in .mops/*@*; do n=$(basename $p); echo --package ${n%@*} $p/src; done) --default-persistent-actors --enhanced-migration src/backend/migrations --idl src/zz_migrate_schema.mo -o "/tmp/$c.snapshot.did") || { rm -f "$tmp"; exit 1; }
   rm -f "$tmp"
