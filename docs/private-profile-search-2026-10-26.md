@@ -124,17 +124,33 @@ fields/subjects cannot decrypt with the owner-name key. The 100-ciphertext and
 25-key ceilings, explicit/club revocation, club removal/re-grant, stopped
 authority denial/recovery and original-key upgrade persistence also pass.
 
+The optional test-only `privateProfileClubRelay.mo` forwards real club decisions
+and holds an observed opening or final authorization reply. The real PII suite
+now verifies club-grant revocation and authority changes at both replies,
+explicit-reader revocation at the final reply, and membership removal between
+the opening and final checks. These cases withhold encrypted keys; healthy
+retries decrypt through the original authority. Run with
+`PRIVATE_PROFILE_CLUB_RELAY_WASM=<compiled local relay>` to include them.
+Removal after an already evaluated final club reply without a PII epoch change
+is still unverified; this evidence does not imply atomic delivery-time freshness.
+
+Scoped candidate matching now repeats identity-to-club authorization after
+private-name hydration and compares exact principal/account/original reference
+sets before returning decrypted matches. Focused tests reject membership
+refusal, removed subjects, relinked accounts, changed references, duplicate or
+foreign confirmation rows and cancellation. All 37 private-name frontend tests
+pass in both modes. This helper remains disconnected from ordinary pickers.
+
 These tests use fresh requests: previously delivered plaintext or keys cannot
 be recalled. They do not establish family-only, competition/league or global
-guardian-search name audiences, delivery-time revocation under a held PII
-callback, or location discovery across original authorities. No grants are
+guardian-search name audiences, or location discovery across original authorities. No grants are
 created outside the disposable replica and no profile references are published.
 Run after compiling the two services' `.mops/.build` Wasm files:
 `POCKET_IC_BIN=<local binary> node frontend/scripts/test-private-profile-pii-replica.mjs`.
 Optional `PRIVATE_PROFILE_PII_WASM` and `PRIVATE_PROFILE_CLUB_WASM` select
 local artifacts. The script refuses errors instead of skipping crypto coverage.
 
-Account-link/configuration drift under a held reply, final-club-reply
+Identity account-link/configuration drift under a held membership reply, final-club-reply
 delivery-time revocation, and complete picker integration remain unverified.
 No live acceptance or release authorization.
 All 17 generated Candid contracts pass drift checking. These checks do not
