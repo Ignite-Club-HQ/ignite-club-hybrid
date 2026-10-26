@@ -166,14 +166,13 @@ module {
     substitutions_count : Nat16;
     started_on_pitch : Bool;
     goals_scored : Nat16;
-    // Optional so pre-20261116 records decode with null. assists mirrors the
-    // Supabase game_player_stats.assists column verbatim.
-    assists : ?Nat16;
   };
-  // position_minutes preserves the Supabase position_minutes map in its
-  // original units (minutes); position_seconds remains the pitch-board
-  // canonical field. Optional so pre-20261116 records decode with null.
-  public type GamePlayerDetail = { user_id : ?Text; child_id : ?Text; position_seconds : ?[(Text, Nat32)]; position_minutes : ?[(Text, Nat16)] };
+  public type GamePlayerDetail = { user_id : ?Text; child_id : ?Text; position_seconds : ?[(Text, Nat32)] };
+  // Sidecar for stat fields the structured record predates (migration
+  // 20261116_000000): assists and the source-unit position_minutes map,
+  // correlated to a stat row by (event_id, team_id, subject). Keeps the
+  // stored GamePlayerStat/GamePlayerDetail shapes untouched.
+  public type GamePlayerStatExtra = { event_id : Text; team_id : Text; user_id : ?Text; child_id : ?Text; assists : ?Nat16; position_minutes : ?[(Text, Nat16)] };
   public type DetailedGamePlayerStat = { stat : GamePlayerStat; detail : ?GamePlayerDetail };
 
   // Mirrors Supabase game_results. period_scores/player_stats are opaque

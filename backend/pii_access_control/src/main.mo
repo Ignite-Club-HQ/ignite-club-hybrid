@@ -141,10 +141,14 @@ persistent actor class Main(governorInit : Principal) = this {
   public type GuardianRelationship = {
     guardian : Principal;
     children : [Text]; // pii_id set
-    // Optional display metadata preserved from the source system during
-    // migration (e.g. "parent"/"guardian", primary-contact flag). Never
-    // gates access — only the children set does. Null for self-registered
-    // relationships.
+  };
+
+  // Display-only guardian metadata preserved from the source system during
+  // migration (e.g. "parent"/"guardian", primary-contact flag). Sidecar to
+  // GuardianRelationship so the stored relationship shape stays untouched;
+  // never gates access — only the children set does.
+  public type GuardianLabel = {
+    guardian : Principal;
     label : ?Text;
     is_primary : ?Bool;
   };
@@ -866,7 +870,7 @@ persistent actor class Main(governorInit : Principal) = this {
       };
       case null {
         mediaAuthEpoch += 1;
-        guardian_relationships := guardian_relationships.concat([{ guardian = guardian; children = [child_id]; label = null; is_primary = null }]);
+        guardian_relationships := guardian_relationships.concat([{ guardian = guardian; children = [child_id] }]);
       };
     };
     log_audit(caller, child_id, "guardian_relationship", "add", true, "Guardian relationship registered");
