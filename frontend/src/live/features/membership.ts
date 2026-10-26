@@ -5,6 +5,7 @@ import { fetchMyRoleGrantsEverywhere } from "./myRoleGrants";
 import { connectLiveIdentityAccessClientWithIdentity } from "../identityAccess";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
+import { privateProfileSearchRehearsalEnabled } from "../privateProfileSearchMode";
 import {
   getLiveTeam,
   listLiveClubs,
@@ -238,7 +239,15 @@ export async function searchLiveInvitableProfiles(
   ctx: FeatureBackendContext,
   query: string,
   limit = 10,
+  scope?: { clubId: string; signal?: AbortSignal },
 ) {
+  if (!scope?.clubId?.trim()) throw new Error("A specific club is required for member search.");
+  if (privateProfileSearchRehearsalEnabled()) {
+    const { searchScopedClubProfiles } = await import("../scopedProfileSearch");
+    return searchScopedClubProfiles(ctx, scope.clubId, query, limit, scope.signal);
+  }
+  // Explicit transitional mode, not a fallback after a failed scoped read.
+  // Keep existing production names/search until the coordinated release.
   const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
   try {
     const results = await client.searchProfiles(query.trim(), limit);

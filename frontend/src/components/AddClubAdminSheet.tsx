@@ -136,8 +136,8 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
 
   // Search for existing users
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
-    queryKey: ["user-search-club-admin", debouncedSearch, clubId],
-    queryFn: () =>
+    queryKey: ["user-search-club-admin", user?.id, debouncedSearch, clubId],
+    queryFn: ({ signal }) =>
       withFeatureBackend("membership", {
         supabase: async () => {
           if (debouncedSearch.length < 2) return [];
@@ -160,7 +160,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
           // grant target), account_id is the notification target. II profiles
           // have no email and avatar_ref is a media blob ref, so those map
           // to null here.
-          const results = await searchLiveInvitableProfiles(ctx, debouncedSearch, 8);
+          const results = await searchLiveInvitableProfiles(ctx, debouncedSearch, 8, { clubId, signal });
           return results.map((r) => ({
             id: r.id,
             display_name: r.display_name,
@@ -169,8 +169,8 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
             account_id: r.account_id,
           }));
         },
-      }, { shared: 'person' }),
-    enabled: debouncedSearch.length >= 2,
+      }, { clubId }),
+    enabled: open && debouncedSearch.length >= 2,
   });
 
   // Filter out existing members (account_id in ICP mode, user id otherwise)

@@ -64,7 +64,7 @@ export function useAddTeamMemberSearch({
 }: UseAddTeamMemberSearchArgs) {
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
     queryKey: ["user-search-team-member", debouncedNameInput, clubId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (debouncedNameInput.length < 2) return [];
       return withFeatureBackend("membership", {
         supabase: async () => {
@@ -77,14 +77,14 @@ export function useAddTeamMemberSearch({
           return (data || []) as SearchProfile[];
         },
         icp: async (ctx) => {
-          const results = await searchLiveInvitableProfiles(ctx, debouncedNameInput, 8);
+          const results = await searchLiveInvitableProfiles(ctx, debouncedNameInput, 8, { clubId, signal });
           return results.map((r): SearchProfile => ({
             id: r.id,
             display_name: r.display_name,
             avatar_url: r.avatar_ref ?? null,
           }));
         },
-      }, { shared: 'person' });
+      }, { clubId });
     },
     enabled: debouncedNameInput.length >= 2,
   });
@@ -359,7 +359,7 @@ export function useAddTeamMemberSearch({
               return { term, results: [...profileResults, ...pendingResults] };
             },
             icp: async (ctx) => {
-              const profileResults = (await searchLiveInvitableProfiles(ctx, term, 8)).map(
+              const profileResults = (await searchLiveInvitableProfiles(ctx, term, 8, { clubId })).map(
                 (r): SearchProfile => ({
                   id: r.id,
                   display_name: r.display_name,
@@ -429,14 +429,14 @@ export function useAddTeamMemberSearch({
               };
             },
             icp: async (ctx) => {
-              const results = (await searchLiveInvitableProfiles(ctx, term, 5)).map((r) => ({
+              const results = (await searchLiveInvitableProfiles(ctx, term, 5, { clubId })).map((r) => ({
                 id: r.id,
                 display_name: r.display_name,
                 avatar_url: r.avatar_ref ?? null,
               }));
               return { term, results };
             },
-          }, { shared: 'person' }),
+          }, { clubId }),
         ),
       ),
     enabled: open && mode === "bulk" && bulkSecondParentTerms.length > 0,
@@ -460,14 +460,14 @@ export function useAddTeamMemberSearch({
           }));
         },
         icp: async (ctx) => {
-          const results = await searchLiveInvitableProfiles(ctx, debouncedSecondParentSearch, 5);
+          const results = await searchLiveInvitableProfiles(ctx, debouncedSecondParentSearch, 5, { clubId });
           return results.map((r): SearchProfile => ({
             id: r.id,
             display_name: r.display_name,
             avatar_url: r.avatar_ref ?? null,
           }));
         },
-      }, { shared: 'person' });
+      }, { clubId });
     },
     enabled: debouncedSecondParentSearch.length >= 2 && !selectedSecondParent,
   });

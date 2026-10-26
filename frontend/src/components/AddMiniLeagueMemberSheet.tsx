@@ -244,12 +244,12 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
 
   // Search invitable parents
   const { data: parentResults = [] } = useQuery({
-    queryKey: ["mini-league-parent-search", debouncedParentQuery, clubId],
-    queryFn: () => withFeatureBackend("membership", {
+    queryKey: ["mini-league-parent-search", user?.id, miniLeagueId, debouncedParentQuery, clubId],
+    queryFn: ({ signal }) => withFeatureBackend("membership", {
       icp: async ctx => {
         if (debouncedParentQuery.trim().length < 2) return [];
         const { searchLiveInvitableProfiles } = await import("@/live/features/membership");
-        return (await searchLiveInvitableProfiles(ctx, debouncedParentQuery.trim(), 6)).map(p => ({ id: p.id, display_name: p.display_name, masked_email: null, roles: [] as string[] }));
+        return (await searchLiveInvitableProfiles(ctx, debouncedParentQuery.trim(), 6, { clubId, signal })).map(p => ({ id: p.id, display_name: p.display_name, masked_email: null, roles: [] as string[] }));
       },
       supabase: async () => {
       if (debouncedParentQuery.trim().length < 2) return [];

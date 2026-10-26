@@ -117,9 +117,9 @@ export function CompetitionAdminsCard({
   // (identity_access display names) in ICP mode. Emails are never stored
   // readable on-chain, so ICP search is by name; pasting a principal still works.
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
-    queryKey: ["competition-admin-search", competitionId, debouncedSearch, isIcp],
+    queryKey: ["competition-admin-search", user?.id, competitionId, organizerClubId, debouncedSearch, isIcp],
     enabled: debouncedSearch.trim().length >= 2,
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       withFeatureBackend("competitions", {
         supabase: async () => {
           const { data, error } = await supabase.rpc("search_invitable_profiles", {
@@ -134,12 +134,13 @@ export function CompetitionAdminsCard({
         },
         icp: async (ctx) => {
           const { searchLiveInvitableProfiles } = await import("@/live/features/membership");
-          const rows = await searchLiveInvitableProfiles(ctx, debouncedSearch.trim(), 8);
+          if (!organizerClubId) return [];
+          const rows = await searchLiveInvitableProfiles(ctx, debouncedSearch.trim(), 8, { clubId: organizerClubId, signal });
           return rows
             .filter((p) => !existingUserIds.has(p.id))
             .map((p) => ({ id: p.id, display_name: p.display_name as string | null, avatar_url: null as string | null, masked_email: null as string | null }));
         },
-      }, { shared: "person" }),
+      }, organizerClubId ? { clubId: organizerClubId } : { shared: "person" }),
   });
 
   const addByPrincipal = () => {
