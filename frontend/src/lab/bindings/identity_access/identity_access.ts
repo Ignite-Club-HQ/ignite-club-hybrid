@@ -761,6 +761,7 @@ export interface identity_accessInterface {
     revoke(arg0: Principal, arg1: bigint): Promise<Result>;
     revoke_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2>;
     revoke_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2>;
+    search_guardian_profiles(arg0: Principal, arg1: string, arg2: string, arg3: number): Promise<Result_33>;
     search_profiles(arg0: string, arg1: number): Promise<Result_33>;
     set_account_status(arg0: string, arg1: AccountStatus): Promise<Result>;
     set_attestation_secret(arg0: Uint8Array): Promise<Result_2>;
@@ -1027,6 +1028,10 @@ export class Identity_access implements identity_accessInterface {
     async revoke_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2> {
         const result = await this.actor.revoke_role_scoped(arg0, arg1, to_candid_opt_n7(arg2), to_candid_opt_n7(arg3), to_candid_opt_n7(arg4));
         return from_candid_Result_2_n10(result);
+    }
+    async search_guardian_profiles(arg0: Principal, arg1: string, arg2: string, arg3: number): Promise<Result_33> {
+        const result = await this.actor.search_guardian_profiles(arg0, arg1, arg2, arg3);
+        return from_candid_Result_33_n121(result);
     }
     async search_profiles(arg0: string, arg1: number): Promise<Result_33> {
         const result = await this.actor.search_profiles(arg0, arg1);

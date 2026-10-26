@@ -584,6 +584,11 @@ export const idlFactory = ({ IDL }) => {
         [Result_2],
         [],
       ),
+    'search_guardian_profiles' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text, IDL.Nat16],
+        [Result_33],
+        [],
+      ),
     'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_33], ['query']),
     'set_account_status' : IDL.Func([IDL.Text, AccountStatus], [Result], []),
     'set_attestation_secret' : IDL.Func([IDL.Vec(IDL.Nat8)], [Result_2], []),

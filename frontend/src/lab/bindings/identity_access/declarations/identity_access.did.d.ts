@@ -703,6 +703,13 @@ export interface _SERVICE {
     Result_2
   >,
   /**
+   * Full directory access only after live verification of this exact child.
+   */
+  'search_guardian_profiles' : ActorMethod<
+    [Principal, string, string, number],
+    Result_33
+  >,
+  /**
    * Case-insensitive substring search over display names — the ICP-mode
    * counterpart of the Supabase `search_invitable_profiles` RPC, used by the
    * "add an existing member" pickers. Returns at most `limit` (capped at 25)
