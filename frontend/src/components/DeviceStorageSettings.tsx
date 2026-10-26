@@ -20,8 +20,8 @@ export function DeviceStorageSettings() {
       <HardDrive className="h-5 w-5" /> Device storage
     </h2>
     <dl className="space-y-2 text-sm">
-      <div className="flex justify-between gap-3"><dt>Saved pages and messages</dt><dd className="shrink-0">Up to 4 MB</dd></div>
-      <div className="flex justify-between gap-3"><dt>Recently viewed photos</dt><dd className="shrink-0">Up to 20 MB</dd></div>
+      <div className="flex justify-between gap-3"><dt>Saved page and message copies</dt><dd className="shrink-0">4 MB limit</dd></div>
+      <div className="flex justify-between gap-3"><dt>Saved viewed-photo copies</dt><dd className="shrink-0">20 MB limit</dd></div>
     </dl>
     <Button variant="outline" onClick={clear} disabled={clearing} className="w-full sm:w-auto whitespace-normal">
       {clearing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}

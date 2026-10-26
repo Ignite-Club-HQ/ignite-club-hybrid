@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { snapshotQuery, startIcpQueryCachePersist, restoreIcpQueryCache, clearPersistedIcpQueryCache } from './icpQueryCachePersist';
+import { snapshotQuery, startIcpQueryCachePersist, restoreIcpQueryCache, clearPersistedIcpQueryCache, savedPagePriority } from './icpQueryCachePersist';
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 function result(data: unknown, key = ['clubs'], meta?: Record<string, unknown>) {
@@ -11,6 +11,11 @@ function result(data: unknown, key = ['clubs'], meta?: Record<string, unknown>) 
   return snapshotQuery(query);
 }
 describe('bounded ICP snapshots', () => {
+  it('restores primary Schedule, Clubs, team and Vault inventories ahead of incidental widgets', () => {
+    for (const key of ['events', 'clubs', 'team', 'vault-subfolders', 'next-up-events']) {
+      expect(savedPagePriority([key])).toBeGreaterThan(savedPagePriority(['notification-count']));
+    }
+  });
   it('retains bigint and byte data without JSON conversion', () => {
     const data = { revision: 32n, count: new Uint8Array([1, 2]) };
     expect(result(data)?.snapshot.state.data).toEqual(data);

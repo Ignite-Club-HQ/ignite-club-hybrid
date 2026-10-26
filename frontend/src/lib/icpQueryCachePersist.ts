@@ -12,6 +12,11 @@ const SKIP_KEY = /media-feed|photos|signed|photo-url|blob|media-url|vetkey|secre
 type Snapshot = DehydratedState['queries'][number];
 interface Stored { scope: string; savedAt: number; bytes: number; snapshot: Snapshot }
 type ScopeReader = () => string | null;
+/** Prefer primary page inventories to incidental widgets within startup's time budget. */
+export function savedPagePriority(key: readonly unknown[]): number {
+  const name = typeof key[0] === 'string' ? key[0] : '';
+  return /^(events|clubs|team|club|my-teams|vault-|next-up|user-memberships-for-events|user-clubs-for-filter)/.test(name) ? 1 : 0;
+}
 const active = new Map<QueryClient, () => void>();
 const resetters = new Map<QueryClient, () => void>();
 let generation = 0;
@@ -99,7 +104,8 @@ export async function restoreIcpQueryCache(client: QueryClient, isIcp: boolean, 
         const records = await transaction<Stored[]>('readonly', s => s.getAll(), valid);
         if (!records || !valid()) return;
         let total = 0; let count = 0;
-        for (const row of records.sort((a, b) => b.savedAt - a.savedAt)) {
+        for (const row of records.sort((a, b) =>
+          savedPagePriority(b.snapshot.queryKey) - savedPagePriority(a.snapshot.queryKey) || b.savedAt - a.savedAt)) {
           if (!valid()) return;
           if (row.scope !== owner || Date.now() - row.savedAt > MAX_AGE_MS || row.bytes > MAX_QUERY_BYTES + 512) continue;
           if (++count > MAX_QUERIES || (total += row.bytes) > MAX_TOTAL_BYTES) break;
