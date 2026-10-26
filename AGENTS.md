@@ -10,7 +10,7 @@
 <!-- LOVABLE:END -->
 
 - Preview: frontend/ via lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY; root stays dependency-free.
-- Health merges groups; Vault warms; team/child rows precede names/club settings. Labels grant no access.
+- Health merges groups; Vault warms; team rows precede names; broken carousels resume selectively. Labels grant no access.
 - Install via scripts/ensure-frontend-deps.mjs only: npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
 - Read nested AGENTS.md. Frontend caches bounded; poll/schedule keyboardSafe prevents clipping.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.

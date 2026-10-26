@@ -5,6 +5,17 @@ import { bindMembershipDiscovery, clearMembershipDiscovery, MEMBERSHIP_RECONCILE
 beforeEach(() => { clearMembershipDiscovery(); vi.useFakeTimers(); vi.setSystemTime(1000); });
 afterEach(() => { clearMembershipDiscovery(); vi.useRealTimers(); });
 describe('shared membership discovery', () => {
+  it('retires a suspended discovery so the next read can recover and late replies cannot replace it', async () => {
+    let release: ((rows: string[]) => void) | undefined;
+    const first = readMembershipDiscovery('resume', () => new Promise<string[]>(resolve => { release = resolve; }));
+    const refused = expect(first).rejects.toThrow('timed out');
+    await vi.advanceTimersByTimeAsync(60_001);
+    await refused;
+    expect(await readMembershipDiscovery('resume', async () => ['restored-team'])).toEqual(['restored-team']);
+    release?.(['old-team']);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await readMembershipDiscovery('resume', async () => ['wrong'])).toEqual(['restored-team']);
+  });
   it('records bounded query data and invalidates visible membership pages after an external join', async () => {
     const client = new QueryClient();
     bindMembershipDiscovery(client);

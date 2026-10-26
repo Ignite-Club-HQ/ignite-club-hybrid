@@ -25,6 +25,7 @@ import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
 import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { listLiveEvents } from "@/live/features/events";
+import { useCarouselResumeRecovery } from '@/hooks/useCarouselResumeRecovery';
 
 // Render Supabase storage URLs through the image-transform endpoint at a tiny
 // width so the 28×28 avatar thumbnails don't download full-resolution originals.
@@ -487,7 +488,11 @@ async function fetchIcpCarouselItems(
           canManage,
           isOnTrial,
         });
-      } catch { /* team not visible to caller */ }
+      } catch (error) {
+        // Absence is the successful null row above. A failed resumed request
+        // must not certify an empty inventory or discard existing cards.
+        throw error;
+      }
     }),
   );
 
@@ -495,13 +500,13 @@ async function fetchIcpCarouselItems(
   try {
     const mine = (await listMyLiveMiniLeagues(ctx)) as any[];
     for (const l of mine || []) if (l?.id) leagueIds.add(l.id);
-  } catch { /* no leagues */ }
+  } catch (error) { throw error; }
   await Promise.all(
     leagueAdminClubIds.map(async (clubId) => {
       try {
         const ls = (await listLiveMiniLeaguesByClub(ctx, clubId)) as any[];
         for (const l of ls || []) if (l?.id) leagueIds.add(l.id);
-      } catch { /* club not visible */ }
+      } catch (error) { throw error; }
     }),
   );
   await Promise.all(
@@ -523,7 +528,7 @@ async function fetchIcpCarouselItems(
           club_id: league.club_id,
           canManage: leagueAdminClubIds.includes(league.club_id),
         });
-      } catch { /* league not visible */ }
+      } catch (error) { throw error; }
     }),
   );
 
@@ -577,6 +582,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   const isIcp = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const { activeClubFilter } = useClubTheme();
+  useCarouselResumeRecovery(user?.id, activeClubFilter);
 
   // Hydrate from localStorage so cold opens paint real cards instantly
   const snapshotWithTs = useMemo(
