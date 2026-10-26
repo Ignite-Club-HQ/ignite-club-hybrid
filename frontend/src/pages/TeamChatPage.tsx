@@ -104,6 +104,7 @@ import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchProfilesWithCache, fetchSingleProfileWithCache, getProfilesFromCache } from "@/lib/profileCache";
 import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { useChatProfileWorkset } from "@/hooks/useChatProfileWorkset";
 import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { queueMessage } from "@/lib/messageQueue";
@@ -856,7 +857,8 @@ export default function TeamChatPage() {
   }, [localMessages]);
   const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
   const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
-  const getPrivateProfile = usePrivateChatProfiles(teamId, user?.id, authorIds, privateChatNames);
+  const privateWorkset = useChatProfileWorkset(localMessages ?? [], teamId, user?.id);
+  const getPrivateProfile = usePrivateChatProfiles(teamId, user?.id, privateWorkset.ids, privateChatNames);
   const getProfile = privateChatNames ? getPrivateProfile : getLegacyProfile;
   
   // Reset per-thread scroll/message state when teamId changes so the initial
@@ -2126,6 +2128,8 @@ export default function TeamChatPage() {
             composerHeight={composerHeight}
             currentUserId={user?.id}
             virtualHandleRef={virtualHandleRef}
+            onVisibleMessageIds={privateChatNames ? privateWorkset.onVisibleMessageIds : undefined}
+            privateProfileRevision={privateChatNames ? getPrivateProfile : undefined}
             initialBottomPinned={!targetMessageId}
             initialTargetMessageId={targetMessageId}
             renderRow={(msg, index, arr) => {

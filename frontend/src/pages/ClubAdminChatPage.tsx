@@ -74,6 +74,7 @@ import {
 } from "@/lib/chatThreadLoadState";
 import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { useChatProfileWorkset } from "@/hooks/useChatProfileWorkset";
 import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useMessageReads } from "@/hooks/useMessageReads";
@@ -773,7 +774,8 @@ function SupabaseClubAdminChatPage() {
     return [...new Set((localMessages || []).flatMap(m => [m.author_id, ...(m.reactions ?? []).map(r => r.user_id)]).filter(Boolean))];
   }, [localMessages]);
   const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
-  const getPrivateProfile = usePrivateChatProfiles(conversationId, user?.id, authorIds, privateChatNames);
+  const privateWorkset = useChatProfileWorkset(localMessages ?? [], conversationId, user?.id);
+  const getPrivateProfile = usePrivateChatProfiles(conversationId, user?.id, privateWorkset.ids, privateChatNames);
   const getProfile = privateChatNames ? getPrivateProfile : getLegacyProfile;
 
   // Reset local cache view when conversation changes
@@ -1530,6 +1532,8 @@ function SupabaseClubAdminChatPage() {
             composerHeight={composerHeight}
             currentUserId={user?.id}
             virtualHandleRef={virtualHandleRef}
+            onVisibleMessageIds={privateChatNames ? privateWorkset.onVisibleMessageIds : undefined}
+            privateProfileRevision={privateChatNames ? getPrivateProfile : undefined}
             initialBottomPinned={!targetMessageId}
             renderRow={(msg, index, arr) => {
               const prevMessage = index > 0 ? arr[index - 1] : null;
