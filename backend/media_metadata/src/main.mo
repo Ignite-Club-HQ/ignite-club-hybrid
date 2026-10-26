@@ -937,7 +937,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 4; governor; assets; capabilities; reactions; comments; roles; galleryChatCards })
+    #Ok({ schema = 4; governor; assets; capabilities; reactions; comments; roles; galleryChatCards; albums })
   };
 
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
