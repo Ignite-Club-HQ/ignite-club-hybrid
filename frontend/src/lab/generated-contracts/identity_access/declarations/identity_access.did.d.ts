@@ -604,6 +604,13 @@ export interface _SERVICE {
   'pin_owner_test_deletion_registry' : ActorMethod<[Binding], Result_2>,
   'prepare_account_deletion' : ActorMethod<[string, bigint], Result_19>,
   'read_account_removal_intent' : ActorMethod<[string], Result_6>,
+  /**
+   * Exact registered authority and live caller/subject club membership.
+   */
+  'read_club_profiles' : ActorMethod<
+    [Principal, string, Array<Principal>],
+    Result_33
+  >,
   'read_group_inventory_evidence' : ActorMethod<[bigint], Result_20>,
   /**
    * Governor-only narrow opening evidence, not a lifecycle release or grant.
