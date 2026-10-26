@@ -28,9 +28,16 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
   // Cold group discovery may perform several consensus reads before reaching
   // the events actor. Its time must not consume the actor's entire deadline.
   // Bound coordination separately; still refuse real routing/service failures.
-  const eventRead = <T,>(clubId: string, label: string, action: (scoped: FeatureBackendContext) => Promise<T>) =>
-    withReadDeadline(readContentInScope(ctx, 'events', { clubId }, scoped => read(action(scoped), label)),
-      `${label} connection`, 60_000, signal);
+  const eventRead = async <T,>(clubId: string, label: string, action: (scoped: FeatureBackendContext) => Promise<T>) => {
+    let retired = false;
+    try {
+      return await withReadDeadline(readContentInScope(ctx, 'events', { clubId }, scoped => {
+        assertReadNotAborted(signal);
+        if (retired) throw new Error(`${label} connection expired`);
+        return read(action(scoped), label);
+      }), `${label} connection`, 60_000, signal);
+    } finally { retired = true; }
+  };
   const ids = [...new Set(scope.clubIds)];
   const rows = new Map<string, MemberScheduleEvent[]>();
   const failed = new Set<string>();
