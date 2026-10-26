@@ -230,7 +230,7 @@ function writerContext(clubId, target) {
     agent: HttpAgent.createSync({ host: 'https://icp-api.io', identity }),
     rows: (table, col) => db.all(table, `${col}=eq.${encodeURIComponent(clubId)}`),
     rowsIn: async (table, col, ids) => { const out = []; for (let i = 0; i < ids.length; i += 100) out.push(...await db.all(table, `${col}=${inList(ids.slice(i, i + 100))}`)); return out; },
-    claims: null, // filled by loadClaims() before member-owned steps
+    claims: null, // read from this exact destination before member-owned steps
     schemaFile: (domain) => new URL(`./migrate-schemas/${domain}.snapshot.did.js`, import.meta.url).href,
   };
 }
@@ -246,6 +246,9 @@ export async function runSteps({ journal, path, ctx, approval, writers = WRITERS
     if (next.step === 'route') throw Error('Data migration approval does not authorize sign-in/routing cutover; separate authentication approval is required');
     const write = writers[next.step];
     if (!write) return journal; // verify/route steps run separately
+    if (['events', 'rewards'].includes(next.step) && !ctx.claims) {
+      ctx.claims = await (ctx.readClaims ? ctx.readClaims() : claimedAccounts(ctx));
+    }
     journal = recordIntent(journal, next.step, next.page); save(journal);
     let reply;
     try { const r = await write(ctx); reply = { ok: true, last: true }; summary(`- ${next.step}: ${r.records} records loaded`); }

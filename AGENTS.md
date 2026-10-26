@@ -47,6 +47,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - Keys: SDK derivation, controllers, receipts; engines offline; fixtures never authorize release.
 - Journal readback pins acknowledged commits; unknown writes stop.
+- Migration member converters use exact-destination claims and verified child/media dependencies, preserve points ledgers/cooldowns and refuse unmapped references before import; missing overall writers still block live execution. Why: source UUIDs, dropped award receipts or foreign media cannot safely become on-chain ownership or fresh awards.
 
 - Router index rebuilds from stable rows; writes refresh, picks recheck gates. Never deploy scale-probe.
 - History uses nullable DTOs/exact links and verified humans; PlayHQ keys are tenant-scoped, claims grant no ownership. Deploy history scope upgrades only competition/events, never creates or rewires others. Why: preserve data and isolate releases.

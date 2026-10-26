@@ -1,8 +1,12 @@
+## Continue migration-tool loaders — 26 October 2026
+- [x] Build claim-gated points/rewards ledger conversion and import plus ordinary RSVP conversion. Preserve balances/history/redemption IDs, verifiers, cooldowns, points toggles and payment flags; refuse unresolved child/media references and unsupported RSVP award receipts. Destination claims read before member-step intent. No live copying, claims, emails or routing changes authorized.
+- [ ] Remaining implementation: child/privacy and membership writers, full event duties/results/award receipts, chats, notifications, media/Vault, stable source inventory/durable recovery and final reconciliation/cutover. Overall missing-writer gate continues to refuse all live data writes; real testing also waits for the deferred secrets and separate exact-club/group approvals.
+
 ## Approved all-group club service upgrade — 26 October 2026
 - [x] Owner approved service-only readiness across every registered group; data copying, account claim emails/redemption setup and sign-in/routing migration remain separately blocked.
 - [x] Add protected club_migration scope upgrading club_domain only across the full inventory, including closed groups, with same-source automatic preflight and existing key/journal/publication safeguards.
 - [x] 72 release safeguard checks and 20 separate-approval checks passed; workflow YAML valid and preview build OK. Verified GitHub already contains accountClaims and the deploy recipe builds that source.
-- [ ] Deployment blocked on GitHub synchronization: remote main still lacks club_migration scope at 04:28 UTC. No run dispatched, canister changed, claims registered or emails sent. After synchronization run the approved exact-source release and verify every destination club service/published evidence; do not widen to full_backend or open groups/migrate data/users.
+- [ ] Owner reports the all-group club_migration workflow succeeded at 04:42 UTC; independent all-group run/report verification remains outstanding. Do not widen to full_backend or open groups/migrate data/users.
 
 ## Separate migration approvals — 26 October 2026
 - [x] Require separate club/group-bound data/auth approvals, default none; live actions require configured owner matching original/rerun GitHub actors. Data runner blocks routing even after verification. Local safety tests passed; no migration, deployment or emails run.

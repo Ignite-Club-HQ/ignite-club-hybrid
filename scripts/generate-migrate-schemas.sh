@@ -21,3 +21,4 @@ gen club_domain ClubSnapshot
 gen events_domain EventsSnapshot
 gen competition_domain FenceSnapshot
 gen mini_league_domain LeagueSnapshot
+gen club_points_domain PointsSnapshot

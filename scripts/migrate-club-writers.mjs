@@ -5,14 +5,14 @@
 // endpoint. Snapshot Candid shapes are generated from the canister sources
 // (scripts/migrate-schemas/*.snapshot.did) so encodings cannot drift silently.
 //
-// Imports are idempotent replaces on the canister side, so re-sending a page
-// whose reply was lost converges to the same state.
+// Imports replace club data; the runner never replays an unknown outcome.
 //
 // Member-owned records (roles, guardians, RSVPs, messages, points) need each
 // Supabase user's Internet Identity principal, which only exists after the
 // member account claim ships. Until then writers load club-owned data only and
 // leave member-owned arrays empty; the claim attaches people afterwards.
 
+import { buildPointsSnapshot, buildClaimedRsvps } from './migrate-club-members.mjs';
 const ms = (iso) => (iso ? BigInt(Date.parse(iso)) : null);
 const opt = (v) => (v === null || v === undefined || v === '' ? [] : [v]);
 const optMs = (iso) => opt(ms(iso));
@@ -91,7 +91,7 @@ const EVENT_TYPES = new Set(['game', 'training', 'social', 'mini_league']);
 const HOUR = 3_600_000n;
 
 /** Supabase events -> events_domain EventsSnapshot (event details only; RSVPs/results wait for the claim). */
-export function buildEventsSnapshot({ clubId, events = [], creator }) {
+export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], claims, migratedChildren }) {
   const rows = events.filter((e) => e.club_id === clubId).map((e) => {
     const start = ms(e.start_time ?? e.event_date) ?? 0n;
     const end = ms(e.end_time);
@@ -105,7 +105,7 @@ export function buildEventsSnapshot({ clubId, events = [], creator }) {
       target_team_ids: e.target_team_ids?.length ? [e.target_team_ids] : [],
     };
   });
-  return { events: rows, rsvps: [], series: [], groups: [], group_players: [], group_duties: [], match_links: [], materializations: [],
+  return { events: rows, rsvps: buildClaimedRsvps({ events: rows, rsvps, claims, migratedChildren }), series: [], groups: [], group_players: [], group_duties: [], match_links: [], materializations: [],
     operations: [], player_details: [], results: [], stats: [], summaries: [] };
 }
 
@@ -202,9 +202,19 @@ export const WRITERS = {
     return { records: 1 + snap.teams.length + snap.sponsors.length };
   },
   async events(ctx) {
-    const snap = buildEventsSnapshot({ clubId: ctx.clubId, events: await ctx.rows('events', 'club_id'), creator: ctx.creator });
+    const events = await ctx.rows('events', 'club_id');
+    const rsvps = await ctx.rowsIn('rsvps', 'event_id', events.map(e => e.id));
+    const snap = buildEventsSnapshot({ clubId: ctx.clubId, events, creator: ctx.creator, rsvps, claims: ctx.claims, migratedChildren: ctx.migratedChildren });
     await loadSnapshot(ctx, 'events_domain', snap, 'fence');
-    return { records: snap.events.length };
+    return { records: snap.events.length + snap.rsvps.length };
+  },
+  async rewards(ctx) {
+    const tables = ['clubs', 'club_subscriptions', 'club_rewards', 'user_club_points', 'child_club_points', 'points_history', 'reward_redemptions', 'points_cooldowns'];
+    const [clubs, subscriptions, rewards, users, children, history, redemptions, cooldowns] = await Promise.all(tables.map(t => ctx.rows(t, t === 'clubs' ? 'id' : 'club_id')));
+    const snap = buildPointsSnapshot({ clubId: ctx.clubId, claims: ctx.claims, migratedChildren: ctx.migratedChildren,
+      mediaReferences: ctx.mediaReferences, club: clubs[0], subscriptions, rewards, users, children, history, redemptions, cooldowns });
+    await loadSnapshot(ctx, 'club_points_domain', snap, 'fence');
+    return { records: snap.users.length + snap.children.length + snap.history.length + snap.rewards.length + snap.redemptions.length + snap.cooldowns.length + snap.settings.length };
   },
   async competitions(ctx) {
     const competitions = await ctx.rows('competitions', 'organizer_club_id');
