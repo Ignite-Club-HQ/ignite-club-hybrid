@@ -636,8 +636,8 @@ persistent actor class Main(governorInit : Principal) = this {
       await admitAccount(caller); auth(caller);
       let epoch = mediaAuthEpoch;
       let first = await authorizePrivateNames(caller, ids, scope);
-      let final = await authorizePrivateNames(caller, ids, scope);
       await admitAccount(caller);
+      let final = await authorizePrivateNames(caller, ids, scope);
       if (epoch != mediaAuthEpoch or first != final) return #Err("Private-name authorization changed");
       var out : [EncryptedPii] = [];
       for (id in ids.values()) {
@@ -662,8 +662,8 @@ persistent actor class Main(governorInit : Principal) = this {
         out := out.concat([?key]);
       };
       // One whole-batch closing authorization AFTER all derivations.
-      let final = await authorizePrivateNames(caller, ids, scope);
       await admitAccount(caller);
+      let final = await authorizePrivateNames(caller, ids, scope);
       if (epoch != mediaAuthEpoch or first != final) return #Err("Private-name authorization changed");
       for (id in ids.values()) { log_audit(caller, id, "display_name", "private_name_vetkey", true, scope.kind) };
       #Ok(out)

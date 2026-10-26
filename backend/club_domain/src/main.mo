@@ -3354,6 +3354,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let revision = membershipEpoch();
     switch (expected) { case (?r) if (r != revision) return #Err("Remote membership revision changed"); case null {} };
     for (subject in subjects.values()) { await admitAccount(subject) };
+    if (not trustedCompetition(caller) and miniLeagueDomainCanister != ?caller) return #Err("Relationship authority changed");
     if (revision != membershipEpoch() or subjects.any(func p = removalReceiver.denied(p))) return #Err("Remote membership changed");
     #Ok(revision)
   };
