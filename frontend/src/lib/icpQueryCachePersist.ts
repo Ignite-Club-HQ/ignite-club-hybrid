@@ -117,6 +117,7 @@ export async function restoreIcpQueryCache(client: QueryClient, isIcp: boolean, 
 export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean, scope: ScopeReader = currentPrincipal): () => void {
   active.get(client)?.();
   if (!isIcp || typeof indexedDB === 'undefined') return () => {};
+  void import('@/live/deviceMediaCache').then(m => m.pruneDeviceCachedPhotos()).catch(() => {});
   let stopped = false; let timer: ReturnType<typeof setTimeout> | undefined;
   let idleHandle: number | undefined; let working = false;
   let owner = scope(); let epoch = generation;

@@ -43,8 +43,8 @@ function isIcpSession(): boolean {
 }
 
 export function restoreQueryCache(client: QueryClient) {
-  if (isIcpSession()) return;
   pruneDeviceReadCaches();
+  if (isIcpSession()) return;
   try {
     const raw = localStorage.getItem(QUERY_CACHE_KEY);
     if (!raw) return;
