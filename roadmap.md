@@ -1,3 +1,7 @@
+## Vault theme-filter delay — 26 October 2026
+- [ ] Retain exact-account Vault directory/access caches on theme selection, reveal selected clubs without repeated discovery, and prevent pending reads appearing empty.
+- [ ] Run focused filtering/access safeguards; phone timing awaits the updated frontend and Paul's session.
+
 ## Group 2 U9 chat and gallery delay — 26 October 2026
 - [x] Team headers reveal before optional club labels; authorized message bodies seed cold threads before reactions/profiles, with cancellation/loaded-state guards. Gallery cards use the open chat's known club before resource discovery, reveal independently of labels, reject raw encrypted image fallback and offer explicit retry on failed reads.
 - [x] Focused regressions passed: 51 ICP / 50 Supabase checks; preview build OK. No canister changes or deployment.

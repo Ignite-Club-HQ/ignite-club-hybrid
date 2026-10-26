@@ -116,6 +116,12 @@ export function useVaultAccessModel({
     ? (currentView.type === "root" ? activeClubFilter : currentView.clubId)
     : null;
 
+  const accountRolesKey = ["user-admin-roles", userId, null];
+  const accountRolesState = queryClient.getQueryState<VaultRoleRecord[]>(accountRolesKey);
+  const reusableRoles = isIcpVault && selectedRoleClubId && accountRolesState?.status === "success" &&
+    !accountRolesState.isInvalidated && Date.now() - accountRolesState.dataUpdatedAt < 60_000
+    ? accountRolesState.data?.filter(role => role.club_id === selectedRoleClubId) : undefined;
+
   const { data: userRoles, isLoading: isLoadingRoles, error: rolesError, refetch: retryRoles } = useQuery({
     queryKey: ["user-admin-roles", userId, selectedRoleClubId],
     queryFn: async () => {
@@ -128,6 +134,8 @@ export function useVaultAccessModel({
     },
     enabled: !!userId,
     staleTime: 60_000,
+    initialData: reusableRoles,
+    initialDataUpdatedAt: reusableRoles ? accountRolesState?.dataUpdatedAt : undefined,
     retry: isIcpVault ? false : undefined,
   });
 
@@ -138,7 +146,7 @@ export function useVaultAccessModel({
 
   // Keep the member read subscribed when admin status resolves. A wider
   // directory must not replace already-returned member clubs with a spinner.
-  const memberDirectoryEnabled = isIcpVault && !activeClubFilter;
+  const memberDirectoryEnabled = isIcpVault && (!activeClubFilter || !!queryClient.getQueryData([...vaultKeys.clubsForUser(userId, false), null, isIcpVault]));
   const memberClubs = useQuery({
     queryKey: [...vaultKeys.clubsForUser(userId, false), null, isIcpVault],
     queryFn: ({ signal }) => userId ? withReadDeadline(
@@ -159,32 +167,40 @@ export function useVaultAccessModel({
       return isIcpVault ? withReadDeadline(read, "Vault clubs",
         !activeClubFilter && isAppAdmin === true ? VAULT_ADMIN_DIRECTORY_MS : VAULT_OPEN_READ_MS, signal) : read;
     },
-    enabled: !!userId && (!memberDirectoryEnabled || isAppAdmin === true),
+    enabled: !!userId && (!!activeClubFilter || !memberDirectoryEnabled || isAppAdmin === true),
     staleTime: 60_000,
     retry: isIcpVault ? false : undefined,
   });
-  const userClubs = directoryClubs.data?.length ? directoryClubs.data : memberDirectoryEnabled
-    ? memberClubs.data ?? directoryClubs.data : directoryClubs.data;
-  const isLoadingClubs = !userClubs?.length && (directoryClubs.isLoading || (memberDirectoryEnabled && memberClubs.isLoading));
+  const cachedDirectoryClub = isIcpVault && activeClubFilter
+    ? queryClient.getQueriesData<VaultClubSummary[]>({ queryKey: vaultKeys.clubsForUser(userId, false).slice(0, 2) })
+      .filter(([key]) => key[3] === null && key[4] === true)
+      .flatMap(([, rows]) => rows ?? []).find(club => club.id === activeClubFilter)
+    : undefined;
+  const userClubs = activeClubFilter && isIcpVault
+    ? directoryClubs.data ?? (cachedDirectoryClub ? [cachedDirectoryClub] : undefined)
+    : directoryClubs.data?.length ? directoryClubs.data : memberDirectoryEnabled
+      ? memberClubs.data ?? directoryClubs.data : directoryClubs.data;
+  const isLoadingClubs = !userClubs?.length && (directoryClubs.isPending || (memberDirectoryEnabled && memberClubs.isPending));
   const clubsError = directoryClubs.error || (memberDirectoryEnabled ? memberClubs.error : null);
   const refetchClubs = () => {
     if (memberDirectoryEnabled) void memberClubs.refetch();
-    if (!memberDirectoryEnabled || isAppAdmin === true) void directoryClubs.refetch();
+    if (activeClubFilter || !memberDirectoryEnabled || isAppAdmin === true) void directoryClubs.refetch();
   };
 
   // Auto-navigate to club view when theme filter is active - only on initial load
-  const hasAutoNavigatedRef = useRef(false);
+  const hasAutoNavigatedRef = useRef<string | null>(null);
   useEffect(() => {
+    if (!activeClubFilter) hasAutoNavigatedRef.current = null;
     if (
       activeClubFilter &&
       currentView.type === "root" &&
       userClubs &&
       userClubs.length > 0 &&
-      !hasAutoNavigatedRef.current
+      hasAutoNavigatedRef.current !== activeClubFilter
     ) {
       const club = userClubs.find((c) => c.id === activeClubFilter);
       if (club && club.is_pro) {
-        hasAutoNavigatedRef.current = true;
+        hasAutoNavigatedRef.current = activeClubFilter;
         onAutoNavigateToClub(activeClubFilter, club.name);
       }
     }
@@ -221,7 +237,7 @@ export function useVaultAccessModel({
       ? currentView.clubId
       : null;
   const selectedClub = isIcpVault && activeClubFilter
-    ? userClubs?.find((club) => club.id === activeClubFilter)
+    ? directoryClubs.data?.find((club) => club.id === activeClubFilter)
     : undefined;
   // Only the exact selected ICP read carries authoritative media allowance.
   // Directory flags from the other paths are labels, not access evidence.

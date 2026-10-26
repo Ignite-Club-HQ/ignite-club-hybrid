@@ -63,6 +63,12 @@ export function purgeClubScopedQueryCache(queryClient: QueryClient) {
   const cache = queryClient.getQueryCache();
   for (const query of cache.getAll()) {
     if (isGlobalKey(query.queryKey as readonly unknown[])) continue;
+    // These bind the account and (where applicable) the exact club. Vault
+    // applies its theme filter locally; cached labels never authorize files.
+    const key = query.queryKey;
+    if (key[0] === "vault-clubs" && typeof key[1] === "string" && key[5] === true) continue;
+    if (key[0] === "user-admin-roles" && typeof key[1] === "string") continue;
+    if (key[0] === "vault-club-has-pro" && typeof key[1] === "string" && typeof key[2] === "string" && key[3] === true) continue;
     if (NEXT_UP_EVENT_KEYS.has(String(query.queryKey[0])) && typeof query.queryKey[1] === "string") continue;
     // Remove cached data outright: inactive queries are dropped, active ones
     // remount into a loading state and refetch for the newly selected club.
