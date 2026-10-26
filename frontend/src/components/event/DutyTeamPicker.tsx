@@ -13,6 +13,24 @@ interface TeamOption {
   name: string;
 }
 
+/**
+ * Pick duty-eligible teams from the canister's club team list. Candid
+ * optionals arrive as arrays: deleted_at_ms is [] for a live team, so it
+ * must be unwrapped ([] is truthy and would hide every team).
+ */
+export function filterDutyTeamOptions(rows: Array<{
+  id: string;
+  name: string;
+  is_active: boolean;
+  archived: boolean;
+  is_shell: boolean;
+  deleted_at_ms?: [] | [bigint];
+}>): TeamOption[] {
+  return rows
+    .filter((team) => team.is_active && !team.archived && !team.is_shell && !team.deleted_at_ms?.[0])
+    .map((team) => ({ id: team.id, name: team.name }));
+}
+
 export function DutyTeamPicker({
   clubId,
   value,
@@ -47,9 +65,7 @@ export function DutyTeamPicker({
       icp: async (ctx) => {
         const { listLiveMembershipTeams } = await import("@/live/features/membership");
         const rows = await listLiveMembershipTeams(ctx, clubId!);
-        return rows
-          .filter((team: any) => team.is_active && !team.archived && !team.is_shell && !team.deleted_at_ms)
-          .map((team: any) => ({ id: team.id, name: team.name }));
+        return filterDutyTeamOptions(rows as any);
       },
     }, { clubId: clubId! }),
   });
