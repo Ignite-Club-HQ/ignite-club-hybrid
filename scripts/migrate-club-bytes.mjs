@@ -106,14 +106,15 @@ export async function copyByteItem(target, publicKey, item, deps) {
   const { download, blobStore, pii, journal } = deps;
   const prior = journal.get(item.id);
   if (prior?.phase === 'finalized') return prior.blobRef;
-  if (prior && prior.phase !== 'downloaded' && prior.phase !== 'encrypted' && prior.phase !== 'registered') {
+  if (prior && prior.phase !== 'downloaded' && prior.phase !== 'encrypted' && prior.phase !== 'registered' && prior.phase !== 'begun') {
     throw Error(`Unknown outcome retained for ${item.id} at phase ${prior.phase}; recover before retrying`);
   }
 
-  const plain = prior?.phase ? journal.plaintext(item.id) : await download(item.sourcePath);
-  if (!prior || prior.phase === 'downloaded') {
-    journal.put(item.id, { phase: 'downloaded', bytes: plain.length });
-  }
+  // Plaintext is never persisted: resume re-downloads and the deterministic
+  // seed reproduces the identical ciphertext/hash, so re-registration and the
+  // journaled upload reservation stay consistent.
+  const plain = await download(item.sourcePath);
+  journal.put(item.id, { phase: 'downloaded', bytes: plain.length });
 
   const ciphertext = await encryptBlob(target, publicKey, item.path, plain);
   const hash = sha256Hex(ciphertext);
