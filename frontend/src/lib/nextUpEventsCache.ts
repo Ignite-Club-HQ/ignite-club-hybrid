@@ -1,3 +1,4 @@
+import { writeBoundedReadCache } from "./deviceCacheBudget";
 // Lightweight localStorage hydration for the home page "Next Up" carousel.
 // Mirrors the myTeamsCarouselCache pattern so cold opens (or returns to home
 // after the React Query gcTime has elapsed) render real event cards instantly
@@ -39,7 +40,7 @@ export function setCachedNextUp<T>(userId: string | undefined, data: T): void {
   try {
     if (typeof localStorage === "undefined") return;
     const entry: Entry<T> = { data, timestamp: Date.now() };
-    localStorage.setItem(key(userId), JSON.stringify(entry));
+    writeBoundedReadCache(key(userId), JSON.stringify(entry));
   } catch {
     // quota or unavailable — ignore
   }

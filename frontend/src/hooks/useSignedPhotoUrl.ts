@@ -1,3 +1,4 @@
+import { writeBoundedReadCache } from "@/lib/deviceCacheBudget";
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -57,7 +58,7 @@ function schedulePersist() {
           if (++n >= 500) break;
         }
       }
-      localStorage.setItem(LS_KEY, JSON.stringify(obj));
+      writeBoundedReadCache(LS_KEY, JSON.stringify(obj));
     } catch {
       /* quota exceeded etc. — ignore */
     }
@@ -323,6 +324,8 @@ export async function getSignedPhotoUrls(urls: string[]): Promise<Record<string,
 
 // Clear cache (useful for logout)
 export function clearSignedUrlCache() {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = null;
   urlCache.clear();
   clearIcpPhotoResolutionCache();
   try {

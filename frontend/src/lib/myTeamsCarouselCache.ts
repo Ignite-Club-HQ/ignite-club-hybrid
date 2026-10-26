@@ -1,3 +1,4 @@
+import { writeBoundedReadCache } from "./deviceCacheBudget";
 // Lightweight localStorage hydration for the home page "My Teams" carousel.
 // Keyed by user + active club filter so each context restores its own snapshot.
 // Cold opens render real cards instantly; React Query revalidates in background.
@@ -36,7 +37,7 @@ export function setCachedCarousel<T>(userId: string | undefined, activeClubFilte
   try {
     if (typeof localStorage === "undefined") return;
     const entry: Entry<T> = { data, timestamp: Date.now() };
-    localStorage.setItem(key(userId, activeClubFilter), JSON.stringify(entry));
+    writeBoundedReadCache(key(userId, activeClubFilter), JSON.stringify(entry));
   } catch {
     // quota or unavailable — ignore
   }
