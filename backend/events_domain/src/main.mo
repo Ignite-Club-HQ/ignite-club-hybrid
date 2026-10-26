@@ -147,6 +147,9 @@ persistent actor class Main(governorInit : Principal) = this {
   var gamePlayerDetails : Map.Map<Text, [Types.GamePlayerDetail]>;
   var fixtureMaterializations : Map.Map<Text, { revision : Nat64; input : Types.MatchEventInput; event_ids : [Text] }>;
   var gameResults : [Types.GameResult];
+  // Stat sidecar (migration 20261116_000000): assists and source-unit
+  // position minutes, correlated to a stat row by event/team/subject.
+  var gamePlayerStatExtras : [Types.GamePlayerStatExtra];
   var activeGames : [Types.ActiveGame];
   var playHQConfig : ?Types.PlayHQConfig;
   var playhqTeamSyncs : [Types.PlayHQTeamSync];
@@ -322,7 +325,7 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(evs.size())
   };
   type MaterializationReceipt = { revision : Nat64; input : Types.MatchEventInput; event_ids : [Text] };
-  type EventsSnapshot = { materializations : ?[(Text, MaterializationReceipt)]; player_details : ?[(Text, [Types.GamePlayerDetail])]; events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty]; match_links : ?[Types.CompetitionEventLink]; operations : ?[Types.CompetitionEventOperation]; results : ?[Types.GameResult]; summaries : ?[Types.GameSummary]; stats : ?[Types.GamePlayerStat]; duties : ?[Types.Duty]; duty_teams : ?[Types.EventDutyTeam]; open_duties : ?[Types.OpenDuty]; guests : ?[Types.EventGuest]; captains : ?[Types.EventCaptain]; goalkeepers : ?[Types.EventGoalkeeper]; player_of_match : ?[Types.EventPotm] };
+  type EventsSnapshot = { materializations : ?[(Text, MaterializationReceipt)]; player_details : ?[(Text, [Types.GamePlayerDetail])]; events : [Types.Event]; rsvps : [Types.Rsvp]; series : [Types.EventSeries]; groups : ?[Types.EventGroup]; group_players : ?[Types.EventGroupPlayer]; group_duties : ?[Types.EventGroupDuty]; match_links : ?[Types.CompetitionEventLink]; operations : ?[Types.CompetitionEventOperation]; results : ?[Types.GameResult]; summaries : ?[Types.GameSummary]; stats : ?[Types.GamePlayerStat]; stat_extras : ?[Types.GamePlayerStatExtra]; duties : ?[Types.Duty]; duty_teams : ?[Types.EventDutyTeam]; open_duties : ?[Types.OpenDuty]; guests : ?[Types.EventGuest]; captains : ?[Types.EventCaptain]; goalkeepers : ?[Types.EventGoalkeeper]; player_of_match : ?[Types.EventPotm] };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before export");
@@ -333,7 +336,8 @@ persistent actor class Main(governorInit : Principal) = this {
       operations=?competitionEventOperations.filter(func(o)=o.event_ids.any(func(id)=evs.any(func(e)=e.id==id))).map(func(o)={o with event_ids=o.event_ids.filter(func(id)=evs.any(func(e)=e.id==id))});
       results=?gameResults.filter(func(r)=evs.any(func(e)=r.event_id==?e.id));summaries=?gameSummaries.filter(func(r)=evs.any(func(e)=r.event_id==e.id));stats=?gamePlayerStats.filter(func(r)=evs.any(func(e)=r.event_id==e.id));
       duties=?duties.filter(func(d)=evs.any(func(e)=e.id==d.event_id));duty_teams=?eventDutyTeams.filter(func(d)=evs.any(func(e)=e.id==d.event_id));open_duties=?openDuties.filter(func(d)=evs.any(func(e)=e.id==d.event_id));guests=?eventGuests.filter(func(g)=evs.any(func(e)=e.id==g.event_id));
-      captains=?eventCaptains.filter(func(c)=evs.any(func(e)=e.id==c.event_id));goalkeepers=?eventGoalkeepers.filter(func(g)=evs.any(func(e)=e.id==g.event_id));player_of_match=?eventPotm.filter(func(p)=evs.any(func(e)=e.id==p.event_id)) };
+      captains=?eventCaptains.filter(func(c)=evs.any(func(e)=e.id==c.event_id));goalkeepers=?eventGoalkeepers.filter(func(g)=evs.any(func(e)=e.id==g.event_id));player_of_match=?eventPotm.filter(func(p)=evs.any(func(e)=e.id==p.event_id));
+      stat_extras=?gamePlayerStatExtras.filter(func(x)=evs.any(func(e)=e.id==x.event_id)) };
     #Ok(to_candid (snap))
   };
   public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
