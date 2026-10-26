@@ -1656,7 +1656,7 @@ export default function DirectMessagePage() {
 
   // The inbox already told us who this thread is with, so the header carries a
   // real name from the first frame even while the conversation read is running.
-  const rememberedThreadLabel = getChatThreadLabel(user?.id, "dm", conversationId);
+  const rememberedThreadLabel = privateChatNames ? null : getChatThreadLabel(user?.id, "dm", conversationId);
 
   if (conversationLoading || checkingCanDM) {
     return (
@@ -1893,7 +1893,7 @@ export default function DirectMessagePage() {
         typingUsers={typingUsers}
         replyTo={
           replyTo
-            ? { id: replyTo.id, text: replyTo.text, authorName: replyTo.author?.display_name || null }
+            ? { id: replyTo.id, text: replyTo.text, authorName: privateChatNames ? getProfile(replyTo.author_id)?.display_name ?? null : replyTo.author?.display_name || null }
             : null
         }
         onCancelReply={() => setReplyTo(null)}

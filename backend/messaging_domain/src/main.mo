@@ -3971,6 +3971,10 @@ persistent actor class Main(governorInit : Principal) = this {
     func permitted(c : Types.Conversation) : Bool {
       PrivateDirectNames.permitted(requester, subjects, c.club_id, c.participants,
         c.participants.any(func p = isBlockedPair(requester, p)))
+        // create_conversation/get_or_create_dm can name an arbitrary peer.
+        // Only that peer's own authenticated message establishes disclosure;
+        // a caller-created conversation must never become full-person search.
+        and subjects.all(func p = p == requester or messages.any(func m = m.conversation_id == conversation_id and m.sender == p))
         and not convFenced(conversation_id) and not removalReceiver.denied(requester)
         and not subjects.any(func p = removalReceiver.denied(p))
     };

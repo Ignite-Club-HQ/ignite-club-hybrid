@@ -79,6 +79,8 @@ try {
   const dm=groups[1].messaging;dm.actor.setPrincipal(viewer);
   const directConversation=ok(await dm.actor.create_conversation('dm',[],[viewer,owner]));
   const direct=scope('direct',dm.canisterId,directConversation.id);
+  assert.ok('Err' in await read(viewer,direct),'A caller-created DM cannot enumerate an arbitrary peer name');
+  dm.actor.setPrincipal(owner);ok(await dm.actor.send_message(directConversation.id,'Hello','privacy-peer-consent',[],[]));
   await decrypt(viewer,direct);
   assert.ok('Err' in await read(outsider,direct),'Unrelated user cannot decrypt direct names');
   dm.actor.setPrincipal(outsider);
