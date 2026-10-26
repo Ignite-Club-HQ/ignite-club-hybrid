@@ -83,14 +83,15 @@ export async function fetchIcpIdentityProfile(
     } else if (!/profile not set/i.test(String(profileResult.reason?.message ?? profileResult.reason))) {
       throw profileResult.reason;
     }
+    let displayName: string | null = canisterProfile?.display_name ?? null;
     if (canisterProfile?.display_name?.startsWith("pii-display-name:")) {
       const { hydratePrivateProfileNames } = await import("./privateProfileNames");
       const [hydrated] = await hydratePrivateProfileNames({ identity, target }, [canisterProfile]);
-      if (hydrated) canisterProfile = hydrated;
+      displayName = hydrated?.display_name ?? null;
     }
     const resolved: IcpIdentityProfile = {
       accountId: principal,
-      displayName: canisterProfile?.display_name ?? null,
+      displayName,
       avatarRef: canisterProfile?.avatar_ref?.[0] ?? null,
       roles: roles.value,
       profileMissing: !canisterProfile,

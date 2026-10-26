@@ -105,7 +105,7 @@ async function boundedRead(ctx: FeatureBackendContext, subjects: string[]): Prom
 export async function hydratePrivateProfileNames<T extends { display_name: string | null }>(
   ctx: FeatureBackendContext,
   profiles: readonly T[],
-): Promise<T[]> {
+): Promise<Array<Omit<T, "display_name"> & { display_name: string | null }>> {
   const references = profiles.map(profile => {
     if (!profile.display_name?.startsWith("pii-display-name:")) return undefined;
     if (!profile.display_name.startsWith(PREFIX)) return null;
