@@ -3,7 +3,7 @@ export type ProfileWorksetMessage = {
   author_id?: string | null;
   forwarded_from_user_id?: string | null;
   reply_to_id?: string | null;
-  reply_to?: { author_id?: string | null } | null;
+  reply_to?: { author_id?: string | null; text?: string } | null;
   reactions?: readonly { user_id?: string | null }[];
 };
 
