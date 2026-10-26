@@ -364,7 +364,7 @@ describe("useVaultAccessModel — eligible clubs query", () => {
     renderAccessModel();
     await waitFor(() => expect(warmFolders).toHaveBeenCalledTimes(1));
     expect(warmFolders).toHaveBeenCalledWith(expect.objectContaining({ view: clubView, clubRoles: new Set(["coach"]) }));
-    expect(warmItems).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(warmItems).toHaveBeenCalledTimes(1));
     expect(fetchVaultClubHasPro).toHaveBeenCalledWith("club-a");
     expect(fetchVaultClubHasPro).not.toHaveBeenCalledWith("club-b");
   });
