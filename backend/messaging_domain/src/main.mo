@@ -1731,11 +1731,14 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   // One round trip for a chat screen opening: the newest message page, the
-  // reactions on those messages, and the conversation's pins. Pins are null
-  // when the caller may read messages but not pins (anonymous / no
-  // conversation access); clients then fall back to list_pinned_messages.
+  // reactions on those messages, the conversation's pins, and the results of
+  // polls referenced by the page's messages. Pins are null when the caller
+  // may read messages but not pins (anonymous / no conversation access);
+  // clients then fall back to list_pinned_messages. Polls ride along because
+  // each poll card would otherwise need its own update call (plus its own
+  // membership check) just to render.
   public shared ({ caller }) func open_conversation(conversation_id : Text, limit : Nat16) : async {
-    #Ok : { page : Types.MessagePage; reactions : [Types.Reaction]; pins : ?[Types.PinnedMessage] };
+    #Ok : { page : Types.MessagePage; reactions : [Types.Reaction]; pins : ?[Types.PinnedMessage]; polls : [Types.PollResults] };
     #Err : Text;
   } {
     denyLegacyAccountQuery();
@@ -1778,11 +1781,23 @@ persistent actor class Main(governorInit : Principal) = this {
     } else {
       ?pinnedMessages.filter(func(p) = p.conversation_id == conversation_id)
     };
+    // Polls referenced by this page's messages, bounded to 6. The single
+    // conversation access check above covers them (polls inherit their
+    // conversation's visibility), so cards render without extra round trips.
+    var page_polls : [Types.PollResults] = [];
+    label pollScan for (p in polls.values()) {
+      if (page_polls.size() >= 6) break pollScan;
+      if (p.conversation_id != conversation_id) continue pollScan;
+      let token = "[poll:" # p.id # "]";
+      let referenced = page_messages.find(func(m : Types.Message) : Bool { Text.contains(m.body, #text token) }) != null;
+      if (referenced) { page_polls := page_polls.concat([pollResultsFor(p)]) };
+    };
     let next_seq : ?Nat64 = if (skip > 0 and oldest_set) ?oldest_in_page else null;
     #Ok({
       page = { messages = page_messages; next_sequence = next_seq; latest_sequence = latest };
       reactions = page_reactions;
       pins;
+      polls = page_polls;
     })
   
     } finally { removalReceiver.leave(caller) };
