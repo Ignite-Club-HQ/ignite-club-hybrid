@@ -54,6 +54,7 @@ import {
 } from "@/hooks/useClubRealtimeMode";
 import { ChatSearchLoadingState } from "@/components/chat/ChatSearch";
 import { useChatHistorySearch } from "@/hooks/useChatHistorySearch";
+import { useChatSearchResultJump } from "@/hooks/useChatSearchResultJump";
 import { createChatHistorySearchFetcher } from "@/features/messaging/thread/chatHistorySearchFetcher";
 import { TEAM_CHAT_SCOPE } from "@/features/messaging/scopes/chatScopeAdapters";
 import { fetchMessagesAround } from "@/lib/fetchMessagesAround";
@@ -329,38 +330,32 @@ export default function TeamChatPage() {
   // user sees surrounding context. We first fetch a window of messages around
   // the match so the rows immediately before/after are present in the loaded
   // set (search alone merges only the matched row, leaving a gap).
-  const handleSearchResultClick = async (mid: string) => {
-    const target = (localMessagesRef.current ?? []).find((m) => m.id === mid);
-    setHighlightQuery(searchQuery);
-    setSearchQuery("");
-    setSearchOpen(false);
-    if (target?.created_at && teamId) {
-      if (useIcpLab || resolveAuthBackend() === "icp") {
-        requestAnimationFrame(() => handleJumpToMessage(mid));
-        return;
-      }
-      try {
-        const ctx = await fetchMessagesAround({
+  const handleSearchResultClick = useChatSearchResultJump<Message>({
+    scopeKey: `team:${user?.id}:${teamId}`,
+    getMessages: () => localMessagesRef.current ?? [],
+    closeSearch: () => {
+      setHighlightQuery(searchQuery);
+      setSearchQuery("");
+      setSearchOpen(false);
+    },
+    jump: handleJumpToMessage,
+    loadContext: async (target) => {
+      if (!target.created_at || !teamId || useIcpLab || resolveAuthBackend() === "icp") return [];
+      return fetchMessagesAround({
           table: "team_messages",
           scope: { team_id: teamId },
           createdAt: target.created_at,
           selectColumns:
             "id, text, image_url, created_at, edited_at, author_id, team_id, reply_to_id, is_club_announcement, club_announcement_name, is_system_message, forwarded_from_user_id, forwarded_at, forwarded_source_label",
           hasAnnouncements: true,
-        });
-        if (ctx.length) {
-          setLocalMessages((prev) => {
-            const existing = new Set((prev || []).map((m) => m.id));
-            const adds = ctx.filter((m) => !existing.has(m.id));
-            return adds.length ? [...(prev || []), ...adds] : prev;
-          });
-        }
-      } catch {
-        // best-effort; fall through to jump
-      }
-    }
-    requestAnimationFrame(() => handleJumpToMessage(mid));
-  };
+      });
+    },
+    mergeContext: (rows) => setLocalMessages((prev) => {
+      const existing = new Set((prev ?? []).map((m) => m.id));
+      const adds = rows.filter((m) => !existing.has(m.id));
+      return adds.length ? [...(prev ?? []), ...adds] : prev;
+    }),
+  });
 
   const {
     team,
@@ -2104,7 +2099,7 @@ export default function TeamChatPage() {
               <Skeleton key={i} className="h-16 w-3/4" />
             ))}
           </div>
-        ) : (isSearchFetching || (!!searchQuery && !searchCanShowEmpty)) ? (
+        ) : (!!searchQuery.trim() && !filteredMessages?.length && (isSearchFetching || !searchCanShowEmpty)) ? (
           <ChatSearchLoadingState />
         ) : filteredMessages?.length === 0 ? (
           <ChatEmptyState

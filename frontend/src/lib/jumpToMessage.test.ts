@@ -10,6 +10,15 @@ const makeHandle = (scrollToMessageIdResult = false) => ({
 });
 
 describe("jumpToMessageInVirtualizedChat", () => {
+  it("focuses an already-loaded result without waiting for a polling timer", () => {
+    const handle = makeHandle(true);
+    const highlight = vi.fn();
+    const cancel = jumpToMessageInVirtualizedChat("target", () => [{ id: "a" }, { id: "target" }], () => handle as any, highlight);
+    expect(highlight).toHaveBeenCalledWith("target");
+    expect(handle.scrollToMessageId).toHaveBeenCalledWith("target", "end");
+    cancel();
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
     // Spy on getElementById so we can assert it is NEVER consulted as a fallback.

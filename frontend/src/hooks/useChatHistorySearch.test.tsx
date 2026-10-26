@@ -16,6 +16,17 @@ function setup(fetcher: (query: string, signal: AbortSignal) => Promise<Message[
 }
 
 describe("useChatHistorySearch race and merge safety", () => {
+  it("closing search immediately stops waiting and ignores late rows", async () => {
+    const pending = deferred<Message[]>();
+    const hook = setup(() => pending.promise);
+    hook.rerender({ query: "older", cacheKey: "team:1" });
+    await act(async () => {});
+    hook.rerender({ query: "", cacheKey: "team:1" });
+    expect(hook.result.current.isSearching).toBe(false);
+    await act(async () => pending.resolve([{ id: "late", text: "Old search" }]));
+    expect(hook.result.current.messages.map((row) => row.id)).not.toContain("late");
+  });
+
 
   it("does not query below the minimum and permits a local empty state", async () => {
     const fetcher = vi.fn();
