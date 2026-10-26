@@ -749,6 +749,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_profile_broadcast_batch' : ActorMethod<
+    [Principal, string, Array<Principal>, [] | [bigint]],
+    { 'Ok' : Batch } |
+      { 'Err' : string }
+  >,
   'read_profile_direct_batch' : ActorMethod<
     [Principal, string, Array<Principal>, [] | [bigint]],
     { 'Ok' : Batch } |

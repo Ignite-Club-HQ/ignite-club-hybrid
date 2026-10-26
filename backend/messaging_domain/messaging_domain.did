@@ -824,6 +824,12 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_profile_broadcast_batch: (requester: principal, conversation_id:
+    text, subjects: vec principal, expected: opt nat) ->
+    (variant {
+       Err: text;
+       Ok: Batch;
+     });
    read_profile_direct_batch: (requester: principal, conversation_id: 
     text, subjects: vec principal, expected: opt nat) ->
     (variant {

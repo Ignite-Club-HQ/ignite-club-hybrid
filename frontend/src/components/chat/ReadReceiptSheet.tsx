@@ -58,7 +58,7 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
   const privateNames = privateProfileSearchRehearsalEnabled() && resolveAuthBackend() === "icp";
   const baseReaders = propReaders.length > 0 ? propReaders : fetchedReaders;
   const getPrivateProfile = usePrivateChatProfiles(contextId, currentUserId,
-    [...baseReaders.map(row => row.user_id), ...allMembers.map(row => row.user_id)], privateNames && open);
+    [...baseReaders.map(row => row.user_id), ...allMembers.map(row => row.user_id)], privateNames && open, messageType === 'dm' ? 'direct' : 'group', messageType === 'broadcast' ? messageId : undefined);
   const scopedLabel = (row: MemberInfo) => privateNames ? {
     ...row, display_name: getPrivateProfile(row.user_id)?.display_name ?? null,
     avatar_url: getPrivateProfile(row.user_id)?.avatar_url ?? null,

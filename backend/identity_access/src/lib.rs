@@ -1552,7 +1552,7 @@ async fn read_private_profile_name_authorization(viewer_principal: Principal, su
     if !inventory.groups.iter().any(|g| g.domains.iter().any(|d| d.domain == "pii_access_control" && d.canister == service)) {
         return Err("Original private-name service is not registered".into());
     }
-    let domain = match scope.kind.as_str() { "competition" => "competition_domain", "league" => "mini_league_domain", "direct" => "messaging_domain", _ => "club_domain" };
+    let domain = match scope.kind.as_str() { "competition" => "competition_domain", "league" => "mini_league_domain", "direct" | "broadcast" => "messaging_domain", _ => "club_domain" };
     if !inventory.groups.iter().any(|g| g.domains.iter().any(|d| d.domain == domain && d.canister == scope.authority)) {
         return Err("Private-name audience authority is not registered".into());
     }
@@ -1571,7 +1571,7 @@ async fn read_private_profile_name_authorization(viewer_principal: Principal, su
         verify_guardian_search(viewer_principal, scope.authority, &scope.resource, &viewer, &config).await?;
         active()?;
     } else {
-        let method = match scope.kind.as_str() { "club" => "read_profile_membership_batch", "family" => "read_profile_family_batch", "competition" | "league" => "read_profile_audience_batch", "direct" => "read_profile_direct_batch", _ => return Err("Invalid audience".into()) };
+        let method = match scope.kind.as_str() { "club" => "read_profile_membership_batch", "family" => "read_profile_family_batch", "competition" | "league" => "read_profile_audience_batch", "direct" => "read_profile_direct_batch", "broadcast" => "read_profile_broadcast_batch", _ => return Err("Invalid audience".into()) };
         let mut retained: Option<club_profiles::MembershipBatch> = None;
         for _ in 0..2 {
             let expected = retained.as_ref().map(|r| r.revision.clone());

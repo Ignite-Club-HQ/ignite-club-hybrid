@@ -6,7 +6,7 @@ import { createLivePrivateProfileAuthorityResolver } from './privateProfileAutho
 import { listLiveProfilesByIds } from './features/identityAccessClient';
 
 export type ProfileRelationship = {
-  kind: 'club' | 'family' | 'competition' | 'league' | 'direct';
+  kind: 'club' | 'family' | 'competition' | 'league' | 'direct' | 'broadcast';
   resource: string;
 };
 
@@ -21,7 +21,7 @@ export async function readRelationshipProfiles(
   ids = [...ids];
   if (!relationship.resource.trim()) throw new Error('An exact profile relationship is required.');
   const domain = relationship.kind === 'competition' ? 'competition_domain'
-    : relationship.kind === 'league' ? 'mini_league_domain' : relationship.kind === 'direct' ? 'messaging_domain' : 'club_domain';
+    : relationship.kind === 'league' ? 'mini_league_domain' : ['direct', 'broadcast'].includes(relationship.kind) ? 'messaging_domain' : 'club_domain';
   const authorityId = owner.target.canisterIds[domain];
   const identity = owner.identity;
   const principal = identity.getPrincipal().toText();
@@ -71,7 +71,7 @@ export async function readRelationshipProfiles(
 
 /** Legacy Supabase cache stays unchanged; ICP resolves exact ownership first. */
 export async function selectRelationshipProfiles(ids: readonly string[], relationship: ProfileRelationship) {
-  if (relationship.kind === 'direct') throw new Error('Direct profiles require an explicit authorized conversation context.');
+  if (relationship.kind === 'direct' || relationship.kind === 'broadcast') throw new Error('Message profiles require an explicit authorized conversation context.');
   if (relationship.kind === 'family') throw new Error('Family profiles require an explicit owning child context.');
   const scope = relationship.kind === 'league' ? { miniLeagueId: relationship.resource }
     : relationship.kind === 'competition' ? { competitionId: relationship.resource }

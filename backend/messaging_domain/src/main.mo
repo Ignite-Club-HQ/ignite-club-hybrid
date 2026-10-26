@@ -1565,6 +1565,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { #Err("Message not found") };
       case (?msg) {
         let receipt : Types.Receipt = { conversation_id; user = caller; message_id; read = true };
+        mediaEvidenceRevision += 1;
         receipts := receipts.filter(func(r) = not (r.conversation_id == conversation_id and r.user.equal(caller)));
         receipts := receipts.concat([receipt]);
         var unread_count_val : Nat64 = 0;
@@ -3115,6 +3116,7 @@ persistent actor class Main(governorInit : Principal) = this {
     } else {
       reactions := reactions.concat([{ message_id; user = caller; emoji }]);
     };
+    mediaEvidenceRevision += 1;
     ignore fanOutWsReactionPoke(message_id);
     #Ok
   
@@ -4001,6 +4003,40 @@ persistent actor class Main(governorInit : Principal) = this {
         case null #Err("Direct conversation not found");
       }
     } finally { removalReceiver.leave(caller) };
+  };
+
+  // Broadcast author is the fixed Announcements label. Only independently
+  // recorded readers/reactors can disclose a personal name in those drawers;
+  // a caller-supplied principal is never a global person-search selector.
+  public shared ({ caller }) func read_profile_broadcast_batch(requester : Principal, message_id : Text, subjects : [Principal], expected : ?Nat) : async { #Ok : PrivateDirectNames.Batch; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1") return #Err("Private broadcast names are not released");
+    let authority = accountAdmissionAuthority;
+    if (caller.isAnonymous() or authority != ?caller) return #Err("Configured identity authority required");
+    let conversation_id = BROADCAST_CONVERSATION_ID;
+    if (message_id == "" or message_id.size() > 128 or requester.isAnonymous() or requester.toText() == "aaaaa-aa" or subjects.size() == 0 or subjects.size() > 25
+      or subjects.any(func p = p.isAnonymous() or p.toText() == "aaaaa-aa")
+      or subjects.any(func p = subjects.filter(func q = q == p).size() != 1)) return #Err("Exact bounded broadcast participants required");
+    let revision = mediaEvidenceRevision;
+    switch (expected) { case (?r) if (r != revision) return #Err("Broadcast name revision changed"); case null {} };
+    func participant(p : Principal) : Bool {
+      receipts.any(func r = r.conversation_id == conversation_id and r.message_id == message_id and r.user == p and r.read)
+      or reactions.any(func r = r.user == p and r.message_id == message_id)
+    };
+    func active() : Bool {
+      authority == accountAdmissionAuthority and revision == mediaEvidenceRevision
+      and conversations.any(func c = c.id == conversation_id and c.club_id == "broadcast")
+      and messages.any(func m = m.id == message_id and m.conversation_id == conversation_id)
+      and not convFenced(conversation_id) and not removalReceiver.denied(requester)
+      and subjects.all(func p = participant(p) and not isBlockedPair(requester, p) and not removalReceiver.denied(p))
+    };
+    if (not active()) return #Err("Broadcast name audience denied");
+    if (not removalReceiver.enter(requester)) return #Err("Account removal fenced");
+    try {
+      await admitAccount(requester);
+      if (not active()) return #Err("Broadcast name audience changed");
+      for (subject in subjects.values()) { await admitAccount(subject); if (not active()) return #Err("Broadcast name audience changed") };
+      #Ok({ revision; requester; club = message_id; subjects; members = subjects.map(func _ = true) })
+    } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(requester) }
   };
 
   public shared ({ caller }) func get_message_window(conversation_id : Text, message_id : Text) : async { #Ok : Types.MessagePage; #Err : Text } {

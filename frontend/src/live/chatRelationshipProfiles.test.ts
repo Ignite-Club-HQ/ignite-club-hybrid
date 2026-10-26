@@ -19,6 +19,22 @@ beforeEach(() => {
   mocks.legacy.mockResolvedValue(new Map());
 });
 describe('rehearsal chat relationship names', () => {
+  it('resolves canonical broadcast reader/reactor names through messaging, not a club', async () => {
+    mocks.metadata.mockResolvedValue({ ...metadata(), conversationId: 'broadcast', kind: 'broadcast', clubId: null, teamId: null, members: [] });
+    await readChatRelationshipProfiles(context(), 'broadcast', ['person'], undefined, 'msg-broadcast-1');
+    expect(mocks.profiles.mock.calls[0][2]).toEqual({ kind: 'broadcast', resource: 'msg-broadcast-1' });
+    expect(mocks.legacy).not.toHaveBeenCalled(); expect(mocks.metadata).toHaveBeenCalledTimes(2);
+  });
+  it('rejects a fake broadcast resource before a private profile read', async () => {
+    mocks.metadata.mockResolvedValue({ ...metadata(), kind: 'broadcast', clubId: null });
+    await expect(readChatRelationshipProfiles(context(), 'chat', ['person'])).rejects.toThrow('unavailable');
+    expect(mocks.profiles).not.toHaveBeenCalled(); expect(mocks.legacy).not.toHaveBeenCalled();
+  });
+  it('refuses a broadcast name lookup without its exact drawer message', async () => {
+    mocks.metadata.mockResolvedValue({ ...metadata(), conversationId: 'broadcast', kind: 'broadcast', clubId: null, teamId: null });
+    await expect(readChatRelationshipProfiles(context(), 'broadcast', ['person'])).rejects.toThrow('drawer message');
+    expect(mocks.profiles).not.toHaveBeenCalled();
+  });
   it('reads only exact DM participants through messaging authority, never a club', async () => {
     mocks.direct.mockResolvedValue({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'person' });
     const owner = context();
