@@ -87,6 +87,11 @@ describe("scoped decrypted person matching", () => {
 });
 
 describe("authority-owned paged club search", () => {
+  it("carries the original-authority resolver through paging into private hydration", async () => {
+    const resolve = vi.fn();
+    expect((await searchScopedClubProfiles(ctx,"club-a","Paul",10,undefined,resolve))[0]?.id).toBe(subject);
+    expect(mocks.hydrate).toHaveBeenCalledWith(ctx,[row],{signal:undefined,resolveAuthority:resolve});
+  });
   it("retires the whole traversal when the identity changes during a candidate page", async () => {
     const changing = { ...ctx };
     mocks.page.mockImplementationOnce(async () => {

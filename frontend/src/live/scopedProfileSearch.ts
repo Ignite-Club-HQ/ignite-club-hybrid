@@ -4,6 +4,7 @@ import { connectLiveIdentityAccessClientWithIdentity } from "./identityAccess";
 import { hydratePrivateProfileNames } from "./privateProfileNames";
 import { connectLiveClubDomain } from "./domains";
 import { unwrapCandid } from "./features/candid";
+import type { PrivateProfileAuthorityResolver } from "./privateProfileAuthority";
 
 type CandidateCursor = { revision: bigint; phase: bigint; offset: bigint };
 type ProfileBinding = { principal: Principal; account_id: string; display_name: string | null };
@@ -30,6 +31,7 @@ export async function searchScopedClubProfiles(
   query: string,
   limit = 10,
   signal?: AbortSignal,
+  resolveAuthority?: PrivateProfileAuthorityResolver,
 ) {
   const active = pinnedSearchGuard(ctx, signal);
   active();
@@ -58,7 +60,7 @@ export async function searchScopedClubProfiles(
     for (const id of ids) seen.add(id);
     const rows = await searchScopedProfileCandidates(ctx, clubId, ids, query, limit, signal, profiles => {
       for (const profile of profiles) originalBindings.set(profile.principal.toText(), profile);
-    });
+    }, resolveAuthority);
     active();
     matches.push(...rows);
     matchedSubjects.push(...rows.map(row => row.id));
@@ -108,6 +110,7 @@ export async function searchScopedProfileCandidates(
   limit = 10,
   signal?: AbortSignal,
   observed?: (profiles: readonly ProfileBinding[]) => void,
+  resolveAuthority?: PrivateProfileAuthorityResolver,
 ) {
   const active = pinnedSearchGuard(ctx, signal);
   active();
@@ -136,7 +139,7 @@ export async function searchScopedProfileCandidates(
     // Refuse foreign server rows rather than letting a response extend scope.
     const requested = new Set(subjects.map(p => p.toText()));
     if (rows.some(row => !requested.has(row.principal.toText()))) throw new Error("Person search returned an unexpected identity.");
-    const hydrated = await hydratePrivateProfileNames(ctx, rows, signal ? { signal } : undefined);
+    const hydrated = await hydratePrivateProfileNames(ctx, rows, signal || resolveAuthority ? { signal, resolveAuthority } : undefined);
     active();
     // Decryption adds asynchronous authorization boundaries. Verify identity
     // admission and both memberships again, not just the club page revision:

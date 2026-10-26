@@ -18,6 +18,11 @@ function fixture() {
   return { snapshot, binding };
 }
 describe('account authority deployment inventory', () => {
+  it('separately validates the approved on-chain alias, never rewrites the runtime alias', () => {
+    const { snapshot, binding } = fixture();
+    expect(accountAuthoritiesFromRegistry(snapshot,{...binding,targetAlias:'app-mainnet',registryAlias:'mainnet'})).toHaveLength(2);
+    expect(()=>accountAuthoritiesFromRegistry(snapshot,{...binding,targetAlias:'app-mainnet',registryAlias:'foreign'})).toThrow('Foreign');
+  });
   it('includes both groups and the required legacy club authority', () => {
     const { snapshot, binding } = fixture();
     expect(accountAuthoritiesFromRegistry(snapshot, binding)).toEqual(snapshot.groups.map(g => ({ groupId: g.id, clubDomain: g.domains[0].canister.toText() })));

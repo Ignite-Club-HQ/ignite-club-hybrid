@@ -12,6 +12,8 @@ export type AccountRegistrySnapshot = {
 };
 export type AccountRegistryBinding = {
   targetAlias: string; deploymentId: string; deploymentRevision: bigint; host: string; networkKind: string;
+  /** On-chain deployment alias may differ from the app's runtime target alias. */
+  registryAlias?: string;
   registryRevision: bigint; requiredClubAuthorities: readonly string[];
 };
 
@@ -28,7 +30,7 @@ export function accountAuthoritiesFromRegistry(snapshot: AccountRegistrySnapshot
   let subnetSignature: string | undefined;
   const groups = snapshot.groups.map(g => {
     const p = snapshot.placements.find(p => p.group_id === g.id);
-    if (!p || g.target_alias !== binding.targetAlias || p.deployment_id !== binding.deploymentId ||
+    if (!p || g.target_alias !== (binding.registryAlias ?? binding.targetAlias) || p.deployment_id !== binding.deploymentId ||
         p.deployment_revision !== binding.deploymentRevision || p.host !== binding.host || p.network_kind !== binding.networkKind) throw new Error('Foreign account authority deployment');
     const approved = p.approved_subnets.map(s => s.toText()).sort();
     if (!approved.length || approved.length > 64 || new Set(approved).size !== approved.length ||
@@ -60,13 +62,34 @@ export function accountAuthoritiesFromRegistry(snapshot: AccountRegistrySnapshot
 export async function readLiveAccountAuthorityRegistry(
   ctx: import('./featureRouter').FeatureBackendContext, binding: AccountRegistryBinding,
 ) {
+  const snapshot = await readLiveAccountAuthoritySnapshot(ctx, binding);
+  return { revision: snapshot.revision, groups: accountAuthoritiesFromRegistry(snapshot, binding) };
+}
+
+/** Complete consensus inventory for original-PII routing. No approved binding
+ * is derived from the reply itself, and no membership/cache fallback exists. */
+export async function readLiveAccountAuthoritySnapshot(
+  ctx: import('./featureRouter').FeatureBackendContext, binding: AccountRegistryBinding,
+): Promise<AccountRegistrySnapshot> {
+  binding = { ...binding, requiredClubAuthorities: [...binding.requiredClubAuthorities] };
   if (ctx.target.alias !== binding.targetAlias || new URL(ctx.target.host).origin !== binding.host ||
       ctx.target.networkKind !== binding.networkKind || ctx.identity.getPrincipal().isAnonymous()) throw new Error('Account registry target mismatch');
+  const identity = ctx.identity;
+  const principal = identity.getPrincipal().toText();
+  const target = JSON.stringify(ctx.target);
+  const recheck = () => {
+    if (ctx.identity !== identity || identity.getPrincipal().toText() !== principal || JSON.stringify(ctx.target) !== target || ctx.target.status === 'disabled') throw new Error('Registry identity or target changed');
+  };
+  recheck();
   const { connectLiveShardRouter } = await import('./domains');
-  const { actor } = await connectLiveShardRouter(ctx.target, ctx.identity);
+  recheck();
+  const { actor } = await connectLiveShardRouter(ctx.target, identity);
+  recheck();
   const { readPinnedGroupRegistry } = await import('./groupRegistryPager');
-  const principal = ctx.identity.getPrincipal().toText();
-  const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => actor.read_group_registry_page(binding.targetAlias, revision, cursor, limit),
-    binding.registryRevision, () => { if (ctx.identity.getPrincipal().toText() !== principal) throw new Error('Registry identity changed'); });
-  return { revision: snapshot.revision, groups: accountAuthoritiesFromRegistry(snapshot, binding) };
+  recheck();
+  const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => actor.read_group_registry_page(binding.registryAlias ?? binding.targetAlias, revision, cursor, limit),
+    binding.registryRevision, recheck);
+  recheck();
+  accountAuthoritiesFromRegistry(snapshot, binding);
+  return snapshot;
 }

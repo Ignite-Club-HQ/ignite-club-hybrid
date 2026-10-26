@@ -1,12 +1,22 @@
 import { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "./featureRouter";
 import { accountAuthoritiesFromRegistry, type AccountRegistryBinding, type AccountRegistrySnapshot } from "./accountAuthorityRegistry";
+import { readLiveAccountAuthoritySnapshot } from "./accountAuthorityRegistry";
 
 export type PrivateProfileAuthorityLease = {
   context: FeatureBackendContext;
   confirm: () => Promise<void>;
 };
 export type PrivateProfileAuthorityResolver = (authority: string) => Promise<PrivateProfileAuthorityLease>;
+
+/** Explicit approved deployment evidence is required; never derive a pin from
+ * a private reference or silently discover/rebind the current registry. */
+export function createLivePrivateProfileAuthorityResolver(
+  ctx: FeatureBackendContext, binding: AccountRegistryBinding,
+): PrivateProfileAuthorityResolver {
+  const pinned = { ...binding, requiredClubAuthorities: [...binding.requiredClubAuthorities] };
+  return createPrivateProfileAuthorityResolver(ctx, pinned, () => readLiveAccountAuthoritySnapshot(ctx, pinned));
+}
 
 const fingerprint = (value: unknown) => JSON.stringify(value, (_, item) =>
   typeof item === "bigint" ? item.toString() : item);
