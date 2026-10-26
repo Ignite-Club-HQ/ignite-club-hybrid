@@ -1,3 +1,8 @@
+## Private names and guardian-only full search — 26 October 2026
+- [ ] Implement private personal names with existing in-app display preserved and authorized, bounded reads.
+- [ ] Restrict full-app search to verified guardian linking for a specific child; preserve authorized scoped searches elsewhere.
+- [ ] Test privacy/authorization rules and document separately approved release/conversion prerequisites; no live data or sign-ins changed.
+
 ## Continue migration-tool loaders — 26 October 2026
 - [x] Next requested batch: offline family preparation preserves explicit child/team/guardian relations, role/account mirrors and club exclusions; encrypts names/birth years under exact production PII key; retains guardian metadata and refuses shared-ID collisions/unsupported season, exclusion and global-point semantics. No children writer or live activation.
 - [x] All 72 migration checks passed, including children-writer and game-results checks plus existing separate-approval regressions; production loading remains withheld pending the deferred secrets and separate exact-club/group approvals. No live data, claims, emails, sign-ins or deployments changed.
