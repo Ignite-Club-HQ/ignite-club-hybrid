@@ -6,6 +6,7 @@ import { connectLiveClubDomain } from "./domains";
 import { unwrapCandid } from "./features/candid";
 
 type CandidateCursor = { revision: bigint; phase: bigint; offset: bigint };
+type ProfileBinding = { principal: Principal; account_id: string; display_name: string | null };
 
 function assertActive(signal?: AbortSignal) {
   if (signal?.aborted) throw new DOMException("Person search cancelled", "AbortError");
@@ -27,6 +28,7 @@ export async function searchScopedClubProfiles(
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   const matches: Awaited<ReturnType<typeof searchScopedProfileCandidates>> = [];
   const matchedSubjects: string[] = [];
+  const originalBindings = new Map<string, ProfileBinding>();
   const seen = new Set<string>();
   let cursor: [] | [CandidateCursor] = [];
   let revision: bigint | undefined;
@@ -43,7 +45,9 @@ export async function searchScopedClubProfiles(
     if (next && (next.revision !== revision || next.phase > 2n || (prior && (next.phase < prior.phase || (next.phase === prior.phase && next.offset <= prior.offset))))) throw new Error("Invalid club person search continuation.");
     const ids = page.subjects.map(subject => subject.toText()).filter(id => !seen.has(id));
     for (const id of ids) seen.add(id);
-    const rows = await searchScopedProfileCandidates(ctx, clubId, ids, query, limit, signal);
+    const rows = await searchScopedProfileCandidates(ctx, clubId, ids, query, limit, signal, profiles => {
+      for (const profile of profiles) originalBindings.set(profile.principal.toText(), profile);
+    });
     assertActive(signal);
     matches.push(...rows);
     matchedSubjects.push(...rows.map(row => row.id));
@@ -51,22 +55,30 @@ export async function searchScopedClubProfiles(
       // A later page's unlock may suspend/relink an earlier match without
       // changing this club's membership revision. Reauthorize the WHOLE
       // retained result, including original-reference identity, before return.
-      const finalMatches: typeof matches = [];
-      for (let start = 0; start < matchedSubjects.length; start += 25) {
-        const confirmedRows = await searchScopedProfileCandidates(ctx, clubId, matchedSubjects.slice(start, start + 25), query, 25, signal);
-        for (const confirmedRow of confirmedRows) {
-          const priorRow = matches.find(row => row.id === confirmedRow.id);
-          if (!priorRow || priorRow.account_id !== confirmedRow.account_id || priorRow.display_name !== confirmedRow.display_name) throw new Error("Person search authority changed; please try again.");
+      const authorityId = ctx.target.canisterIds.club_domain;
+      if (!authorityId) throw new Error("The club's connection is not configured.");
+      const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
+      try {
+        for (let start = 0; start < matchedSubjects.length; start += 25) {
+          const slice = matchedSubjects.slice(start, start + 25);
+          // Revalidate original opaque references without paying to derive
+          // every matched name key a second time.
+          const confirmedRows = await client.readClubProfiles(Principal.fromText(authorityId), clubId, slice.map(id => Principal.fromText(id)));
+          assertActive(signal);
+          if (confirmedRows.length !== slice.length || new Set(confirmedRows.map(row => row.principal.toText())).size !== slice.length) throw new Error("Person search authority changed; please try again.");
+          for (const confirmedRow of confirmedRows) {
+            const id = confirmedRow.principal.toText();
+            const priorRow = originalBindings.get(id);
+            if (!slice.includes(id) || !priorRow || priorRow.account_id !== confirmedRow.account_id || priorRow.display_name !== confirmedRow.display_name) throw new Error("Person search authority changed; please try again.");
+          }
         }
-        finalMatches.push(...confirmedRows);
-      }
-      if (finalMatches.length !== matches.length) throw new Error("Person search authority changed; please try again.");
+      } finally { client.dispose(); }
       // Re-read the opening page at its revision after all name/decryption
       // awaits; a removed membership cannot return retained partial matches.
       const confirmed = await unwrapCandid(actor.read_profile_candidates(clubId, [{ revision, phase: 0n, offset: 0n }]), "Confirm club person search");
       if (confirmed.revision !== revision) throw new Error("Club person search changed; please try again.");
       assertActive(signal);
-      return finalMatches.slice(0, limit);
+      return matches.slice(0, limit);
     }
     cursor = [next];
   }
@@ -83,6 +95,7 @@ export async function searchScopedProfileCandidates(
   query: string,
   limit = 10,
   signal?: AbortSignal,
+  observed?: (profiles: readonly ProfileBinding[]) => void,
 ) {
   assertActive(signal);
   if (!clubId.trim() || clubId !== clubId.trim()) throw new Error("A specific club is required for person search.");
@@ -125,6 +138,7 @@ export async function searchScopedProfileCandidates(
           return !prior || prior.account_id !== row.account_id || prior.display_name !== row.display_name;
         })) throw new Error("Person search authority changed; please try again.");
     }
+    observed?.(rows);
     return hydrated.filter(row => row.display_name?.toLocaleLowerCase().includes(needle)).slice(0, limit).map(row => ({
       id: row.principal.toText(),
       account_id: row.account_id,
