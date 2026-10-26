@@ -1,0 +1,346 @@
+type TeamInviteLink = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   id: text;
+   revoked: bool;
+   role: text;
+   rotated_at_ms: opt nat64;
+   team_id: text;
+   token: text;
+ };
+type TeamInvite = 
+ record {
+   accepted_by: opt principal;
+   club_id: text;
+   created_at_ms: nat64;
+   email: text;
+   expires_at_ms: nat64;
+   id: text;
+   invited_by: principal;
+   revoked: bool;
+   role: text;
+   team_id: text;
+ };
+type TeamFolder = 
+ record {
+   club_id: text;
+   color: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   description: opt text;
+   id: text;
+   name: text;
+   sort_order: nat32;
+ };
+type Team = 
+ record {
+   club: text;
+   id: text;
+ };
+type SeasonTeamAssignment = 
+ record {
+   added_at_ms: nat64;
+   member_id: text;
+   season_id: text;
+   team_id: text;
+ };
+type SeasonCloneReceipt = 
+ record {
+   copy_staff: bool;
+   name: text;
+   season_id: text;
+   source: text;
+ };
+type Season = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   end_date: text;
+   id: text;
+   name: text;
+   start_date: text;
+   status: text;
+   updated_at_ms: nat64;
+ };
+type RoleRequest = 
+ record {
+   account_id: text;
+   club: text;
+   created_at_ms: nat64;
+   decided_at_ms: opt nat64;
+   decided_by: opt principal;
+   id: text;
+   role: text;
+   status: text;
+   team: opt text;
+   user: principal;
+ };
+type RoleGrant = 
+ record {
+   club: opt text;
+   role: text;
+   team: opt text;
+   user: principal;
+ };
+type Receipt = 
+ record {
+   audience: vec text;
+   authority: principal;
+   body: text;
+   club: text;
+   competition: text;
+   count: opt nat16;
+   key: text;
+   officials: vec principal;
+   queue: principal;
+   teams: vec text;
+   user: principal;
+ };
+type PendingInvite = 
+ record {
+   accepted_at_ms: opt nat64;
+   accepted_by: opt principal;
+   child_id: opt text;
+   club_id: text;
+   created_at_ms: nat64;
+   email: text;
+   id: text;
+   invited_by: principal;
+   kind: text;
+   resent_at_ms: opt nat64;
+   role: opt text;
+   status: text;
+   team_id: opt text;
+ };
+type ParentInvite = 
+ record {
+   accepted_by: opt principal;
+   child_id: text;
+   club_id: text;
+   created_at_ms: nat64;
+   expires_at_ms: nat64;
+   id: text;
+   invited_by: principal;
+   team_id: opt text;
+ };
+type NewsPost = 
+ record {
+   attachments: vec NewsAttachment;
+   body: text;
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   id: text;
+   image_url: opt text;
+   is_important: bool;
+   revision: nat64;
+   status: text;
+   target_competition_id: opt text;
+   target_mini_league_id: opt text;
+   target_team_ids: opt vec text;
+   title: text;
+   updated_at_ms: nat64;
+ };
+type NewsAudienceRecipient = 
+ record {
+   news_id: text;
+   user: principal;
+ };
+type NewsAttachment = 
+ record {
+   anchor: opt text;
+   kind: text;
+   mime_type: opt text;
+   name: text;
+   size: nat64;
+   url: text;
+ };
+type Listing = 
+ record {
+   links: vec Link;
+   revision: nat64;
+ };
+type Link = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   draft: Draft;
+   id: text;
+   sort_order: nat32;
+ };
+type Job = 
+ record {
+   attempt: nat;
+   ciphertext: text;
+   created_at_ms: nat64;
+   id: text;
+   kind: text;
+   provider_id: text;
+   resource: text;
+   state: text;
+   worker: opt principal;
+ };
+type Guardian = 
+ record {
+   child: text;
+   user: principal;
+ };
+type Exclusion = 
+ record {
+   club: text;
+   user: principal;
+ };
+type Draft = 
+ record {
+   icon: text;
+   is_active: bool;
+   open_mode: text;
+   subtitle: opt text;
+   title: text;
+   url: text;
+ };
+type CompetitionRecovery = 
+ record {
+   assignments: vec SeasonTeamAssignment;
+   clones: vec record {
+                 text;
+                 SeasonCloneReceipt;
+               };
+   copies: vec record {
+                 text;
+                 text;
+                 text;
+               };
+   invites: vec PendingInvite;
+   mail: vec record {
+               text;
+               Job;
+             };
+   relays: vec record {
+                 text;
+                 Receipt;
+               };
+   seasons: vec Season;
+ };
+type ClubTeam = 
+ record {
+   age_group: opt text;
+   archived: bool;
+   club_id: text;
+   deleted_at_ms: opt nat64;
+   description: opt text;
+   division: opt text;
+   folder_id: opt text;
+   gender: opt text;
+   id: text;
+   is_active: bool;
+   is_shell: bool;
+   logo_url: opt text;
+   name: text;
+   playhq_auto_create_events: bool;
+   playhq_competition_id: opt text;
+   playhq_team_id: opt text;
+   shell_claim_token: opt text;
+   shell_claimed_at_ms: opt nat64;
+   shell_claimed_by: opt principal;
+   shell_contact_email: opt text;
+   shell_contact_name: opt text;
+   shell_invited_by: opt principal;
+   team_type: opt text;
+ };
+type ClubSponsor = 
+ record {
+   club_id: text;
+   description: opt text;
+   exposure_percentage: opt nat8;
+   id: text;
+   is_active: bool;
+   is_team_only: bool;
+   logo_url: opt text;
+   name: text;
+   sort_order: nat32;
+   tier: text;
+   website_url: opt text;
+ };
+type ClubSnapshot = 
+ record {
+   account_roles: vec AccountRole;
+   acl_teams: vec Team;
+   children: vec Child;
+   competition_recovery: opt CompetitionRecovery;
+   exclusions: vec Exclusion;
+   guardians: vec Guardian;
+   listing: Listing;
+   member: bool;
+   news: vec NewsPost;
+   news_audience: vec NewsAudienceRecipient;
+   parent_invites: vec ParentInvite;
+   profiles: vec ClubProfile;
+   role_requests: vec RoleRequest;
+   roles: vec RoleGrant;
+   settings: vec ClubSettings;
+   sponsors: vec ClubSponsor;
+   team_folders: vec TeamFolder;
+   team_invite_links: vec TeamInviteLink;
+   team_invites: vec TeamInvite;
+   teams: vec ClubTeam;
+ };
+type ClubSettings = 
+ record {
+   announcement: opt text;
+   chat_thread_ads_enabled: bool;
+   club_id: text;
+   club_switcher_hint: opt text;
+   contact_email: opt text;
+   events_sponsor_strip_enabled: bool;
+   header_club_name_enabled: bool;
+   header_logo_enabled: bool;
+   invite_email_style: opt text;
+   logo_only_mode: bool;
+   media_header_sponsors_enabled: bool;
+   media_sponsors_enabled: bool;
+   membership_open: bool;
+   public_directory: bool;
+   theme_accent_color: opt text;
+   theme_dark_accent_color: opt text;
+   theme_dark_primary_color: opt text;
+   theme_dark_secondary_color: opt text;
+   theme_enabled: bool;
+   theme_primary_color: opt text;
+   theme_secondary_color: opt text;
+ };
+type ClubProfile = 
+ record {
+   created_at_ms: nat64;
+   deleted_at_ms: opt nat64;
+   description: opt text;
+   id: text;
+   is_active: bool;
+   logo_url: opt text;
+   name: text;
+   playhq_org_id: opt text;
+   playhq_tenant: opt text;
+   primary_color: opt text;
+   secondary_color: opt text;
+   slug: text;
+   sport: opt text;
+ };
+type Child = 
+ record {
+   club_id: opt text;
+   id: text;
+   parent: opt principal;
+   teams: vec text;
+ };
+type AccountRole = 
+ record {
+   account_id: text;
+   club: opt text;
+   role: text;
+   team: opt text;
+ };
+service : {
+  schema: (ClubSnapshot) -> () query;
+}

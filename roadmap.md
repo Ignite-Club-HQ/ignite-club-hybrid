@@ -800,3 +800,5 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [ ] Destination writers per step (club, children, events, messaging, rewards, competitions, mini-leagues, notifications, media, vault) — encode each domain's import snapshot; migrate refuses until all exist.
 - [ ] Member-account placeholders + verified email claim (club_domain/identity change, protected all-group upgrade).
 - [ ] Owner: add SUPABASE_SERVICE_ROLE_KEY secret to the group-2-admin-controls GitHub environment.
+- [x] Club migration loaders, slice 1: club/teams/sponsors loader (lock + idempotent import, schema generated from club service source), tested.
+- [ ] Club migration loaders, remaining 9 steps (children, events, messaging, rewards, competitions, mini-leagues, notifications, photos, Vault). Member-owned data blocked on the member account claim (Supabase users have no ICP identity yet); real check blocked on SUPABASE_SERVICE_ROLE_KEY secret.

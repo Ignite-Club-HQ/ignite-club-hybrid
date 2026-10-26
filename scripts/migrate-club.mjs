@@ -110,12 +110,10 @@ async function readUsage(target) {
   return usage;
 }
 
-/**
- * Destination writers, one per step. A writer receives the step's Supabase
- * rows page and must return { last } after the canister acknowledged it.
- * Steps without a writer make `migrate` refuse BEFORE any write.
- */
-export const WRITERS = {};
+// Destination writers live in migrate-club-writers.mjs; steps without one make
+// `migrate` refuse BEFORE any write.
+export { WRITERS } from './migrate-club-writers.mjs';
+import { WRITERS } from './migrate-club-writers.mjs';
 
 function summary(md) { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md + '\n'); console.log(md); }
 
