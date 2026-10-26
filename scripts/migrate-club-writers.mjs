@@ -268,6 +268,7 @@ export const WRITERS = {
       publicKey: await productionPiiPublicKey(ctx.target),
     });
     await loadSnapshot(ctx, 'pii_access_control', prepared.pii, 'fence');
+    ctx.migratedChildren = new Set(childIds); // later steps verify child references against this
     // Re-import the club snapshot with the family arrays filled (idempotent replace).
     const [clubs, allTeams, sponsors] = await Promise.all([ctx.rows('clubs', 'id'), ctx.rows('teams', 'club_id'), ctx.rows('sponsors', 'club_id')]);
     const snap = buildClubSnapshot({ club: clubs[0], teams: allTeams, sponsors });
