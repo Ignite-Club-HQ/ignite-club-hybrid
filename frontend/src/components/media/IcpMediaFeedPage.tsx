@@ -45,6 +45,7 @@ import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorSt
 import { MediaSponsorTile } from "@/components/media/MediaSponsorTile";
 import { IcpUploadPhotoSheet } from "@/components/media/IcpUploadPhotoSheet";
 import { usePendingGalleryUploads, reconcileGalleryUploads } from './pendingGalleryUploads';
+import { acknowledgedGalleryPosts } from './acknowledgedGalleryPosts';
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 import { mediaProfileDirectory } from "./mediaProfileDirectory";
@@ -605,7 +606,10 @@ export function IcpMediaFeedPage() {
       const previousDetails = queryClient.getQueryData<LivePostDetails>(detailsKey);
       const previousMine = post.reactions.filter(r => r.user_id === principal);
       const mine: LiveReactionView[] = remove || !principal ? [] : [{ user_id: principal, reaction_type: emoji, profiles: { display_name: 'You', avatar_url: null } }];
-      if (principal) queryClient.setQueryData<LivePostDetails>(detailsKey, old => old && ({ ...old, reactions: updateMemberReaction(old.reactions, principal, mine) }));
+      if (principal) queryClient.setQueryData<LivePostDetails>(detailsKey, old => ({
+        ...(old ?? { ownerName: post.ownerName, ownerAvatarUrl: post.ownerAvatarUrl, comments: post.comments, reactions: post.reactions }),
+        reactions: updateMemberReaction(old?.reactions ?? post.reactions, principal, mine),
+      }));
       if (previous && principal) {
         queryClient.setQueryData<LiveMediaFeed>(key, {
           ...previous,
@@ -744,11 +748,19 @@ export function IcpMediaFeedPage() {
     const linked = linkedFeedAsset.data;
     const known = new Set(loaded.flatMap(p => p.assets.map(a => a.id)));
     const extra = (cardPhotoQuery.data ?? []).filter(p => !known.has(p.representativeAssetId));
-    return [...(linked && !known.has(link.photoId ?? '') ? [linked] : []), ...extra, ...loaded];
-  }, [feedQuery.data?.posts, linkedFeedAsset.data, link.photoId, cardPhotoQuery.data]);
+    const confirmed = [...(linked && !known.has(link.photoId ?? '') ? [linked] : []), ...extra, ...loaded];
+    const local = principal ? acknowledgedGalleryPosts(pendingUploads, principal) : [];
+    const merged = confirmed.map(post => {
+      const addition = local.find(row => row.clubId === post.clubId && row.id === post.id);
+      if (!addition) return post;
+      const ids = new Set(post.assets.map(asset => asset.id));
+      return { ...post, assets: [...post.assets, ...addition.assets.filter(asset => !ids.has(asset.id))] };
+    });
+    return [...local.filter(row => !confirmed.some(post => post.clubId === row.clubId && post.id === row.id)), ...merged];
+  }, [feedQuery.data?.posts, linkedFeedAsset.data, link.photoId, cardPhotoQuery.data, pendingUploads, principal]);
   useEffect(() => {
-    if (principal) reconcileGalleryUploads(queryClient, principal, allFeedPosts.flatMap(post => post.assets.map(asset => asset.id)));
-  }, [principal, queryClient, allFeedPosts]);
+    if (principal) reconcileGalleryUploads(queryClient, principal, (feedQuery.data?.posts ?? []).flatMap(post => post.assets.map(asset => asset.id)));
+  }, [principal, queryClient, feedQuery.data?.posts]);
   const loadedAssetIds = new Set(allFeedPosts.flatMap(post => post.assets.map(asset => asset.id)));
   const pendingPreviews = pendingUploads.filter(row => (!row.assetId || !loadedAssetIds.has(row.assetId))
     && (effectiveClubId === 'all' || row.clubId === effectiveClubId)
@@ -938,7 +950,7 @@ export function IcpMediaFeedPage() {
                 : <img src={pending.src} alt="" className="aspect-square w-full object-cover" />}
               <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-background/85 px-2.5 py-1">
                 {!pending.settled && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
-                <p className="text-xs font-medium text-foreground">{pending.settled ? 'Published' : 'Uploading…'}</p>
+                <p className="text-xs font-medium text-foreground">{pending.settled ? 'Publication not confirmed' : pending.assetId ? 'Finishing publication…' : 'Uploading…'}</p>
               </div>
             </div>
           ))}

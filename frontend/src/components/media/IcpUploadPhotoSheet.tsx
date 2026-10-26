@@ -131,14 +131,11 @@ export function IcpUploadPhotoSheet({
     if (!open || !clubId) return;
     void (async () => {
       try {
-        const [{ getActiveIcpTarget }, { getCurrentInternetIdentity }, { encryptClubMedia }] = await Promise.all([
-          import("@/live/targetRegistry"),
-          import("@/live/internetIdentityAuth"),
-          import("@/live/piiVetKeys"),
-        ]);
-        const identity = await getCurrentInternetIdentity();
-        if (!identity) return;
-        await encryptClubMedia({ target: getActiveIcpTarget(), identity } as never, clubId, new Uint8Array(1));
+        const { encryptClubMedia } = await import("@/live/piiVetKeys");
+        await withFeatureBackend('media', {
+          supabase: async () => undefined,
+          icp: ctx => encryptClubMedia(ctx, clubId, new Uint8Array(1)),
+        }, { clubId });
       } catch {
         // Best-effort warm-up only.
       }
@@ -255,7 +252,10 @@ export function IcpUploadPhotoSheet({
               contentLength: prepared.file.size,
               blobRef: uploaded.blobRef,
             });
+            // Retain the actual registration ID even if scope acknowledgement
+            // is refused/unknown; never mistake it for complete publication.
             acknowledgeGalleryUpload(queryClient, principal, previews[i].id, asset.id);
+            let scopeConfirmed = false;
             try {
               await setLiveAssetScope(ctx, asset.id, {
                 teamId: teamId || null,
@@ -265,6 +265,7 @@ export function IcpUploadPhotoSheet({
                 caption: trimmedCaption,
                 albumId,
               });
+              scopeConfirmed = true;
             } catch (err) {
               if (SCOPE_UNSUPPORTED.test(String(err))) {
                 // Deployed canister predates set_asset_scope; tags apply
@@ -274,11 +275,14 @@ export function IcpUploadPhotoSheet({
                 throw err;
               }
             }
-            if (!scopePending) {
+            if (scopeConfirmed) {
+              acknowledgeGalleryUpload(queryClient, principal, previews[i].id, asset.id, {
+                albumId, miniLeagueId: miniLeagueId || null, eventId: defaultEventId ?? null,
+                caption: trimmedCaption, createdAtMs: Number(asset.created_at_ms),
+              });
               // The photo is published now; show it in the feed straight away
               // and let the Vault copy finish behind the scenes.
               registeredAssetIds.push(asset.id);
-              void queryClient.invalidateQueries({ queryKey: ['icp-media-feed', principal], exact: true });
               vaultCopies.push(import('./galleryVaultCopy').then(({ copyGalleryAssetToVault }) =>
                 copyGalleryAssetToVault(ctx, { assetId: asset.id, clubId, teamId: teamId || null,
                   file: prepared.file, name: raw.name || 'Gallery photo' })).catch(() => { vaultCopyFailed = true; }));
@@ -295,19 +299,19 @@ export function IcpUploadPhotoSheet({
           if (failed?.status === 'rejected') throw failed.reason;
           // Every photo is published: end the "Uploading" state before the
           // chat card, notifications and Vault copies run.
-          void finishGalleryUpload(queryClient, principal, batchId).catch(() => undefined);
           onPendingChange?.([]);
-          await Promise.all(vaultCopies);
-          if (teamId && registeredAssetIds.length) {
+          const chat = async () => {
+            if (!teamId || !registeredAssetIds.length) return;
             const { publishLiveGalleryChatCard } = await import('@/live/features/media');
-
             await publishLiveGalleryChatCard(ctx, { clubId, teamId, eventId: defaultEventId, assetIds: registeredAssetIds,
-              heroUrl, receipt: `gallery-${albumId}` }).catch(() => { chatCardFailed = true; });
-          }
-          if (registeredAssetIds[0]) {
+              heroUrl, receipt: `gallery-${batchId}` }).catch(() => { chatCardFailed = true; });
+          };
+          const notify = async () => {
+            if (!registeredAssetIds[0]) return;
             const notice = await announceLiveGalleryAsset(ctx, registeredAssetIds[0]).catch(() => "unknown");
             noticeStatus = ['queued', 'not_configured', 'refused', 'denied', 'capacity'].includes(notice) ? notice : 'unknown';
-          }
+          };
+          await Promise.all([Promise.all(vaultCopies), chat(), notify()]);
         },
       }, writeOnce({ clubId }));
       if (scopePending) {
