@@ -19,6 +19,8 @@ export function createIdentityAccessClient(actor: _SERVICE) {
       call(() => actor.set_profile(displayName, avatarRef ? [avatarRef] : [])),
     myRoles: () => call(() => actor.my_roles()),
     searchProfiles: (query: string, limit: number) => call(() => actor.search_profiles(query, limit)),
+    searchGuardianProfiles: (authority: Parameters<_SERVICE['search_guardian_profiles']>[0], childId: string, query: string, limit: number) =>
+      call(() => actor.search_guardian_profiles(authority, childId, query, limit)),
     getProfilesByIds: (ids: string[]) => actor.get_profiles_by_ids(ids),
     myTermsAcceptance: () => call(() => actor.my_terms_acceptance()),
     getTermsAcceptance: (accountId: string) => call(() => actor.get_terms_acceptance(accountId)),

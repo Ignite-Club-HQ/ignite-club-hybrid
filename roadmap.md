@@ -1,3 +1,9 @@
+## Private names and guardian-only full search — 26 October 2026
+- [ ] Implement private personal names with existing in-app display preserved and authorized, bounded reads.
+- [x] Build purpose-bound guardian search with registered owning authority, repeated live exact-child checks, principal results and account/child-isolated sheet queries; four Rust and both-mode frontend checks pass locally.
+- [ ] Replace remaining unrestricted general searches with authorized scoped readers before privacy cutover; encrypted-name full-search design must not retain readable search sidecars. See docs/private-profile-search-2026-10-26.md.
+- [x] Foundation verification: four guardian-request/disclosure Rust tests, five existing profile tests, focused frontend checks in both modes and 17-contract drift pass; preview build OK. Browser saw only startup loading, not a signed-in flow. Release/conversion prerequisites documented; encrypted names and remaining search restrictions are not complete or live.
+
 ## Continue migration-tool loaders — 26 October 2026
 - [x] Next requested batch: offline family preparation preserves explicit child/team/guardian relations, role/account mirrors and club exclusions; encrypts names/birth years under exact production PII key; retains guardian metadata and refuses shared-ID collisions/unsupported season, exclusion and global-point semantics. No children writer or live activation.
 - [x] All 72 migration checks passed, including children-writer and game-results checks plus existing separate-approval regressions; production loading remains withheld pending the deferred secrets and separate exact-club/group approvals. No live data, claims, emails, sign-ins or deployments changed.
