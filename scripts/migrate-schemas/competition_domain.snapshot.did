@@ -1,0 +1,1313 @@
+type TeamEntry = 
+ record {
+   club_id: text;
+   competition_id: text;
+   division_id: opt text;
+   status: text;
+   team_id: text;
+ };
+type Target = 
+ record {
+   authority: principal;
+   club: text;
+   officials: vec principal;
+   teams: vec text;
+ };
+type State = 
+ record {
+   chatSettings: vec ChatSettings;
+   competitionInvites: vec CompetitionInvite;
+   competitionJoinLinks: vec CompetitionJoinLink;
+   competitionOfficialEmailInvites: vec CompetitionOfficialEmailInvite;
+   competitionWelcomeSettings:
+    vec
+     record {
+       competition_id: text;
+       enabled: bool;
+       message: text;
+       subject: text;
+     };
+   competitions: vec Competition;
+   entries: vec TeamEntry;
+   eoiSubmissions: vec EoiSubmission;
+   governor: principal;
+   matches: vec Match;
+   roles: vec RoleGrant;
+   schema: nat32;
+   seasons: vec Season;
+   tokens: vec JoinToken;
+ };
+type Settings = 
+ record {
+   competition_id: text;
+   enabled: bool;
+   message: text;
+   subject: text;
+ };
+type Setting = 
+ record {
+   competition_id: text;
+   division: opt text;
+   hide_scores: bool;
+ };
+type Season = 
+ record {
+   competition_id: text;
+   divisions: vec text;
+   name: text;
+   revision: nat64;
+   status: text;
+ };
+type RoleLinkPreview = 
+ record {
+   competition_id: text;
+   name: text;
+   role: text;
+ };
+type RoleLink = 
+ record {
+   competition_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   revoked: bool;
+   role: text;
+   token: text;
+ };
+type RoleGrant = 
+ record {
+   competition_id: text;
+   role: text;
+   team_id: opt text;
+   user: principal;
+ };
+type Result = 
+ variant {
+   Err: text;
+   Ok: Settings;
+ };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Recovery = 
+ record {
+   broadcast_deliveries: vec record {
+                               text;
+                               Delivery;
+                             };
+   broadcast_plans: vec record {
+                          text;
+                          vec Target;
+                        };
+   email_jobs: vec record {
+                     text;
+                     Job;
+                   };
+   fixture_receipts: vec record {
+                           text;
+                           Receipt;
+                         };
+ };
+type Receipt__1 = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
+type Receipt = 
+ record {
+   creator: principal;
+   input: Input;
+   match_id: text;
+ };
+type PlayHQStat = 
+ record {
+   competition_id: text;
+   game_id: text;
+   match_id: text;
+   player_id: text;
+   player_name: text;
+   stats_json: text;
+   team_id: text;
+   tenant: text;
+ };
+type PlayHQMatchMeta = 
+ record {
+   away_id: text;
+   away_name: text;
+   competition_id: text;
+   game_id: text;
+   grade_id: text;
+   home_id: text;
+   home_name: text;
+   match_id: text;
+   synced_revision: nat64;
+   tenant: text;
+ };
+type PlayHQCompetitionLink = 
+ record {
+   club_id: text;
+   competition_id: text;
+   grade_id: text;
+   last_synced_at_ms: opt nat64;
+   sport: opt text;
+   tenant: text;
+ };
+type OfficialChat = 
+ record {
+   competition_id: text;
+   conversation_id: text;
+   scope: text;
+ };
+type MatchRead = 
+ record {
+   arrival_minutes_before: opt nat16;
+   away_score: opt nat16;
+   away_team: text;
+   competition_id: text;
+   division_id: opt text;
+   duration_minutes: opt nat16;
+   home_score: opt nat16;
+   home_team: text;
+   id: text;
+   notes: opt text;
+   pitch_number: opt text;
+   revision: nat64;
+   round_number: opt nat16;
+   scheduled_at_ms: opt nat64;
+   status: text;
+   venue: opt text;
+ };
+type Match = 
+ record {
+   arrival_minutes_before: opt nat16;
+   away_score: nat16;
+   away_team: text;
+   competition_id: text;
+   division_id: opt text;
+   duration_minutes: opt nat16;
+   home_score: nat16;
+   home_team: text;
+   id: text;
+   notes: opt text;
+   pitch_number: opt text;
+   revision: nat64;
+   round_number: opt nat16;
+   scheduled_at_ms: opt nat64;
+   status: text;
+   venue: opt text;
+ };
+type Main = 
+ service {
+   accept_competition_invite: (invite_id: text) ->
+    (variant {
+       Err: text;
+       Ok: CompetitionInvite;
+     });
+   accept_competition_official_email_invite: (token: text, email_hash: 
+    text, verification_code_hash: text) ->
+    (variant {
+       Err: text;
+       Ok: RoleGrant;
+     });
+   accept_role_link: (token: text) -> (variant {
+                                         Err: text;
+                                         Ok: RoleGrant;
+                                       });
+   addBulkAccessPrincipal: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   add_competition_role: (competition_id: text, "principal": principal, role:
+    text, team_id: opt text) -> (variant {
+                                   Err: text;
+                                   Ok: RoleGrant;
+                                 });
+   allocate_eoi_to_team: (id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: EoiSubmission;
+     });
+   assign_division: (competition_id: text, team_id: text, division_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: TeamEntry;
+                  });
+   assign_eoi_team: (id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: EoiSubmission;
+     });
+   bulk_resend_eoi_invites: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             fail: nat;
+             ok: nat;
+           };
+     });
+   can_invite_players_to_team: (team_id: text) -> (bool) query;
+   check_my_broadcast_erasure: () -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
+   claim_email_job: () ->
+    (variant {
+       Err: text;
+       Ok:
+        opt record {
+              body: text;
+              job: Job;
+              subject: text;
+              to: text;
+              token: text;
+            };
+     });
+   claim_eoi_by_token: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: EoiSubmission;
+     });
+   claim_join_token: (token_id: text) -> (variant {
+                                            Err: text;
+                                            Ok: text;
+                                          });
+   claim_playhq_player: (competition_id: text, tenant: text, player_id:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
+   compact_email_jobs: (cursor: opt text, limit: nat) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             next_cursor: opt text;
+             scanned: nat;
+           };
+     });
+   competition_engagement_summary: (competition_ids: vec text, since_ms: 
+    int, until_ms: int) ->
+    (variant {
+       Err: text;
+       Ok: vec CompetitionEngagementSummary;
+     }) query;
+   confirm_eoi_placement: (submission_id: text) ->
+    (variant {
+       Err: text;
+       Ok: EoiSubmission;
+     });
+   create_competition: (club_id: text, name: text, season: text) ->
+    (variant {
+       Err: text;
+       Ok: Competition;
+     });
+   create_competition_event: (operation_id: text, competition_id: text,
+    title: text, description: text, event_type: text, location: opt text,
+    starts_at_ms: nat64, ends_at_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: nat16;
+     });
+   create_competition_invite: (competition_id: text, invitee: principal,
+    role: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: CompetitionInvite;
+     });
+   create_competition_join_link: (competition_id: text, role: text, team_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: CompetitionJoinLink;
+                  });
+   create_competition_official_email_invite: (competition_id: text, role:
+    text, token: text, email_hash: text, verification_code_hash: text) ->
+    (variant {
+       Err: text;
+       Ok: CompetitionOfficialEmailInvite;
+     });
+   create_competition_official_link: (competition_id: text, role: text,
+    token: text) -> (variant {
+                       Err: text;
+                       Ok: CompetitionJoinLink;
+                     });
+   create_fixture: (operation: text, input: Input) ->
+    (variant {
+       Err: text;
+       Ok: Match;
+     });
+   create_personal_competition: (name: text, season: text) ->
+    (variant {
+       Err: text;
+       Ok: Competition;
+     });
+   create_role_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok: RoleLink;
+     });
+   create_season: (competition_id: text, name: text) ->
+    (variant {
+       Err: text;
+       Ok: Season;
+     });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
+   decline_competition_invite: (invite_id: text) ->
+    (variant {
+       Err: text;
+       Ok: CompetitionInvite;
+     });
+   delete_eoi: (id: text) -> (variant {
+                                Err: text;
+                                Ok;
+                              });
+   delete_match: (match_id: text) -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
+   duplicate_season: (competition_id: text, source_name: text, new_name:
+    text) -> (variant {
+                Err: text;
+                Ok: Season;
+              });
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
+   export_state: () -> (variant {
+                          Err: text;
+                          Ok: State;
+                        }) query;
+   finish_email_job: (id: text, attempt: nat, outcome: text, provider_id:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
+   get_chat_settings: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: ChatSettings;
+     }) query;
+   get_competition_hide_ladder: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     }) query;
+   get_competition_official_email_invite_preview: (token: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          competition_id: text;
+          competition_name: text;
+          role: text;
+          status: text;
+        };
+     }) query;
+   get_competition_welcome_email: (competition_id: text) -> (Result);
+   get_competition_welcome_email_job: (token: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          competition_id: text;
+          competition_name: text;
+          message: text;
+          subject: text;
+          to: text;
+        };
+     }) query;
+   get_eoi_stats: (club_id: text, season_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: EoiStats;
+     });
+   get_join_link_preview: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: JoinLinkPreview;
+     }) query;
+   get_member_welcome_email_job: (token: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          competition_id: text;
+          competition_name: text;
+          message: text;
+          subject: text;
+          to: text;
+        };
+     }) query;
+   get_my_pending_eois: () ->
+    (variant {
+       Err: text;
+       Ok: vec EoiSubmission;
+     }) query;
+   get_news_audience: (competition_id: text, requester: principal) ->
+    (variant {
+       Err: text;
+       Ok: CompetitionNewsAudience;
+     });
+   get_public_competition_page: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          competition: Competition;
+          hidden_divisions: vec text;
+          hide_ladder: bool;
+          matches: vec MatchRead;
+        };
+     }) query;
+   get_role_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok: opt RoleLink;
+     });
+   get_role_link_preview: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: RoleLinkPreview;
+     }) query;
+   get_score_privacy: (competition_id: text) -> (vec Setting) query;
+   get_vault_access: (competition_id: text, requester: principal) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             can_manage: bool;
+             club_id: text;
+             is_member: bool;
+           };
+     });
+   grant_role: ("principal": principal, role: text, competition_id: text,
+    team_id: opt text) -> (variant {
+                             Err: text;
+                             Ok;
+                           });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
+   invite_team: (competition_id: text, team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamEntry;
+     });
+   is_competition_admin: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     }) query;
+   is_competition_invite_manager: (team_id: text, requester: principal) ->
+    (bool) query;
+   issue_join_token: (competition_id: text, team_id: text, expires_at_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: JoinToken;
+               });
+   join_competition_by_token: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: RoleGrant;
+     });
+   join_competition_with_link: (token: text, team_id: text, division_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: TeamEntry;
+                  });
+   link_playhq_competition: (club_id: text, name: text, season: text, tenant:
+    text, grade_id: text, sport: opt text) ->
+    (variant {
+       Err: text;
+       Ok: Competition;
+     });
+   listBulkAccessPrincipals: () ->
+    (variant {
+       Err: text;
+       Ok: vec principal;
+     }) query;
+   list_competition_broadcasts: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Broadcast;
+     }) query;
+   list_competition_invites: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec CompetitionInvite;
+     });
+   list_competition_join_links: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec CompetitionJoinLink;
+     });
+   list_competition_roles: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec RoleGrant;
+     });
+   list_competitions: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     }) query;
+   list_competitions_multi: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     }) query;
+   list_division_settings: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec DivisionSetting;
+     }) query;
+   list_entries: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamEntry;
+     });
+   list_entries_by_team: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamEntry;
+     });
+   list_eoi_submissions: (club_id: text, season_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec EoiSubmission;
+     });
+   list_invites_by_invitee: () ->
+    (variant {
+       Err: text;
+       Ok: vec CompetitionInvite;
+     }) query;
+   list_matches: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchRead;
+     });
+   list_my_news_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     }) query;
+   list_my_personal_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     }) query;
+   list_official_chats: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec OfficialChat;
+     }) query;
+   list_playhq_competitions: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 competition: Competition;
+                 link: PlayHQCompetitionLink;
+               };
+     });
+   list_public_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     }) query;
+   list_seasons: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Season;
+     });
+   materialize_match_events: (match_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     });
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
+   move_team_division: (competition_id: text, team_id: text,
+    expected_division: opt text, division_id: opt text, clear_fixtures:
+    bool) -> (variant {
+                Err: text;
+                Ok: nat;
+              });
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   prepare_my_broadcast_erasure: () -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
+   purge_my_data: () -> (variant {
+                           Err: text;
+                           Ok: nat;
+                         });
+   queue_competition_broadcast: (operation: text, competition: text,
+    divisions: vec text, title: text, body: text) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
+   queue_official_invite_email: (token: text, ciphertext: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   read_account_can_invite_players_to_team: (team_id: text) -> (bool);
+   read_account_competition_engagement_summary: (competition_ids: vec text,
+    since_ms: int, until_ms: int) ->
+    (variant {
+       Err: text;
+       Ok: vec CompetitionEngagementSummary;
+     });
+   read_account_get_chat_settings: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: ChatSettings;
+     });
+   read_account_get_my_pending_eois: () ->
+    (variant {
+       Err: text;
+       Ok: vec EoiSubmission;
+     });
+   read_account_is_competition_admin: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_account_is_competition_invite_manager: (team_id: text, requester:
+    principal) -> (bool);
+   read_account_list_competition_broadcasts: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Broadcast;
+     });
+   read_account_list_competitions: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     });
+   read_account_list_competitions_multi: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     });
+   read_account_list_division_settings: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec DivisionSetting;
+     });
+   read_account_list_invites_by_invitee: () ->
+    (variant {
+       Err: text;
+       Ok: vec CompetitionInvite;
+     });
+   read_account_list_my_news_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     });
+   read_account_list_my_personal_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     });
+   read_account_list_official_chats: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec OfficialChat;
+     });
+   read_account_list_public_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     });
+   read_account_read_token_club: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
+   read_competition_club: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok: opt text;
+                                         });
+   read_competition_welcome_message: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt record {
+                 message: text;
+                 subject: text;
+               };
+     });
+   read_fixture_operation: (operation: text) ->
+    (variant {
+       Err: text;
+       Ok: opt Receipt;
+     });
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
+   read_history_match_result: (match_id: text, team_id: text, requester:
+    principal) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             away: opt nat16;
+             hidden: bool;
+             home: opt nat16;
+           };
+     });
+   read_history_score_access: (competition_id: text, team_id: text,
+    starts_at_ms: nat64, requester: principal, manager_only: bool) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_match_score_access: (competition_id: text, match_id: text, team_id:
+    text, requester: principal, manager_only: bool) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_my_competition_cards: () ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 competition: Competition;
+                 entries: vec TeamEntry;
+               };
+     });
+   read_playhq_stats: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          claims: vec record {
+                        mine: bool;
+                        player_id: text;
+                        tenant: text;
+                      };
+          matches: vec PlayHQMatchMeta;
+          stats: vec PlayHQStat;
+        };
+     });
+   read_resource_club: (kind: text, id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_token_club: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     }) query;
+   reconcile_email_job: (id: text, attempt: nat, provider_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   record_match: (competition_id: text, home_team: text, away_team: text) ->
+    (variant {
+       Err: text;
+       Ok: Match;
+     });
+   register_competition_welcome_job: (token: text, to: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   register_member_welcome_job: (competition_id: text, token: text, to:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
+   register_team: (competition_id: text, team_id: text, club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamEntry;
+     });
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
+   removeBulkAccessPrincipal: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_competition_role: (competition_id: text, "principal": principal,
+    role: text, team_id: opt text) -> (variant {
+                                         Err: text;
+                                         Ok;
+                                       });
+   resend_eoi_invite: (id: text) -> (variant {
+                                       Err: text;
+                                       Ok: EoiSubmission;
+                                     });
+   respond_to_entry_invite: (competition_id: text, team_id: text, accept:
+    bool) -> (variant {
+                Err: text;
+                Ok: TeamEntry;
+              });
+   revoke_competition_join_link: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   revoke_competition_official_email_invite: (token: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   revoke_competition_official_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   revoke_role_link: (competition_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   rotate_competition_join_link: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: CompetitionJoinLink;
+     });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
+   send_competition_broadcast: (competition_id: text, title: text, body:
+    text) -> (variant {
+                Err: text;
+                Ok: Broadcast;
+              });
+   set_chat_settings: (competition_id: text, chat_enabled: bool, admins_only:
+    bool, expected_revision: nat64) ->
+    (variant {
+       Err: text;
+       Ok: ChatSettings;
+     });
+   set_club_domain_canister: (id: principal) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
+   set_competition_hide_ladder: (competition_id: text, hide_ladder: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_competition_welcome_email: (competition_id: text, enabled: bool,
+    subject: text, message: text) -> (Result);
+   set_division_hide_ladder: (competition_id: text, division: text,
+    hide_ladder: bool) -> (variant {
+                             Err: text;
+                             Ok: DivisionSetting;
+                           });
+   set_email_workers: (workers: vec principal) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   set_events_domain_canister: (id: principal) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   set_match_result: (match_id: text, home_score: nat16, away_score: 
+    nat16, expected_revision: nat64) -> (variant {
+                                           Err: text;
+                                           Ok: Match;
+                                         });
+   set_official_chat: (competition_id: text, scope: text, conversation_id:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
+   set_participant_club_authorities: (ids: vec principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_pii_access_control_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_score_privacy: (competition_id: text, division: opt text, hide_scores:
+    opt bool) -> (variant {
+                    Err: text;
+                    Ok;
+                  });
+   set_season_divisions: (competition_id: text, name: text, divisions:
+    vec text) -> (variant {
+                    Err: text;
+                    Ok: Season;
+                  });
+   set_season_status: (competition_id: text, status: text, expected_revision:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: Season;
+               });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_vault_domain_canister: (id: principal) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
+   submit_public_eoi: (club_id: text, season_id: text, parent_name: text,
+    parent_email: text, parent_mobile: opt text, player_name: text,
+    player_dob: opt text, player_gender: opt text, preferred_teammates:
+    opt text, preferred_position: opt text, skill_level: opt nat16,
+    training_days: vec text, game_days: vec text, notes: opt text, source:
+    text) -> (variant {
+                Err: text;
+                Ok: text;
+              });
+   suggest_eoi_teams: (season_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EoiTeamSuggestion;
+     });
+   /// Refreshes the caller's mirrored club-admin role for a competition's
+   /// organiser club so later management queries see it.
+   sync_my_competition_access: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   sync_playhq_grade: (competition_id: text, tenant: text, grade: text) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   trim_rounds: (competition_id: text, max_round: nat16) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
+   update_competition_settings: (competition_id: text, name: text,
+    description: opt text, status: text, visibility: text, points_win: 
+    nat16, points_draw: nat16, points_loss: nat16) ->
+    (variant {
+       Err: text;
+       Ok: Competition;
+     });
+   update_eoi_status: (id: text, status: text) ->
+    (variant {
+       Err: text;
+       Ok: EoiSubmission;
+     });
+   update_eoi_submission: (id: text, extra_notes: opt text,
+    preferred_teammates: opt text, preferred_position: opt text) ->
+    (variant {
+       Err: text;
+       Ok: EoiSubmission;
+     });
+   update_match_details: (match_id: text, home_team: text, away_team: 
+    text, division_id: opt text, scheduled_at_ms: opt nat64, venue: opt text,
+    pitch_number: opt text, round_number: opt nat16, duration_minutes:
+    opt nat16, arrival_minutes_before: opt nat16, notes: opt text,
+    expected_revision: nat64) -> (variant {
+                                    Err: text;
+                                    Ok: Match;
+                                  });
+   write_history_match_result: (match_id: text, team_id: text, requester:
+    principal, own: nat32, opponent: nat32) -> (variant {
+                                                  Err: text;
+                                                  Ok;
+                                                });
+   zz_migrate_schema: (FenceSnapshot) -> () query;
+ };
+type JoinToken = 
+ record {
+   competition_id: text;
+   expires_at_ms: nat64;
+   id: text;
+   issued_by: principal;
+   team_id: text;
+   used: bool;
+ };
+type JoinLinkPreview = 
+ record {
+   club_id: text;
+   competition_id: text;
+   competition_status: text;
+   divisions: vec text;
+   entered_team_ids: vec text;
+   name: text;
+   role: text;
+   season: text;
+ };
+type Job = 
+ record {
+   attempt: nat;
+   ciphertext: text;
+   created_at_ms: nat64;
+   id: text;
+   kind: text;
+   provider_id: text;
+   resource: text;
+   state: text;
+   worker: opt principal;
+ };
+type Input = 
+ record {
+   arrival_minutes_before: opt nat16;
+   away_team: text;
+   competition_id: text;
+   division_id: opt text;
+   duration_minutes: opt nat16;
+   home_team: text;
+   notes: opt text;
+   pitch_number: opt text;
+   round_number: opt nat16;
+   scheduled_at_ms: opt nat64;
+   venue: opt text;
+ };
+type FenceSnapshot = 
+ record {
+   broadcasts: vec Broadcast;
+   chat_settings: vec ChatSettings;
+   competitions: vec Competition;
+   divisions: vec DivisionSetting;
+   entries: vec TeamEntry;
+   eoi: vec EoiSubmission;
+   invites: vec CompetitionInvite;
+   join_links: vec CompetitionJoinLink;
+   ladders: vec CompetitionLadderSetting;
+   matches: vec Match;
+   member_welcome_jobs: opt vec CompetitionMemberWelcomeJob;
+   official_chats: vec OfficialChat;
+   official_invites: vec CompetitionOfficialEmailInvite;
+   owners: vec record {
+                 text;
+                 principal;
+               };
+   playhq_links: opt vec PlayHQCompetitionLink;
+   playhq_metadata: opt vec PlayHQMatchMeta;
+   playhq_stats: opt vec PlayHQStat;
+   recovery: opt Recovery;
+   role_links: vec RoleLink;
+   roles: vec RoleGrant;
+   score_privacy: opt vec Setting;
+   seasons: vec Season;
+   tokens: vec JoinToken;
+   welcome: vec Settings;
+   welcome_jobs: vec CompetitionWelcomeJob;
+ };
+type EoiTeamSuggestion = 
+ record {
+   age_group: text;
+   avg_skill: float64;
+   player_count: nat;
+   submission_ids: vec text;
+ };
+type EoiSubmission = 
+ record {
+   age_group: opt text;
+   allocated_at_ms: opt nat64;
+   assigned_team_id: opt text;
+   child_id: opt text;
+   claim_token: text;
+   claimed_at_ms: opt nat64;
+   club_id: text;
+   confirmed_at_ms: opt nat64;
+   created_at_ms: nat64;
+   extra_notes: opt text;
+   game_days: vec text;
+   id: text;
+   invite_sent_at_ms: opt nat64;
+   invite_sent_count: nat16;
+   notes: opt text;
+   parent_confirmed_at_ms: opt nat64;
+   parent_email: text;
+   parent_mobile: opt text;
+   parent_name: text;
+   parent_user_id: opt principal;
+   player_dob: opt text;
+   player_gender: opt text;
+   player_name: text;
+   preferred_position: opt text;
+   preferred_teammates: opt text;
+   registered_at_ms: opt nat64;
+   returning_player: bool;
+   revision: nat64;
+   season_id: text;
+   skill_level: opt nat16;
+   source: text;
+   status: text;
+   submitted_at_ms: nat64;
+   training_days: vec text;
+   updated_at_ms: nat64;
+   withdrawn_at_ms: opt nat64;
+ };
+type EoiStats = 
+ record {
+   allocated: nat;
+   confirmed: nat;
+   conversion_rate: float64;
+   new_players: nat;
+   registered: nat;
+   returning_players: nat;
+   submitted: nat;
+   total: nat;
+   views: nat;
+   withdrawn: nat;
+ };
+type DivisionSetting = 
+ record {
+   competition_id: text;
+   division: text;
+   hide_ladder: bool;
+ };
+type Delivery = 
+ record {
+   body: text;
+   broadcast_id: text;
+   competition: text;
+   completed: vec record {
+                    text;
+                    nat16;
+                  };
+   divisions: vec text;
+   sender: principal;
+   title: text;
+   unknown: opt text;
+ };
+type CompetitionWelcomeJob = 
+ record {
+   competition_id: text;
+   created_at_ms: nat64;
+   to: text;
+   token: text;
+ };
+type CompetitionOfficialEmailInvite = 
+ record {
+   accepted_by: opt principal;
+   attempts: nat8;
+   competition_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   email_hash: text;
+   expires_at_ms: nat64;
+   revoked: bool;
+   role: text;
+   token: text;
+   verification_code_hash: text;
+ };
+type CompetitionNewsAudience = 
+ record {
+   can_publish: bool;
+   club_id: text;
+   competition_id: text;
+   recipients: vec principal;
+   team_ids: vec text;
+ };
+type CompetitionMemberWelcomeJob = 
+ record {
+   competition_id: text;
+   created_at_ms: nat64;
+   member: principal;
+   to: text;
+   token: text;
+ };
+type CompetitionLadderSetting = 
+ record {
+   competition_id: text;
+   hide_ladder: bool;
+ };
+type CompetitionJoinLink = 
+ record {
+   competition_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   revision: nat64;
+   revoked: bool;
+   role: text;
+   team_id: opt text;
+   token: text;
+ };
+type CompetitionInvite = 
+ record {
+   competition_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   id: text;
+   invitee: principal;
+   responded_at_ms: opt nat64;
+   role: text;
+   status: text;
+   team_id: opt text;
+ };
+type CompetitionEngagementSummary = 
+ record {
+   active_teams: nat;
+   broadcasts: nat;
+   competition_id: text;
+   results_entered: nat;
+   total_matches: nat;
+ };
+type Competition = 
+ record {
+   club_id: text;
+   description: opt text;
+   id: text;
+   name: text;
+   points_draw: nat16;
+   points_loss: nat16;
+   points_win: nat16;
+   revision: nat64;
+   season: text;
+   status: text;
+   visibility: text;
+ };
+type ChatSettings = 
+ record {
+   admins_only: bool;
+   chat_enabled: bool;
+   competition_id: text;
+   revision: nat64;
+ };
+type Broadcast = 
+ record {
+   body: text;
+   competition_id: text;
+   created_at_ms: nat64;
+   id: text;
+   sender: principal;
+   title: text;
+ };
+service : (governorInit: principal) -> Main

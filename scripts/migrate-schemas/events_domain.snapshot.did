@@ -1,0 +1,1969 @@
+type Value = 
+ variant {
+   "bool": bool;
+   "int": int;
+   "null";
+   "text": text;
+ };
+type TeamTrainingPause = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   ends_at_ms: nat64;
+   id: text;
+   reason: text;
+   starts_at_ms: nat64;
+   team_id: text;
+ };
+type SavedLocation = 
+ record {
+   account_id: text;
+   address: text;
+   created_at_ms: nat64;
+   id: text;
+   lat: float64;
+   lng: float64;
+   location_label: text;
+ };
+type RsvpWithChild = 
+ record {
+   child: opt Child;
+   rsvp: Rsvp;
+ };
+type RsvpSubject = 
+ variant {
+   account: text;
+   mini_league_player: text;
+ };
+type Rsvp = 
+ record {
+   account_id: text;
+   child_id: opt text;
+   event_id: text;
+   has_paid: opt bool;
+   notes: text;
+   source: text;
+   state: text;
+   updated_at_ms: nat64;
+ };
+type Row = vec Cell;
+type RosterEntry = 
+ record {
+   account_id: text;
+   child_id: opt text;
+   event_id: text;
+ };
+type RoleGrant = 
+ record {
+   club_id: text;
+   role: text;
+   team_id: opt text;
+   user: principal;
+ };
+type Result__1 = 
+ record {
+   event_ids: vec text;
+   first_event_id: text;
+   series_id: opt text;
+ };
+type Result = 
+ record {
+   hasMore: bool;
+   rows: vec Row;
+ };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type ReminderLog = 
+ record {
+   channel: text;
+   event_id: text;
+   id: text;
+   recipient: text;
+   sent_at_ms: nat64;
+ };
+type Recurrence = 
+ record {
+   event_id: text;
+   frequency: text;
+   until_ms: nat64;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
+type Read = 
+ record {
+   away_label: text;
+   away_score: opt nat32;
+   event_id: opt text;
+   home_label: text;
+   home_score: opt nat32;
+   id: text;
+   mvp_player_id: opt text;
+   mvp_player_name: opt text;
+   period_scores_json: text;
+   player_stats_json: text;
+   saved_by: principal;
+   scores_hidden: bool;
+   sport: text;
+   team_id: text;
+   updated_at_ms: nat64;
+ };
+type PushReachability = 
+ record {
+   reachable: bool;
+   updated_at_ms: nat64;
+   user: principal;
+ };
+type PlayerStatRow = 
+ record {
+   captain_count: nat32;
+   goalkeeper_count: nat32;
+   mvp_count: nat32;
+   ref_id: text;
+   ref_kind: text;
+   vice_count: nat32;
+ };
+type PlayHQTeamSync = 
+ record {
+   auto: bool;
+   club_id: text;
+   competition_id: text;
+   last_error: opt text;
+   last_synced_at_ms: opt nat64;
+   playhq_team_id: text;
+   team_id: text;
+   updated_by: principal;
+ };
+type PlayHQMatch = 
+ record {
+   away_team_name: opt text;
+   external_away_team_id: opt text;
+   external_home_team_id: opt text;
+   home_team_name: opt text;
+ };
+type PlayHQImportResult = 
+ record {
+   cancelled: nat32;
+   created: nat32;
+   updated: nat32;
+ };
+type PlayHQConfig = 
+ record {
+   api_key: text;
+   base_url: text;
+   updated_at_ms: nat64;
+ };
+type PlayHQCompetition = 
+ record {
+   id: text;
+   name: text;
+   season: opt text;
+ };
+type PitchBoardSettings = 
+ record {
+   disable_batch_subs: bool;
+   disable_position_swaps: bool;
+   formation: opt text;
+   max_spread_minutes: nat16;
+   minutes_per_half: nat16;
+   rotate_gk_at_halftime: bool;
+   rotation_speed: nat16;
+   show_lineup_picker: bool;
+   show_match_header: bool;
+   team_id: text;
+   team_size: nat16;
+   updated_at_ms: nat64;
+ };
+type OpenDuty = 
+ record {
+   claimed_by: opt text;
+   created_at_ms: nat64;
+   duty: text;
+   event_id: text;
+   id: text;
+ };
+type MiniLeagueRsvp = 
+ record {
+   event_id: text;
+   state: text;
+   subject: RsvpSubject;
+   updated_at_ms: nat64;
+ };
+type MaterializationReceipt = 
+ record {
+   event_ids: vec text;
+   input: MatchEventInput;
+   revision: nat64;
+ };
+type MatchGoalkeeperAssignment = 
+ record {
+   assigned_by: principal;
+   event_id: text;
+   period: text;
+   ref_id: text;
+   ref_kind: text;
+   updated_at_ms: nat64;
+ };
+type MatchEventInput = 
+ record {
+   competition_id: text;
+   creator: principal;
+   ends_at_ms: nat64;
+   match_id: text;
+   starts_at_ms: nat64;
+   teams: vec CompetitionEventTarget;
+   title: text;
+   venue: opt text;
+ };
+type MatchCaptainAssignment = 
+ record {
+   assigned_by: principal;
+   event_id: text;
+   ref_id: text;
+   ref_kind: text;
+   role: text;
+   updated_at_ms: nat64;
+ };
+type Main = 
+ service {
+   addBulkAccessPrincipal: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   add_event_guest: (event_id: text, guest_name: text) ->
+    (variant {
+       Err: text;
+       Ok: EventGuest;
+     });
+   add_favourite_event_title: (title: text) -> (variant {
+                                                  Err: text;
+                                                  Ok;
+                                                });
+   add_group_player: (group_id: text, account_id: text, team_letter:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: EventGroupPlayer;
+                  });
+   add_lineup: (event_id: text, member: text, slot: text, team_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: LineupEntry;
+                  });
+   add_series_occurrence: (series_id: text, starts_at_ms: nat64, ends_at_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: Event;
+               });
+   admin_link_guardian: (child_id: text, guardian_id: text, is_primary:
+    bool) -> (variant {
+                Err: text;
+                Ok: ChildGuardian;
+              });
+   admin_update_rsvp_status: (event_id: text, account_id: text, child_id:
+    opt text, status: text) -> (variant {
+                                  Err: text;
+                                  Ok: Rsvp;
+                                });
+   admin_upsert_child: (id: text, parent_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: Child;
+     });
+   admin_upsert_child_team_assignment: (child_id: text, team_id: text,
+    club_id: text) -> (variant {
+                         Err: text;
+                         Ok: ChildTeamAssignment;
+                       });
+   admin_upsert_rsvp: (event_id: text, account_id: text, child_id: opt text,
+    status: text, notes: text) -> (variant {
+                                     Err: text;
+                                     Ok: Rsvp;
+                                   });
+   check_event_membership: (user_id: text, event_id: text) -> (bool) query;
+   child_is_in_event_audience: (child_id: text, event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     }) query;
+   claim_open_duty: (id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok: OpenDuty;
+     });
+   complete_duty: (event_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok: Duty;
+     });
+   create_association_event: (association_id: text, club_ids: vec text,
+    title: text, description: text, location: opt text, starts_at_ms: 
+    nat64, ends_at_ms: nat64) -> (variant {
+                                    Err: text;
+                                    Ok: nat16;
+                                  });
+   create_competition_events: (operation_id: text, competition_id: text,
+    creator: principal, competition_club_id: text, targets:
+    vec CompetitionEventTarget, title: text, description: text, event_type:
+    text, location: opt text, starts_at_ms: nat64, ends_at_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     });
+   create_event: (club_id: text, team_id: opt text, title: text, description:
+    text, event_type: text, location: opt text, opponent: opt text, address:
+    opt text, mini_league_id: opt text, starts_at_ms: nat64, ends_at_ms:
+    nat64, rsvp_audience: opt text, adults_only: bool, restricted_to_roles:
+    opt vec text, target_team_ids: opt vec text) ->
+    (variant {
+       Err: text;
+       Ok: Event;
+     });
+   create_event_group: (event_id: text, name: text, team_letter: opt text,
+    colour: opt text, ability_band: opt text, pitch_name: opt text) ->
+    (variant {
+       Err: text;
+       Ok: EventGroup;
+     });
+   create_event_with_setup: (input: Input) ->
+    (variant {
+       Err: text;
+       Ok: Result__1;
+     });
+   create_open_duty: (event_id: text, duty: text) ->
+    (variant {
+       Err: text;
+       Ok: OpenDuty;
+     });
+   create_recurring_series: (club_id: text, team_id: opt text, title: 
+    text, description: text, event_type: text, location: opt text, frequency:
+    text, first_starts_at_ms: nat64, first_ends_at_ms: nat64, occurrences:
+    opt nat32, until_ms: opt nat64, rsvp_audience: opt text, adults_only:
+    bool, restricted_to_roles: opt vec text, target_team_ids:
+    opt vec text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             events: vec Event;
+             series: EventSeries;
+           };
+     });
+   create_series: (club_id: text, team_id: opt text, title: text,
+    description: text, event_type: text, location: opt text, frequency: 
+    text, first_starts_at_ms: nat64, first_ends_at_ms: nat64, until_ms:
+    nat64, rsvp_audience: opt text, adults_only: bool, restricted_to_roles:
+    opt vec text, target_team_ids: opt vec text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             events: vec Event;
+             series: EventSeries;
+           };
+     });
+   create_team_training_pause: (club_id: text, team_id: text, starts_at_ms:
+    nat64, ends_at_ms: nat64, reason: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamTrainingPause;
+     });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
+   deactivate_active_game: (team_id: opt text) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   delete_club_data: (club_id: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat32;
+                                         });
+   delete_event: (id: text) -> (variant {
+                                  Err: text;
+                                  Ok: Event;
+                                });
+   delete_event_group: (group_id: text) -> (variant {
+                                              Err: text;
+                                              Ok;
+                                            });
+   delete_game_result: (event_id: text) -> (variant {
+                                              Err: text;
+                                              Ok;
+                                            });
+   delete_saved_location: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
+   delete_series: (id: text, from_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
+   delete_team_data: (team_id: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat32;
+                                         });
+   delete_team_training_pause: (id: text) -> (variant {
+                                                Err: text;
+                                                Ok;
+                                              });
+   detach_occurrence: (event_id: text) -> (variant {
+                                             Err: text;
+                                             Ok: Event;
+                                           });
+   event_roster: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: EventRoster;
+     }) query;
+   execute: (input: text) -> (Result) query;
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
+   export_state: () ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          attendance: vec Attendance;
+          childGuardians: vec ChildGuardian;
+          childTeamAssignments: vec ChildTeamAssignment;
+          children: vec Child;
+          coachNotes: vec CoachNote;
+          competitionEventOperations: vec CompetitionEventOperation;
+          duties: vec Duty;
+          dutyTeamReminderSent: vec text;
+          eventAttendance: vec EventAttendance;
+          eventDutyTeams: vec EventDutyTeam;
+          eventGroupDuties: vec EventGroupDuty;
+          eventGroupPlayers: vec EventGroupPlayer;
+          eventGroups: vec EventGroup;
+          eventGuests: vec EventGuest;
+          eventViews: vec EventView;
+          events: vec Event;
+          governor: principal;
+          individualDutyReminderSent: vec text;
+          lineupSnapshots: vec LineupSnapshot;
+          lineups: vec LineupEntry;
+          miniLeagueRsvps: vec MiniLeagueRsvp;
+          openDuties: vec OpenDuty;
+          pointsReminderSent: vec text;
+          pushReachability: vec PushReachability;
+          recurrences: vec Recurrence;
+          reminderLogs: vec ReminderLog;
+          roles: vec RoleGrant;
+          roster: vec RosterEntry;
+          rsvps: vec Rsvp;
+          schema: nat32;
+          series: vec EventSeries;
+          teamTrainingPauses: vec TeamTrainingPause;
+        };
+     }) query;
+   fetch_playhq_grade: (tenant: text, grade: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          games:
+           vec
+            record {
+              away_id: text;
+              away_name: text;
+              away_score: opt nat16;
+              game_id: text;
+              home_id: text;
+              home_name: text;
+              home_score: opt nat16;
+              starts_at_ms: opt nat64;
+              status: text;
+              venue: opt text;
+            };
+          stats:
+           vec
+            record {
+              game_id: text;
+              player_id: text;
+              player_name: text;
+              stats_json: text;
+              team_id: text;
+            };
+        };
+     });
+   getApiDoc: () -> (text) query;
+   get_active_game: (team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: opt ActiveGame;
+     }) query;
+   get_attendance: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventAttendance;
+     }) query;
+   get_coach_note: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt CoachNote;
+     }) query;
+   get_event_auto_reminder: (event_id: text) ->
+    (opt record {
+           hours_before: nat16;
+           sent: bool;
+         }) query;
+   get_event_child: (event_id: text, child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: Child;
+     }) query;
+   get_event_duty_team: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventDutyTeam;
+     }) query;
+   get_event_group: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventGroup;
+     }) composite_query;
+   get_event_roster: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec RosterEntry;
+     }) query;
+   get_event_rosters: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec RosterEntry;
+     }) query;
+   get_event_sponsors: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     }) query;
+   get_event_timer: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventTimer;
+     }) query;
+   get_event_view_count: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     }) query;
+   get_game_result: (event_id: text) -> (variant {
+                                           Err: text;
+                                           Ok: opt Read;
+                                         });
+   get_game_summary: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt GameSummary;
+     }) query;
+   get_group_edit_access: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     }) composite_query;
+   get_lineup_snapshot: (event_id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: opt LineupSnapshot;
+     }) query;
+   get_match_event_ids: (match_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 event_id: text;
+                 team_id: text;
+               };
+     }) query;
+   get_pitch_board_settings: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PitchBoardSettings;
+     }) query;
+   get_player_stats_report: (club_id: text, team_id: opt text, from_ms:
+    nat64, to_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec PlayerStatRow;
+     }) query;
+   get_playhq_config_status: () ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          base_url: opt text;
+          configured: bool;
+          updated_at_ms: opt nat64;
+        };
+     }) query;
+   get_playhq_team_sync: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PlayHQTeamSync;
+     }) query;
+   get_push_reachable: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok: opt bool;
+     }) query;
+   get_reminder_log: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             recipients_count: nat32;
+             sent_at_ms: opt nat64;
+           };
+     }) query;
+   get_rsvp_created_at: (event_id: text, account_id: text) ->
+    (opt nat64) query;
+   get_schedule_view: () -> (opt text);
+   get_training_default: (club_id: text, team_id: text, child_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: opt text;
+                  }) query;
+   grant_role: ("principal": principal, role: text, club_id: text, team_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok;
+                  });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
+   /// Imports the linked team's PlayHQ fixtures as game events now.
+   import_playhq_team_fixtures: (club_id: text, team_id: text,
+    competition_id: text, playhq_team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PlayHQImportResult;
+     });
+   is_guardian_of: ("principal": principal, child_id: text) -> (bool) query;
+   is_paused: (club_id: text, team_id: text, at_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     }) query;
+   is_reachable: (account_id: text) -> (variant {
+                                          Err: text;
+                                          Ok: bool;
+                                        }) query;
+   is_team_member: ("principal": principal, club_id: text, team_id: text) ->
+    (bool) query;
+   listBulkAccessPrincipals: () ->
+    (variant {
+       Err: text;
+       Ok: vec principal;
+     }) query;
+   list_active_game_write_rates: (since_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 nat32;
+               };
+     });
+   list_active_games: (since_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec ActiveGame;
+     });
+   list_association_events: (association_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec AssociationEvent;
+     }) query;
+   list_child_team_assignments: (club_id: text, team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ChildTeamAssignment;
+     }) query;
+   list_duties: (event_id: text) -> (variant {
+                                       Err: text;
+                                       Ok: vec Duty;
+                                     }) query;
+   list_duties_multi: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Duty;
+     }) query;
+   list_event_duty_teams: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventDutyTeam;
+     }) query;
+   list_event_groups: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventGroup;
+     }) composite_query;
+   list_event_views: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventView;
+     }) query;
+   list_events: (club_id: opt text, team_id: opt text) ->
+    (vec Event) composite_query;
+   list_events_for_duty_teams: (team_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Event;
+     }) query;
+   list_events_multi: (club_ids: vec text, team_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Event;
+     }) composite_query;
+   list_favourite_event_titles: () -> (vec text) query;
+   list_game_player_stats: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec GamePlayerStat;
+     });
+   list_group_duties: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventGroupDuty;
+     }) composite_query;
+   list_group_players: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventGroupPlayer;
+     }) composite_query;
+   list_match_captains: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchCaptainAssignment;
+     }) query;
+   list_match_goalkeepers: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchGoalkeeperAssignment;
+     }) query;
+   list_mini_league_rsvps: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueRsvp;
+     }) query;
+   list_my_viewed_event_ids: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     }) query;
+   list_open_duties: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec OpenDuty;
+     }) query;
+   list_playhq_competitions: (tenant: text, org_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec PlayHQCompetition;
+     });
+   list_playhq_fixtures: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec PlayHQMatch;
+     });
+   list_reminders: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ReminderLog;
+     }) query;
+   list_saved_locations: () -> (vec SavedLocation) query;
+   list_series: (club_id: opt text, team_id: opt text) ->
+    (vec EventSeries) query;
+   list_series_occurrences: (series_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        vec
+         record {
+           deleted: bool;
+           ends_at_ms: nat64;
+           id: text;
+           starts_at_ms: nat64;
+         };
+     }) query;
+   list_team_training_pauses: (club_id: text, team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamTrainingPause;
+     }) query;
+   mark_attendance: (event_id: text, records: vec AttendanceInput) ->
+    (variant {
+       Err: text;
+       Ok: vec EventAttendance;
+     });
+   materialize_competition_fixture: (input: MatchEventInput, revision:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: vec text;
+               });
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
+   merge_principal: (old: principal, new_principal: principal, dry_run:
+    bool) -> (variant {
+                err: text;
+                ok: nat;
+              });
+   move_group_player: (from_group_id: text, to_group_id: text, account_id:
+    text, team_letter: opt text) -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
+   my_attendance: (event_id: opt text) -> (vec EventAttendance) query;
+   my_child_rsvps: (event_id: opt text, club_id: opt text) ->
+    (vec RsvpWithChild) query;
+   my_child_team_assignments: (child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ChildTeamAssignment;
+     }) query;
+   my_children: () -> (vec Child) query;
+   my_rsvps: () -> (vec Rsvp) query;
+   notify_duty_completion: (event_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat16;
+     });
+   notify_event_audience: (event_id: text, kind: text) ->
+    (variant {
+       Err: text;
+       Ok: nat16;
+     });
+   notify_group_pitch: (group_id: text, action: text, detail: text, key:
+    text) -> (variant {
+                Err: text;
+                Ok: nat16;
+              });
+   playhqTransform: (record {
+                       context: blob;
+                       response: HttpRequestResult;
+                     }) -> (HttpRequestResult) query;
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
+   purge_my_data: () -> (variant {
+                           Err: text;
+                           Ok: nat32;
+                         });
+   read_account_check_event_membership: (user_id: text, event_id: text) ->
+    (bool);
+   read_account_child_is_in_event_audience: (child_id: text, event_id:
+    text) -> (variant {
+                Err: text;
+                Ok: bool;
+              });
+   read_account_event_roster: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: EventRoster;
+     });
+   read_account_execute: (input: text) -> (Result);
+   read_account_get_active_game: (team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: opt ActiveGame;
+     });
+   read_account_get_attendance: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventAttendance;
+     });
+   read_account_get_coach_note: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt CoachNote;
+     });
+   read_account_get_event_auto_reminder: (event_id: text) ->
+    (opt record {
+           hours_before: nat16;
+           sent: bool;
+         });
+   read_account_get_event_child: (event_id: text, child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: Child;
+     });
+   read_account_get_event_duty_team: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventDutyTeam;
+     });
+   read_account_get_event_group: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventGroup;
+     });
+   read_account_get_event_roster: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec RosterEntry;
+     });
+   read_account_get_event_rosters: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec RosterEntry;
+     });
+   read_account_get_event_sponsors: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     });
+   read_account_get_event_timer: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventTimer;
+     });
+   read_account_get_event_view_count: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
+   read_account_get_game_result: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt Read;
+     });
+   read_account_get_game_summary: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt GameSummary;
+     });
+   read_account_get_group_edit_access: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_account_get_lineup_snapshot: (event_id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: opt LineupSnapshot;
+     });
+   read_account_get_pitch_board_settings: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PitchBoardSettings;
+     });
+   read_account_get_player_stats_report: (club_id: text, team_id: opt text,
+    from_ms: nat64, to_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec PlayerStatRow;
+     });
+   read_account_get_playhq_config_status: () ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          base_url: opt text;
+          configured: bool;
+          updated_at_ms: opt nat64;
+        };
+     });
+   read_account_get_playhq_team_sync: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PlayHQTeamSync;
+     });
+   read_account_get_push_reachable: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok: opt bool;
+     });
+   read_account_get_reminder_log: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             recipients_count: nat32;
+             sent_at_ms: opt nat64;
+           };
+     });
+   read_account_get_rsvp_created_at: (event_id: text, account_id: text) ->
+    (opt nat64);
+   read_account_get_training_default: (club_id: text, team_id: text,
+    child_id: opt text) -> (variant {
+                              Err: text;
+                              Ok: opt text;
+                            });
+   read_account_is_guardian_of: ("principal": principal, child_id: text) ->
+    (bool);
+   read_account_is_paused: (club_id: text, team_id: text, at_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_account_is_reachable: (account_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   read_account_is_team_member: ("principal": principal, club_id: text,
+    team_id: text) -> (bool);
+   read_account_list_association_events: (association_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec AssociationEvent;
+     });
+   read_account_list_child_team_assignments: (club_id: text, team_id:
+    text) -> (variant {
+                Err: text;
+                Ok: vec ChildTeamAssignment;
+              });
+   read_account_list_duties: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Duty;
+     });
+   read_account_list_duties_multi: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Duty;
+     });
+   read_account_list_event_duty_teams: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventDutyTeam;
+     });
+   read_account_list_event_groups: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventGroup;
+     });
+   read_account_list_event_views: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventView;
+     });
+   read_account_list_events: (club_id: opt text, team_id: opt text) ->
+    (vec Event);
+   read_account_list_events_for_duty_teams: (team_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Event;
+     });
+   read_account_list_events_multi: (club_ids: vec text, team_ids:
+    vec text) -> (variant {
+                    Err: text;
+                    Ok: vec Event;
+                  });
+   read_account_list_favourite_event_titles: () -> (vec text);
+   read_account_list_game_player_stats: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec GamePlayerStat;
+     });
+   read_account_list_group_duties: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventGroupDuty;
+     });
+   read_account_list_group_players: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec EventGroupPlayer;
+     });
+   read_account_list_match_captains: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchCaptainAssignment;
+     });
+   read_account_list_match_goalkeepers: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchGoalkeeperAssignment;
+     });
+   read_account_list_mini_league_rsvps: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueRsvp;
+     });
+   read_account_list_my_viewed_event_ids: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     });
+   read_account_list_open_duties: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec OpenDuty;
+     });
+   read_account_list_reminders: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ReminderLog;
+     });
+   read_account_list_saved_locations: () -> (vec SavedLocation);
+   read_account_list_series: (club_id: opt text, team_id: opt text) ->
+    (vec EventSeries);
+   read_account_list_series_occurrences: (series_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        vec
+         record {
+           deleted: bool;
+           ends_at_ms: nat64;
+           id: text;
+           starts_at_ms: nat64;
+         };
+     });
+   read_account_list_team_training_pauses: (club_id: text, team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamTrainingPause;
+     });
+   read_account_my_attendance: (event_id: opt text) -> (vec EventAttendance);
+   read_account_my_child_rsvps: (event_id: opt text, club_id: opt text) ->
+    (vec RsvpWithChild);
+   read_account_my_child_team_assignments: (child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ChildTeamAssignment;
+     });
+   read_account_my_children: () -> (vec Child);
+   read_account_my_rsvps: () -> (vec Rsvp);
+   read_account_read_event_club: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_account_read_event_group_club: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   read_competition_events: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Event;
+     });
+   read_detailed_game_player_stats: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec DetailedGamePlayerStat;
+     });
+   read_event_cancellation_audience: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
+   /// Location-only lookup for group routing: which club owns this event, if
+   /// it lives in this canister. Viewers only; returns null when not held here.
+   read_event_club: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     }) composite_query;
+   read_event_group_club: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     }) composite_query;
+   read_event_honours: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          captains: vec MatchCaptainAssignment;
+          goalkeepers: vec MatchGoalkeeperAssignment;
+        };
+     });
+   read_fixture_materialization: (match_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        opt
+         record {
+           event_ids: vec text;
+           input: MatchEventInput;
+           revision: nat64;
+         };
+     });
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
+   read_shared_board: (club: text, team: text) ->
+    (variant {
+       Err: text;
+       Ok: opt ActiveGame;
+     });
+   record_event_view: (event_id: text) -> (variant {
+                                             Err: text;
+                                             Ok;
+                                           });
+   record_reminder_sent: (event_id: text, channel: text, recipient: text) ->
+    (variant {
+       Err: text;
+       Ok: ReminderLog;
+     });
+   rekey_principal: (old: principal, new_principal: principal, dry_run:
+    bool) -> (variant {
+                err: text;
+                ok: nat;
+              });
+   removeBulkAccessPrincipal: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_child_team_assignment: (child_id: text, team_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_duty: (event_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_event_guest: (id: text) -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
+   remove_favourite_event_title: (title: text) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   remove_group_duty: (group_id: text, duty: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_group_duty_slot: (group_id: text, slot_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_group_player: (group_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_match_captain: (event_id: text, ref_kind: text, ref_id: text, role:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
+   remove_match_goalkeeper: (event_id: text, period: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   rename_event_group: (group_id: text, name: text) ->
+    (variant {
+       Err: text;
+       Ok: EventGroup;
+     });
+   replace_event_groups: (event_id: text, groups: vec GroupSpecInput,
+    delete_existing: bool) -> (variant {
+                                 Err: text;
+                                 Ok: vec text;
+                               });
+   /// App admins: run the photo-prompt sweep now (also runs every 15 min).
+   run_photo_prompts: () -> (variant {
+                               Err: text;
+                               Ok: nat;
+                             });
+   save_detailed_game_player_stats: (event_id: text, team_id: text, stats:
+    vec GamePlayerStatInput, details: vec GamePlayerDetail) ->
+    (variant {
+       Err: text;
+       Ok: vec GamePlayerStat;
+     });
+   save_game_player_stats: (event_id: text, team_id: text, stats:
+    vec GamePlayerStatInput) -> (variant {
+                                   Err: text;
+                                   Ok: vec GamePlayerStat;
+                                 });
+   save_game_result: (team_id: text, event_id: opt text, sport: text,
+    home_label: text, away_label: text, home_score: nat32, away_score: 
+    nat32, period_scores_json: text, player_stats_json: text, mvp_player_id:
+    opt text, mvp_player_name: opt text) ->
+    (variant {
+       Err: text;
+       Ok: GameResult;
+     });
+   save_game_summary: (event_id: text, team_id: text, total_game_time: 
+    nat32, half_duration: nat32, formation_used: opt text,
+    total_substitutions: nat16) -> (variant {
+                                      Err: text;
+                                      Ok: GameSummary;
+                                    });
+   save_group_duty_slot: (group_id: text, slot_id: text, duty: text,
+    account_id: opt text) -> (variant {
+                                Err: text;
+                                Ok: EventGroupDuty;
+                              });
+   save_lineup_snapshot: (event_id: text, team_id: opt text, formation:
+    opt text, team_size: nat16, ball_x: opt float64, ball_y: opt float64,
+    players: vec LineupPlayer) -> (variant {
+                                     Err: text;
+                                     Ok: LineupSnapshot;
+                                   });
+   save_location: (location_label: text, address: text, lat: float64, lng:
+    float64) -> (variant {
+                   Err: text;
+                   Ok: SavedLocation;
+                 });
+   save_pitch_board_settings: (team_id: text, rotation_speed: nat16,
+    disable_position_swaps: bool, disable_batch_subs: bool,
+    rotate_gk_at_halftime: bool, minutes_per_half: nat16, max_spread_minutes:
+    nat16, team_size: nat16, formation: opt text, show_match_header: 
+    bool, show_lineup_picker: bool) ->
+    (variant {
+       Err: text;
+       Ok: PitchBoardSettings;
+     });
+   schema: () -> (text) query;
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   send_event_reminders: (event_id: text) -> (variant {
+                                                Err: text;
+                                                Ok: nat16;
+                                              });
+   send_individual_event_reminder: (event_id: text, account_id: opt text,
+    child_id: opt text) -> (variant {
+                              Err: text;
+                              Ok: nat16;
+                            });
+   set_attendance: (event_id: text, account_id: text, present: bool, note:
+    text) -> (variant {
+                Err: text;
+                Ok: Attendance;
+              });
+   set_child_rsvp: (event_id: text, account_id: text, child_id: text, state:
+    text, notes: text) -> (variant {
+                             Err: text;
+                             Ok: Rsvp;
+                           });
+   set_club_domain_canister: (id: principal) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
+   set_coach_note: (event_id: text, note: text) ->
+    (variant {
+       Err: text;
+       Ok: CoachNote;
+     });
+   set_competition_domain_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_duty: (event_id: text, account_id: text, duty: text) ->
+    (variant {
+       Err: text;
+       Ok: Duty;
+     });
+   set_event_auto_reminder: (event_id: text, hours_before: opt nat16) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_event_cancelled: (id: text, cancelled: bool) ->
+    (variant {
+       Err: text;
+       Ok: Event;
+     });
+   set_event_duty_team: (event_id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_event_group_appearance: (group_id: text, team_letter: opt text,
+    colour: opt text, ability_band: opt text, pitch_name: opt text,
+    team_b_colour: opt text) -> (variant {
+                                   Err: text;
+                                   Ok: EventGroup;
+                                 });
+   set_event_sponsors: (event_id: text, sponsor_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_event_timer: (event_id: text, action: text, minutes_per_half:
+    opt nat16, adjust_ms: opt int64) -> (variant {
+                                           Err: text;
+                                           Ok: EventTimer;
+                                         });
+   set_group_duty: (group_id: text, duty: text, account_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: EventGroupDuty;
+     });
+   set_match_captain: (event_id: text, ref_kind: text, ref_id: text, role:
+    text) -> (variant {
+                Err: text;
+                Ok: MatchCaptainAssignment;
+              });
+   set_match_goalkeeper: (event_id: text, ref_kind: text, ref_id: text,
+    period: text) -> (variant {
+                        Err: text;
+                        Ok: MatchGoalkeeperAssignment;
+                      });
+   set_mini_league_domain_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_mini_league_rsvp: (event_id: text, subject: RsvpSubject, state:
+    text) -> (variant {
+                Err: text;
+                Ok: MiniLeagueRsvp;
+              });
+   set_notification_queue_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_playhq_config: (config: opt PlayHQConfig) -> (variant {
+                                                       Err: text;
+                                                       Ok;
+                                                     });
+   /// Records (or clears, when either id is null) the team's PlayHQ link and
+   /// auto-sync flag so the 6-hourly sweep can keep its fixtures current.
+   set_playhq_team_sync: (club_id: text, team_id: text, competition_id:
+    opt text, playhq_team_id: opt text, auto: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_push_reachable: (reachable: bool) ->
+    (variant {
+       Err: text;
+       Ok: PushReachability;
+     });
+   set_recurrence: (event_id: text, frequency: text, until_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: Recurrence;
+     });
+   set_roster: (event_id: text, account_id: text, child_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: RosterEntry;
+     });
+   set_rsvp: (event_id: text, account_id: text, state: text, notes: text) ->
+    (variant {
+       Err: text;
+       Ok: Rsvp;
+     });
+   set_rsvp_note: (event_id: text, account_id: text, notes: text) ->
+    (variant {
+       Err: text;
+       Ok: Rsvp;
+     });
+   set_schedule_view: (view: text) -> (variant {
+                                         Err: text;
+                                         Ok;
+                                       });
+   set_series_cancelled: (series_id: text, cancelled: bool, from_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: nat32;
+               });
+   set_training_default: (club_id: text, team_id: text, child_id: opt text,
+    default_rsvp: text) -> (variant {
+                              Err: text;
+                              Ok;
+                            });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   soft_delete_series: (id: text) -> (variant {
+                                        Err: text;
+                                        Ok: EventSeries;
+                                      });
+   swap_group_players: (group_a: text, account_a: text, team_a: opt text,
+    group_b: text, account_b: text, team_b: opt text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   sync_active_game: (team_id: opt text, timer_state_json: text,
+    pitch_state_json: text, board_session_id: text) ->
+    (variant {
+       Err: text;
+       Ok: ActiveGame;
+     });
+   sync_group_state: (group_id: text, expected_revision: nat64, timer_json:
+    opt text, pitch_json: opt text) -> (variant {
+                                          Err: text;
+                                          Ok: EventGroup;
+                                        });
+   sync_shared_board: (club: text, team: text, expected: opt nat64, pitch:
+    text, session: text) -> (variant {
+                               Err: text;
+                               Ok: ActiveGame;
+                             });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   unclaim_open_duty: (id: text) -> (variant {
+                                       Err: text;
+                                       Ok: OpenDuty;
+                                     });
+   uncomplete_duty: (event_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok: Duty;
+     });
+   update_event: (id: text, title: text, description: text, event_type: 
+    text, location: opt text, opponent: opt text, address: opt text,
+    mini_league_id: opt text, starts_at_ms: nat64, ends_at_ms: nat64,
+    rsvp_audience: opt text, adults_only: bool, restricted_to_roles:
+    opt vec text, target_team_ids: opt vec text) ->
+    (variant {
+       Err: text;
+       Ok: Event;
+     });
+   update_series: (id: text, title: text, description: text, event_type:
+    text, location: opt text, from_ms: nat64, rsvp_audience: opt text,
+    adults_only: bool, restricted_to_roles: opt vec text, target_team_ids:
+    opt vec text) -> (variant {
+                        Err: text;
+                        Ok: EventSeries;
+                      });
+   upsert_competition_match_events: (input: MatchEventInput) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     });
+   /// Public: aggregate record counts (shown in admin settings). Counts only —
+   /// no record contents, so no PII is exposed.
+   usage_stats: () -> (record {
+                         children: nat;
+                         events: nat;
+                         rsvps: nat;
+                       }) query;
+   zz_migrate_schema: (EventsSnapshot) -> () query;
+ };
+type LineupSnapshot = 
+ record {
+   ball_x: opt float64;
+   ball_y: opt float64;
+   event_id: text;
+   formation: opt text;
+   players: vec LineupPlayer;
+   revision: nat64;
+   team_id: opt text;
+   team_size: nat16;
+   updated_at_ms: nat64;
+   updated_by: principal;
+ };
+type LineupPlayer = 
+ record {
+   bench: bool;
+   member: text;
+   number: opt nat16;
+   slot: text;
+   x: opt float64;
+   y: opt float64;
+ };
+type LineupEntry = 
+ record {
+   event_id: text;
+   member: text;
+   slot: text;
+   team_id: opt text;
+ };
+type Input = 
+ record {
+   address: opt text;
+   adults_only: bool;
+   club_id: text;
+   description: text;
+   duties: vec record {
+                 account_id: opt text;
+                 duty: text;
+               };
+   duty_team_id: opt text;
+   event_type: text;
+   location: opt text;
+   mini_league_id: opt text;
+   occurrences: vec record {
+                      ends_at_ms: nat64;
+                      starts_at_ms: nat64;
+                    };
+   opponent: opt text;
+   reminder_hours: opt nat16;
+   request_id: text;
+   restricted_to_roles: opt vec text;
+   rsvp_audience: opt text;
+   target_team_ids: opt vec text;
+   team_id: opt text;
+   title: text;
+ };
+type HttpRequestResult = 
+ record {
+   body: blob;
+   headers: vec HttpHeader;
+   status: nat;
+ };
+type HttpHeader = 
+ record {
+   name: text;
+   value: text;
+ };
+type GroupSpecInput = 
+ record {
+   ability_band: opt text;
+   display_order: nat16;
+   duties: vec GroupDutyInput;
+   name: text;
+   pitch_name: opt text;
+   players: vec GroupPlayerInput;
+   team_a_colour: opt text;
+   team_b_colour: opt text;
+ };
+type GroupPlayerInput = 
+ record {
+   account_id: text;
+   team_letter: opt text;
+ };
+type GroupDutyInput = 
+ record {
+   account_id: opt text;
+   duty: text;
+ };
+type GameSummary = 
+ record {
+   event_id: text;
+   formation_used: opt text;
+   half_duration: nat32;
+   team_id: text;
+   total_game_time: nat32;
+   total_substitutions: nat16;
+   updated_at_ms: nat64;
+ };
+type GameResult = 
+ record {
+   away_label: text;
+   away_score: nat32;
+   event_id: opt text;
+   home_label: text;
+   home_score: nat32;
+   id: text;
+   mvp_player_id: opt text;
+   mvp_player_name: opt text;
+   period_scores_json: text;
+   player_stats_json: text;
+   saved_by: principal;
+   sport: text;
+   team_id: text;
+   updated_at_ms: nat64;
+ };
+type GamePlayerStatInput = 
+ record {
+   fill_in_player_name: opt text;
+   goals_scored: nat16;
+   jersey_number: opt nat16;
+   minutes_played: nat32;
+   positions_played: vec text;
+   started_on_pitch: bool;
+   substitutions_count: nat16;
+   user_id: opt text;
+ };
+type GamePlayerStat = 
+ record {
+   event_id: text;
+   fill_in_player_name: opt text;
+   goals_scored: nat16;
+   jersey_number: opt nat16;
+   minutes_played: nat32;
+   positions_played: vec text;
+   started_on_pitch: bool;
+   substitutions_count: nat16;
+   team_id: text;
+   user_id: opt text;
+ };
+type GamePlayerDetail = 
+ record {
+   child_id: opt text;
+   position_seconds: opt vec record {
+                               text;
+                               nat32;
+                             };
+   user_id: opt text;
+ };
+type EventsSnapshot = 
+ record {
+   events: vec Event;
+   group_duties: opt vec EventGroupDuty;
+   group_players: opt vec EventGroupPlayer;
+   groups: opt vec EventGroup;
+   match_links: opt vec CompetitionEventLink;
+   materializations: opt vec record {
+                               text;
+                               MaterializationReceipt;
+                             };
+   operations: opt vec CompetitionEventOperation;
+   player_details: opt vec record {
+                             text;
+                             vec GamePlayerDetail;
+                           };
+   results: opt vec GameResult;
+   rsvps: vec Rsvp;
+   series: vec EventSeries;
+   stats: opt vec GamePlayerStat;
+   summaries: opt vec GameSummary;
+ };
+type EventView = 
+ record {
+   event_id: text;
+   viewed_at_ms: nat64;
+   viewer: principal;
+ };
+type EventTimer = 
+ record {
+   accumulated_pause_ms: nat64;
+   current_half: nat8;
+   event_id: text;
+   half_ended_at_ms: opt nat64;
+   half_paused_at_ms: opt nat64;
+   half_started_at_ms: opt nat64;
+   is_game_finished: bool;
+   is_running: bool;
+   last_event_at_ms: nat64;
+   minutes_per_half: nat16;
+   schema_version: nat8;
+   updated_by: principal;
+ };
+type EventSeries = 
+ record {
+   adults_only: bool;
+   club_id: text;
+   creator: principal;
+   deleted: bool;
+   description: text;
+   event_type: text;
+   first_ends_at_ms: nat64;
+   first_starts_at_ms: nat64;
+   frequency: text;
+   id: text;
+   location: opt text;
+   restricted_to_roles: opt vec text;
+   revision: nat64;
+   rsvp_audience: opt text;
+   target_team_ids: opt vec text;
+   team_id: opt text;
+   title: text;
+   until_ms: nat64;
+ };
+type EventRoster = 
+ record {
+   guests: vec EventGuest;
+   rsvps: vec RsvpWithChild;
+ };
+type EventGuest = 
+ record {
+   added_by: principal;
+   created_at_ms: nat64;
+   event_id: text;
+   guest_name: text;
+   id: text;
+ };
+type EventGroupPlayer = 
+ record {
+   account_id: text;
+   group_id: text;
+   team_letter: opt text;
+ };
+type EventGroupDuty = 
+ record {
+   account_id: opt text;
+   duty: text;
+   group_id: text;
+   id: text;
+ };
+type EventGroup = 
+ record {
+   ability_band: opt text;
+   colour: opt text;
+   created_at_ms: nat64;
+   display_order: nat16;
+   event_id: text;
+   id: text;
+   name: text;
+   pitch_name: opt text;
+   pitch_state_json: opt text;
+   state_revision: nat64;
+   team_b_colour: opt text;
+   team_letter: opt text;
+   timer_state_json: opt text;
+ };
+type EventDutyTeam = 
+ record {
+   event_id: text;
+   team_id: text;
+ };
+type EventAttendance = 
+ record {
+   event_id: text;
+   marked_at_ms: nat64;
+   marked_by: principal;
+   notes: text;
+   status: text;
+   subject_id: text;
+   subject_kind: text;
+ };
+type Event = 
+ record {
+   address: opt text;
+   adults_only: bool;
+   cancelled: bool;
+   club_id: text;
+   creator: principal;
+   deleted: bool;
+   description: text;
+   ends_at_ms: nat64;
+   event_type: text;
+   id: text;
+   location: opt text;
+   mini_league_id: opt text;
+   opponent: opt text;
+   restricted_to_roles: opt vec text;
+   revision: nat64;
+   rsvp_audience: opt text;
+   series_id: opt text;
+   starts_at_ms: nat64;
+   target_team_ids: opt vec text;
+   team_id: opt text;
+   title: text;
+   updated_at_ms: nat64;
+ };
+type Duty = 
+ record {
+   account_id: text;
+   completed: bool;
+   duty: text;
+   event_id: text;
+ };
+type DetailedGamePlayerStat = 
+ record {
+   detail: opt GamePlayerDetail;
+   stat: GamePlayerStat;
+ };
+type CompetitionEventTarget = 
+ record {
+   club_id: text;
+   team_id: text;
+ };
+type CompetitionEventOperation = 
+ record {
+   competition_id: text;
+   event_ids: vec text;
+   operation_id: text;
+ };
+type CompetitionEventLink = 
+ record {
+   competition_id: text;
+   event_id: text;
+   match_id: text;
+   team_id: text;
+ };
+type CoachNote = 
+ record {
+   event_id: text;
+   note: text;
+   updated_at_ms: nat64;
+   updated_by: principal;
+ };
+type ChildTeamAssignment = 
+ record {
+   child_id: text;
+   club_id: text;
+   team_id: text;
+ };
+type ChildGuardian = 
+ record {
+   child_id: text;
+   guardian_id: text;
+   is_primary: bool;
+ };
+type Child = 
+ record {
+   id: text;
+   parent_id: opt text;
+ };
+type Cell = 
+ record {
+   name: text;
+   value: Value;
+ };
+type AttendanceInput = 
+ record {
+   notes: text;
+   status: text;
+   subject_id: text;
+   subject_kind: text;
+ };
+type Attendance = 
+ record {
+   account_id: text;
+   event_id: text;
+   note: text;
+   present: bool;
+ };
+type AssociationEvent = 
+ record {
+   association_id: text;
+   child_event_ids: vec text;
+   created_at_ms: nat64;
+   created_by: principal;
+   deleted: bool;
+   description: text;
+   ends_at_ms: nat64;
+   id: text;
+   location: opt text;
+   starts_at_ms: nat64;
+   title: text;
+ };
+type ActiveGame = 
+ record {
+   board_session_id: text;
+   id: text;
+   is_active: bool;
+   pitch_state_json: text;
+   team_id: opt text;
+   timer_state_json: text;
+   updated_at_ms: nat64;
+   user_id: principal;
+ };
+service : (governorInit: principal) -> Main

@@ -90,7 +90,7 @@ export async function snapshotType(require, file) {
   const { idlFactory } = await import(file);
   const { IDL } = require('@dfinity/candid');
   const svc = idlFactory({ IDL });
-  return svc._fields.find(([n]) => n === 'schema')[1].argTypes[0];
+  return svc._fields.find(([n]) => n === 'zz_migrate_schema')[1].argTypes[0];
 }
 
 /**
