@@ -25,6 +25,7 @@ import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
 import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { listLiveEvents } from "@/live/features/events";
+import { useCarouselResumeRecovery } from '@/hooks/useCarouselResumeRecovery';
 
 // Render Supabase storage URLs through the image-transform endpoint at a tiny
 // width so the 28×28 avatar thumbnails don't download full-resolution originals.
@@ -577,6 +578,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   const isIcp = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const { activeClubFilter } = useClubTheme();
+  useCarouselResumeRecovery(user?.id, activeClubFilter);
 
   // Hydrate from localStorage so cold opens paint real cards instantly
   const snapshotWithTs = useMemo(
