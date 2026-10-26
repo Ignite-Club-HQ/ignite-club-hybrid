@@ -131,7 +131,7 @@ export function buildCompetitionSnapshot({ clubId, competitions = [], divisions 
       venue: opt(m.venue), notes: opt(m.notes), pitch_number: opt(m.pitch_number), round_number: optN16(m.round_number),
       duration_minutes: optN16(m.duration_minutes), arrival_minutes_before: optN16(m.arrival_minutes_before), revision: 1n })),
     score_privacy: [privacy],
-    ladders: [],
+    ladders: comps.filter((c) => c.hide_ladder).map((c) => ({ competition_id: c.id, hide_ladder: true })),
     broadcasts: [], chat_settings: [], eoi: [], invites: [], join_links: [], member_welcome_jobs: [], official_chats: [], official_invites: [],
     owners: [], playhq_links: [], playhq_metadata: [], playhq_stats: [], recovery: [], role_links: [], roles: [], seasons: [], tokens: [],
     welcome: [], welcome_jobs: [],
