@@ -14,7 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
-import { STEPS, validateRequest, assertMigrationApproval, gateReasons, buildPlan, newJournal, nextAction, normalizePlan, recordIntent, recordReply } from './migrate-club-plan.mjs';
+import { STEPS, validateRequest, assertMigrationOwner, assertMigrationApproval, gateReasons, buildPlan, newJournal, nextAction, normalizePlan, recordIntent, recordReply } from './migrate-club-plan.mjs';
 import { createPrivateKey } from 'node:crypto';
 import { sendClaimInvites } from './migrate-club-claims.mjs';
 
@@ -132,6 +132,7 @@ function summary(md) { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(proce
 export async function main(env = process.env) {
   const req = { action: env.ACTION, clubId: env.CLUB_ID?.trim(), groupId: env.GROUP_ID?.trim(), plan: env.PLAN, confirmation: env.CONFIRMATION, approvalScope: env.APPROVAL_SCOPE };
   validateRequest(req);
+  assertMigrationOwner(req.action, env);
   const target = loadGroup(req.groupId);
   if (req.action === 'invite') return invite(req, target);
   const groups = allGroupIds().map(loadGroup).filter(Boolean);

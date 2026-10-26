@@ -1,10 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateRequest, gateReasons, buildPlan, newJournal, nextAction, recordIntent, recordReply, mayRoute, STEPS, STEP_ORDER, CONFIRM_MIGRATE } from './migrate-club-plan.mjs';
+import { validateRequest, assertMigrationOwner, gateReasons, buildPlan, newJournal, nextAction, recordIntent, recordReply, mayRoute, STEPS, STEP_ORDER, CONFIRM_MIGRATE } from './migrate-club-plan.mjs';
 
 const canisters = Object.fromEntries(STEPS.map(s => [s.domain, `${s.domain}-id`]));
 const target = { canisters, mediaStore: 'blob' };
 const inventory = { clubFound: true, counts: { teams: 3 }, mediaFiles: 2, mediaBytes: 100 };
+
+test('only the configured owner can start or rerun live actions; absent owner disables them', () => {
+  assert.doesNotThrow(() => assertMigrationOwner('check', {}));
+  const env = { GITHUB_ACTIONS: 'true', MIGRATION_OWNER_GITHUB_LOGIN: 'owner', GITHUB_ACTOR: 'owner', GITHUB_TRIGGERING_ACTOR: 'owner' };
+  for (const action of ['migrate', 'recover', 'invite']) {
+    assert.doesNotThrow(() => assertMigrationOwner(action, env));
+    for (const bad of [{}, { ...env, MIGRATION_OWNER_GITHUB_LOGIN: '' }, { ...env, GITHUB_ACTOR: 'other' }, { ...env, GITHUB_TRIGGERING_ACTOR: 'other' }, { ...env, GITHUB_ACTIONS: 'false' }]) {
+      assert.throws(() => assertMigrationOwner(action, bad), /configured owner/);
+    }
+  }
+});
 
 test('check needs only club and group; migrate needs plan hash and exact words', () => {
   assert.doesNotThrow(() => validateRequest({ action: 'check', clubId: 'abc-1', groupId: 'g2' }));

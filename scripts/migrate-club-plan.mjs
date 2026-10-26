@@ -58,6 +58,15 @@ export function validateRequest({ action, clubId, groupId, plan, confirmation, a
 }
 
 /** A build, read-only check, or approval of the other scope grants no writes. */
+export function assertMigrationOwner(action, env) {
+  if (action === 'check') return;
+  const owner = String(env.MIGRATION_OWNER_GITHUB_LOGIN ?? '').trim().toLowerCase();
+  if (env.GITHUB_ACTIONS !== 'true' || !owner || String(env.GITHUB_ACTOR ?? '').toLowerCase() !== owner ||
+      (env.GITHUB_TRIGGERING_ACTOR && String(env.GITHUB_TRIGGERING_ACTOR).toLowerCase() !== owner)) {
+    throw Error('Live migration is disabled until the configured owner personally starts this approved workflow');
+  }
+}
+
 export function assertMigrationApproval(approval, scope, clubId, groupId, planHash) {
   validateRequest(approval ?? {});
   if (approval.action === 'check' || approval.approvalScope !== scope ||

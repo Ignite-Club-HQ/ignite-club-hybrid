@@ -1,5 +1,6 @@
 ## Separate migration approvals — 26 October 2026
-- [ ] Require explicit, separate club/group-bound approval for data copying versus account claim activation; data approval must never run sign-in/routing cutover. Validate with local tests only; no live migration or emails authorized.
+- [x] Require separate club/group-bound data/auth approvals, default none; live actions require configured owner matching original/rerun GitHub actors. Data runner blocks routing even after verification. Local safety tests passed; no migration, deployment or emails run.
+- [ ] Live actions remain disabled until the owner sets MIGRATION_OWNER_GITHUB_LOGIN in the protected GitHub environment; its reviewer settings have not been verified. Existing service-key, loaders and protected-release prerequisites remain.
 
 ## Club upgrade subscription warning — 26 October 2026
 - [x] Subscription display uses the actual feature dispatcher with exact club/account identity; mounted/restored II guards ancillary reads/realtime. ICP cancellation/downgrade cannot reach Supabase or self-write privileged canister subscription rows; unsupported local actions withheld. Provider fulfillment and paid-term rules unchanged.
