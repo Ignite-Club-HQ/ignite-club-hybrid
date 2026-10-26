@@ -3806,7 +3806,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let now = nowMs();
     let invite : Types.TeamInvite = {
       id;
-      club_id; team_id; email; role;
+      club_id; team_id; email = "pii:email"; role;
       invited_by = caller;
       created_at_ms = now;
       expires_at_ms = now + 7 * 24 * 60 * 60 * 1000;
@@ -3822,7 +3822,7 @@ persistent actor class Main(governorInit : Principal) = this {
   public query ({ caller }) func list_team_invites(club_id : Text, team_id : ?Text) : async { #Ok : [Types.TeamInvite]; #Err : Text } {
     denyLegacyAccountQuery();
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
-    #Ok(teamInvites.filter(func(i) = i.club_id == club_id and (team_id == null or team_id == ?i.team_id)))
+    #Ok(teamInvites.filter(func(i) = i.club_id == club_id and (team_id == null or team_id == ?i.team_id)).map(func(i : Types.TeamInvite) : Types.TeamInvite = { i with email = "" }))
   };
 
   public query ({ caller }) func get_team_invite(id : Text) : async { #Ok : Types.TeamInvite; #Err : Text } {
@@ -7588,7 +7588,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
-    #Ok(teamInvites.filter(func(i) = i.club_id == club_id and (team_id == null or team_id == ?i.team_id)))
+    #Ok(teamInvites.filter(func(i) = i.club_id == club_id and (team_id == null or team_id == ?i.team_id)).map(func(i : Types.TeamInvite) : Types.TeamInvite = { i with email = "" }))
   
     } finally { removalReceiver.leave(caller) };
   };
