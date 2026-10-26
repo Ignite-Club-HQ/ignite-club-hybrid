@@ -28,6 +28,7 @@ import { useInviteFlowSweeper } from "@/hooks/useInviteFlowSweeper";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { KeptTabsOutlet } from "./KeptTabsOutlet";
 import { isIcpProviderMounted } from "@/live/authBackendMode";
+import { TabPagePlaceholder } from "./TabPagePlaceholder";
 
 const LazyDeepLinkGate = lazyWithRetry(() => import("@/components/DeepLinkGate"));
 
@@ -370,11 +371,7 @@ export function AppLayout() {
           preserves the chrome and confines the fallback to the content area.
         */}
         <Suspense
-          fallback={
-            <div className="flex-1 flex items-center justify-center py-16" role="status" aria-label="Loading page">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
-          }
+          fallback={<TabPagePlaceholder />}
         >
           {isIcpProviderMounted() && user ? <KeptTabsOutlet ownerId={user.id} prewarm /> : <Outlet />}
         </Suspense>

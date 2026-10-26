@@ -23,6 +23,7 @@ const IcpGapFeedback = lazyWithRetry(() => import("@/components/IcpGapFeedback")
 import TestingIssuesPanel from "@/components/TestingIssuesPanel";
 import PitchBoardResumeRedirect from "@/components/pitch/PitchBoardResumeRedirect";
 import { MessagesBootstrapPrefetcher } from "@/components/MessagesBootstrapPrefetcher";
+import { warmMainRoutes } from "@/lib/routePrefetch";
 
 import { CookieConsentBanner } from "@/components/CookieConsentBanner";
 import { IOSInstallPrompt } from "@/components/IOSInstallPrompt";
@@ -247,12 +248,12 @@ installPendingSendKeeper(queryClient);
 // Download the main pages' code while the app is idle so the first tap on
 // any of them does not wait for a code download.
 if (typeof window !== "undefined") {
+  warmMainRoutes();
   const warm = () => {
     const pages = [
-      () => import("./pages/HomePage"), () => import("./pages/MessagesPage"),
-      () => import("./pages/EventsPage"), () => import("./pages/ClubsPage"),
+      () => import("./pages/ClubsPage"),
       () => import("./pages/ClubDetailPage"), () => import("./pages/TeamDetailPage"),
-      () => import("./pages/MediaPage"), () => import("./pages/VaultPage"),
+      () => import("./pages/VaultPage"),
       () => import("./pages/ProfilePage"), () => import("./pages/SettingsPage"),
       () => import("./pages/EventDetailPage"), () => import("./pages/NotificationsPage"),
       () => import("./pages/TeamChatPage"), () => import("./pages/ClubChatPage"),
@@ -537,7 +538,9 @@ const App = () => {
           <TestingIssuesPanel />
           <IcsPreviewFallbackDialog />
           <NotifDebugOverlay />
-          <BrowserRouter>
+          {/* Commit destination chrome now; lazy code must not retain the old
+              screen and make a successful tap look ignored. */}
+          <BrowserRouter useTransitions={false}>
             <AppNavigatorBridge />
             <ScrollToTop />
             <PWAPendingInviteHandler />

@@ -76,6 +76,7 @@ import {
 } from "@/features/messaging/inbox/inboxReadModel";
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { resetInboxOpenLog } from "@/lib/inboxOpenLatency";
+import { shouldBlockInboxReveal } from "@/lib/inboxRevealPolicy";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
 
 import { cacheProfiles, getProfileFromCache, selectCachedProfileById, selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -1488,19 +1489,15 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
   // had. The latch is now session-scoped per user, so warm re-entry paints from
   // cache immediately and patches in place.
   //
-  // STALE-ORDER FIX: the cached-data bypass must NOT also be applied to the
-  // session's *first* reveal. Cached rows carry stale `lastActivity` /
-  // `created_at` values, so releasing the gate merely because a cache exists
-  // painted an intermediate ordering that visibly re-sorted the moment the
-  // authoritative previews arrived (the Android reload/resume jolt). Online
-  // cold starts therefore wait for authoritative ordering, bounded by
-  // `sortGateExpired` (and `isLoadingFreshData` still consults the cache, so
-  // a cached inbox never waits on the *loading* half of the gate). Offline is
-  // excluded entirely by the leading `isOnline`, so the cached inbox is still
-  // revealed instantly with no network.
+  // ICP has slower remote reads: existing account-scoped rows reveal now,
+  // then refresh quietly. Supabase retains its first-order readiness gate.
   const initialRevealBlocked =
     isOnline &&
-    (isLoadingFreshData || !freshSortDataReady);
+    shouldBlockInboxReveal({
+      online: isOnline, icp: useIcpLab,
+      hasRows: !!hasCachedData || hasAnyDisplayData || !!dmConversations?.length,
+      loading: isLoadingFreshData, orderReady: freshSortDataReady,
+    });
 
 
   useEffect(() => {
