@@ -1,9 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ profiles: vi.fn(), reactions: vi.fn() }));
+const mode = vi.hoisted(() => ({ rehearsal: false }));
+vi.mock('@/live/privateProfileSearchMode', () => ({ privateProfileSearchRehearsalEnabled: () => mode.rehearsal }));
 vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: mocks.profiles }));
 vi.mock('@/live/features/messaging', () => ({ listLiveLatestMessagesPage: vi.fn(), listLiveReactions: mocks.reactions }));
 import { mapLiveGroupRows } from './useGroupMessagesQuery';
 describe('ICP group message enrichment', () => {
+  it('keeps rehearsal private author names out of persisted message results', async () => {
+    mode.rehearsal = true; mocks.profiles.mockClear(); mocks.reactions.mockResolvedValue([]);
+    try {
+      const rows = await mapLiveGroupRows({}, 'chat', [{ id: 'message', sender: { toText: () => 'person' }, sequence: 1n, body: 'hello', created_at_ms: 1000n, conversation_id: 'chat' }]);
+      expect(rows[0].author).toBeNull(); expect(mocks.profiles).not.toHaveBeenCalled();
+    } finally { mode.rehearsal = false; }
+  });
   it('does not start enrichment for an abandoned chat', async () => {
     mocks.profiles.mockClear(); mocks.reactions.mockClear();
     const controller = new AbortController(); controller.abort();

@@ -9,6 +9,29 @@ and other details must remain viewable in the app.
 
 ## Implemented locally
 
+### 22:47 continuation — mounted group-chat names
+
+Rehearsal group chats now resolve names independently of message retrieval.
+The exact authorized messaging metadata locates a club or tagged league;
+league ownership is confirmed through its owning domain before/after name
+hydration. Competition official chats locate their resource through the
+caller-authorized competition directory and exact official-chat mapping,
+never a parsed conversation ID, name, public directory or organizer-club
+membership. The original PII/identity relationship verifier still authorizes
+each requested name; these location checks grant nothing. Closing chat
+metadata rejects changed participants/scope, account/target drift retires reads,
+and ambiguous or over-limit lookups refuse without generic-cache fallback.
+
+Names live only in the mounted chat hook, clear on audience/account changes
+and recheck on foreground. Rehearsal message results carry no author names;
+author/reply/reaction presentation ignores old generic-cache labels. Existing
+hosted behavior remains unchanged and the loopback rehearsal gate stays off.
+Competition-admin/broadcast/DM scopes still require their distinct contracts;
+this batch does not claim those are complete. Held tests here model frontend
+ownership replies, not actual final-service revocation races. Protected executable
+release/backfill, full production evidence and real signed-in acceptance remain
+unfinished. No deployment, conversion, grants or activation was performed.
+
 ### 22:46 completion batch — relationship display connections
 
 Added one relationship display reader that keeps the owning service context
