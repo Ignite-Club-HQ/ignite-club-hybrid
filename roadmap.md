@@ -1,7 +1,8 @@
 ## Approved all-group club service upgrade — 26 October 2026
 - [x] Owner approved service-only readiness across every registered group; data copying, account claim emails/redemption setup and sign-in/routing migration remain separately blocked.
 - [x] Add protected club_migration scope upgrading club_domain only across the full inventory, including closed groups, with same-source automatic preflight and existing key/journal/publication safeguards.
-- [ ] Run the approved exact-source release after repository synchronization, then verify every destination club service and published release evidence; do not open groups or migrate data/users.
+- [x] 72 release safeguard checks and 20 separate-approval checks passed; workflow YAML valid and preview build OK. Verified GitHub already contains accountClaims and the deploy recipe builds that source.
+- [ ] Deployment blocked on GitHub synchronization: remote main still lacks club_migration scope at 04:28 UTC. No run dispatched, canister changed, claims registered or emails sent. After synchronization run the approved exact-source release and verify every destination club service/published evidence; do not widen to full_backend or open groups/migrate data/users.
 
 ## Separate migration approvals — 26 October 2026
 - [x] Require separate club/group-bound data/auth approvals, default none; live actions require configured owner matching original/rerun GitHub actors. Data runner blocks routing even after verification. Local safety tests passed; no migration, deployment or emails run.
