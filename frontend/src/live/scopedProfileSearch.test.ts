@@ -91,6 +91,17 @@ describe("authority-owned paged club search", () => {
     expect((await searchScopedClubProfiles(ctx,"club-a","Paul"))[0]?.id).toBe(subject);
     expect(mocks.page).toHaveBeenNthCalledWith(1,"club-a",[]);
     expect(mocks.page).toHaveBeenNthCalledWith(2,"club-a",[{revision:7n,phase:0n,offset:0n}]);
+    expect(mocks.hydrate).toHaveBeenCalledOnce();
+    expect(mocks.read).toHaveBeenCalledTimes(3);
+  });
+  it("checks the original opaque reference without deriving a matched private-name key twice", async()=>{
+    const privateRow={...row,display_name:"pii-display-name:v1:original:subject"};
+    mocks.read.mockResolvedValue([privateRow]);
+    mocks.hydrate.mockResolvedValue([row]);
+    expect((await searchScopedClubProfiles(ctx,"club-a","Paul"))[0]?.display_name).toBe("Paul Cranwell");
+    expect(mocks.hydrate).toHaveBeenCalledOnce();
+    mocks.read.mockResolvedValueOnce([privateRow]).mockResolvedValueOnce([privateRow]).mockResolvedValueOnce([{...privateRow,display_name:"replacement-reference"}]);
+    await expect(searchScopedClubProfiles(ctx,"club-a","Paul")).rejects.toThrow("authority changed");
   });
   it("discards earlier matches if membership changes before final confirmation", async () => {
     mocks.page.mockResolvedValueOnce({ Ok: { revision:7n,subjects:[row.principal],next:[],scanned:1n } }).mockResolvedValueOnce({Err:"revision changed"});
@@ -111,5 +122,17 @@ describe("authority-owned paged club search", () => {
     mocks.page.mockResolvedValueOnce({Ok:{revision:7n,subjects:[row.principal],next:[{revision:7n,phase:1n,offset:0n}],scanned:1n}}).mockResolvedValue({Ok:{revision:7n,subjects:[row.principal],next:[],scanned:1n}});
     expect(await searchScopedClubProfiles(ctx,"club-a","Paul")).toEqual([]);
     expect(mocks.read).toHaveBeenCalledOnce();
+  });
+  it("refuses an earlier match suspended while a later page unlocks despite unchanged club revision", async () => {
+    const other = { ...row, principal: Principal.fromText(authority), account_id: "other-account" };
+    mocks.page.mockResolvedValueOnce({Ok:{revision:7n,subjects:[row.principal],next:[{revision:7n,phase:1n,offset:0n}],scanned:1n}}).mockResolvedValue({Ok:{revision:7n,subjects:[other.principal],next:[],scanned:1n}});
+    mocks.read.mockResolvedValueOnce([row]).mockResolvedValueOnce([row]).mockResolvedValueOnce([other]).mockResolvedValueOnce([other]).mockResolvedValue([other]);
+    await expect(searchScopedClubProfiles(ctx,"club-a","Paul")).rejects.toThrow("authority changed");
+  });
+  it("refuses an earlier account relink while later candidates unlock", async () => {
+    const other = { ...row, principal: Principal.fromText(authority), account_id: "other-account" };
+    mocks.page.mockResolvedValueOnce({Ok:{revision:7n,subjects:[row.principal],next:[{revision:7n,phase:1n,offset:0n}],scanned:1n}}).mockResolvedValue({Ok:{revision:7n,subjects:[other.principal],next:[],scanned:1n}});
+    mocks.read.mockResolvedValueOnce([row]).mockResolvedValueOnce([row]).mockResolvedValueOnce([other]).mockResolvedValueOnce([other]).mockResolvedValue([{...row,account_id:"relinked"},other]);
+    await expect(searchScopedClubProfiles(ctx,"club-a","Paul")).rejects.toThrow("authority changed");
   });
 });

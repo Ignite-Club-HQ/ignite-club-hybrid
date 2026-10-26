@@ -41,6 +41,7 @@ export default function EditProfilePage() {
   const [leaderboardOptOut, setLeaderboardOptOut] = useState(false);
   const [country, setCountry] = useState<string>("");
   const [contactEmail, setContactEmail] = useState("");
+  const [contactEmailChanged, setContactEmailChanged] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -282,7 +283,12 @@ export default function EditProfilePage() {
     }
 
     if (isIcpLive) {
+      let publicProfileSaved = false;
       try {
+        const trimmedEmail = contactEmail.trim();
+        if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+          throw new Error("Enter a valid email address, or leave it empty.");
+        }
         const [{ getCurrentInternetIdentity }, { saveIcpIdentityProfile }] = await Promise.all([
           import("@/live/internetIdentityAuth"),
           import("@/live/identityProfile"),
@@ -293,28 +299,21 @@ export default function EditProfilePage() {
           displayName: displayName.trim(),
           avatarRef: avatarUrl.trim() || null,
         });
+        publicProfileSaved = true;
         // Mirror the display name into pii_access_control (pii_id = caller
         // principal text, field_id = "display_name", owner = the user).
-        // Best effort — the profile save above already succeeded.
-        const [{ getActiveIcpTarget }, { registerLivePiiText }] = await Promise.all([
+        // Strict readback, still no private-reference publication or cutover.
+        const [{ getActiveIcpTarget }, { preparePrivateOwnProfileName }] = await Promise.all([
           import("@/live/targetRegistry"),
-          import("@/live/features/vault"),
+          import("@/live/privateProfileNames"),
         ]);
-        await registerLivePiiText(
-          { identity, target: getActiveIcpTarget() },
-          identity.getPrincipal().toText(),
-          "display_name",
-          displayName.trim(),
-        );
+        await preparePrivateOwnProfileName({ identity, target: getActiveIcpTarget() }, displayName.trim());
         // Optional contact email (own PII record, upsert semantics). Powers
         // competition welcome emails for existing members in ICP mode.
-        const trimmedEmail = contactEmail.trim();
-        if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-          throw new Error("Enter a valid email address, or leave it empty.");
-        }
-        if (trimmedEmail) {
+        // An unavailable initial email read is not permission to erase it.
+        if (contactEmailChanged) {
           const { saveLiveContactEmail } = await import("@/live/features/memberWelcomeEmail");
-          await saveLiveContactEmail({ identity, target: getActiveIcpTarget() } as any, trimmedEmail);
+          await saveLiveContactEmail({ identity, target: getActiveIcpTarget() }, trimmedEmail);
         }
         // Re-sync avatar club grants — covers clubs joined after the photo
         // was uploaded. Best-effort (never throws).
@@ -323,8 +322,8 @@ export default function EditProfilePage() {
       } catch (error) {
         setSaving(false);
         toast({
-          title: "Failed to update profile",
-          description: error instanceof Error ? error.message : "Could not update profile",
+          title: publicProfileSaved ? "Profile saved; private details unconfirmed" : "Failed to update profile",
+          description: publicProfileSaved ? "Your profile changed, but saving private details was not confirmed. Stay here and check before retrying." : error instanceof Error ? error.message : "Could not update profile",
           variant: "destructive",
         });
         return;
@@ -482,7 +481,7 @@ export default function EditProfilePage() {
                 id="contact-email"
                 type="email"
                 value={contactEmail}
-                onChange={(e) => setContactEmail(e.target.value)}
+                onChange={(e) => { setContactEmailChanged(true); setContactEmail(e.target.value); }}
                 placeholder="you@example.com"
               />
               <p className="text-xs text-muted-foreground">

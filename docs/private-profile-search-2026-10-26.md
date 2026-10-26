@@ -55,6 +55,42 @@ and other details must remain viewable in the app.
 
 ## Not complete / do not enable a privacy cutover
 
+### Completion batch: 26 October, strict saves and whole-search guards
+
+- Owner name preparation and optional contact-email saving now share strict
+  encryption/registration/decrypted-readback handling. Contact emails retain
+  the existing `contact_email` identity, not a new incompatible field. An
+  explicit empty edit writes encrypted empty content; a missing initial email
+  read never automatically clears storage. Email delivery remains optional.
+- Edit Profile no longer reports a silently failed private copy as success.
+  A partial public-profile save is disclosed without automatically replaying
+  an unknown private write. Adult profile plaintext remains transitional;
+  this is not private-reference publication or backfill.
+- Identity profile validation accepts canonical original-authority private
+  references longer than the old 80-byte plaintext limit only for a current
+  account alias. Foreign/anonymous/malformed/future references are refused.
+- Private display rejects another returned principal's reference and foreign,
+  wrong-field or duplicate encrypted records. Search revalidates all retained
+  match bindings after the last page without deriving private keys twice.
+  Earlier suspended/relinked subjects cannot survive later-page decryption
+  just because the club revision did not change.
+- Real held identity-to-club replies verify caller link changes at both
+  boundaries and subject link changes at the final boundary. Ordinary
+  configuration replacement is itself refused by the existing fenced-recovery
+  rule; rejected changes preserve authorized reads. Actual replacement drift
+  is not newly verified or bypassed.
+- Real SDK PII tests verify owner-only contact-email decryption, unrelated
+  and club-role refusal, name-grant/email separation and encrypted empty
+  clearing. No messages were sent and no mainnet data/settings were changed.
+
+Remaining blockers are implementation, not merely approvals: original-PII
+location contracts across groups; family-only/competition/league adult-name
+audiences; encrypted guardian-only full search; ordinary picker replacement;
+complete approved backfill/recovery and release acceptance. Previously
+evaluated remote final replies do not prove atomic delivery-time revocation.
+The real preview redirects `/edit-profile` to `/auth`; authenticated profile
+saving remains UNVERIFIED without the owner's Internet Identity session.
+
 This is the purpose-bound guardian-search foundation, **not** a completed
 private-name migration. Existing `search_profiles` and `get_profiles_by_ids`
 still expose their historical data. Removing them now would break current
