@@ -5,6 +5,7 @@ import { markChatFetch } from "@/hooks/useChatPerfMarks";
 import { splitPageWindow } from "@/lib/chatPageWindow";
 import { getCachedMessages, cacheMessages } from "@/lib/messageCache";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { isUsableCachedThread } from "@/lib/chatThreadLoadState";
 import { assertReadNotAborted } from "@/live/readDeadline";
 import { groupChatReadScope } from './groupChatScope';
@@ -73,7 +74,10 @@ export const mapLiveGroupRows = async (
     }));
   }
   const [profilesMap, liveReactions] = await Promise.all([
-    fetchProfilesWithCache(authorIds),
+    // Rehearsal names are mounted-audience-only; never embed decrypted labels
+    // in message snapshots. GroupChatPage hydrates them independently.
+    privateProfileSearchRehearsalEnabled() ? Promise.resolve(new Map())
+      : fetchProfilesWithCache(authorIds),
     listLiveReactions(ctx, groupId).catch(() => []),
   ]);
   assertReadNotAborted(signal);

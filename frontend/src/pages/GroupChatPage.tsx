@@ -124,6 +124,8 @@ import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { MessageReadAvatars } from "@/components/chat/MessageReadAvatars";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { useProfiles } from "@/hooks/useProfiles";
+import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { shouldRefetchMessages } from "@/lib/messageCache";
 import {
   classifyChatThreadState,
@@ -574,8 +576,6 @@ export default function GroupChatPage() {
     pageSize: MESSAGES_PER_PAGE,
     supabaseClient: supabase,
     clubId: group?.club_id,
-    userId: user?.id,
-    clubId: group?.club_id,
   });
 
   // Scope key for the realtime edit/soft-delete reconciliation registry.
@@ -850,9 +850,15 @@ export default function GroupChatPage() {
   
   // Use fresh profile data that refreshes on visibility change (fixes names vanishing after phone lock)
   const authorIds = useMemo(() => {
-    return [...new Set((localMessages || []).map(m => m.author_id).filter(Boolean))];
-  }, [localMessages]);
-  const { getProfile } = useProfiles(authorIds);
+    return [...new Set([
+      ...(localMessages || []).flatMap(m => [m.author_id, m.forwarded_from_user_id]),
+      ...reactions.map(r => r.user_id),
+    ].filter((id): id is string => !!id))];
+  }, [localMessages, reactions]);
+  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
+  const getPrivateProfile = usePrivateChatProfiles(groupId, user?.id, authorIds, privateChatNames);
+  const getProfile = privateChatNames ? getPrivateProfile : getLegacyProfile;
   
   // Reset scroll state when groupId changes
   useEffect(() => {
@@ -945,6 +951,7 @@ export default function GroupChatPage() {
 
   // Always ensure profiles are loaded for messages with missing author data
   useEffect(() => {
+    if (privateChatNames) return;
     if (!localMessages?.length) return;
     
     // Find messages with missing profile data
@@ -973,7 +980,7 @@ export default function GroupChatPage() {
         return updated ? newMessages : prev;
       });
     });
-  }, [localMessages]);
+  }, [localMessages, privateChatNames]);
 
 
   useEffect(() => {
