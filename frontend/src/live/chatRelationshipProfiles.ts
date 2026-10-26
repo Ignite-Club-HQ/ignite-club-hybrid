@@ -38,7 +38,7 @@ export async function readDirectChatProfiles(owner: FeatureBackendContext, conve
 /** Metadata only locates a relationship. Name disclosure is independently
  * authorized by identity + original PII + the exact owning relationship. */
 export async function readChatRelationshipProfiles(
-  owner: FeatureBackendContext, conversationId: string, ids: readonly string[], signal?: AbortSignal,
+  owner: FeatureBackendContext, conversationId: string, ids: readonly string[], signal?: AbortSignal, broadcastMessageId?: string,
 ): Promise<Map<string, ChatProfile>> {
   if (!privateProfileSearchRehearsalEnabled()) {
     return (await import('@/lib/profileCache')).fetchProfilesWithCache([...ids]);
@@ -65,7 +65,8 @@ export async function readChatRelationshipProfiles(
   let relationship: ProfileRelationship;
   let confirmResource: () => Promise<void> = async () => {};
   if (metadata.kind === 'broadcast' && conversationId === 'broadcast' && !metadata.clubId && !metadata.teamId) {
-    relationship = { kind: 'broadcast', resource: 'broadcast' };
+    if (!broadcastMessageId?.startsWith('msg-broadcast-')) throw new Error('Exact broadcast drawer message required.');
+    relationship = { kind: 'broadcast', resource: broadcastMessageId };
   } else if (metadata.kind.startsWith('mini_league:')) {
     const resource = metadata.kind.slice('mini_league:'.length);
     const league = await getLiveMiniLeague(owner, resource);

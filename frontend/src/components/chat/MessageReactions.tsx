@@ -331,6 +331,7 @@ export const MessageReactionsPopover = memo(function MessageReactionsPopover({
 });
 
 interface MessageReactionsDisplayProps {
+  messageId?: string;
   reactions?: Reaction[];
   currentUserId?: string;
   onReactionClick: (type: string, reactionId?: string) => void;
@@ -338,6 +339,7 @@ interface MessageReactionsDisplayProps {
 }
 
 export const MessageReactionsDisplay = memo(function MessageReactionsDisplay({
+  messageId,
   reactions = [],
   currentUserId,
   onReactionClick,
@@ -421,6 +423,7 @@ export const MessageReactionsDisplay = memo(function MessageReactionsDisplay({
 
       </PopoverTrigger>
       <AllReactionsContent
+        messageId={messageId}
         reactions={committed}
         allUserIds={allUserIds}
         currentUserId={currentUserId}
@@ -433,6 +436,7 @@ export const MessageReactionsDisplay = memo(function MessageReactionsDisplay({
 });
 
 interface AllReactionsContentProps {
+  messageId?: string;
   reactions: Reaction[];
   allUserIds: string[];
   currentUserId?: string;
@@ -442,6 +446,7 @@ interface AllReactionsContentProps {
 }
 
 const AllReactionsContent = memo(function AllReactionsContent({
+  messageId,
   reactions,
   allUserIds,
   currentUserId,
@@ -455,7 +460,7 @@ const AllReactionsContent = memo(function AllReactionsContent({
   const conversationId = chatScope && ('conversationId' in chatScope ? chatScope.conversationId
     : 'teamId' in chatScope ? chatScope.teamId : 'clubId' in chatScope ? chatScope.clubId : 'shared' in chatScope && chatScope.shared === 'app' ? 'broadcast' : undefined);
   const directChat = typeof window !== 'undefined' && window.location.pathname.startsWith('/messages/dm/');
-  const getPrivateProfile = usePrivateChatProfiles(conversationId, user?.id, allUserIds, privateNames && isOpen, directChat ? 'direct' : 'group');
+  const getPrivateProfile = usePrivateChatProfiles(conversationId, user?.id, allUserIds, privateNames && isOpen, directChat ? 'direct' : 'group', conversationId === 'broadcast' ? messageId : undefined);
   // Seed from in-memory profile cache so names render instantly when available;
   // avoids the brief "Unknown" flash before the async fetch resolves.
   const initialUsers = (() => {

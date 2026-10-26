@@ -14,7 +14,7 @@ pub fn validate(viewer: Principal, subjects: &[Principal], scope: &Scope) -> Res
         || scope.authority == Principal::anonymous() || scope.authority == Principal::management_canister()
         || scope.resource.trim().is_empty() || scope.resource.trim() != scope.resource || scope.resource.len() > 128
         || !["club", "family", "competition", "league", "guardian_search", "direct", "broadcast"].contains(&scope.kind.as_str())
-        || (scope.kind == "broadcast" && scope.resource != "broadcast")
+        || (scope.kind == "broadcast" && (!scope.resource.starts_with("msg-broadcast-") || subjects.is_empty()))
         || (scope.kind == "direct" && subjects.len() > 2)
         || subjects.len() > 25 || subjects.iter().any(|p| *p == Principal::anonymous() || *p == Principal::management_canister())
         || subjects.iter().collect::<std::collections::BTreeSet<_>>().len() != subjects.len() {
@@ -47,8 +47,9 @@ pub fn validate(viewer: Principal, subjects: &[Principal], scope: &Scope) -> Res
         assert!(validate(p(2), &[p(3)], &scope("competition_admin")).is_err());
     }
     #[test] fn broadcast_names_require_the_canonical_resource_and_bounded_subjects() {
-        let mut s=scope("broadcast"); s.resource="broadcast".into();
+        let mut s=scope("broadcast"); s.resource="msg-broadcast-1".into();
         assert!(validate(p(2), &[p(3)], &s).is_ok());
+        assert!(validate(p(2), &[], &s).is_err());
         assert!(validate(p(2), &(0..26).map(p).collect::<Vec<_>>(), &s).is_err());
         assert!(validate(p(2), &[p(3), p(3)], &s).is_err());
         s.resource="other".into(); assert!(validate(p(2), &[p(3)], &s).is_err());

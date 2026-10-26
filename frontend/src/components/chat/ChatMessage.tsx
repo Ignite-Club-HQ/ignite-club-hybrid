@@ -1239,6 +1239,7 @@ function ChatMessageInner({
         </div>
         
         <MessageReactionsDisplay
+          messageId={id}
           reactions={optimisticReactions}
           currentUserId={currentUserId}
           onReactionClick={handleReactionClick}
