@@ -1003,6 +1003,13 @@ export interface MainInterface {
         Err: string;
     }>;
     read_group_opening_configuration(): Promise<Array<[string, string]>>;
+    read_profile_broadcast_batch(requester: Principal, conversation_id: string, subjects: Array<Principal>, expected: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: Batch;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_profile_direct_batch(requester: Principal, conversation_id: string, subjects: Array<Principal>, expected: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: Batch;
@@ -2782,6 +2789,16 @@ export class Messaging_domain implements messaging_domainInterface {
     async read_group_opening_configuration(): Promise<Array<[string, string]>> {
         const result = await this.actor.read_group_opening_configuration();
         return result;
+    }
+    async read_profile_broadcast_batch(arg0: Principal, arg1: string, arg2: Array<Principal>, arg3: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: Batch;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_profile_broadcast_batch(arg0, arg1, arg2, to_candid_opt_n109(arg3));
+        return from_candid_variant_n117(result);
     }
     async read_profile_direct_batch(arg0: Principal, arg1: string, arg2: Array<Principal>, arg3: bigint | null): Promise<{
         __kind__: "Ok";
