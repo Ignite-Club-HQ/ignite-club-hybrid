@@ -28,7 +28,7 @@ export const STEPS = Object.freeze([
   { id: 'messaging', domain: 'messaging_domain', tables: [
     ['team_messages', 'team_id', 'team'], ['club_messages', 'club_id', 'club'], ['chat_groups', 'club_id', 'club'], ['polls', 'chat_id', 'team'],
     ['scheduled_messages', 'club_id', 'club'], ['club_admin_conversations', 'club_id', 'club']] },
-  { id: 'rewards', domain: 'club_points_domain', tables: [['club_rewards', 'club_id', 'club'], ['user_club_points', 'club_id', 'club'], ['points_history', 'club_id', 'club'], ['reward_redemptions', 'club_id', 'club']] },
+  { id: 'rewards', domain: 'club_points_domain', tables: [['club_rewards', 'club_id', 'club'], ['user_club_points', 'club_id', 'club'], ['child_club_points', 'club_id', 'club'], ['points_history', 'club_id', 'club'], ['reward_redemptions', 'club_id', 'club'], ['points_cooldowns', 'club_id', 'club'], ['club_subscriptions', 'club_id', 'club']] },
   { id: 'competitions', domain: 'competition_domain', tables: [['competitions', 'organizer_club_id', 'club']] },
   { id: 'mini_leagues', domain: 'mini_league_domain', tables: [['mini_leagues', 'club_id', 'club']] },
   { id: 'notifications', domain: 'notification_queue', tables: [['notifications', 'club_id', 'club']] },
