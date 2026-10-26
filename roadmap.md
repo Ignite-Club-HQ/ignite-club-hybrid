@@ -1,3 +1,7 @@
+## Stable background refresh — 26 October 2026
+- [ ] Preserve visible list order while updating row content; reset ordering on page return or explicit filters, keep removals authoritative, and verify focused regressions.
+- [ ] Signed-in phone acceptance requires Paul's Internet Identity session and the updated frontend; no deployment requested.
+
 ## Immediate bottom-tab response — 26 October 2026
 - [x] Commit navigation without deferred lazy transitions, show destination placeholders, centralize earlier sequential code warmup, and reveal existing scoped ICP inbox rows during quiet refresh. Keep tab state, auth gates, cache scopes and Supabase ordering intact.
 - [x] 33 focused checks passed in each mode plus 27 ICP offline/native safeguards; ICP isolation guard passed and preview build OK. Browser delayed-chunk fixture verified immediate destination, a second tap during download, return and Back, with no page errors. Fixture is not signed-in production acceptance.
