@@ -87,7 +87,7 @@ export async function listLiveProfilesByIds(
     }
     if (out.some(profile => profile.display_name?.startsWith("pii-display-name:"))) {
       const { hydratePrivateProfileNames } = await import("../privateProfileNames");
-      return hydratePrivateProfileNames(ctx, out, privateOptions);
+      return privateOptions ? hydratePrivateProfileNames(ctx, out, privateOptions) : hydratePrivateProfileNames(ctx, out);
     }
     return out;
   } finally {
