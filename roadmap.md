@@ -1,3 +1,6 @@
+## Event detail loading speed — 26 October 2026
+- [ ] Remove private-name waits from authorized RSVP publication and parallelize adult/child labels; verify reader and attendance regressions. Cold live timings require Paul's signed-in session.
+
 ## Event-associated duty teams — 26 October 2026
 - [x] Scope create/edit/detail duty-team choices to primary team or selected audience; unrestricted club events retain club teams. Supabase filters requested IDs; ICP intersects its authorized club list. 18 focused tests pass; actual picker browser fixture offers U9 only, excludes U10 and emits U9 selection. Preview build OK; signed-in service assignment remains unverified locally. No backend/deployment changes.
 
