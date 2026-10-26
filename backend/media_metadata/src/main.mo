@@ -968,6 +968,7 @@ persistent actor class Main(governorInit : Principal) = this {
     for (g in roles.values()) { if (g.user.equal(new)) conflicts += 1 };
     for (p in bulkAccessPrincipals.values()) { if (p.equal(new)) conflicts += 1 };
     for (c in galleryChatCards.values()) { if (c.uploader_id.equal(new)) conflicts += 1 };
+    for (a in albums.values()) { if (a.created_by.equal(new)) conflicts += 1 };
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in media_metadata");
 
     var changed = 0;
@@ -998,6 +999,7 @@ persistent actor class Main(governorInit : Principal) = this {
     };
 
     let newGalleryChatCards = Array.map<Types.GalleryChatCard, Types.GalleryChatCard>(galleryChatCards, func(c) { if (c.uploader_id.equal(old)) { changed += 1; { c with uploader_id = new } } else c });
+    let newAlbums = Array.map<Types.Album, Types.Album>(albums, func(a) { if (a.created_by.equal(old)) { changed += 1; { a with created_by = new } } else a });
 
     if (not dry_run and changed > 0) {
       mediaEvidenceRevision += 1;
@@ -1009,6 +1011,7 @@ persistent actor class Main(governorInit : Principal) = this {
       bulkAccessPrincipals := newBulk;
       mediaEvidenceRevision += 1;
       galleryChatCards := newGalleryChatCards;
+      albums := newAlbums;
     };
     #ok(changed)
   };
