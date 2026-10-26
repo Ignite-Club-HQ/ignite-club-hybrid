@@ -474,7 +474,9 @@ export default function PlacementAdminSettingsPage() {
           description: "Website sync needs a Supabase admin sign-in. The app routing change is saved and live.",
         });
       } else if (changes.length > 0) {
-        const canisterId = tryActiveIcpTarget()?.canisterIds["club_domain"] ?? null;
+        // Register against the router so the website follows clubs across groups.
+        const ids = tryActiveIcpTarget()?.canisterIds;
+        const canisterId = ids?.["shard_router"] ?? ids?.["club_domain"] ?? null;
         void syncClubBackendChanges(changes, canisterId).then(failures => {
           if (failures.length > 0) {
             toast({
