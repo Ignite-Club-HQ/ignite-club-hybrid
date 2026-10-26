@@ -25,9 +25,11 @@ const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 export async function pullJournal(env, clubId, fetchImpl = fetch) {
   const cfg = remoteConfig(env);
   if (!cfg) return null; // remote persistence not configured -> local only
-  const res = await fetchImpl(`${cfg.base}/${remoteJournalPath(clubId)}?ref=${BRANCH}`, {
+  const get = (ref) => fetchImpl(`${cfg.base}/${remoteJournalPath(clubId)}${ref ? `?ref=${ref}` : ''}`, {
     headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json' },
   });
+  let res = await get(BRANCH);
+  if (res.status === 404) res = await get(null); // first push may have landed on the default branch
   if (res.status === 404) return null;
   if (!res.ok) throw Error(`Remote journal read failed: ${res.status}`);
   const body = await res.json();
