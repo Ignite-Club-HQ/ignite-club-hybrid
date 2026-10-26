@@ -1,6 +1,7 @@
 ## U9 gallery card still blank — 26 October 2026
 - [x] Reproduced local sign-in boundary; screenshot is a whole-card pending slot, not proof of a missing photo. Bound metadata/unlock reads, add independent photo retry, and key image load/error state by resolved source without raw ciphertext fallback.
-- [ ] Run focused regression checks; live original U9 card readback requires Paul's Internet Identity session and updated app.
+- [x] 34 focused gallery/scoped-read/photo tests pass with the configured runner; ICP isolation guard and preview build OK. Initial unconfigured runner failure was test setup, not an application failure.
+- [ ] Original U9 card/photo readback requires Paul's Internet Identity session and updated app; local preview redirects to sign-in, so the exact live cause remains unverified. No deployment or canister changes.
 
 ## Bounded device caching — 26 October 2026
 - [x] Shared disposable local read copies capped at 2 MiB plus existing 2 MiB ICP snapshots; viewed ICP photos capped at 20 MiB/100 entries with seven-day expiry and serialized eviction. Clear downloaded content removes read copies/mirrors/pending cache writes while retaining authentication, photo keys, drafts and upload recovery. No new automatic media/document downloads; native manually opened/exported files and app installation are outside these read-cache budgets.
