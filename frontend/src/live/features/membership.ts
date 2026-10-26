@@ -239,11 +239,15 @@ export async function searchLiveInvitableProfiles(
   ctx: FeatureBackendContext,
   query: string,
   limit = 10,
-  scope?: { clubId: string; signal?: AbortSignal },
+  scope?: { clubId: string; signal?: AbortSignal; privateAuthorityBinding?: import("../accountAuthorityRegistry").AccountRegistryBinding },
 ) {
   if (!scope?.clubId?.trim()) throw new Error("A specific club is required for member search.");
   if (privateProfileSearchRehearsalEnabled()) {
     const { searchScopedClubProfiles } = await import("../scopedProfileSearch");
+    if (scope.privateAuthorityBinding) {
+      const { createLivePrivateProfileAuthorityResolver } = await import("../privateProfileAuthority");
+      return searchScopedClubProfiles(ctx, scope.clubId, query, limit, scope.signal, createLivePrivateProfileAuthorityResolver(ctx, scope.privateAuthorityBinding));
+    }
     return searchScopedClubProfiles(ctx, scope.clubId, query, limit, scope.signal);
   }
   // Explicit transitional mode, not a fallback after a failed scoped read.

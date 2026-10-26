@@ -120,11 +120,16 @@ export async function searchLiveGuardianProfiles(
   query: string,
   limit: number,
   signal?: AbortSignal,
+  privateAuthorityBinding?: import("../accountAuthorityRegistry").AccountRegistryBinding,
 ): Promise<Array<{ id: string; display_name: string | null; avatar_url: string | null }>> {
   if (!childId.trim()) throw new Error("A specific child is required for guardian search.");
   if (query.trim().length < 2) return [];
   if (privateProfileSearchRehearsalEnabled()) {
     const { searchEncryptedGuardianProfiles } = await import("../guardianProfileSearch");
+    if (privateAuthorityBinding) {
+      const { createLivePrivateProfileAuthorityResolver } = await import("../privateProfileAuthority");
+      return searchEncryptedGuardianProfiles(ctx, childId, query, limit, { signal, resolveAuthority: createLivePrivateProfileAuthorityResolver(ctx, privateAuthorityBinding) });
+    }
     return searchEncryptedGuardianProfiles(ctx, childId, query, limit, { signal });
   }
   const authorityId = ctx.target.canisterIds.club_domain;

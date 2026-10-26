@@ -60,13 +60,33 @@ export function accountAuthoritiesFromRegistry(snapshot: AccountRegistrySnapshot
 export async function readLiveAccountAuthorityRegistry(
   ctx: import('./featureRouter').FeatureBackendContext, binding: AccountRegistryBinding,
 ) {
+  const snapshot = await readLiveAccountAuthoritySnapshot(ctx, binding);
+  return { revision: snapshot.revision, groups: accountAuthoritiesFromRegistry(snapshot, binding) };
+}
+
+/** Complete consensus inventory for original-PII routing. No approved binding
+ * is derived from the reply itself, and no membership/cache fallback exists. */
+export async function readLiveAccountAuthoritySnapshot(
+  ctx: import('./featureRouter').FeatureBackendContext, binding: AccountRegistryBinding,
+): Promise<AccountRegistrySnapshot> {
   if (ctx.target.alias !== binding.targetAlias || new URL(ctx.target.host).origin !== binding.host ||
       ctx.target.networkKind !== binding.networkKind || ctx.identity.getPrincipal().isAnonymous()) throw new Error('Account registry target mismatch');
+  const identity = ctx.identity;
+  const principal = identity.getPrincipal().toText();
+  const target = JSON.stringify(ctx.target);
+  const recheck = () => {
+    if (ctx.identity !== identity || identity.getPrincipal().toText() !== principal || JSON.stringify(ctx.target) !== target || ctx.target.status === 'disabled') throw new Error('Registry identity or target changed');
+  };
+  recheck();
   const { connectLiveShardRouter } = await import('./domains');
-  const { actor } = await connectLiveShardRouter(ctx.target, ctx.identity);
+  recheck();
+  const { actor } = await connectLiveShardRouter(ctx.target, identity);
+  recheck();
   const { readPinnedGroupRegistry } = await import('./groupRegistryPager');
-  const principal = ctx.identity.getPrincipal().toText();
+  recheck();
   const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => actor.read_group_registry_page(binding.targetAlias, revision, cursor, limit),
-    binding.registryRevision, () => { if (ctx.identity.getPrincipal().toText() !== principal) throw new Error('Registry identity changed'); });
-  return { revision: snapshot.revision, groups: accountAuthoritiesFromRegistry(snapshot, binding) };
+    binding.registryRevision, recheck);
+  recheck();
+  accountAuthoritiesFromRegistry(snapshot, binding);
+  return snapshot;
 }
