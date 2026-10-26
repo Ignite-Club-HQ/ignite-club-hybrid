@@ -48,7 +48,8 @@ export async function searchScopedClubProfiles(
     if (matches.length >= limit || !next) {
       // Re-read the opening page at its revision after all name/decryption
       // awaits; a removed membership cannot return retained partial matches.
-      await unwrapCandid(actor.read_profile_candidates(clubId, [{ revision, phase: 0n, offset: 0n }]), "Confirm club person search");
+      const confirmed = await unwrapCandid(actor.read_profile_candidates(clubId, [{ revision, phase: 0n, offset: 0n }]), "Confirm club person search");
+      if (confirmed.revision !== revision) throw new Error("Club person search changed; please try again.");
       assertActive(signal);
       return matches.slice(0, limit);
     }

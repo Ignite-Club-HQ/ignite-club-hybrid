@@ -695,6 +695,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (profiles.size() != 0 or identityUnlinkReceipts.size() != 0) return #Err("Empty owner-test group required");
     if (identityAccessCanister != null and identityAccessCanister != ?id) return #Err("Deletion identity already bound");
     identityAccessCanister := ?id;
+    bumpMembershipDiscovery();
     #Ok
   };
   type LinkedAccount = { id : Text; principals : [Principal]; version : Nat64; status : { #Active; #Suspended } };
@@ -3292,7 +3293,7 @@ persistent actor class Main(governorInit : Principal) = this {
       label scan while (phase < 3 and scanned < 100 and subjects.size() < 25) {
         if (offset == sizes[phase]) { phase += 1; offset := 0; continue scan };
         let subject : ?Principal = switch (phase) {
-          case (0) ?acl.roles[offset].user;
+          case (0) { let role = acl.roles[offset]; if (role.club == ?club_id) ?role.user else null };
           case (1) acl.children[offset].parent;
           case (_) ?acl.guardians[offset].user;
         };
