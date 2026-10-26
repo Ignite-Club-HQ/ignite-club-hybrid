@@ -103,6 +103,8 @@ import { useMarkVisibleChatMessagesRead } from "@/hooks/useMarkVisibleChatMessag
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchProfilesWithCache, fetchSingleProfileWithCache, getProfilesFromCache } from "@/lib/profileCache";
 import { useProfiles } from "@/hooks/useProfiles";
+import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { queueMessage } from "@/lib/messageQueue";
 import { getCachedMessages, cacheMessages, shouldRefetchMessages } from "@/lib/messageCache";
@@ -850,9 +852,12 @@ export default function TeamChatPage() {
   
   // Use fresh profile data that refreshes on visibility change (fixes names vanishing after phone lock)
   const authorIds = useMemo(() => {
-    return [...new Set((localMessages || []).map(m => m.author_id).filter(Boolean))];
+    return [...new Set((localMessages || []).flatMap(m => [m.author_id, ...(m.reactions ?? []).map(r => r.user_id)]).filter(Boolean))];
   }, [localMessages]);
-  const { getProfile } = useProfiles(authorIds);
+  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
+  const getPrivateProfile = usePrivateChatProfiles(teamId, user?.id, authorIds, privateChatNames);
+  const getProfile = privateChatNames ? getPrivateProfile : getLegacyProfile;
   
   // Reset per-thread scroll/message state when teamId changes so the initial
   // bottom-pin runs against the new chat, not stale messages from the last team.
@@ -1045,6 +1050,7 @@ export default function TeamChatPage() {
 
   // Always ensure profiles are loaded for messages with missing profile data
   useEffect(() => {
+    if (privateChatNames) return;
     if (!localMessages?.length) return;
     
     // Find messages with missing profile data
@@ -1073,7 +1079,7 @@ export default function TeamChatPage() {
         return updated ? newMessages : prev;
       });
     });
-  }, [localMessages]);
+  }, [localMessages, privateChatNames]);
 
   // Update hasOlderMessages from fetched data
   useEffect(() => {
@@ -2149,8 +2155,8 @@ export default function TeamChatPage() {
                       text={msg.text}
                       imageUrl={msg.image_url}
                       authorId={msg.author_id}
-                      authorName={msg.is_club_announcement ? (msg.club_announcement_name || "Club") : (getProfile(msg.author_id)?.display_name || msg.profiles?.display_name || null)}
-                      authorAvatar={getProfile(msg.author_id)?.avatar_url || msg.profiles?.avatar_url || null}
+                      authorName={msg.is_club_announcement ? (msg.club_announcement_name || "Club") : (getProfile(msg.author_id)?.display_name || (privateChatNames ? null : msg.profiles?.display_name) || null)}
+                      authorAvatar={getProfile(msg.author_id)?.avatar_url || (privateChatNames ? null : msg.profiles?.avatar_url) || null}
                       timestamp={formatMessageDate(msg.created_at)}
                       isOwn={msg.is_club_announcement ? false : msg.author_id === user?.id}
                       isAdmin={isAdmin || false}
@@ -2160,7 +2166,9 @@ export default function TeamChatPage() {
                       queryKey={queryKeyMemo}
                       replyToMessage={
                         msg.reply_to
-                          ? { text: msg.reply_to.text, authorName: msg.reply_to.profiles?.display_name || null }
+                          ? { text: msg.reply_to.text, authorName: privateChatNames
+                            ? getProfile(localMessages?.find(row => row.id === msg.reply_to_id)?.author_id ?? "")?.display_name ?? null
+                            : msg.reply_to.profiles?.display_name || null }
                           : null
                       }
                       hasReply={!!msg.reply_to_id}
@@ -2171,8 +2179,8 @@ export default function TeamChatPage() {
                         !msg.is_club_announcement && isAdmin && msg.author_id !== user?.id
                           ? () => handleMemberProfileTap(
                               msg.author_id,
-                              getProfile(msg.author_id)?.display_name || msg.profiles?.display_name || "Unknown User",
-                              getProfile(msg.author_id)?.avatar_url || msg.profiles?.avatar_url || null,
+                              getProfile(msg.author_id)?.display_name || (privateChatNames ? null : msg.profiles?.display_name) || "Unknown User",
+                              getProfile(msg.author_id)?.avatar_url || (privateChatNames ? null : msg.profiles?.avatar_url) || null,
                             )
                           : undefined
                       }
