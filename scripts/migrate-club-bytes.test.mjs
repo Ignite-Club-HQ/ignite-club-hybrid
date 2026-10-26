@@ -89,7 +89,7 @@ test('copyByteItem encrypts, registers, chunks and finalizes with hash check', a
     const ct = Buffer.concat(captured.map((c) => Buffer.from(c)));
     return { canister: 'store-1', path: item.path, content_hash: sha256Hex(new Uint8Array(ct)) };
   };
-  const ref = await copyByteItem({ canisters: {} }, await fakePublicKey(), item, {
+  const ref = await copyByteItem({ canisters: { pii_access_control: 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae' } }, await fakePublicKey(), item, {
     download: async () => plain, blobStore, pii, journal,
   });
   assert.equal(captured.length, 2); // 1 MB + 10 bytes
@@ -145,7 +145,7 @@ test('copyClubBytes splits refs by kind and patch helpers fill blob_ref', async 
     { kind: 'photo', id: 'p1', clubId: CLUB, sourcePath: 'a', path: 'pa', mime: 'm', owner: 'aaaaa-aa' },
     { kind: 'vault', id: 'v1', clubId: CLUB, sourcePath: 'b', path: 'pb', mime: 'm', owner: 'bbbbb-bb' },
   ];
-  const refs = await copyClubBytes({ canisters: {} }, key, items, {
+  const refs = await copyClubBytes({ canisters: { pii_access_control: 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae' } }, key, items, {
     download: async () => new Uint8Array(100), blobStore, pii: fakePii(), journal,
   });
   assert.equal(refs.photos.size, 1);
