@@ -13,7 +13,7 @@ on:
         type: choice
         required: true
         default: full_backend
-        options: [full_backend, app_admin, team_invites, messaging, competition, history, subscriptions, events_pitch, gallery_vault]
+        options: [full_backend, club_migration, app_admin, team_invites, messaging, competition, history, subscriptions, events_pitch, gallery_vault]
       checked_plan:
         description: "CHECKED PLAN HASH (64 letters/numbers) - required for recover; optional for upgrade"
         required: false
@@ -50,7 +50,7 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import {validateRequest,normalizeConfirmation,normalizePlan} from './scripts/all-group-upgrade-policy.mjs';
-          if(process.env.ACTION==='upgrade'&&process.env.SCOPE==='full_backend'&&!normalizePlan(process.env.CHECKED_PLAN)){
+          if(process.env.ACTION==='upgrade'&&['full_backend','club_migration'].includes(process.env.SCOPE)&&!normalizePlan(process.env.CHECKED_PLAN)){
             const typed=normalizeConfirmation(process.env.CONFIRMATION);
             if(typed.startsWith('RECOVER'))throw Error('Action dropdown is still "upgrade". Change Action to "recover" and paste the original checked plan hash into Checked plan');
             if(typed!=='UPGRADE ALL MAINNET GROUPS')throw Error('Type UPGRADE ALL MAINNET GROUPS');
@@ -97,7 +97,7 @@ jobs:
           for(const name of names)copyFileSync('deploy/mainnet/.icp/cache/artifacts/'+name,dest+'/'+name);
           JS
       - name: Automatically check the complete release on this exact source revision
-        if: inputs.action == 'upgrade' && inputs.scope == 'full_backend' && inputs.checked_plan == ''
+        if: inputs.action == 'upgrade' && (inputs.scope == 'full_backend' || inputs.scope == 'club_migration') && inputs.checked_plan == ''
         working-directory: frontend
         run: |
           npx --yes tsx@4 scripts/upgrade-all-groups.ts check "$SCOPE" "$RUNNER_TEMP/all-group-wasm" "$RUNNER_TEMP/all-group.pem" "$RUNNER_TEMP/all-group-report"

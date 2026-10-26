@@ -5,12 +5,13 @@ Workflow: **Upgrade backend (all mainnet groups)** (`upgrade-all-groups.yml`) in
 ## Run it
 1. Let the complete source sync to hybrid. Open Actions and select the workflow on `main`.
 2. Leave action **upgrade** and scope **full_backend** selected; leave `checked_plan` empty.
-3. Enter **UPGRADE ALL MAINNET GROUPS** and complete the existing protected environment approval. The same run automatically checks the exact source/inventory/artifacts, binds its plan hash, then upgrades and verifies all targets. No separate check run or feature-by-feature runs are required. Optional action **check** remains read-only. Narrow scopes still require a separately checked hash on the same source revision.
+3. Enter **UPGRADE ALL MAINNET GROUPS** and complete the existing protected environment approval. The same run automatically checks the exact source/inventory/artifacts, binds its plan hash, then upgrades and verifies all targets. No separate check run or feature-by-feature runs are required. Optional action **check** remains read-only. The **club_migration** scope also performs same-source automatic preflight; other narrow scopes still require a separately checked hash on the same source revision.
 4. A successful upgrade verifies all selected modules, preserves original settings/wiring/photo keys, refreshes the routing evidence and publishes its exact files through a non-force branch update. Then run **Deploy web app (ICP frontend canister)** after that snapshot commit, and test signed-in flows in both groups.
 
 | Scope | Services per group | Shared once |
 |---|---|---|
 | full_backend (default) | all 13 group services, including PII, timers, insights and points | identity_access, placement_registry, migration_coordinator, secret_workload_identity, shard_router |
+| club_migration | club_domain only, including closed registered groups | — |
 | app_admin | notification_queue | identity_access |
 | team_invites | club_domain, mini_league_domain | — |
 | messaging | messaging_domain | — |
@@ -23,6 +24,8 @@ Workflow: **Upgrade backend (all mainnet groups)** (`upgrade-all-groups.yml`) in
 The complete scope includes shared infrastructure, with router last and no legacy deploy/rewiring calls. Unknown mainnet mapping names, missing groups or mismatched inventories fail closed rather than silently skipping services. It never creates/reinstalls, funds, changes authorities, moves clubs, enables admission/placements, activates Resend or releases permanent discovery. Media metadata index backfill finishes before publication; a separate complete module manifest is published at `deploy/mainnet/backend-release.json` alongside routing evidence. Feature activations remain separate.
 
 ## Failure and resume
+For the approved migration-readiness service release, select **club_migration** instead of **full_backend**, leave the checked plan empty, and use the same confirmation. This upgrades only club_domain in original Group 1 and every registered group, including closed groups. It adds the account-claim methods without registering claims, sending emails, copying data, changing sign-ins/routing or opening groups. Each real migration still needs the owner's separate exact-club/group data and authentication approvals. New unregistered groups are not created by this release; their normal provisioning uses the updated club service source.
+
 - For the specific **Gallery authority inventory missing for g1** failure after module installation, use the fixed workflow on `main`, action **recover**, the same scope (**full_backend**), `checked_plan` **eac3e577bb4e5998cad15271ef868e50a623a6e4c5b2eb7b54843ad709940b5c**, and confirmation **RECOVER COMPLETED MAINNET RELEASE**. Complete the protected approval. Do not rerun the old failed job: it contains the old bug. Recovery reads the existing journal, requires every module's acknowledged completion and `modulesComplete`, preserves the original release/hash, and verifies modules/settings/wiring/keys twice. It never builds or installs modules. It finishes exact idempotent gallery authority setup, bounded index backfill and verified snapshot publication against the pinned repair source. Drift, pending steps, unknown installs or moved source branches still stop; no journal reset or bypass is allowed. Local checks do not certify the live journal is eligible; the protected run verifies that.
 - Upgrades are not atomic. A failed run may leave versions temporarily mixed; neither a green check nor a partly completed installation proves completion.
 - Durable receipts live on `all-group-upgrade-receipts`, in `all-group-upgrade.json`. Artifacts are a convenient copy, not the authority.

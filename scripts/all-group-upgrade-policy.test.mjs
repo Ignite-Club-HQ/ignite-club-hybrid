@@ -52,6 +52,19 @@ test('future Group 3 and Group 4 cannot be silently skipped',()=>{
   assert.throws(()=>planInventory(shared,f.provisions.slice(0,1),f.registry,'messaging',f.hashes));
   assert.throws(()=>planInventory(shared,f.provisions,{...f.registry,groups:f.registry.groups.slice(0,1),placements:f.registry.placements.slice(0,1)},'messaging',f.hashes));
 });
+test('migration readiness upgrades only the club service in every registered group, including closed groups',()=>{
+  const f=fixture(4);
+  f.registry.groups.forEach(g=>{g.enabled=false;g.admission_enabled=false;});
+  const plan=planInventory(shared,f.provisions,f.registry,'club_migration',f.hashes);
+  assert.deepEqual(SCOPES.club_migration,['club_domain']);
+  assert.deepEqual(plan.targets.map(t=>[t.groupId,t.name]),[['g1','club_domain'],['g2','club_domain'],['g3','club_domain'],['g4','club_domain']]);
+  assert.equal(plan.targets[0].canisterId,shared.club_domain);
+  assert.equal(plan.targets[1].canisterId,original.canisters.club_domain);
+});
+test('migration readiness refuses to omit a registered destination group',()=>{
+  const f=fixture(4);
+  assert.throws(()=>planInventory(shared,f.provisions.slice(0,1),f.registry,'club_migration',f.hashes),/inventory differ/);
+});
 test('complete release includes all 18 original and every future group service exactly once',()=>{
   const f=fixture(4),full=planInventory(shared,f.provisions,f.registry,'full_backend',f.hashes);
   assert.equal(full.targets.length,57);
