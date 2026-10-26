@@ -72,6 +72,8 @@ import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/
 import { loadScheduleFixtures, type FixtureSnapshot } from "@/live/scheduleFixtures";
 import { withReadDeadline } from "@/live/readDeadline";
 import { loadMemberSchedule, type MemberScheduleSnapshot } from "@/live/scheduleMembers";
+import { scheduleRefreshIssue } from "@/features/events/scheduleRefreshIssue";
+import { retryScheduleRefresh } from "@/features/events/retryScheduleRefresh";
 
 /** Derive the memberships shape the schedule filters need from the caller's
  * club_domain role grants + events_domain roster scope (live ICP path).
@@ -925,6 +927,7 @@ export default function EventsPage() {
   const isLoading = isIcpAuthBackend ? memberScheduleQuery.isLoading : legacyEventsQuery.isLoading;
   const isFetching = isIcpAuthBackend ? memberScheduleQuery.isFetching : legacyEventsQuery.isFetching;
   const eventsIsError = isIcpAuthBackend ? memberScheduleQuery.isError || (memberScheduleQuery.data?.failed.length ?? 0) > 0 : legacyEventsQuery.isError;
+  const refreshIssue = isIcpAuthBackend ? scheduleRefreshIssue(memberScheduleQuery.data?.failed ?? [], memberScheduleQuery.error) : undefined;
   const refetchEvents = () => isIcpAuthBackend ? memberScheduleQuery.refetch() : legacyEventsQuery.refetch();
 
   // --- Cold-offline fallback -------------------------------------------
@@ -1327,9 +1330,12 @@ export default function EventsPage() {
       <QueryErrorBanner
         hasError={isOnline && eventsIsError && !isFetching}
         onRetry={async () => {
-          await Promise.allSettled([refetchEvents(), queryClient.refetchQueries({ queryKey: ["user-memberships-for-events"] })]);
+          // Refresh access first. Parallel membership/event retries can change
+          // the event query key mid-read and cancel the retry the user requested.
+          await retryScheduleRefresh(refetchMemberships, () => queryClient.refetchQueries({ queryKey: isIcpAuthBackend ? ['events', 'icp-member-schedule', user?.id] : ['events'], type: 'active' }));
         }}
-        message="Couldn't load schedule. Tap to retry."
+        tone="neutral"
+        message={refreshIssue ?? "Couldn't load schedule. Tap to retry."}
       />
 
       {!isOnline && (

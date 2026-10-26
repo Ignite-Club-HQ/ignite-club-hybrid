@@ -14,7 +14,7 @@
 - Install via scripts/ensure-frontend-deps.mjs only: npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
 - Read nested AGENTS.md; frontend owns bounded disposable caches. Poll uses keyboardSafe.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
-- Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
+- Schedule: omission keeps; empty image/zero end clears; UTC months clamp. Retry access before events to avoid cancellation.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.
 - ICP pitch alerts use livePitchRecipients for club scope/staff/match duties; omit child names. Why: avoid wrong audiences and plaintext PII.
 - Releases: all groups/shared, router last; preserve keys/unknown locks. Recovery: original plan, acknowledged modules, two live sweeps, no installs, separate repair-source CAS. Why: never replay upgrades. Read scripts/AGENTS.md.
