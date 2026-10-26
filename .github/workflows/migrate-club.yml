@@ -49,7 +49,7 @@ jobs:
       - name: Install existing dependencies
         run: node scripts/ensure-frontend-deps.mjs
       - name: Test migration safety rules
-        run: node --test scripts/migrate-club-plan.test.mjs scripts/migrate-club-writers.test.mjs scripts/migrate-club-run.test.mjs scripts/migrate-club-claims.test.mjs scripts/migrate-club-members.test.mjs scripts/migrate-club-family.test.mjs scripts/migrate-club-messaging.test.mjs scripts/migrate-club-notifications.test.mjs scripts/migrate-club-media.test.mjs scripts/migrate-club-vault.test.mjs scripts/migrate-club-event-results.test.mjs scripts/migrate-club-children-writer.test.mjs
+        run: node --test scripts/migrate-club-plan.test.mjs scripts/migrate-club-writers.test.mjs scripts/migrate-club-run.test.mjs scripts/migrate-club-claims.test.mjs scripts/migrate-club-members.test.mjs scripts/migrate-club-family.test.mjs scripts/migrate-club-messaging.test.mjs scripts/migrate-club-notifications.test.mjs scripts/migrate-club-media.test.mjs scripts/migrate-club-vault.test.mjs scripts/migrate-club-event-results.test.mjs scripts/migrate-club-children-writer.test.mjs scripts/migrate-club-bytes.test.mjs
       - name: Run
         env:
           ACTION: ${{ inputs.action }}
