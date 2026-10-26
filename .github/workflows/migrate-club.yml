@@ -1,0 +1,57 @@
+name: Migrate club from Supabase to canisters
+# Moves ONE whole club into the chosen group. check is read-only and prints the
+# plan hash; migrate/recover need that hash plus the typed confirmation. The
+# Supabase copy is never modified. Needs secret SUPABASE_SERVICE_ROLE_KEY in the
+# group-2-admin-controls environment.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        type: choice
+        required: true
+        default: check
+        options: [check, migrate, recover]
+      club_id:
+        description: Club ID (from the Migrate club admin page)
+        required: true
+      group_id:
+        description: Target group, e.g. g2
+        required: true
+      plan:
+        description: Plan hash from the check run (migrate/recover only)
+        required: false
+        default: ''
+      confirmation:
+        description: "MIGRATE CLUB TO CANISTERS (migrate) or RECOVER CLUB MIGRATION (recover)"
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: group-2-admin-controls
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Install existing dependencies
+        run: node scripts/ensure-frontend-deps.mjs
+      - name: Test migration safety rules
+        run: node --test scripts/migrate-club-plan.test.mjs
+      - name: Run
+        env:
+          ACTION: ${{ inputs.action }}
+          CLUB_ID: ${{ inputs.club_id }}
+          GROUP_ID: ${{ inputs.group_id }}
+          PLAN: ${{ inputs.plan }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          SUPABASE_URL: ${{ vars.IGNITE_LIVE_SUPABASE_URL || 'https://cdrxmelhysdqrccttsjg.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NODE_PATH: ${{ github.workspace }}/frontend/node_modules
+        run: node scripts/migrate-club.mjs
