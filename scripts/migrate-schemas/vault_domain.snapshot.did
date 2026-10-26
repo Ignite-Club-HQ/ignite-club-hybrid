@@ -1,0 +1,546 @@
+type VaultSnapshot = 
+ record {
+   files: vec VaultFile;
+   folders: vec VaultFolder;
+ };
+type VaultFolder = 
+ record {
+   club: text;
+   color: opt text;
+   competition_id: opt text;
+   created_at_ms: nat64;
+   created_by: principal;
+   deleted_at_ms: opt nat64;
+   deleted_by: opt principal;
+   description: opt text;
+   id: text;
+   mini_league_id: opt text;
+   name: text;
+   parent_id: opt text;
+   restricted_roles: vec text;
+   sort_order: nat32;
+   team: opt text;
+ };
+type VaultFileWithFolder = 
+ record {
+   file: VaultFile;
+   folder_name: opt text;
+   folder_path: vec text;
+ };
+type VaultFile = 
+ record {
+   blob_ref: opt BlobRef;
+   club: text;
+   competition_id: opt text;
+   created_at_ms: nat64;
+   deleted_at_ms: opt nat64;
+   deleted_by: opt principal;
+   file_url: text;
+   folder_id: text;
+   id: text;
+   is_external_link: bool;
+   mime: text;
+   mini_league_id: opt text;
+   name: text;
+   size: nat64;
+   team: opt text;
+   uploaded_by: principal;
+ };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Reference = 
+ record {
+   content_hash: opt text;
+   path: opt text;
+   resource_id: text;
+   store: opt text;
+   url: text;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
+type PinnedVault = 
+ record {
+   chat_id: text;
+   chat_type: text;
+   club: text;
+   enabled: bool;
+   root_id: opt text;
+   root_scope: opt text;
+   set_by: principal;
+   updated_at_ms: nat64;
+   vault_file_id: opt text;
+   vault_folder_id: opt text;
+ };
+type Page = 
+ record {
+   next: opt nat;
+   references: vec Reference;
+   revision: nat;
+   scanned: nat;
+ };
+type Main = 
+ service {
+   acknowledge_file_upload: (id: text) -> (variant {
+                                             Err: text;
+                                             Ok;
+                                           });
+   begin_file_cleanup: (id: text) -> (variant {
+                                        Err: text;
+                                        Ok: VaultFile;
+                                      });
+   begin_file_upload: (file: VaultFile) -> (variant {
+                                              Err: text;
+                                              Ok;
+                                            });
+   clear_pinned_vault: (chat_type: text, chat_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   create_backup: (backup_label: text) -> (variant {
+                                             Err: text;
+                                             Ok: Backup;
+                                           });
+   create_backup_summary: (backup_label: text) ->
+    (variant {
+       Err: text;
+       Ok: BackupSummary;
+     });
+   create_folder: (id: text, club: text, team: opt text, parent_id: opt text,
+    name: text, restricted_roles: vec text, mini_league_id: opt text,
+    competition_id: opt text, sort_order: nat32, description: opt text,
+    color: opt text) -> (variant {
+                           Err: text;
+                           Ok: VaultFolder;
+                         });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
+   delete_backup: (id: text) -> (variant {
+                                   Err: text;
+                                   Ok;
+                                 });
+   delete_file_permanent: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
+   delete_folder: (id: text) -> (variant {
+                                   Err: text;
+                                   Ok: VaultFolder;
+                                 });
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
+   get_backup: (id: text) -> (variant {
+                                Err: text;
+                                Ok: Backup;
+                              }) query;
+   get_competition_folder: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt VaultFolder;
+     });
+   get_file: (id: text) -> (variant {
+                              Err: text;
+                              Ok: opt VaultFile;
+                            }) query;
+   get_folder: (id: text) -> (variant {
+                                Err: text;
+                                Ok: opt VaultFolder;
+                              }) query;
+   get_gallery_copy: (source: text) ->
+    (variant {
+       Err: text;
+       Ok: opt VaultFile;
+     });
+   get_pinned_vault: (chat_type: text, chat_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PinnedVault;
+     }) query;
+   grant_role: (user: principal, role: text, club_id: opt text, team_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok;
+                  });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
+   list_backups: () -> (variant {
+                          Err: text;
+                          Ok: vec BackupSummary;
+                        }) query;
+   list_club_files: (club: text, team: opt text, mini_league_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     }) query;
+   list_club_files_with_folder: (club: text, team: opt text, mini_league_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: vec VaultFileWithFolder;
+                  }) query;
+   list_competition_files_with_folder: (folder_id: text, competition_id:
+    text) -> (variant {
+                Err: text;
+                Ok: vec VaultFileWithFolder;
+              });
+   list_competition_folders: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFolder;
+     });
+   list_files: (folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     }) query;
+   list_files_with_folder: (folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     }) query;
+   list_folders: (club: text, team: opt text, mini_league_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFolder;
+     }) query;
+   list_trashed_files: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     }) query;
+   list_trashed_files_with_folder: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     }) query;
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
+   move_file: (id: text, folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: VaultFile;
+     });
+   move_file_to_root: (id: text, team: opt text) ->
+    (variant {
+       Err: text;
+       Ok: VaultFile;
+     });
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
+   purge_my_data: () -> (variant {
+                           Err: text;
+                           Ok: nat32;
+                         });
+   read_account_get_backup: (id: text) -> (variant {
+                                             Err: text;
+                                             Ok: Backup;
+                                           });
+   read_account_get_file: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt VaultFile;
+     });
+   read_account_get_folder: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt VaultFolder;
+     });
+   read_account_get_pinned_vault: (chat_type: text, chat_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PinnedVault;
+     });
+   read_account_list_backups: () ->
+    (variant {
+       Err: text;
+       Ok: vec BackupSummary;
+     });
+   read_account_list_club_files: (club: text, team: opt text, mini_league_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: vec VaultFile;
+                  });
+   read_account_list_club_files_with_folder: (club: text, team: opt text,
+    mini_league_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     });
+   read_account_list_files: (folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     });
+   read_account_list_files_with_folder: (folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     });
+   read_account_list_folders: (club: text, team: opt text, mini_league_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: vec VaultFolder;
+                  });
+   read_account_list_trashed_files: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     });
+   read_account_list_trashed_files_with_folder: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     });
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   read_backup_page: (id: text, offset: nat, expected: opt nat) ->
+    (variant {
+       Err: text;
+       Ok: BackupPage;
+     });
+   read_cleanup_page: (after: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             items: vec record {
+                          text;
+                          CleanupRecord;
+                        };
+             next: opt text;
+           };
+     });
+   read_club_media_references: (club: text, offset: nat, expected:
+    opt nat) -> (variant {
+                   Err: text;
+                   Ok: Page;
+                 });
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
+   read_my_upload_intent: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok: Intent;
+                                         });
+   read_my_upload_page: (club: text, after: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             ids: vec text;
+             next: opt text;
+           };
+     });
+   read_resource_club: (kind: text, id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     });
+   read_vault_file_page: (club: text, team: opt text, league: opt text,
+    competition: opt text, folder: opt text, trash: bool, offset: nat,
+    expected: opt nat) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          items: vec VaultFileWithFolder;
+          next: opt nat;
+          revision: nat;
+        };
+     });
+   reconcile_erased_file: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
+   recover_file_upload: (id: text) -> (variant {
+                                         Err: text;
+                                         Ok: VaultFile;
+                                       });
+   register_file: (id: text, folder_id: text, club: text, team: opt text,
+    name: text, file_url: text, size: nat64, mime: text, is_external_link:
+    bool, blob_ref: opt BlobRef, mini_league_id: opt text, competition_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: VaultFile;
+                  });
+   register_gallery_copy: (source: text, name: text, file_url: text, size:
+    nat64, mime: text, blob_ref: BlobRef) ->
+    (variant {
+       Err: text;
+       Ok: VaultFile;
+     });
+   rekey_principal: (old: principal, new_principal: principal, dry_run:
+    bool) -> (variant {
+                err: text;
+                ok: nat;
+              });
+   rename_file: (id: text, name: text) ->
+    (variant {
+       Err: text;
+       Ok: VaultFile;
+     });
+   restore_backup: (id: text) -> (variant {
+                                    Err: text;
+                                    Ok: nat;
+                                  });
+   restore_backup_page: (id: text, offset: nat) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             complete: bool;
+             next: nat;
+             restored: nat;
+             skipped: nat;
+           };
+     });
+   restore_file: (id: text) -> (variant {
+                                  Err: text;
+                                  Ok: VaultFile;
+                                });
+   resume_file_cleanup: (id: text) -> (variant {
+                                         Err: text;
+                                         Ok;
+                                       });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   set_club_domain_canister: (canister: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_competition_domain_canister: (canister: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_gallery_media_authority: (id: principal) -> (variant {
+                                                      Err: text;
+                                                      Ok;
+                                                    });
+   set_messaging_domain_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_pinned_vault: (chat_type: text, chat_id: text, club: text,
+    vault_file_id: opt text, vault_folder_id: opt text, root_scope: opt text,
+    root_id: opt text, enabled: bool) ->
+    (variant {
+       Err: text;
+       Ok: PinnedVault;
+     });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_vault_stores: (ids: vec principal) -> (variant {
+                                                Err: text;
+                                                Ok;
+                                              });
+   sweep_vault_lifecycle: () -> (variant {
+                                   Err: text;
+                                   Ok;
+                                 });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   trash_file: (id: text) -> (variant {
+                                Err: text;
+                                Ok: VaultFile;
+                              });
+   trash_gallery_copy: (user: principal, source: text, club: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
+   update_folder: (id: text, name: text, restricted_roles: vec text,
+    sort_order: nat32, description: opt text, color: opt text) ->
+    (variant {
+       Err: text;
+       Ok: VaultFolder;
+     });
+   zz_migrate_schema: (VaultSnapshot) -> () query;
+ };
+type Intent = 
+ record {
+   file: VaultFile;
+   ready: bool;
+ };
+type CleanupRecord = 
+ record {
+   blob_ref: BlobRef;
+   club: text;
+   competition: opt text;
+   state: variant {
+            complete;
+            erased;
+            pending;
+          };
+   team: opt text;
+ };
+type BlobRef = 
+ record {
+   canister: text;
+   content_hash: text;
+   path: text;
+ };
+type BackupSummary = 
+ record {
+   backup_label: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   file_count: nat;
+   folder_count: nat;
+   id: text;
+ };
+type BackupPage = 
+ record {
+   files: vec VaultFile;
+   folders: vec VaultFolder;
+   next: opt nat;
+   offset: nat;
+   revision: nat;
+   summary: BackupSummary;
+ };
+type Backup = 
+ record {
+   backup_label: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   files: vec VaultFile;
+   folders: vec VaultFolder;
+   id: text;
+ };
+service : (governorInit: principal) -> Main

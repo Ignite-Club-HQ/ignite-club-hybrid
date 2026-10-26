@@ -13,6 +13,10 @@
 // leave member-owned arrays empty; the claim attaches people afterwards.
 
 import { buildPointsSnapshot, buildClaimedRsvps } from './migrate-club-members.mjs';
+import { buildChatPages } from './migrate-club-messaging.mjs';
+import { buildNotificationSnapshot } from './migrate-club-notifications.mjs';
+import { buildMediaSnapshot } from './migrate-club-media.mjs';
+import { buildVaultSnapshot } from './migrate-club-vault.mjs';
 const ms = (iso) => (iso ? BigInt(Date.parse(iso)) : null);
 const opt = (v) => (v === null || v === undefined || v === '' ? [] : [v]);
 const optMs = (iso) => opt(ms(iso));
@@ -189,6 +193,26 @@ async function loadSnapshot(ctx, domain, snap, lock) {
   if ('Err' in r) throw Error(`${domain} import refused: ${r.Err}`);
 }
 
+/** Fence the club on messaging_domain, then load ChatPage pages in order (idempotent per message id). */
+async function loadChatPages(ctx, pages) {
+  const { IDL } = ctx.require('@icp-sdk/core/candid');
+  const { Actor } = ctx.require('@icp-sdk/core/agent');
+  const canisterId = ctx.target.canisters.messaging_domain;
+  if (!canisterId) throw Error('Destination messaging_domain missing');
+  const type = await snapshotType(ctx.require, ctx.schemaFile('messaging_domain'));
+  const actor = Actor.createActor(({ IDL }) => IDL.Service({
+    set_transfer_fence: IDL.Func([IDL.Text, IDL.Bool], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
+    import_club_snapshot_page: IDL.Func([IDL.Text, IDL.Vec(IDL.Nat8)], [IDL.Variant({ Ok: IDL.Nat, Err: IDL.Text })], []),
+  }), { agent: ctx.agent, canisterId });
+  const f = await actor.set_transfer_fence(ctx.clubId, true);
+  if ('Err' in f) throw Error(`messaging_domain lock refused: ${f.Err}`);
+  for (const page of pages) {
+    const blob = new Uint8Array(IDL.encode([type], [page]));
+    const r = await actor.import_club_snapshot_page(ctx.clubId, blob);
+    if ('Err' in r) throw Error(`messaging_domain import refused: ${r.Err}`);
+  }
+}
+
 /**
  * Writers keyed by step id. `ctx` = { require, agent, target, clubId, creator, rows(table, col), rowsIn(table, col, ids), schemaFile(domain) }.
  * `creator` is the deploy identity's principal: Supabase authors have no ICP identity until they claim.
@@ -231,5 +255,39 @@ export const WRITERS = {
     const snap = buildLeagueSnapshot({ clubId: ctx.clubId, leagues, sessions, groups, creator: ctx.creator });
     await loadSnapshot(ctx, 'mini_league_domain', snap, 'fence');
     return { records: snap.leagues.length + snap.sessions.length + snap.groups.length };
+  },
+  async messaging(ctx) {
+    const [teams, clubMessages, chatGroups, clubAdminConversations] = await Promise.all([
+      ctx.rows('teams', 'club_id'), ctx.rows('club_messages', 'club_id'),
+      ctx.rows('chat_groups', 'club_id'), ctx.rows('club_admin_conversations', 'club_id'),
+    ]);
+    const teamIds = teams.map((t) => t.id);
+    const [teamMessages, polls, groupMessages, clubAdminMessages] = await Promise.all([
+      ctx.rowsIn('team_messages', 'team_id', teamIds), ctx.rowsIn('polls', 'chat_id', teamIds),
+      ctx.rowsIn('group_messages', 'group_id', chatGroups.map((g) => g.id)),
+      ctx.rowsIn('club_admin_messages', 'conversation_id', clubAdminConversations.map((c) => c.id)),
+    ]);
+    const pages = buildChatPages({ clubId: ctx.clubId, teams: teams.filter((t) => !t.deleted_at), teamMessages, clubMessages,
+      chatGroups, groupMessages, clubAdminConversations, clubAdminMessages, polls, claims: ctx.claims, creator: ctx.creator });
+    await loadChatPages(ctx, pages);
+    return { records: pages.reduce((s, p) => s + p.conversations.length + p.messages.length, 0) };
+  },
+  async notifications(ctx) {
+    const [notifications, scheduledMessages] = await Promise.all([ctx.rows('notifications', 'club_id'), ctx.rows('scheduled_messages', 'club_id')]);
+    const snap = buildNotificationSnapshot({ clubId: ctx.clubId, notifications, scheduledMessages, claims: ctx.claims });
+    await loadSnapshot(ctx, 'notification_queue', snap, 'fence');
+    return { records: snap.items.length + snap.scheduled.length };
+  },
+  async media(ctx) {
+    const [photos, albums] = await Promise.all([ctx.rows('photos', 'club_id'), ctx.rows('photo_albums', 'club_id')]);
+    const snap = buildMediaSnapshot({ clubId: ctx.clubId, photos, albums, claims: ctx.claims });
+    await loadSnapshot(ctx, 'media_metadata', snap, 'fence');
+    return { records: snap.assets.length };
+  },
+  async vault(ctx) {
+    const [folders, files] = await Promise.all([ctx.rows('team_folders', 'club_id'), ctx.rows('vault_files', 'club_id')]);
+    const snap = buildVaultSnapshot({ clubId: ctx.clubId, folders, files, claims: ctx.claims, creator: ctx.creator });
+    await loadSnapshot(ctx, 'vault_domain', snap, 'fence');
+    return { records: snap.folders.length + snap.files.length };
   },
 };

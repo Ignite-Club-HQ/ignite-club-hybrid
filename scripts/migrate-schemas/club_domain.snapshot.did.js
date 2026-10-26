@@ -306,6 +306,11 @@ export const idlFactory = ({ IDL }) => {
   const Cell = IDL.Record({ 'value' : Value, 'name' : IDL.Text });
   const Row = IDL.Vec(Cell);
   const Result__2 = IDL.Record({ 'hasMore' : IDL.Bool, 'rows' : IDL.Vec(Row) });
+  const Claimed = IDL.Record({
+    'principal' : IDL.Principal,
+    'claimed_ms' : IDL.Nat64,
+    'source_user' : IDL.Text,
+  });
   const Team = IDL.Record({ 'id' : IDL.Text, 'club' : IDL.Text });
   const Guardian = IDL.Record({ 'child' : IDL.Text, 'user' : IDL.Principal });
   const Exclusion = IDL.Record({ 'club' : IDL.Text, 'user' : IDL.Principal });
@@ -661,6 +666,12 @@ export const idlFactory = ({ IDL }) => {
     'scanned' : IDL.Nat,
     'edges' : IDL.Vec(Edge),
     'revision' : IDL.Nat,
+  });
+  const Registration = IDL.Record({
+    'email_hint' : IDL.Text,
+    'source_user' : IDL.Text,
+    'expires_ms' : IDL.Nat64,
+    'token_hash' : IDL.Text,
   });
   const NewsAudienceRecipient = IDL.Record({
     'news_id' : IDL.Text,
@@ -1103,6 +1114,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'execute' : IDL.Func([IDL.Text], [Result__2], ['query']),
+    'export_account_claims' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Nat],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Claimed), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'export_acl' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : Config, 'Err' : IDL.Text })],
@@ -2418,6 +2434,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'redeem_account_claim' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'club_id' : IDL.Text }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'redeem_club_storage_promo_code' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
@@ -2426,6 +2452,11 @@ export const idlFactory = ({ IDL }) => {
     'redeem_team_promo_code' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
+        [],
+      ),
+    'register_account_claims' : IDL.Func(
+        [IDL.Text, IDL.Vec(Registration)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'register_media_quota_store' : IDL.Func(

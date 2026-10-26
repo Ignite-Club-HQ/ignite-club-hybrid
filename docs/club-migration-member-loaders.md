@@ -19,6 +19,19 @@ records, destination canisters, account claims, emails or routing were changed.
   primary flag and timestamp are retained separately, not silently discarded.
   The SDK pins the supplied public key to the production destination PII canister
   and immutable `ignite-pii-v1` context; no encryption key is stored in canisters.
+- Messaging loader (`migrate-club-messaging.mjs`): team/club/group/club-admin
+  conversations with canonical ids (team chat id = team id, club chat id = club
+  id), ordered per-conversation sequences, replies, image attachments and
+  system-message attribution to the deploy identity. Imported through the
+  canister's paged import (500 messages per page, idempotent per message id).
+- Notifications loader (`migrate-club-notifications.mjs`): historical
+  notifications import as delivered receipts with stable idempotency keys;
+  pending scheduled messages keep send time, recurrence and status variants.
+- Media and Vault loaders (`migrate-club-media.mjs`, `migrate-club-vault.mjs`):
+  photo/folder/file metadata with scoping, captions and attribution. Bytes are
+  NOT copied: storage_path/file_url keep pointing at Supabase and blob_ref
+  stays empty until the separate copy-and-encrypt job moves bytes into the
+  group's blob store.
 
 ## Family preparation boundary
 The new helper accepts local input arrays only. It neither fetches source data nor
@@ -42,12 +55,18 @@ create membership or grant platform/competition administrator roles.
 - Mini-league RSVP subjects and existing RSVP award flags: the current snapshot
   does not preserve their complete semantics, so the converter refuses rather
   than enabling duplicate awards or silently omitting records.
+- Polls and photo albums: votes and album names/covers have no field in the
+  destination snapshots, so clubs carrying them refuse rather than lose data.
+- Direct messages: account-to-account, not club-owned; excluded from the club
+  migration entirely.
 - Missing overall writers still refuse execution before any live data write.
   Claim emails remain a separately approved auth action; routing remains blocked.
 
 ## Not completed or verified live
-Live child PII/membership loading, full event duties/results/award receipts, chats,
-notifications, media/Vault, stable source inventory and durable remote recovery,
-destination reconciliation and separately approved sign-in cutover remain.
+Live child PII/membership loading, full event duties/results/award receipts,
+poll/album preservation contracts, media/Vault byte copy-and-encrypt, stable
+source inventory and durable remote recovery, destination reconciliation and
+separately approved sign-in cutover remain. The children step has no writer,
+so the missing-writer gate still refuses every live data write.
 The adapter tests exercise encoding, fencing and acknowledgement with fixtures;
 they do not establish live Supabase consistency or Internet Identity acceptance.
