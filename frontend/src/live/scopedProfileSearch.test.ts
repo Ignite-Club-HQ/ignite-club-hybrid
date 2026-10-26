@@ -26,7 +26,7 @@ describe("scoped decrypted person matching", () => {
     mocks.read.mockResolvedValue([{ ...row, display_name: "pii-display-name:v1:authority:subject" }]);
     mocks.hydrate.mockResolvedValue([row]);
     expect((await searchScopedProfileCandidates(ctx, "club-a", [subject], "CRANWELL"))[0]?.id).toBe(subject);
-    expect(mocks.hydrate).toHaveBeenCalledWith(ctx, expect.any(Array));
+    expect(mocks.hydrate).toHaveBeenCalledWith(ctx, expect.any(Array), undefined);
   });
   it("cannot disclose candidates after a membership refusal", async () => {
     mocks.read.mockRejectedValue(new Error("Club membership changed"));

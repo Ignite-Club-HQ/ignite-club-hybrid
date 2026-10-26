@@ -21,6 +21,10 @@ export function createIdentityAccessClient(actor: _SERVICE) {
     searchProfiles: (query: string, limit: number) => call(() => actor.search_profiles(query, limit)),
     searchGuardianProfiles: (authority: Parameters<_SERVICE['search_guardian_profiles']>[0], childId: string, query: string, limit: number) =>
       call(() => actor.search_guardian_profiles(authority, childId, query, limit)),
+    readGuardianProfileCandidates: (authority: Parameters<_SERVICE['read_guardian_profile_candidates']>[0], childId: string, cursor: Parameters<_SERVICE['read_guardian_profile_candidates']>[2]) =>
+      call(() => actor.read_guardian_profile_candidates(authority, childId, cursor)),
+    readGuardianProfiles: (authority: Parameters<_SERVICE['read_guardian_profiles']>[0], childId: string, subjects: Parameters<_SERVICE['read_guardian_profiles']>[2], revision: bigint) =>
+      call(() => actor.read_guardian_profiles(authority, childId, subjects, revision)),
     readClubProfiles: (authority: Parameters<_SERVICE['read_club_profiles']>[0], clubId: string, subjects: Parameters<_SERVICE['read_club_profiles']>[2]) =>
       call(() => actor.read_club_profiles(authority, clubId, subjects)),
     getProfilesByIds: (ids: string[]) => actor.get_profiles_by_ids(ids),

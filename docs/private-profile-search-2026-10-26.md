@@ -55,6 +55,45 @@ and other details must remain viewable in the app.
 
 ## Not complete / do not enable a privacy cutover
 
+### Coordinated search connections — 26 October, 21:33 request
+
+- Connected team member (single/bulk/second-parent), club-admin,
+  mini-league parent and competition organizer-club pickers to the shared
+  exact-club search gateway. Query cancellation reaches scoped search and
+  search keys include account/club/relationship where available. The second
+  league-parent dialog now dispatches ICP search instead of calling Supabase.
+- Explicit loopback-only rehearsal selects the encrypted scoped reader;
+  existing production search remains an explicit transitional path. A refused
+  scoped request never falls back to unrestricted search. Hosted builds cannot
+  activate this rehearsal flag. No live privacy cutover was performed.
+- Added identity `read_guardian_profile_candidates` and
+  `read_guardian_profiles`, generated both contract copies, and connected the
+  existing other-parent screen through bounded device-side matching. Each
+  stable B-tree range reads at most 100 profiles and emits at most 25 candidates;
+  no full profile materialization or new readable name index. Memory 25 pins
+  account/profile writes. Cursors bind the viewer/aliases/exact child/source/
+  configuration/revision and expiry; every page/readback repeats live guardian
+  verification. The frontend rechecks original bindings after decryption and
+  all retained matches after the final page; cancellation/20-second read waits
+  and a 100-page work limit refuse incomplete traversal.
+- App-admin assignment and DM restriction search now use the existing
+  service-authorized admin directory, not ordinary `search_profiles`.
+  Administrative powers remain separate from the sole ordinary guardian
+  full-search screen.
+- Real disposable identity/router/two-club tests verify guardian/non-guardian/
+  anonymous/foreign-source behavior, 100-scan/25-row bounds, ordered pages,
+  child-bound cursors, profile-revision drift and removed-guardian readback,
+  alongside the previous club audience/outage/upgrade checks. These are actual
+  service calls, not browser booleans. Rust storage tests verify a 130-profile
+  directory partitions 100/30 and mutation revision updates.
+
+The search connections are built, but encrypted guardian-wide key access is
+NOT complete: existing PII owner/explicit/club grants do not authorize a
+verified guardian to decrypt every candidate's adult name. Original-PII live
+resolution, family/competition/league audiences, real signed-in encrypted
+search acceptance and approved conversion/release remain blocked. No broad
+reader grants, canister deployment or live names/emails conversion occurred.
+
 ### Completion batch: 26 October, strict saves and whole-search guards
 
 - Owner name preparation and optional contact-email saving now share strict

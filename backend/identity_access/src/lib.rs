@@ -80,6 +80,9 @@ const MEM_DIRECTORY_UPDATES:u8=21;
 const MEM_DIRECTORY_WORKER:u8=22;
 const MEM_DIRECTORY_SESSIONS:u8=23;
 const MEM_DIRECTORY_CONFIG:u8=24;
+// Additive traversal revision. Any account/link/profile write invalidates
+// guardian candidate continuations; no copied name index or new key material.
+const MEM_PROFILE_SEARCH_REVISION:u8=25;
 // Stable B-tree rows grow independently of heap snapshots. Reserve a conservative
 // 8 KiB per account (including eight denial rows) within 32 GiB stable memory.
 const MAX_ACCOUNTS: usize = (32u64 * 1024 * 1024 * 1024 / 8192) as usize;
@@ -193,6 +196,13 @@ pub struct ProfileSearchResult {
     pub principal: Principal,
     pub display_name: String,
     pub avatar_ref: Option<String>,
+}
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct GuardianProfilePage {
+    pub revision: u64,
+    pub rows: Vec<ProfileSearchResult>,
+    pub scanned: u16,
+    pub next: Option<guardian_search::Cursor>,
 }
 /// A Pro entitlement granted to a principal from an IAP (App Store) receipt
 /// or a governor/verifier write. `transaction_id` is the Apple transaction
@@ -476,6 +486,7 @@ thread_local! {
         RefCell::new(StableBTreeMap::init(memory(MEM_PRINCIPAL_INDEX)));
     static PROFILES: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_PROFILES)));
+    static PROFILE_SEARCH_REVISION: RefCell<StableCell<u64, Memory>> = RefCell::new(StableCell::init(memory(MEM_PROFILE_SEARCH_REVISION), 0));
     static ENTITLEMENTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
         RefCell::new(StableBTreeMap::init(memory(MEM_ENTITLEMENTS)));
     static LINK_LIFECYCLE: RefCell<StableCell<Vec<u8>, Memory>> =
@@ -1400,9 +1411,11 @@ fn get_account(id: &str) -> Option<Account> {
     ACCOUNTS.with(|m| m.borrow().get(&id.to_string())).map(|b| decode(&b))
 }
 fn put_account(account: &Account) {
+    bump_profile_search_revision();
     ACCOUNTS.with(|m| m.borrow_mut().insert(account.id.clone(), encode(account)));
 }
 fn remove_account(id: &str) -> Option<Account> {
+    bump_profile_search_revision();
     ACCOUNTS.with(|m| m.borrow_mut().remove(&id.to_string())).map(|b| decode(&b))
 }
 fn account_count() -> u64 {
@@ -1424,6 +1437,7 @@ fn get_profile_entry(account_id: &str) -> Option<Profile> {
     PROFILES.with(|m| m.borrow().get(&account_id.to_string())).map(|b| decode(&b))
 }
 fn put_profile_entry(profile: &Profile) {
+    bump_profile_search_revision();
     PROFILES.with(|m| m.borrow_mut().insert(profile.account_id.clone(), encode(profile)));
 }
 /// The caller's profile, or a blank default (not yet persisted) when none
@@ -1441,10 +1455,91 @@ fn get_or_init_profile(account_id: &str) -> Profile {
     })
 }
 fn remove_profile_entry(account_id: &str) {
+    bump_profile_search_revision();
     PROFILES.with(|m| m.borrow_mut().remove(&account_id.to_string()));
 }
 fn all_profiles() -> Vec<Profile> {
     PROFILES.with(|m| m.borrow().iter().map(|e| decode(&e.value())).collect())
+}
+fn profile_search_revision() -> u64 { PROFILE_SEARCH_REVISION.with(|cell| *cell.borrow().get()) }
+fn bump_profile_search_revision() {
+    PROFILE_SEARCH_REVISION.with(|cell| { let mut value=cell.borrow_mut(); let next=value.get().checked_add(1).expect("Profile revision exhausted"); value.set(next); });
+}
+fn bounded_guardian_profile_rows(after: Option<String>) -> Vec<Profile> {
+    PROFILES.with(|store| {
+        let store=store.borrow();
+        let bounds=after.map(|key|(std::ops::Bound::Excluded(key),std::ops::Bound::Unbounded))
+            .unwrap_or((std::ops::Bound::Unbounded,std::ops::Bound::Unbounded));
+        store.range(bounds).take(guardian_search::SCAN_LIMIT).map(|entry|decode(&entry.value())).collect()
+    })
+}
+fn guardian_search_binding(caller: Principal, viewer: &membership_private_lookup::Viewer, authority: Principal, child: &str, config: &membership_runtime::Config) -> Vec<u8> {
+    // Encode configuration fields only (worker progress is not a repin).
+    Sha256::digest(encode(&(caller, &viewer.account, viewer.version, &viewer.aliases, authority, child,
+        &config.binding, config.generation, &config.inventory_digest, &config.sources, config.enabled, &config.lifecycle, &config.release))).to_vec()
+}
+async fn verify_guardian_search(caller: Principal, authority: Principal, child: &str, viewer: &membership_private_lookup::Viewer, config: &membership_runtime::Config) -> Outcome<()> {
+    let reply=ic_cdk::call::Call::bounded_wait(authority,"read_has_child_guardian")
+        .with_args(&(caller,child.to_string())).await.map_err(|_|"Guardian verification unavailable")?;
+    let guardian: bool=reply.candid().map_err(|_|"Invalid guardian verification")?;
+    guardian_search::permit_disclosure(guardian,membership_lookup_viewer(caller)?==*viewer,config.same_configuration(&directory_config()?))
+}
+
+/// Exact-child bounded directory traversal for device-side encrypted matching.
+/// Rehearsal only until the PII guardian audience and release acceptance pass.
+#[ic_cdk::update]
+async fn read_guardian_profile_candidates(authority: Principal, child: String, cursor: Option<guardian_search::Cursor>) -> Outcome<GuardianProfilePage> {
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1") { return Err("Private guardian search is not released".into()); }
+    let caller=ic_cdk::api::msg_caller();
+    let viewer=membership_lookup_viewer(caller)?;
+    let config=directory_config()?;
+    guardian_search::validate_scope(authority,&config.sources.iter().map(|(_,p)|*p).collect::<Vec<_>>(),&child)?;
+    let binding=guardian_search_binding(caller,&viewer,authority,&child,&config);
+    let revision=profile_search_revision();
+    if let Some(ref c)=cursor { guardian_search::validate_cursor(c,revision,&binding,ic_cdk::api::time())?; }
+    verify_guardian_search(caller,authority,&child,&viewer,&config).await?;
+    if profile_search_revision()!=revision { return Err("Guardian directory changed".into()); }
+    let after=cursor.as_ref().map(|c|c.after.clone());
+    let profiles=bounded_guardian_profile_rows(after);
+    let mut scanned=0u16; let mut rows=Vec::new(); let mut last=None;
+    for profile in profiles {
+        scanned+=1; last=Some(profile.account_id.clone());
+        let account=match get_account(&profile.account_id){Some(a)=>a,None=>continue};
+        let principal=match account.principals.iter().copied().find(|p| *p!=caller && membership_lookup_viewer(*p).is_ok()){Some(p)=>p,None=>continue};
+        if profile.display_name.trim().is_empty(){continue;}
+        // A private reference belongs to its original alias, not necessarily
+        // the first/current alias returned by the historical search endpoint.
+        let principal=if profile.display_name.starts_with("pii-display-name:") {
+            if !private_profile_reference::valid(&profile.display_name,&account.principals){continue;}
+            match profile.display_name.rsplit(':').next().and_then(|s|Principal::from_text(s).ok()) {Some(p) if membership_lookup_viewer(p).is_ok()=>p,_=>continue}
+        } else {principal};
+        rows.push(ProfileSearchResult{account_id:profile.account_id,principal,display_name:profile.display_name,avatar_ref:profile.avatar_ref});
+        if rows.len()==guardian_search::RESULT_LIMIT{break;}
+    }
+    let has_next=last.as_ref().is_some_and(|last|PROFILES.with(|store|store.borrow().range((std::ops::Bound::Excluded(last.clone()),std::ops::Bound::Unbounded)).next().is_some()));
+    verify_guardian_search(caller,authority,&child,&viewer,&config).await?;
+    if profile_search_revision()!=revision {return Err("Guardian directory changed".into());}
+    rows.retain(|row|membership_lookup_viewer(row.principal).is_ok());
+    let next=if has_next {last.map(|after|guardian_search::Cursor{after,revision,binding,expires_at_ns:cursor.map(|c|c.expires_at_ns).unwrap_or(ic_cdk::api::time()+300_000_000_000)})} else {None};
+    Ok(GuardianProfilePage{revision,rows,scanned,next})
+}
+
+/// Final retained-match readback, without rescanning or deriving keys twice.
+#[ic_cdk::update]
+async fn read_guardian_profiles(authority: Principal, child: String, subjects: Vec<Principal>, revision: u64) -> Outcome<Vec<ProfileSearchResult>> {
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1"){return Err("Private guardian search is not released".into());}
+    if subjects.len()>25 || subjects.iter().any(|p|*p==Principal::anonymous()) || subjects.iter().collect::<std::collections::BTreeSet<_>>().len()!=subjects.len(){return Err("Bounded distinct guardian candidates required".into());}
+    let caller=ic_cdk::api::msg_caller(); let viewer=membership_lookup_viewer(caller)?; let config=directory_config()?;
+    guardian_search::validate_scope(authority,&config.sources.iter().map(|(_,p)|*p).collect::<Vec<_>>(),&child)?;
+    verify_guardian_search(caller,authority,&child,&viewer,&config).await?;
+    if profile_search_revision()!=revision{return Err("Guardian directory changed".into());}
+    verify_guardian_search(caller,authority,&child,&viewer,&config).await?;
+    if profile_search_revision()!=revision{return Err("Guardian directory changed".into());}
+    Ok(subjects.into_iter().filter_map(|principal| {
+        let subject=membership_lookup_viewer(principal).ok()?;
+        let profile=get_profile_entry(&subject.account)?;
+        Some(ProfileSearchResult{account_id:profile.account_id,principal,display_name:profile.display_name,avatar_ref:profile.avatar_ref})
+    }).collect())
 }
 
 // ---- Entitlements ----
@@ -3037,6 +3132,29 @@ fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn guardian_storage_traversal_is_bounded_ordered_and_preserves_private_references() {
+        for n in 0..130 {
+            put_profile_entry(&Profile{account_id:format!("guardian-storage-{n:03}"),display_name:"pii-display-name:v1:opaque".into(),avatar_ref:None,updated_at_ns:1,theme_preference:None,club_switcher_hint_seen_at:None});
+        }
+        let first=bounded_guardian_profile_rows(Some("guardian-storage-".into()));
+        assert_eq!(first.len(),100);
+        assert_eq!(first[0].account_id,"guardian-storage-000");
+        assert_eq!(first[99].account_id,"guardian-storage-099");
+        let second=bounded_guardian_profile_rows(Some(first[99].account_id.clone()));
+        assert_eq!(second.len(),30);
+        assert_eq!(second[0].account_id,"guardian-storage-100");
+        assert!(second.iter().all(|row|row.display_name=="pii-display-name:v1:opaque"));
+    }
+    #[test]
+    fn guardian_profile_revision_invalidates_on_profile_and_account_mutations() {
+        let opening=profile_search_revision();
+        let account=Account{id:"guardian-revision-account".into(),principals:vec![Principal::from_slice(&[230,1])],version:1,status:AccountStatus::Active};
+        put_account(&account);assert!(profile_search_revision()>opening);
+        let prior=profile_search_revision();remove_account(&account.id);assert!(profile_search_revision()>prior);
+        let prior=profile_search_revision();put_profile_entry(&Profile{account_id:account.id.clone(),display_name:"Name".into(),avatar_ref:None,updated_at_ns:1,theme_preference:None,club_switcher_hint_seen_at:None});assert!(profile_search_revision()>prior);
+        let prior=profile_search_revision();remove_profile_entry(&account.id);assert!(profile_search_revision()>prior);
+    }
     #[test]
     fn private_lookup_resolves_verified_aliases_and_fails_on_lifecycle_changes(){
         let caller=Principal::from_slice(&[51,1]);let alias=Principal::from_slice(&[52,1]);

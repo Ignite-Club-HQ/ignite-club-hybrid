@@ -279,13 +279,29 @@ export const idlFactory = ({ IDL }) => {
     'avatar_ref' : IDL.Opt(IDL.Text),
     'display_name' : IDL.Text,
   });
-  const Result_33 = IDL.Variant({
+  const Result_20 = IDL.Variant({
     'Ok' : IDL.Vec(ProfileSearchResult),
     'Err' : IDL.Text,
   });
-  const Result_20 = IDL.Variant({ 'Ok' : Evidence, 'Err' : IDL.Text });
-  const Result_21 = IDL.Variant({
+  const Result_21 = IDL.Variant({ 'Ok' : Evidence, 'Err' : IDL.Text });
+  const Result_22 = IDL.Variant({
     'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+    'Err' : IDL.Text,
+  });
+  const Cursor = IDL.Record({
+    'after' : IDL.Text,
+    'binding' : IDL.Vec(IDL.Nat8),
+    'revision' : IDL.Nat64,
+    'expires_at_ns' : IDL.Nat64,
+  });
+  const GuardianProfilePage = IDL.Record({
+    'next' : IDL.Opt(Cursor),
+    'rows' : IDL.Vec(ProfileSearchResult),
+    'scanned' : IDL.Nat16,
+    'revision' : IDL.Nat64,
+  });
+  const Result_23 = IDL.Variant({
+    'Ok' : GuardianProfilePage,
     'Err' : IDL.Text,
   });
   const DirectoryConfigurationReadback = IDL.Record({
@@ -296,7 +312,7 @@ export const idlFactory = ({ IDL }) => {
     'sources' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Principal)),
     'app_enabled' : IDL.Bool,
   });
-  const Result_22 = IDL.Variant({
+  const Result_24 = IDL.Variant({
     'Ok' : DirectoryConfigurationReadback,
     'Err' : IDL.Text,
   });
@@ -323,8 +339,8 @@ export const idlFactory = ({ IDL }) => {
     'photo_stores' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Opt(IDL.Principal))),
     'registry' : Snapshot,
   });
-  const Result_23 = IDL.Variant({ 'Ok' : ReleasedReply, 'Err' : IDL.Text });
-  const Result_24 = IDL.Variant({ 'Ok' : Reply, 'Err' : IDL.Text });
+  const Result_25 = IDL.Variant({ 'Ok' : ReleasedReply, 'Err' : IDL.Text });
+  const Result_26 = IDL.Variant({ 'Ok' : Reply, 'Err' : IDL.Text });
   const EligibilityDecision = IDL.Variant({
     'Eligible' : IDL.Null,
     'Denied' : IDL.Null,
@@ -335,11 +351,11 @@ export const idlFactory = ({ IDL }) => {
     'subject' : IDL.Principal,
     'denied_through_version' : IDL.Opt(IDL.Nat64),
   });
-  const Result_25 = IDL.Variant({
+  const Result_27 = IDL.Variant({
     'Ok' : IDL.Vec(PrincipalEligibility),
     'Err' : IDL.Text,
   });
-  const Result_26 = IDL.Variant({
+  const Result_28 = IDL.Variant({
     'Ok' : PrincipalEligibility,
     'Err' : IDL.Text,
   });
@@ -355,7 +371,7 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat64,
     'club_authorities' : IDL.Vec(IDL.Principal),
   });
-  const Result_27 = IDL.Variant({
+  const Result_29 = IDL.Variant({
     'Ok' : RemovalHistoryManifest,
     'Err' : IDL.Text,
   });
@@ -397,21 +413,21 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat64,
     'receipts' : IDL.Vec(IDL.Tuple(IDL.Text, Receipt)),
   });
-  const Result_28 = IDL.Variant({
+  const Result_30 = IDL.Variant({
     'Ok' : RemovalHistoryPage,
     'Err' : IDL.Text,
   });
-  const Result_29 = IDL.Variant({ 'Ok' : RemovalInventory, 'Err' : IDL.Text });
+  const Result_31 = IDL.Variant({ 'Ok' : RemovalInventory, 'Err' : IDL.Text });
   const DirectoryCleanup = IDL.Record({
     'scanned' : IDL.Nat64,
     'complete' : IDL.Bool,
   });
-  const Result_30 = IDL.Variant({ 'Ok' : DirectoryCleanup, 'Err' : IDL.Text });
-  const Result_31 = IDL.Variant({ 'Ok' : Entitlement, 'Err' : IDL.Text });
-  const Result_32 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
-  const Result_34 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
-  const Result_35 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
-  const Result_36 = IDL.Variant({ 'Ok' : IDL.Vec(Receipt), 'Err' : IDL.Text });
+  const Result_32 = IDL.Variant({ 'Ok' : DirectoryCleanup, 'Err' : IDL.Text });
+  const Result_33 = IDL.Variant({ 'Ok' : Entitlement, 'Err' : IDL.Text });
+  const Result_34 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
+  const Result_35 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
+  const Result_36 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
+  const Result_37 = IDL.Variant({ 'Ok' : IDL.Vec(Receipt), 'Err' : IDL.Text });
   
   return IDL.Service({
     'accept_link' : IDL.Func([IDL.Nat64], [Result], []),
@@ -523,21 +539,31 @@ export const idlFactory = ({ IDL }) => {
     'read_account_removal_intent' : IDL.Func([IDL.Text], [Result_6], []),
     'read_club_profiles' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal)],
-        [Result_33],
+        [Result_20],
         [],
       ),
-    'read_group_inventory_evidence' : IDL.Func([IDL.Nat64], [Result_20], []),
-    'read_group_opening_configuration' : IDL.Func([], [Result_21], []),
+    'read_group_inventory_evidence' : IDL.Func([IDL.Nat64], [Result_21], []),
+    'read_group_opening_configuration' : IDL.Func([], [Result_22], []),
+    'read_guardian_profile_candidates' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Opt(Cursor)],
+        [Result_23],
+        [],
+      ),
+    'read_guardian_profiles' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Nat64],
+        [Result_20],
+        [],
+      ),
     'read_linked_account' : IDL.Func([IDL.Principal], [Result], []),
-    'read_membership_directory_configuration' : IDL.Func([], [Result_22], []),
+    'read_membership_directory_configuration' : IDL.Func([], [Result_24], []),
     'read_my_membership_directory' : IDL.Func(
         [IDL.Nat64, IDL.Opt(Token)],
-        [Result_23],
+        [Result_25],
         [],
       ),
     'read_my_membership_directory_diagnostic' : IDL.Func(
         [IDL.Nat64, IDL.Opt(Token)],
-        [Result_24],
+        [Result_26],
         [],
       ),
     'read_owner_test_creation_eligible' : IDL.Func(
@@ -547,28 +573,28 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_principal_eligibilities' : IDL.Func(
         [IDL.Vec(IDL.Principal)],
-        [Result_25],
+        [Result_27],
         [],
       ),
-    'read_principal_eligibility' : IDL.Func([IDL.Principal], [Result_26], []),
-    'read_removal_history_manifest' : IDL.Func([], [Result_27], []),
+    'read_principal_eligibility' : IDL.Func([IDL.Principal], [Result_28], []),
+    'read_removal_history_manifest' : IDL.Func([], [Result_29], []),
     'read_removal_history_page' : IDL.Func(
         [IDL.Nat64, RemovalHistoryCursor, IDL.Nat16],
-        [Result_28],
+        [Result_30],
         [],
       ),
-    'read_removal_inventory_evidence' : IDL.Func([IDL.Nat64], [Result_29], []),
+    'read_removal_inventory_evidence' : IDL.Func([IDL.Nat64], [Result_31], []),
     'read_service_account' : IDL.Func([IDL.Principal], [Result], []),
-    'reclaim_membership_directory' : IDL.Func([], [Result_30], []),
+    'reclaim_membership_directory' : IDL.Func([], [Result_32], []),
     'redeem_entitlement' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64, IDL.Text, IDL.Text],
-        [Result_31],
+        [Result_33],
         [],
       ),
     'register_account' : IDL.Func([], [Result], []),
     'rekey_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
-        [Result_32],
+        [Result_34],
         [],
       ),
     'remove_verifier' : IDL.Func([IDL.Principal], [Result_2], []),
@@ -591,17 +617,17 @@ export const idlFactory = ({ IDL }) => {
       ),
     'search_guardian_profiles' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Nat16],
-        [Result_33],
+        [Result_20],
         [],
       ),
-    'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_33], ['query']),
+    'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_20], ['query']),
     'set_account_status' : IDL.Func([IDL.Text, AccountStatus], [Result], []),
     'set_attestation_secret' : IDL.Func([IDL.Vec(IDL.Nat8)], [Result_2], []),
     'set_club_authorities' : IDL.Func([IDL.Vec(IDL.Principal)], [Result_2], []),
     'set_club_switcher_hint_seen' : IDL.Func([], [Result_15], []),
     'set_entitlement' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Nat64, IDL.Text],
-        [Result_31],
+        [Result_33],
         [],
       ),
     'set_exclusion' : IDL.Func(
@@ -622,7 +648,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_privacy_consent' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool],
-        [Result_34],
+        [Result_35],
         [],
       ),
     'set_profile' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [Result_15], []),
@@ -636,10 +662,10 @@ export const idlFactory = ({ IDL }) => {
         [Result_2],
         [],
       ),
-    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_35], []),
+    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_36], []),
     'set_theme_preference' : IDL.Func([IDL.Opt(IDL.Text)], [Result_15], []),
     'settle_account_deletion' : IDL.Func([IDL.Text], [Result_2], []),
-    'verify_account_removal_seals' : IDL.Func([IDL.Text], [Result_36], []),
+    'verify_account_removal_seals' : IDL.Func([IDL.Text], [Result_37], []),
     'whoami' : IDL.Func([], [Result], ['query']),
   });
 };

@@ -95,7 +95,7 @@ export default function InviteOtherParentSheet({
   // Search for existing users as parent types — restricted to the club
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
     queryKey: ["parent-invite-user-search", user?.id, childId, debouncedName, scopeClubId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (debouncedName.length < 2) return [];
       return withFeatureBackend("membership", {
         supabase: async () => {
@@ -110,12 +110,13 @@ export default function InviteOtherParentSheet({
         },
         // Full ICP search requires live verification for this exact child.
         icp: async (ctx) => {
-          const rows = await searchLiveGuardianProfiles(ctx, childId, debouncedName, 6);
+          const rows = await searchLiveGuardianProfiles(ctx, childId, debouncedName, 6, signal);
           return rows.filter(u => u.id !== user?.id);
         },
       }, teamIds[0] ? { teamId: teamIds[0] } : { shared: 'person' });
     },
     enabled: open && debouncedName.length >= 2 && !selectedUser && (!teamIds[0] || !!scopeClubId),
+    retry: false,
   });
 
 

@@ -31,6 +31,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 async function liveCtx() {
   const { icpCtx } = await import("@/lib/icpClubTeamLookup");
@@ -150,13 +151,16 @@ export function CompetitionOfficialsCard({
   );
 
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
-    queryKey: ["competition-official-search", competitionId, debouncedSearch],
+    queryKey: ["competition-official-search", user?.id, competitionId, organizerClubId, debouncedSearch, isIcp],
     enabled: debouncedSearch.trim().length >= 2,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (isIcp) {
-        const ctx = await liveCtx();
+        if (!organizerClubId) return [];
         const { searchLiveInvitableProfiles } = await import("@/live/features/membership");
-        const rows = await searchLiveInvitableProfiles(ctx, debouncedSearch.trim(), 8);
+        const rows = await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Secure sign-in is required for this search."); },
+          icp: ctx => searchLiveInvitableProfiles(ctx, debouncedSearch.trim(), 8, { clubId: organizerClubId, signal }),
+        }, { clubId: organizerClubId });
         return rows.map((p: any) => ({ id: p.id, display_name: (p.display_name as string | null) ?? null, avatar_url: null }));
       }
       const { data, error } = await supabase.rpc("search_invitable_profiles", {

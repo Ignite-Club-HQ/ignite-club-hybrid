@@ -1,6 +1,7 @@
 import type { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "../featureRouter";
 import { connectLiveIdentityAccessClientWithIdentity } from "../identityAccess";
+import { privateProfileSearchRehearsalEnabled } from "../privateProfileSearchMode";
 
 /**
  * Identity feature ("membership") -> identity_access canister: batch
@@ -103,18 +104,11 @@ export async function searchLiveProfiles(
   ctx: FeatureBackendContext,
   query: string,
   limit: number,
+  scope?: { clubId: string; signal?: AbortSignal },
 ): Promise<Array<{ id: string; display_name: string | null; avatar_url: string | null }>> {
-  const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
-  try {
-    const rows = await client.searchProfiles(query, limit);
-    return rows.map((row) => ({
-      id: row.account_id,
-      display_name: row.display_name,
-      avatar_url: row.avatar_ref[0] ?? null,
-    }));
-  } finally {
-    client.dispose();
-  }
+  const { searchLiveInvitableProfiles } = await import("./membership");
+  const rows = await searchLiveInvitableProfiles(ctx, query, limit, scope);
+  return rows.map(row => ({ id: row.account_id, display_name: row.display_name, avatar_url: row.avatar_ref }));
 }
 
 /** Full-directory lookup exclusively for linking another guardian. The
@@ -125,16 +119,23 @@ export async function searchLiveGuardianProfiles(
   childId: string,
   query: string,
   limit: number,
+  signal?: AbortSignal,
 ): Promise<Array<{ id: string; display_name: string | null; avatar_url: string | null }>> {
   if (!childId.trim()) throw new Error("A specific child is required for guardian search.");
   if (query.trim().length < 2) return [];
+  if (privateProfileSearchRehearsalEnabled()) {
+    const { searchEncryptedGuardianProfiles } = await import("../guardianProfileSearch");
+    return searchEncryptedGuardianProfiles(ctx, childId, query, limit, { signal });
+  }
   const authorityId = ctx.target.canisterIds.club_domain;
   if (!authorityId) throw new Error("The child's club connection is not configured.");
   const { Principal } = await import("@icp-sdk/core/principal");
   const authority = Principal.fromText(authorityId);
   const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
   try {
+    if (signal?.aborted) throw new Error("Guardian search cancelled.");
     const rows = await client.searchGuardianProfiles(authority, childId, query.trim(), Math.min(25, Math.max(1, limit)));
+    if (signal?.aborted) throw new Error("Guardian search cancelled.");
     return rows.map((row) => ({
       id: row.principal.toText(),
       display_name: row.display_name,
@@ -155,16 +156,28 @@ export async function searchLiveProfilesWithPrincipals(
   query: string,
   limit: number,
 ): Promise<Array<{ accountId: string; principal: Principal; displayName: string | null; avatarUrl: string | null }>> {
-  const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
-  try {
-    const rows = await client.searchProfiles(query, limit);
-    return rows.map((row) => ({
-      accountId: row.account_id,
-      principal: row.principal,
-      displayName: row.display_name,
-      avatarUrl: row.avatar_ref?.[0] || null,
-    }));
-  } finally {
-    client.dispose();
+  if (!Number.isInteger(limit) || limit < 1 || limit > 25 || query.trim().length > 80) throw new Error("Invalid administrative search.");
+  if (query.trim().length < 2) return [];
+  // App-wide management is distinct from ordinary full person search. The
+  // existing directory verifies governor/app-admin authority inside the service.
+  const { readAdminUserDirectory } = await import("../adminUserDirectory");
+  const results: Array<{ accountId: string; principal: Principal; displayName: string | null; avatarUrl: string | null }> = [];
+  let cursor: string | null = null;
+  const needle = query.trim().toLocaleLowerCase();
+  for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
+    const page = await readAdminUserDirectory(ctx, privateProfileSearchRehearsalEnabled() ? "" : query, cursor);
+    const profiles = page.items.flatMap(item => item.profile[0] ? [{ ...item.profile[0], principal: item.principals[0] }] : []);
+    const { hydratePrivateProfileNames } = await import("../privateProfileNames");
+    const hydrated = await hydratePrivateProfileNames(ctx, profiles);
+    for (const row of hydrated) {
+      if (!row.principal || !row.display_name?.toLocaleLowerCase().includes(needle)) continue;
+      results.push({ accountId: row.account_id, principal: row.principal, displayName: row.display_name, avatarUrl: row.avatar_ref[0] ?? null });
+      if (results.length === limit) return results;
+    }
+    const next = page.next[0];
+    if (!next) return results;
+    if (cursor && next <= cursor) throw new Error("Administrative search continuation changed.");
+    cursor = next;
   }
+  throw new Error("Administrative search exceeded its page budget.");
 }
