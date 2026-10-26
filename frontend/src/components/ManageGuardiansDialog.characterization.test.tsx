@@ -31,6 +31,7 @@ vi.mock("@/live/featureRouter", () => ({
 vi.mock("@/live/features/club", () => ({ listLiveChildGuardians: (...args: unknown[]) => mocks.guardiansLive(...args) }));
 vi.mock("@/live/features/membership", () => ({ listLiveTeamRoleGrants: (...args: unknown[]) => mocks.rolesLive(...args) }));
 vi.mock("@/live/features/identityAccessClient", () => ({ listLiveProfilesByIds: (...args: unknown[]) => mocks.profilesLive(...args) }));
+vi.mock("@/live/relationshipProfileRead", () => ({ readRelationshipProfiles: (...args: unknown[]) => mocks.profilesLive(...args) }));
 vi.mock("@/live/features/vault", () => ({ grantLiveGuardianChildNameRead: (...args: unknown[]) => mocks.grantName(...args) }));
 vi.mock("@icp-sdk/core/principal", () => ({ Principal: { fromText: (text: string) => ({ toText: () => text, text }) } }));
 

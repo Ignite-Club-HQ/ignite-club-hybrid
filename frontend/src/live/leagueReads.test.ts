@@ -6,6 +6,7 @@ vi.mock('./featureRouter', () => ({ withFeatureBackend: async (_f: unknown, p: {
 vi.mock('./miniLeagueRouting', () => ({ readMiniLeagueInScope: async (ctx: unknown, _s: unknown, fn: (c: unknown) => unknown) => fn(ctx) }));
 vi.mock('./membershipRouting', () => ({ readMembershipInScope: async (ctx: unknown, _s: unknown, fn: (c: unknown) => unknown) => fn(ctx) }));
 vi.mock('./features/identityAccessClient', () => ({ listLiveProfilesByIds: state.profiles }));
+vi.mock('./relationshipProfileRead', () => ({ readRelationshipProfiles: state.profiles }));
 vi.mock('./features/miniLeagues', () => ({ listMyLiveMiniLeagues: state.leagues, getLiveMiniLeague: state.league, listLivePlayers: state.roster }));
 vi.mock('./features/events', () => ({ listLiveEvents: state.events, listLiveEventGroups: state.groups, listLiveGroupPlayers: state.players, listLiveGroupDuties: state.duties, getLiveGroupEditAccess: state.edit }));
 import { readLeagueAccess, readLeagueMembers, readManageableLeagues, readLeagueEvents, readLiveLeagueMatches } from './leagueReads';
@@ -28,7 +29,7 @@ describe('league canister reads', () => {
       { id: 'parent-a', display_name: 'Sam', avatar_url: 'avatar', role: 'parent', isAlsoParent: false },
       { id: 'staff-b', display_name: 'Jo', avatar_url: null, role: 'league_admin', isAlsoParent: true },
     ]);
-    expect(state.profiles.mock.calls[0]?.[0].target.alias).toBe('shared');
+    expect(state.profiles).toHaveBeenCalledWith(ctx, ['parent-a', 'staff-b'], { kind: 'league', resource: 'league-a' });
   });
   it('does not fabricate an empty assignee list on a denied read', async () => {
     state.members.mockResolvedValue({ Err: 'Forbidden' });

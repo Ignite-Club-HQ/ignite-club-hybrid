@@ -848,8 +848,11 @@ export default function TeamDetailPage() {
     enabled: isIcpAccount && adultNameIds.length > 0,
     queryFn: () => withFeatureBackend('membership', {
       supabase: () => { throw new Error('ICP names required'); },
-      icp: ctx => withRosterDeadline(readRelationshipProfiles(ctx, adultNameIds, { kind: 'club', resource: team.club_id }), 8_000, 'member names'),
-    }, { shared: 'person' }),
+      icp: ctx => {
+        if (!team?.club_id) throw new Error('Team club required for member names');
+        return withRosterDeadline(readRelationshipProfiles(ctx, adultNameIds, { kind: 'club', resource: team.club_id }), 8_000, 'member names');
+      },
+    }, { clubId: team?.club_id ?? '' }),
     staleTime: 60_000,
     retry: 1,
   });

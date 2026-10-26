@@ -10,7 +10,6 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { listLiveInvites, listLivePlayers, removeLivePlayer, updateLivePlayer, getLivePlayerGuardianStatus } from "@/live/features/miniLeagues";
 import { Principal } from "@icp-sdk/core/principal";
 import { removeLiveMember, restoreLiveMember, listLiveRemovedMembers } from "@/live/features/club";
-import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { selectRelationshipProfiles } from "@/live/relationshipProfileRead";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
