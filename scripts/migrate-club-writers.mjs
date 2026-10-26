@@ -117,7 +117,7 @@ export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], 
   const eventDutyTeams = events.filter((e) => e.club_id === clubId && e.duty_team_id).map((e) => ({ event_id: e.id, team_id: e.duty_team_id }));
   const extras = buildEventExtras({ eventIds: rows.map((e) => e.id), duties, eventDutyTeams, captains, goalkeepers, playerOfMatch, guests, claims, migratedChildren });
   return { events: rows, rsvps: buildClaimedRsvps({ events: rows, rsvps, claims, migratedChildren }), series: [], groups: [], group_players: [], group_duties: [], match_links: [], materializations: [],
-    operations: [], player_details: [game.player_details], results: [game.results], stats: [game.stats], summaries: [game.summaries],
+    operations: [], player_details: [game.player_details], results: [game.results], stats: [game.stats], summaries: [game.summaries], stat_extras: [game.stat_extras],
     duties: [extras.duties], duty_teams: [extras.duty_teams], open_duties: [extras.open_duties], guests: [extras.guests],
     captains: [extras.captains], goalkeepers: [extras.goalkeepers], player_of_match: [extras.player_of_match] };
 }

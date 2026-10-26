@@ -132,19 +132,22 @@ export async function prepareFamilyCopy(input) {
     }
   }
   const byGuardian = new Map();
+  for (const g of mappedGuardians) {
+    const key = g.user.toText(), previous = byGuardian.get(key) ?? { guardian: g.user, children: [] };
+    previous.children.push(g.child); byGuardian.set(key, previous);
+  }
+  // Relationship labels/primary flags ride the display-only guardian-label
+  // sidecar (never gates access); first label per guardian wins.
+  const labelsByGuardian = new Map();
   for (let i = 0; i < mappedGuardians.length; i++) {
-    const g = mappedGuardians[i], src = guardians[i];
-    const key = g.user.toText(), previous = byGuardian.get(key) ?? { guardian: g.user, children: [], label: [], is_primary: [] };
-    previous.children.push(g.child);
-    // Relationship labels/primary flags ride the guardian relationship
-    // contract (display metadata only; never gates access).
-    if (!previous.label.length && src.relationship_type) previous.label = [String(src.relationship_type)];
-    if (!previous.is_primary.length && src.is_primary != null) previous.is_primary = [!!src.is_primary];
-    byGuardian.set(key, previous);
+    const src = guardians[i], key = mappedGuardians[i].user.toText();
+    if (labelsByGuardian.has(key)) continue;
+    if (src.relationship_type == null && src.is_primary == null) continue;
+    labelsByGuardian.set(key, { guardian: mappedGuardians[i].user, label: opt(src.relationship_type), is_primary: opt(src.is_primary) });
   }
   return {
     domain: { ...membership, children: mappedChildren, guardians: mappedGuardians },
-    pii: { records, grants, guardians: [...byGuardian.values()] },
+    pii: { records, grants, guardians: [...byGuardian.values()], guardian_labels: [[...labelsByGuardian.values()]] },
     counts: { children: children.length, guardians: guardians.length, privateFields: records.length, roles: membership.roles.length },
   };
 }

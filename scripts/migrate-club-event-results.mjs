@@ -46,32 +46,38 @@ export function buildGameResults({ eventIds, gameResults = [], gameSummaries = [
     };
   });
   const stats = [];
+  const statExtras = [];
   const detailsByEvent = new Map();
   for (const p of gamePlayerStats) {
     if (!p.event_id || !events.has(p.event_id)) throw Error('Foreign player stat refused');
     if (!p.team_id) throw Error('Player stat without a team refused');
     if (p.fill_in_player_name || p.player_name) throw Error('Fill-in player names stay out of plaintext storage; refusing to store plaintext');
+    const subject = {
+      user_id: p.user_id ? [claimedPrincipal(claims, p.user_id).toText()] : [],
+      child_id: p.child_id ? [child(p.child_id)] : [],
+    };
     stats.push({
       event_id: p.event_id, team_id: p.team_id,
-      user_id: p.user_id ? [claimedPrincipal(claims, p.user_id).toText()] : [],
+      user_id: subject.user_id,
       fill_in_player_name: [], jersey_number: p.jersey_number == null ? [] : [n16(p.jersey_number)],
       minutes_played: n32(p.minutes_played), positions_played: p.positions_played ?? (p.position ? [p.position] : []),
       substitutions_count: n16(p.substitutions_count), started_on_pitch: !!p.started_on_pitch, goals_scored: n16(p.goals_scored),
-      assists: p.assists == null ? [] : [n16(p.assists)],
     });
+    // Assists and position minutes ride the sidecar contract; position_minutes
+    // is preserved verbatim in its source units (minutes).
+    if (p.assists != null || p.position_minutes != null) {
+      statExtras.push({
+        event_id: p.event_id, team_id: p.team_id, ...subject,
+        assists: p.assists == null ? [] : [n16(p.assists)],
+        position_minutes: p.position_minutes == null ? [] : [Object.entries(p.position_minutes).map(([pos, m]) => [pos, n16(m)])],
+      });
+    }
     // The canister requires exactly one detail entry per stat row.
-    // position_minutes is preserved verbatim in its source units (minutes);
-    // position_seconds stays the pitch-board canonical field.
-    const minutes = p.position_minutes == null ? [] : [Object.entries(p.position_minutes).map(([pos, m]) => [pos, n16(m)])];
     const list = detailsByEvent.get(p.event_id) ?? [];
-    list.push({
-      user_id: p.user_id ? [claimedPrincipal(claims, p.user_id).toText()] : [],
-      child_id: p.child_id ? [child(p.child_id)] : [],
-      position_seconds: [], position_minutes: minutes,
-    });
+    list.push({ ...subject, position_seconds: [] });
     detailsByEvent.set(p.event_id, list);
   }
-  return { results, summaries, stats, player_details: [...detailsByEvent.entries()] };
+  return { results, summaries, stats, stat_extras: statExtras, player_details: [...detailsByEvent.entries()] };
 }
 
 /**

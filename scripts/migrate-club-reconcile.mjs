@@ -25,7 +25,7 @@ export function countSnapshot(domain, snap) {
       // stats); accept the table-style names too for older journals.
       const pick = (...keys) => keys.reduce((n, k) => n + len(snap[k]), 0);
       return pick('events', 'rsvps') + pick('results', 'game_results') + pick('summaries', 'game_summaries') + pick('stats', 'game_player_stats')
-        + pick('duties', 'duty_teams', 'open_duties', 'guests', 'captains', 'goalkeepers', 'player_of_match');
+        + pick('stat_extras') + pick('duties', 'duty_teams', 'open_duties', 'guests', 'captains', 'goalkeepers', 'player_of_match');
     }
     case 'competition_domain':
       return (snap.competitions?.length ?? 0) + (snap.matches?.length ?? 0) + (snap.entries?.length ?? 0) + (snap.divisions?.length ?? 0);
