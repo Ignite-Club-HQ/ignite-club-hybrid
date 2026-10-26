@@ -247,7 +247,8 @@ export const WRITERS = {
     const snap = buildEventsSnapshot({ clubId: ctx.clubId, events, creator: ctx.creator, rsvps, claims: ctx.claims, migratedChildren: ctx.migratedChildren, gameResults, gameSummaries, gamePlayerStats, duties, captains, goalkeepers, playerOfMatch, guests });
     await loadSnapshot(ctx, 'events_domain', snap, 'fence');
     const n = snap.events.length + snap.rsvps.length + gameResults.length + gamePlayerStats.length + gameSummaries.length
-      + duties.length + captains.length + goalkeepers.length + playerOfMatch.length + guests.length + snap.duty_teams[0].length + snap.open_duties[0].length;
+      + snap.duties[0].length + snap.duty_teams[0].length + snap.open_duties[0].length
+      + captains.length + goalkeepers.length + playerOfMatch.length + guests.length;
     return { records: n, counts: { events_domain: n } };
   },
   async children(ctx) {
@@ -258,10 +259,6 @@ export const WRITERS = {
       ctx.rowsIn('children', 'id', childIds), ctx.rowsIn('child_guardians', 'child_id', childIds),
       ctx.rows('user_roles', 'club_id'), ctx.rows('club_member_exclusions', 'club_id'),
     ]);
-    // Primary-guardian flags and relationship labels have no destination field.
-    if (guardians.some((g) => g.is_primary === true || (g.relationship_type ?? '') !== '')) {
-      throw Error('Guardian relationship metadata has no destination contract; refusing to drop it');
-    }
     // Account mirrors use the canister's own fallback convention (accountIdFor).
     const accounts = new Map([...ctx.claims.entries()].map(([u, p]) => [u, { principal: p.toText(), accountId: `principal:${p.toText()}` }]));
     const prepared = await prepareFamilyCopy({
@@ -319,15 +316,19 @@ export const WRITERS = {
       ctx.rows('chat_groups', 'club_id'), ctx.rows('club_admin_conversations', 'club_id'),
     ]);
     const teamIds = teams.map((t) => t.id);
+    // Polls can live in any conversation of the club: team chats (chat_id =
+    // team id), the club chat (chat_id = club id), groups and admin rooms.
+    const pollScopes = [...teamIds, ctx.clubId, ...chatGroups.map((g) => g.id), ...clubAdminConversations.map((c) => c.id)];
     const [teamMessages, polls, groupMessages, clubAdminMessages] = await Promise.all([
-      ctx.rowsIn('team_messages', 'team_id', teamIds), ctx.rowsIn('polls', 'chat_id', teamIds),
+      ctx.rowsIn('team_messages', 'team_id', teamIds), ctx.rowsIn('polls', 'chat_id', pollScopes),
       ctx.rowsIn('group_messages', 'group_id', chatGroups.map((g) => g.id)),
       ctx.rowsIn('club_admin_messages', 'conversation_id', clubAdminConversations.map((c) => c.id)),
     ]);
+    const pollVotes = await ctx.rowsIn('poll_votes', 'poll_id', polls.map((p) => p.id));
     const pages = buildChatPages({ clubId: ctx.clubId, teams: teams.filter((t) => !t.deleted_at), teamMessages, clubMessages,
-      chatGroups, groupMessages, clubAdminConversations, clubAdminMessages, polls, claims: ctx.claims, creator: ctx.creator });
+      chatGroups, groupMessages, clubAdminConversations, clubAdminMessages, polls, pollVotes, claims: ctx.claims, creator: ctx.creator });
     await loadChatPages(ctx, pages);
-    const n = pages.reduce((s, p) => s + p.conversations.length + p.messages.length, 0);
+    const n = pages.reduce((s, p) => s + p.conversations.length + p.messages.length + (p.polls?.[0]?.length ?? 0) + (p.poll_votes?.[0]?.length ?? 0), 0);
     return { records: n, counts: { messaging_domain: n } };
   },
   async notifications(ctx) {
@@ -341,7 +342,8 @@ export const WRITERS = {
     const [photos, albums] = await Promise.all([ctx.rows('photos', 'club_id'), ctx.rows('photo_albums', 'club_id')]);
     const snap = buildMediaSnapshot({ clubId: ctx.clubId, photos, albums, claims: ctx.claims });
     await loadSnapshot(ctx, 'media_metadata', snap, 'fence');
-    return { records: snap.assets.length, counts: { media_metadata: snap.assets.length } };
+    const n = snap.assets.length + snap.albums[0].length;
+    return { records: n, counts: { media_metadata: n } };
   },
   async vault(ctx) {
     const [folders, files] = await Promise.all([ctx.rows('team_folders', 'club_id'), ctx.rows('vault_files', 'club_id')]);

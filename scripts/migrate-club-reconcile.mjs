@@ -14,22 +14,27 @@ export function countSnapshot(domain, snap) {
         + (snap.roles?.length ?? 0) + (snap.account_roles?.length ?? 0) + (snap.exclusions?.length ?? 0);
     case 'pii_access_control':
       return (snap.records?.length ?? snap.fields?.length ?? 0);
-    case 'events_domain':
-      return (snap.events?.length ?? 0) + (snap.rsvps?.length ?? 0)
-        + (snap.game_results?.length ?? 0) + (snap.game_summaries?.length ?? 0) + (snap.game_player_stats?.length ?? 0);
+    case 'events_domain': {
+      // Decoded field names follow the snapshot contract (results/summaries/
+      // stats); accept the table-style names too for older journals.
+      const pick = (...keys) => keys.reduce((n, k) => n + (snap[k]?.length ?? 0), 0);
+      return pick('events', 'rsvps') + pick('results', 'game_results') + pick('summaries', 'game_summaries') + pick('stats', 'game_player_stats')
+        + pick('duties', 'duty_teams', 'open_duties', 'guests', 'captains', 'goalkeepers', 'player_of_match');
+    }
     case 'competition_domain':
       return (snap.competitions?.length ?? 0) + (snap.matches?.length ?? 0) + (snap.entries?.length ?? 0) + (snap.divisions?.length ?? 0);
     case 'mini_league_domain':
       return (snap.leagues?.length ?? 0) + (snap.sessions?.length ?? 0) + (snap.groups?.length ?? 0);
     case 'messaging_domain':
-      return (snap.conversations?.length ?? 0) + (snap.messages?.length ?? 0);
+      return (snap.conversations?.length ?? 0) + (snap.messages?.length ?? 0)
+        + (snap.polls?.length ?? 0) + (snap.poll_votes?.length ?? 0);
     case 'club_points_domain':
       return (snap.users?.length ?? 0) + (snap.children?.length ?? 0) + (snap.history?.length ?? 0)
         + (snap.rewards?.length ?? 0) + (snap.redemptions?.length ?? 0) + (snap.cooldowns?.length ?? 0) + (snap.settings?.length ?? 0);
     case 'notification_queue':
       return (snap.items?.length ?? 0) + (snap.scheduled?.length ?? 0);
     case 'media_metadata':
-      return (snap.assets?.length ?? 0);
+      return (snap.assets?.length ?? 0) + (snap.albums?.length ?? 0);
     case 'vault_domain':
       return (snap.folders?.length ?? 0) + (snap.files?.length ?? 0);
     default:
