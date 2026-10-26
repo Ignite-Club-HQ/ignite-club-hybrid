@@ -5,6 +5,25 @@ import { purgeClubScopedQueryCache } from "./clubScopeCachePurge";
 import { selectVisibleHomeEvents } from "@/components/home/homeEventSelection";
 
 describe("Next Up club-switch cache isolation", () => {
+  it("retains account-keyed ICP Vault directory and exact allowance but removes ambiguous content", () => {
+    const client = new QueryClient();
+    const directory = ["vault-clubs", "paul", false, null, true];
+    const selected = ["vault-clubs", "paul", false, "giddy-goat", true];
+    const allowance = ["vault-club-has-pro", "giddy-goat", "paul", true];
+    client.setQueryData(directory, [{ id: "giddy-goat" }]);
+    client.setQueryData(selected, [{ id: "giddy-goat", is_pro: true }]);
+    client.setQueryData(allowance, true);
+    client.setQueryData(["vault-files"], ["private"]);
+    client.setQueryData(["vault-clubs"], ["ambiguous"]);
+    purgeClubScopedQueryCache(client);
+    expect(client.getQueryData(directory)).toEqual([{ id: "giddy-goat" }]);
+    expect(client.getQueryData(selected)).toEqual([{ id: "giddy-goat", is_pro: true }]);
+    expect(client.getQueryData(allowance)).toBe(true);
+    expect(client.getQueryData(["vault-files"])).toBeUndefined();
+    expect(client.getQueryData(["vault-clubs"])).toBeUndefined();
+    expect(client.getQueryState(directory)?.isInvalidated).toBe(false);
+    client.clear();
+  });
   it("immediately selects the new club's loaded events without restarting the account feed", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const now = Date.now();

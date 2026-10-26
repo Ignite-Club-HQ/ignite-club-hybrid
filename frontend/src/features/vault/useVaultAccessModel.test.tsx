@@ -348,6 +348,40 @@ describe("useVaultAccessModel — root auto-navigation", () => {
 });
 
 describe("useVaultAccessModel — eligible clubs query", () => {
+  it("reveals the loaded selected club immediately while its exact allowance is pending, without granting access from labels", async () => {
+    featureRouting.icp = true;
+    fetchVaultUserRoles.mockResolvedValue([{ role: "club_admin", club_id: "club-a", team_id: null }]);
+    fetchVaultAnyProAccess.mockResolvedValue(true);
+    fetchVaultAccessibleClubs.mockImplementation(async (_user, _admin, _client, club) => club
+      ? new Promise(() => {})
+      : [{ id: "club-a", name: "Club A", is_pro: true, storage_used_bytes: 0 }]);
+    const { result, rerender, onAutoNavigateToClub } = renderAccessModel();
+    await waitFor(() => expect(result.current.canAccessVault).toBe(true));
+    await waitFor(() => expect(result.current.userClubs?.length).toBe(1));
+    rerender({ currentView: rootView, activeClubFilter: "club-a" });
+    expect(result.current.userClubs?.map(club => club.id)).toEqual(["club-a"]);
+    expect(result.current.isLoadingClubs).toBe(false);
+    await waitFor(() => expect(onAutoNavigateToClub).toHaveBeenCalledWith("club-a", "Club A"));
+    rerender({ currentView: clubView, activeClubFilter: "club-a" });
+    expect(result.current.userRoles).toEqual([{ role: "club_admin", club_id: "club-a", team_id: null }]);
+    await waitFor(() => expect(result.current.currentClubHasPro).toBe(false));
+    expect(result.current.canAccessVault).toBe(false);
+    expect(fetchVaultUserRoles).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not substitute another club when the selected club is absent from the loaded directory", async () => {
+    featureRouting.icp = true;
+    fetchVaultAccessibleClubs.mockImplementation(async (_user, _admin, _client, club) => club
+      ? new Promise(() => {})
+      : [{ id: "club-a", name: "Club A", is_pro: true, storage_used_bytes: 0 }]);
+    const { result, rerender } = renderAccessModel();
+    await waitFor(() => expect(result.current.userClubs?.length).toBe(1));
+    rerender({ currentView: rootView, activeClubFilter: "club-b" });
+    expect(result.current.userClubs).toBeUndefined();
+    expect(result.current.isLoadingClubs).toBe(true);
+    expect(result.current.canAccessVault).toBe(false);
+  });
+
   it("ends a stalled admin directory after 35 seconds even when no member clubs exist", async () => {
     vi.useFakeTimers();
     featureRouting.icp = true;
