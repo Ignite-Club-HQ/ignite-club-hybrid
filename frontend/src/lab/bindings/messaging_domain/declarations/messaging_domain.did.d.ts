@@ -26,6 +26,13 @@ export interface AttachmentMetadata {
   'message_id' : [] | [string],
   'ref_id' : string,
 }
+export interface Batch {
+  'requester' : Principal,
+  'members' : Array<boolean>,
+  'subjects' : Array<Principal>,
+  'club' : string,
+  'revision' : bigint,
+}
 export interface BroadcastResult {
   'skipped' : Array<string>,
   'delivered' : number,
@@ -509,6 +516,7 @@ export interface Main {
         'Ok' : {
           'page' : MessagePage,
           'pins' : [] | [Array<PinnedMessage>],
+          'polls' : Array<PollResults>,
           'reactions' : Array<Reaction>,
         }
       } |
@@ -741,6 +749,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_profile_direct_batch' : ActorMethod<
+    [Principal, string, Array<Principal>, [] | [bigint]],
+    { 'Ok' : Batch } |
+      { 'Err' : string }
+  >,
   'read_vault_chat_access' : ActorMethod<
     [Principal, string, string],
     {
