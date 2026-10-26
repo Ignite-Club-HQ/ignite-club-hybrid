@@ -16,7 +16,8 @@ the exact displayed announcement using server message sequences. A later
 frontier covers earlier messages, but earlier frontiers never cover newer ones;
 missing, ambiguous and legacy-zero frontier references do not imply other
 messages were read. Exact reactions remain independently scoped. The new
-reader endpoint caps selectors at 100 and returns only exact-message rows,
+reader endpoint caps selectors at 100 and responses at 2500 rows (larger sets
+refuse explicitly rather than return a misleading partial list), returning exact-message rows,
 with current conversation access, blocks and removal checks. Rehearsal badges
 and drawers use it; production stays on its existing interface until release.
 Original-PII authorization independently rechecks the same recorded evidence.

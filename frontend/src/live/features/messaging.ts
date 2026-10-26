@@ -1348,7 +1348,7 @@ export async function listLiveBroadcastMessageReaders(ctx: FeatureBackendContext
   const { actor } = await connectLiveMessagingDomain(ctx.target, identity);
   const raw = await unwrapCandid(actor.list_broadcast_message_readers(ids), 'Read broadcast message readers');
   if (identity !== ctx.identity || identity.getPrincipal().toText() !== principal || target !== JSON.stringify(ctx.target)) throw new Error('Broadcast reader account changed');
-  if (raw.some(r => r.conversation_id !== 'broadcast' || !ids.includes(r.message_id) || !r.read)) throw new Error('Broadcast reader message mismatch');
+  if (raw.length > 2500 || raw.some(r => r.conversation_id !== 'broadcast' || !ids.includes(r.message_id) || !r.read)) throw new Error('Broadcast reader message mismatch');
   return raw.map(r => ({ conversationId: r.conversation_id, messageId: r.message_id, read: r.read, user: r.user }));
 }
 

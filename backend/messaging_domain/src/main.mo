@@ -4045,6 +4045,7 @@ persistent actor class Main(governorInit : Principal) = this {
         if (targets.size() != 1) return #Err("Broadcast message missing or ambiguous");
         for (receipt in receipts.values()) {
           if (broadcastReceiptCovers(receipt, targets[0]) and not removalReceiver.denied(receipt.user) and not isBlockedPair(caller, receipt.user)) {
+            if (not BroadcastReadPolicy.canAppend(result.size())) return #Err("Broadcast reader response exceeds 2500 rows; narrow message selection");
             result := result.concat([{ receipt with message_id = id }]);
           };
         };
