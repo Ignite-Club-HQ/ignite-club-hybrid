@@ -13,12 +13,12 @@ export function useRewardClubDirectory(userId: string | undefined, clubFilter: s
   return useQuery({
     queryKey: ["user-clubs-for-rewards", userId, resolveAuthBackend(), clubFilter],
     enabled: !!userId, staleTime: 5 * 60 * 1000, retry: false,
-    queryFn: () => readHomeRewardsWithDeadline(() => withFeatureBackend<RewardDirectoryClub[]>("points", {
+    queryFn: () => withFeatureBackend<RewardDirectoryClub[]>("points", {
       icp: async (ctx) => {
         const { liveMyRewardClubIds, liveRewardClubs } = await import("@/lib/icpRewardsReads");
         return liveRewardClubs(ctx, clubFilter ? [clubFilter] : await liveMyRewardClubIds(ctx));
       },
-      supabase: async () => {
+      supabase: () => readHomeRewardsWithDeadline(async () => {
         if (!userId) return [];
         let ids = clubFilter ? [clubFilter] : [];
         if (!clubFilter) {
@@ -37,7 +37,7 @@ export function useRewardClubDirectory(userId: string | undefined, clubFilter: s
           const sub = subscriptions.data?.find((row) => row.club_id === club.id);
           return { ...club, hasPro: !!(sub?.is_pro || sub?.is_pro_football || sub?.admin_pro_override || sub?.admin_pro_football_override) };
         });
-      },
-    }, { shared: "person" })),
+      }),
+    }, { shared: "person" }),
   });
 }
