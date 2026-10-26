@@ -1,0 +1,86 @@
+// Final reconciliation: after every data step is done, read each destination
+// canister's own export back and prove the record counts match what the
+// writers acknowledged. A mismatch stops the run; routing stays blocked
+// regardless (separate auth approval).
+
+import { snapshotType } from './migrate-club-writers.mjs';
+
+/** Records per domain, counted from a decoded snapshot. */
+export function countSnapshot(domain, snap) {
+  switch (domain) {
+    case 'club_domain':
+      return 1 + (snap.teams?.length ?? 0) + (snap.sponsors?.length ?? 0)
+        + (snap.children?.length ?? 0) + (snap.guardians?.length ?? 0)
+        + (snap.roles?.length ?? 0) + (snap.account_roles?.length ?? 0) + (snap.exclusions?.length ?? 0);
+    case 'pii_access_control':
+      return (snap.records?.length ?? snap.fields?.length ?? 0);
+    case 'events_domain':
+      return (snap.events?.length ?? 0) + (snap.rsvps?.length ?? 0)
+        + (snap.game_results?.length ?? 0) + (snap.game_summaries?.length ?? 0) + (snap.game_player_stats?.length ?? 0);
+    case 'competition_domain':
+      return (snap.competitions?.length ?? 0) + (snap.matches?.length ?? 0) + (snap.entries?.length ?? 0) + (snap.divisions?.length ?? 0);
+    case 'mini_league_domain':
+      return (snap.leagues?.length ?? 0) + (snap.sessions?.length ?? 0) + (snap.groups?.length ?? 0);
+    case 'messaging_domain':
+      return (snap.conversations?.length ?? 0) + (snap.messages?.length ?? 0);
+    case 'club_points_domain':
+      return (snap.users?.length ?? 0) + (snap.children?.length ?? 0) + (snap.history?.length ?? 0)
+        + (snap.rewards?.length ?? 0) + (snap.redemptions?.length ?? 0) + (snap.cooldowns?.length ?? 0) + (snap.settings?.length ?? 0);
+    case 'notification_queue':
+      return (snap.items?.length ?? 0) + (snap.scheduled?.length ?? 0);
+    case 'media_metadata':
+      return (snap.assets?.length ?? 0);
+    case 'vault_domain':
+      return (snap.folders?.length ?? 0) + (snap.files?.length ?? 0);
+    default:
+      throw Error(`No counter for ${domain}`);
+  }
+}
+
+/** Sum the per-domain counts recorded in the journal by each writer. */
+export function expectedCounts(journal) {
+  const out = {};
+  for (const [step, s] of Object.entries(journal.steps ?? {})) {
+    if (s?.state !== 'done' || !s.counts) continue;
+    for (const [domain, n] of Object.entries(s.counts)) out[domain] = (out[domain] ?? 0) + n;
+  }
+  return out;
+}
+
+/** Decode one exported snapshot blob with the generated schema. */
+export async function decodeSnapshot(require, schemaFile, blob) {
+  const { IDL } = require('@icp-sdk/core/candid');
+  const type = await snapshotType(require, schemaFile);
+  const [snap] = IDL.decode([type], Buffer.from(blob));
+  return snap;
+}
+
+/**
+ * Export every domain, decode, count and compare against the journal.
+ * `deps`: { exportSnapshot(domain) -> Uint8Array (messaging: full concatenated
+ * pages already assembled by the caller) }. Returns a per-domain report;
+ * throws on the first mismatch.
+ */
+export async function reconcileClub(ctx, journal, deps) {
+  const expected = expectedCounts(journal);
+  const report = [];
+  for (const [domain, want] of Object.entries(expected)) {
+    const blob = await deps.exportSnapshot(domain);
+    const snap = await decodeSnapshot(ctx.require, ctx.schemaFile(domain), blob);
+    const got = countSnapshot(domain, snap);
+    report.push({ domain, expected: want, actual: got, ok: got === want });
+    if (got !== want) throw Error(`Reconciliation failed for ${domain}: destination has ${got}, writers acknowledged ${want}`);
+  }
+  // media_bytes: every photo/Vault record must point at on-chain bytes.
+  if (journal.steps?.media_bytes?.state === 'done') {
+    for (const domain of ['media_metadata', 'vault_domain']) {
+      const blob = await deps.exportSnapshot(domain);
+      const snap = await decodeSnapshot(ctx.require, ctx.schemaFile(domain), blob);
+      const rows = domain === 'media_metadata' ? snap.assets ?? [] : snap.files ?? [];
+      const missing = rows.filter((r) => !(r.blob_ref?.length)).length;
+      report.push({ domain: `${domain} blob_refs`, expected: rows.length, actual: rows.length - missing, ok: missing === 0 });
+      if (missing) throw Error(`${missing} ${domain} records still lack on-chain bytes`);
+    }
+  }
+  return report;
+}
