@@ -230,10 +230,51 @@ export const WRITERS = {
   },
   async events(ctx) {
     const events = await ctx.rows('events', 'club_id');
-    const rsvps = await ctx.rowsIn('rsvps', 'event_id', events.map(e => e.id));
-    const snap = buildEventsSnapshot({ clubId: ctx.clubId, events, creator: ctx.creator, rsvps, claims: ctx.claims, migratedChildren: ctx.migratedChildren });
+    const eventIds = events.map((e) => e.id);
+    const [rsvps, gameResults, gameSummaries, gamePlayerStats, ...unsupported] = await Promise.all([
+      ctx.rowsIn('rsvps', 'event_id', eventIds), ctx.rowsIn('game_results', 'event_id', eventIds),
+      ctx.rowsIn('game_summaries', 'event_id', eventIds), ctx.rowsIn('game_player_stats', 'event_id', eventIds),
+      ...UNSUPPORTED_EVENT_TABLES.map((t) => ctx.rowsIn(t, 'event_id', eventIds)),
+    ]);
+    // Duties, captains, goalkeepers, player-of-the-match and guests have no
+    // destination contract yet; any row stops the step rather than dropping it.
+    assertNoUnsupportedEventRows(Object.fromEntries(UNSUPPORTED_EVENT_TABLES.map((t, i) => [t, unsupported[i]])));
+    const snap = buildEventsSnapshot({ clubId: ctx.clubId, events, creator: ctx.creator, rsvps, claims: ctx.claims, migratedChildren: ctx.migratedChildren, gameResults, gameSummaries, gamePlayerStats });
     await loadSnapshot(ctx, 'events_domain', snap, 'fence');
-    return { records: snap.events.length + snap.rsvps.length };
+    return { records: snap.events.length + snap.rsvps.length + gameResults.length + gamePlayerStats.length + gameSummaries.length };
+  },
+  async children(ctx) {
+    const teams = (await ctx.rows('teams', 'club_id')).filter((t) => !t.deleted_at);
+    const assignments = await ctx.rowsIn('child_team_assignments', 'team_id', teams.map((t) => t.id));
+    const childIds = [...new Set(assignments.map((a) => a.child_id))];
+    const [children, guardians, userRoles, exclusions] = await Promise.all([
+      ctx.rowsIn('children', 'id', childIds), ctx.rowsIn('child_guardians', 'child_id', childIds),
+      ctx.rows('user_roles', 'club_id'), ctx.rows('club_member_exclusions', 'club_id'),
+    ]);
+    // Primary-guardian flags and relationship labels have no destination field.
+    if (guardians.some((g) => g.is_primary === true || (g.relationship_type ?? '') !== '')) {
+      throw Error('Guardian relationship metadata has no destination contract; refusing to drop it');
+    }
+    // Account mirrors use the canister's own fallback convention (accountIdFor).
+    const accounts = new Map([...ctx.claims.entries()].map(([u, p]) => [u, { principal: p.toText(), accountId: `principal:${p.toText()}` }]));
+    const prepared = await prepareFamilyCopy({
+      clubId: ctx.clubId, groupId: ctx.target.groupId, target: ctx.target,
+      // The check gate confirmed this club is absent from every group; shared
+      // children from another migrated club are refused canister-side by the
+      // PII ciphertext-collision check.
+      destination: { clubId: ctx.clubId, groupId: ctx.target.groupId, clubDomain: ctx.target.canisters.club_domain,
+        piiDomain: ctx.target.canisters.pii_access_control, childIds: new Set(), piiIds: new Set() },
+      claims: ctx.claims, accounts, teams, children, assignments, guardians, userRoles, exclusions,
+      publicKey: await productionPiiPublicKey(ctx.target),
+    });
+    await loadSnapshot(ctx, 'pii_access_control', prepared.pii, 'fence');
+    // Re-import the club snapshot with the family arrays filled (idempotent replace).
+    const [clubs, allTeams, sponsors] = await Promise.all([ctx.rows('clubs', 'id'), ctx.rows('teams', 'club_id'), ctx.rows('sponsors', 'club_id')]);
+    const snap = buildClubSnapshot({ club: clubs[0], teams: allTeams, sponsors });
+    Object.assign(snap, { roles: prepared.domain.roles, account_roles: prepared.domain.account_roles,
+      exclusions: prepared.domain.exclusions, children: prepared.domain.children, guardians: prepared.domain.guardians });
+    await loadSnapshot(ctx, 'club_domain', snap, 'freeze');
+    return { records: prepared.counts.children + prepared.counts.privateFields + prepared.counts.guardians + prepared.counts.roles };
   },
   async rewards(ctx) {
     const tables = ['clubs', 'club_subscriptions', 'club_rewards', 'user_club_points', 'child_club_points', 'points_history', 'reward_redemptions', 'points_cooldowns'];
