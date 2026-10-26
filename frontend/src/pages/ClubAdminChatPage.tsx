@@ -1517,7 +1517,7 @@ function SupabaseClubAdminChatPage() {
         ) : (!!searchQuery.trim() && !filteredMessages?.length && (isSearchFetching || !searchCanShowEmpty)) ? (
           <ChatSearchLoadingState />
         ) : filteredMessages?.length === 0 ? (
-          <ChatEmptyState title={isMember ? `Send a message to ${club?.name || "club"} admins` : `Start a conversation with ${memberProfile?.display_name || "this member"}`} />
+          <ChatEmptyState title={isMember ? `Send a message to ${club?.name || "club"} admins` : `Start a conversation with ${resolvedMemberName || "this member"}`} />
         ) : (
           <ChatMessagesScroller
             messages={filteredMessages || []}

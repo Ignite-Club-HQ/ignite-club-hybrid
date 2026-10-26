@@ -12,6 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import type { ReaderInfo } from "@/hooks/useMessageReads";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 
 type MessageType = "team" | "club" | "broadcast" | "group" | "dm" | "club_admin";
 
@@ -53,8 +55,16 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
   const [fetchedReaders, setFetchedReaders] = useState<ReaderInfo[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Use prop readers if available, otherwise use fetched readers
-  const readers = propReaders.length > 0 ? propReaders : fetchedReaders;
+  const privateNames = privateProfileSearchRehearsalEnabled() && resolveAuthBackend() === "icp";
+  const baseReaders = propReaders.length > 0 ? propReaders : fetchedReaders;
+  const getPrivateProfile = usePrivateChatProfiles(contextId, currentUserId,
+    [...baseReaders.map(row => row.user_id), ...allMembers.map(row => row.user_id)], privateNames && open);
+  const scopedLabel = (row: MemberInfo) => privateNames ? {
+    ...row, display_name: getPrivateProfile(row.user_id)?.display_name ?? null,
+    avatar_url: getPrivateProfile(row.user_id)?.avatar_url ?? null,
+  } : row;
+  const readers = baseReaders.map(scopedLabel);
+  const visibleMembers = allMembers.map(scopedLabel);
 
   // Internet Identity accounts: messaging_domain exposes list_read_receipts
   // (listLiveReadReceipts) plus get_group_metadata for the group member
@@ -109,7 +119,7 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
 
         const allIds = [...new Set([...readerIds, ...memberIds])];
         let profileMap = new Map<string, { display_name: string | null; avatar_url: string | null }>();
-        if (allIds.length > 0) {
+        if (!privateNames && allIds.length > 0) {
           const profiles = await withFeatureBackend("messaging", {
             supabase: async () => [],
             icp: async (ctx) => {
@@ -150,7 +160,7 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, messageId, contextId, messageType, currentUserId]);
+  }, [open, messageId, contextId, messageType, currentUserId, privateNames]);
 
   useEffect(() => {
     if (!open || !messageId) return;
@@ -282,13 +292,13 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
 
   const readMembers = isDm
     ? readers
-    : allMembers.length > 0
-      ? allMembers.filter((m) => readerIds.has(m.user_id))
+    : visibleMembers.length > 0
+      ? visibleMembers.filter((m) => readerIds.has(m.user_id))
       : readers;
 
-  const unreadMembers = isDm || allMembers.length === 0
+  const unreadMembers = isDm || visibleMembers.length === 0
     ? []
-    : allMembers.filter((m) => !readerIds.has(m.user_id));
+    : visibleMembers.filter((m) => !readerIds.has(m.user_id));
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
