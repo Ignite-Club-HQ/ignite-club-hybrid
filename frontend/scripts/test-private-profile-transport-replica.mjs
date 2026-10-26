@@ -128,7 +128,7 @@ try {
     assert.ok('Err'in await finishRole(),'Membership mutation between batches invalidates exact revision');
     clubs[0].actor.setPrincipal(governor);ok(await clubs[0].actor.restore_member('club-0',member));ok(await clubs[0].actor.add_role_grant(member,'club-0','member',[]));
     assert.equal(ok(await read(0)).length,1);
-    console.log('PASS: observed actual first/second held replies; caller suspension at both boundaries, final subject suspension and between-batch club removal reject disclosure, with healthy retry controls.');
+    console.log('PASS: observed actual first/second held replies; caller suspension and account-link drift at both boundaries, final subject suspension/link drift, blocked configuration replacement and between-batch club removal; healthy retry controls.');
   }
   i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(member.toText()),{Suspended:null}));
   assert.deepEqual(ok(await read(0)),[],'Suspended subjects must not appear');

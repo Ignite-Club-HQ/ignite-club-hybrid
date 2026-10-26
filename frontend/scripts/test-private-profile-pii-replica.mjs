@@ -57,6 +57,27 @@ try {
     assert.equal(await derive(who), null, 'Unauthorized caller receives no fresh key');
   };
   await decrypt(owner); await denied(outsider); await denied(reader);
+  // The real optional contact-email contract uses its existing private field;
+  // display-name grants must never unlock it, and empty encryption clears it.
+  const emailField='contact_email';
+  const emailInput=bytes.encode(`${subject}\u001f${emailField}`);
+  const readEmail=async(who)=>{
+    const rows=ok(await as(who).get_encrypted_pii_batch([subject],emailField,'read_contact_email','Local own-email acceptance'));
+    const transport=TransportSecretKey.random();
+    const keys=ok(await as(who).get_encrypted_pii_vetkeys_batch([subject],emailField,transport.publicKeyBytes()));
+    if(!rows.length){assert.equal(keys[0]?.length,0);return null;}
+    const encrypted=keys[0]?.[0];assert.ok(encrypted);
+    const key=EncryptedVetKey.deserialize(Uint8Array.from(encrypted)).decryptAndVerify(transport,verification,emailInput);
+    return new TextDecoder().decode(IbeCiphertext.deserialize(Uint8Array.from(rows[0].ciphertext)).decrypt(key));
+  };
+  const saveEmail=async(value)=>ok(await as(owner).register_pii(subject,emailField,IbeCiphertext.encrypt(verification,IbeIdentity.fromBytes(emailInput),bytes.encode(value),IbeSeed.random()).serialize(),owner));
+  await saveEmail('paul@example.test');
+  assert.equal(await readEmail(owner),'paul@example.test');
+  assert.equal(await readEmail(reader),null);
+  assert.equal(await readEmail(staff),null);
+  assert.equal(await readEmail(ordinary),null);
+  await saveEmail('');assert.equal(await readEmail(owner),'','Explicit clear decrypts to empty under the original private field');
+  console.log('PASS: real owner-only contact-email encryption, decryption, reader/member denial and verified empty clear. No delivery sent.');
   const ownerKey = await derive(owner); assert.ok(ownerKey);
   const wrongField = IbeCiphertext.encrypt(verification, IbeIdentity.fromBytes(bytes.encode(`${subject}\u001femail`)), bytes.encode('Not a display name'), IbeSeed.random());
   assert.throws(() => wrongField.decrypt(ownerKey), 'A display-name key cannot unlock another personal field');
@@ -79,6 +100,7 @@ try {
   // Despite the historical staff method name, the actual authority accepts
   // any current club role. Exercise that existing rule, never widen grants.
   await decrypt(ordinary);
+  assert.equal(await readEmail(ordinary),null,'A display-name club grant does not disclose personal email');
   await pic.stopCanister({ canisterId: club.canisterId, sender: governor });
   await denied(staff);
   await pic.startCanister({ canisterId: club.canisterId, sender: governor });
