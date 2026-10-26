@@ -1368,7 +1368,7 @@ function SupabaseEditEventPage() {
       {selectedClubId && (
         <Card>
           <CardContent className="pt-4">
-            <DutyTeamPicker clubId={selectedClubId} value={dutyTeamId} onChange={setDutyTeamId} disabled={!canEdit} />
+            <DutyTeamPicker clubId={selectedClubId} teamId={selectedTeamId} targetTeamIds={targetTeamIds} value={dutyTeamId} onChange={setDutyTeamId} disabled={!canEdit} />
           </CardContent>
         </Card>
       )}

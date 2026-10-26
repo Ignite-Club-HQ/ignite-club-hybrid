@@ -2051,7 +2051,7 @@ export default function EventDetailPage() {
         onUpgrade={() => navigate(`/clubs/${event.club_id}/upgrade`)}
       />
 
-      <EventDutyTeamAssignment eventId={id!} clubId={event.club_id} canEdit={canManageEvent} />
+      <EventDutyTeamAssignment eventId={id ?? ""} clubId={event.club_id} teamId={event.team_id} targetTeamIds={(event as any).target_team_ids} canEdit={canManageEvent} />
 
       <EventDutiesSection
         event={event}

@@ -1788,7 +1788,7 @@ function SupabaseCreateEventPage() {
       {clubId && (
         <Card>
           <CardContent className="pt-4">
-            <DutyTeamPicker clubId={clubId} value={dutyTeamId} onChange={setDutyTeamId} />
+            <DutyTeamPicker clubId={clubId} teamId={teamId} targetTeamIds={targetTeamIds} value={dutyTeamId} onChange={setDutyTeamId} />
           </CardContent>
         </Card>
       )}
