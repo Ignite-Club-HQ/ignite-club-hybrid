@@ -204,8 +204,8 @@ export function ScheduleMessageDialog({
   const { hasAccess: hasProAccess, isLoading: proLoading } = useScheduleProAccess(target);
 
   return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6 gap-3 sm:gap-4">
+    <ResponsiveDialog keyboardSafe open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent className="sm:max-w-md sm:max-h-[90vh] sm:overflow-y-auto sm:p-6 gap-3 sm:gap-4">
         <ResponsiveDialogHeader className="space-y-1.5 text-left px-0 pt-2 sm:pt-0">
           <ResponsiveDialogTitle className="text-base sm:text-xl">
             {isEditing ? "Edit scheduled message" : "Schedule message"}
