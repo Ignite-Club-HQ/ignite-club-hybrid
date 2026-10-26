@@ -96,8 +96,8 @@ const optN16 = (v) => (v == null ? [] : [n16(v)]);
 const EVENT_TYPES = new Set(['game', 'training', 'social', 'mini_league']);
 const HOUR = 3_600_000n;
 
-/** Supabase events -> events_domain EventsSnapshot (event details only; RSVPs/results wait for the claim). */
-export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], claims, migratedChildren }) {
+/** Supabase events -> events_domain EventsSnapshot (details, RSVPs and game results; duties/captains/guests refuse earlier). */
+export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], claims, migratedChildren, gameResults = [], gameSummaries = [], gamePlayerStats = [] }) {
   const rows = events.filter((e) => e.club_id === clubId).map((e) => {
     const start = ms(e.start_time ?? e.event_date) ?? 0n;
     const end = ms(e.end_time);
@@ -111,8 +111,9 @@ export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], 
       target_team_ids: e.target_team_ids?.length ? [e.target_team_ids] : [],
     };
   });
+  const game = buildGameResults({ eventIds: rows.map((e) => e.id), gameResults, gameSummaries, gamePlayerStats, claims, migratedChildren });
   return { events: rows, rsvps: buildClaimedRsvps({ events: rows, rsvps, claims, migratedChildren }), series: [], groups: [], group_players: [], group_duties: [], match_links: [], materializations: [],
-    operations: [], player_details: [], results: [], stats: [], summaries: [] };
+    operations: [], player_details: [game.player_details], results: [game.results], stats: [game.stats], summaries: [game.summaries] };
 }
 
 /** Supabase competitions organised by this club -> competition_domain FenceSnapshot. Hidden scores stay hidden. */
