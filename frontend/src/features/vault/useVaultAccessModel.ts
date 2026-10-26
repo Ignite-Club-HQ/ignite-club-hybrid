@@ -346,22 +346,18 @@ export function useVaultAccessModel({
         queryFn: () => withReadDeadline(fetchVaultClubHasPro(club.id), "Vault club subscription", VAULT_OPEN_READ_MS),
         staleTime: 30_000,
       });
-      void queryClient.prefetchQuery({
-        queryKey: [...vaultKeys.subfoldersForView(view, admin, coach, isAppAdmin, signature), userId, true],
-        queryFn: async () => {
-          const { fetchVaultSubfolders } = await import("./vaultReadRepository");
-          return fetchVaultSubfolders({ view, isAppAdmin: isAppAdmin ?? false, isClubAdmin: admin, isCoachOrTeamAdmin: coach, clubRoles });
-        },
-        staleTime: 60_000,
-      });
-      void queryClient.prefetchQuery({
-        queryKey: [...vaultKeys.filesForView(view, admin, coach), userId, true],
-        queryFn: async () => {
-          const { fetchVaultItems } = await import("./vaultReadRepository");
-          return fetchVaultItems({ view, isClubAdmin: admin, isCoachOrTeamAdmin: coach });
-        },
-        staleTime: 60_000,
-      });
+      void import("./vaultReadRepository").then(({ fetchVaultSubfolders, fetchVaultItems }) => {
+        void queryClient.prefetchQuery({
+          queryKey: [...vaultKeys.subfoldersForView(view, admin, coach, isAppAdmin, signature), userId, true],
+          queryFn: () => fetchVaultSubfolders({ view, isAppAdmin: isAppAdmin ?? false, isClubAdmin: admin, isCoachOrTeamAdmin: coach, clubRoles }),
+          staleTime: 60_000,
+        });
+        void queryClient.prefetchQuery({
+          queryKey: [...vaultKeys.filesForView(view, admin, coach), userId, true],
+          queryFn: () => fetchVaultItems({ view, isClubAdmin: admin, isCoachOrTeamAdmin: coach }),
+          staleTime: 60_000,
+        });
+      }).catch(() => { /* optional warmup: normal opening remains retryable */ });
     }
   }, [isIcpVault, userId, currentView.type, activeClubFilter, canAccessVault, userRoles, userClubs, isAppAdmin, queryClient]);
 
