@@ -26,6 +26,16 @@ export function useParentLeaguePlayerRsvpMutation(params: UseParentLeaguePlayerR
   const { toast } = useToast();
 
   const parentLeaguePlayerRsvpMutation = useMutation({
+    onMutate: ({ playerId, status }: { playerId: string; status: RsvpStatus }) => {
+      void queryClient.cancelQueries({ queryKey: eventKeys.rsvps(id) });
+      const previous = queryClient.getQueryData<any[]>(eventKeys.rsvps(id))?.find(row => row.mini_league_player_id === playerId);
+      queryClient.setQueryData(eventKeys.rsvps(id), (current: unknown) => {
+        const rows = Array.isArray(current) ? current : [];
+        return previous ? rows.map(row => row.mini_league_player_id === playerId ? { ...row, status, source: "user" } : row)
+          : [...rows, { id: `pending-league-rsvp-${id}-${playerId}`, event_id: id, user_id: user?.id, mini_league_player_id: playerId, child_id: null, status, source: "user" }];
+      });
+      return { previous, playerId, status };
+    },
     mutationFn: async ({ playerId, status }: { playerId: string; status: RsvpStatus }) => {
       // events_domain now exposes set_mini_league_rsvp, keyed by a
       // RsvpSubject variant that covers mini-league-only players.
@@ -69,7 +79,12 @@ export function useParentLeaguePlayerRsvpMutation(params: UseParentLeaguePlayerR
       queryClient.invalidateQueries({ queryKey: eventKeys.goingRsvps(id) });
       queryClient.invalidateQueries({ queryKey: eventKeys.groups(id) });
     },
-    onError: (err: any) => {
+    onError: (err: any, _variables, context) => {
+      if (context) queryClient.setQueryData(eventKeys.rsvps(id), (current: unknown) => {
+        if (!Array.isArray(current)) return current;
+        return current.flatMap(row => row.mini_league_player_id === context.playerId && row.status === context.status
+          ? context.previous ? [context.previous] : [] : [row]);
+      });
       toast({ title: "Failed to update RSVP", description: err.message, variant: "destructive" });
     },
   });
