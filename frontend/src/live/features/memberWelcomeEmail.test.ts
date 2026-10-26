@@ -77,7 +77,9 @@ describe("private contact email save",()=>{
   });
   it("does not report a failed private write as a successful profile save",async()=>{
     m.prepare.mockRejectedValue(new Error("Private readback unconfirmed"));
-    await expect(saveLiveContactEmail(ctx,"coach@example.test")).rejects.toThrow("readback unconfirmed");
+    const failure = await saveLiveContactEmail(ctx,"coach@example.test").then(() => null, error => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toBe("Private readback unconfirmed");
     expect(m.prepare).toHaveBeenCalledOnce();
   });
 });
