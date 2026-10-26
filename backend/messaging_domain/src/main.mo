@@ -159,7 +159,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   type CompetitionDomainRef = actor {
-    list_competition_roles : shared query (Text) -> async [Types.RoleGrant];
+    list_competition_roles : shared (Text) -> async { #Ok : [{ user : Principal; role : Text; competition_id : Text; team_id : ?Text }]; #Err : Text };
     list_entries : shared query (Text) -> async { #Ok : [{ club_id : Text; competition_id : Text; division_id : ?Text; status : Text; team_id : Text }]; #Err : Text };
     is_competition_admin : shared query (Text) -> async Bool;
   };
@@ -830,7 +830,7 @@ persistent actor class Main(governorInit : Principal) = this {
     switch (competitionDomain) {
       case null { return #Err("competition_domain canister not configured") };
       case (?cd) {
-        let roles = await cd.list_competition_roles(competition_id);
+        let roles = switch (await cd.list_competition_roles(competition_id)) { case (#Ok(r)) r; case (#Err(e)) return #Err(e) };
         let adminPrincipals = roles
           .filter(func(grant) = grant.role == "competition_admin" or grant.role == "admin" or grant.role == "owner")
           .map(func(grant) = grant.user);
@@ -921,7 +921,7 @@ persistent actor class Main(governorInit : Principal) = this {
     switch (competitionDomain) {
       case null { [] };
       case (?cd) {
-        let roles = await cd.list_competition_roles(competition_id);
+        let roles = switch (await cd.list_competition_roles(competition_id)) { case (#Ok(r)) r; case (#Err(_)) return [] };
         let adminPrincipals = roles
           .filter(func(grant) = grant.role == "competition_admin" or grant.role == "admin" or grant.role == "owner")
           .map(func(grant) = grant.user);
@@ -1032,6 +1032,7 @@ persistent actor class Main(governorInit : Principal) = this {
     func isDoomedPoll(pollId : Text) : Bool { doomedPollIds.any(func(d) = d == pollId) };
     mediaEvidenceRevision += 1;
     conversations := conversations.filter(func(c) = not inDoomed(c.id));
+    privateAdminThreads := privateAdminThreads.filter(func t = not inDoomed(t.conversation));
     mediaEvidenceRevision += 1;
     messages := messages.filter(func(m) = not inDoomed(m.conversation_id));
     receipts := receipts.filter(func(r) = not inDoomed(r.conversation_id));
@@ -2530,6 +2531,7 @@ persistent actor class Main(governorInit : Principal) = this {
         groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
         mediaEvidenceRevision += 1;
         conversations := conversations.filter(func(c) = c.id != conversation_id);
+        privateAdminThreads := privateAdminThreads.filter(func t = t.conversation != conversation_id);
         mediaEvidenceRevision += 1;
         messages := messages.filter(func(m) = m.conversation_id != conversation_id);
         receipts := receipts.filter(func(r) = r.conversation_id != conversation_id);

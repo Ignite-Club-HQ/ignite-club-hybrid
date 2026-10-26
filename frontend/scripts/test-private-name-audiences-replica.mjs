@@ -192,7 +192,7 @@ try {
   assert.ok('Err' in await read(viewer,scope('competition_admin',adminMessaging.canisterId,`competition-admin-${competition.id}-${owner.toText()}`)),'Guessed admin thread ID has no verified mapping');
   adminMessaging.actor.setPrincipal(identity.canisterId);
   const retainedAdmin=ok(await adminMessaging.actor.read_profile_competition_admin_batch(viewer,adminThread.id,[owner],[]));
-  comp.actor.setPrincipal(governor);ok(await comp.actor.remove_competition_role(competition.id,owner,'competition_admin'));
+  comp.actor.setPrincipal(governor);ok(await comp.actor.remove_competition_role(competition.id,owner,'competition_admin',[]));
   assert.ok('Err' in await read(viewer,adminScope),'Removed admin remains in cached chat participants but cannot disclose a name');
   ok(await comp.actor.grant_role(owner,'competition_admin',competition.id,[]));
   await decrypt(viewer,adminScope);
