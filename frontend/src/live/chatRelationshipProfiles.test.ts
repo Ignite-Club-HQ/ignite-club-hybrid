@@ -91,4 +91,10 @@ describe('rehearsal chat relationship names', () => {
     await readChatRelationshipProfiles(context(), 'chat', ['person']);
     expect(mocks.legacy).toHaveBeenCalledWith(['person']); expect(mocks.metadata).not.toHaveBeenCalled();
   });
+  it('bounds author batches before any private read and honors cancellation', async () => {
+    await expect(readChatRelationshipProfiles(context(), 'chat', Array.from({ length: 101 }, (_, i) => String(i)))).rejects.toThrow('too large');
+    const controller = new AbortController(); controller.abort();
+    await expect(readChatRelationshipProfiles(context(), 'chat', ['person'], controller.signal)).rejects.toThrow('cancelled');
+    expect(mocks.metadata).not.toHaveBeenCalled();
+  });
 });
