@@ -76,6 +76,7 @@ import {
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { withReadDeadline } from "@/live/readDeadline";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   getLiveEventRoster,
@@ -1621,25 +1622,31 @@ export default function EventDetailPage() {
   // Match awards: captain, POTM, goalkeepers — used to show inline icons next to attendees
   const isGameEvent = event?.type === "game" && !!event?.team_id;
   const { data: matchCaptainRow } = useQuery({
-    queryKey: ["match-captain", id, "marker"],
+    queryKey: isIcpAuthBackend ? ["match-captain", id, user?.id, true, event?.club_id] : ["match-captain", id, "marker"],
     enabled: !!id && isGameEvent && !useIcpLab,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
+      if (!id) return null;
       if (isIcpAuthBackend) {
-        const rows = await withFeatureBackend("events", {
+        const rows = await withReadDeadline(withFeatureBackend("events", {
           supabase: async () => [] as any[],
-          icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchCaptains(ctx, id!) as Promise<any[]>,
-        }, { eventId: id! }).catch(() => [] as any[]);
+          icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchCaptains(ctx, id) as Promise<any[]>,
+        }, event?.club_id ? { clubId: event.club_id } : { eventId: id }), "Captain details", 30_000, signal);
         const c = rows.find((r) => r.role === "captain");
-        return c ? { user_id: c.ref_kind === "child" ? null : c.ref_id, child_id: c.ref_kind === "child" ? c.ref_id : null } : null;
+        return c ? { id: `${c.event_id}:${c.ref_kind}:${c.ref_id}:${c.role}`, event_id: c.event_id,
+          user_id: c.ref_kind === "child" ? null : c.ref_id, child_id: c.ref_kind === "child" ? c.ref_id : null,
+          profiles: null, children: null } : null;
       }
       const { data, error } = await supabase
         .from("match_captains")
         .select("user_id, child_id")
-        .eq("event_id", id!)
+        .eq("event_id", id)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
+    staleTime: 60_000,
+    retry: isIcpAuthBackend ? false : undefined,
+    refetchOnWindowFocus: false,
   });
   const { data: potmRow } = useQuery({
     queryKey: ["player-of-match", id, "marker"],
@@ -1667,17 +1674,18 @@ export default function EventDetailPage() {
     queryKey: ["match-goalkeepers", id],
     enabled: !!id && isGameEvent && !useIcpLab,
     queryFn: async () => {
+      if (!id) return [];
       if (isIcpAuthBackend) {
         const rows = await withFeatureBackend("events", {
           supabase: async () => [] as any[],
-          icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchGoalkeepers(ctx, id!) as Promise<any[]>,
-        }, { eventId: id! }).catch(() => [] as any[]);
+          icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchGoalkeepers(ctx, id) as Promise<any[]>,
+        }, event?.club_id ? { clubId: event.club_id } : { eventId: id });
         return rows.map((g) => ({ user_id: g.ref_kind === "child" ? null : g.ref_id, child_id: g.ref_kind === "child" ? g.ref_id : null }));
       }
       const { data, error } = await supabase
         .from("match_goalkeepers" as any)
         .select("user_id, child_id")
-        .eq("event_id", id!);
+        .eq("event_id", id);
       if (error) throw error;
       return (data as any[]) || [];
     },

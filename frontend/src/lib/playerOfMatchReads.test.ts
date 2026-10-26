@@ -45,6 +45,7 @@ describe('ICP match rewards and player eligibility', () => {
     expect(result.get('paul')).toEqual({ display_name: 'Paul', avatar_url: 'avatar-ref' });
     expect(result.get('sam')).toEqual({ display_name: 'Sam', avatar_url: null });
     expect(m.profiles).toHaveBeenCalledWith(expect.anything(), ['paul', 'sam']);
+    expect(m.scope).toHaveBeenCalledWith({ shared: 'person' });
     expect(m.from).not.toHaveBeenCalled();
   });
   it('returns an empty summary map without any backend call for no ids', async () => {

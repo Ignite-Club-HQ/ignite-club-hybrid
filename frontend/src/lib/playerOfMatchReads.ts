@@ -83,5 +83,5 @@ export async function readProfileSummaries(ids: string[]): Promise<Map<string, P
         avatar_url: p.avatar_ref?.[0] ?? null,
       }]));
     },
-  }, {});
+  }, { shared: 'person' });
 }

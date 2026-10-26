@@ -45,6 +45,7 @@ describe('ICP event captain loading', () => {
     const view = mount();
     expect(await view.findByText('Paul')).toBeTruthy();
     expect(view.getByRole('button', { name: 'Change' })).toBeTruthy();
+    expect(m.season).not.toHaveBeenCalled();
     expect(m.oldRead).not.toHaveBeenCalled();
   });
   it('hydrates a season captain independently through ICP', async () => {
@@ -58,20 +59,38 @@ describe('ICP event captain loading', () => {
     vi.useFakeTimers();
     m.season.mockImplementationOnce(() => new Promise(() => {})).mockResolvedValue([]);
     const view = mount();
-    // A stalled season read times out after 30s, then one automatic retry
-    // reopens assignment without the member needing to tap Try again.
+    // A failed season lookup stays settled until explicit retry; do not
+    // alternate spinner and errors or repeat successful match reads.
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     await act(async () => { await vi.advanceTimersByTimeAsync(30_100); });
     expect(m.season).toHaveBeenCalledTimes(1);
-    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
-    expect(m.season).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
+    fireEvent.click(await view.findByRole('button', { name: 'Try again' }));
     expect(await view.findByRole('button', { name: 'Assign Captain' })).toBeTruthy();
+    expect(m.season).toHaveBeenCalledTimes(2);
+    expect(m.match).toHaveBeenCalledTimes(1);
   });
   it('does not offer replacement when assignment discovery fails', async () => {
     m.match.mockRejectedValue(new Error('refused'));
     const view = mount();
     await waitFor(() => expect(view.getByRole('button', { name: 'Try again' })).toBeTruthy(), { timeout: 3000 });
     expect(view.queryByRole('button', { name: 'Assign Captain' })).toBeNull();
+    expect(m.season).not.toHaveBeenCalled();
+    expect(m.match).toHaveBeenCalledTimes(1);
     expect(m.oldRead).not.toHaveBeenCalled();
+  });
+  it('keeps Captain visible while its read is pending and retries only the failed match check', async () => {
+    vi.useFakeTimers();
+    m.match.mockImplementationOnce(() => new Promise(() => {})).mockResolvedValue([]);
+    const view = mount();
+    expect(view.getByText('Captain')).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_100); });
+    expect(m.match).toHaveBeenCalledTimes(1);
+    expect(m.season).not.toHaveBeenCalled();
+    vi.useRealTimers();
+    fireEvent.click(await view.findByRole('button', { name: 'Try again' }));
+    expect(await view.findByRole('button', { name: 'Assign Captain' })).toBeTruthy();
+    expect(m.match).toHaveBeenCalledTimes(2);
+    expect(m.season).toHaveBeenCalledTimes(1);
   });
 });
