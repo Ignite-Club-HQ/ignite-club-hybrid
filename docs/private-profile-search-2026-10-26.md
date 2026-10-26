@@ -112,8 +112,30 @@ suspension at both boundaries, subject suspension during the final reply and
 club removal between batches; all suppress disclosure and authorized retries
 succeed. Relay inventory is explicitly test-only, not deployment evidence.
 The direct two-real-source suite also passes independently without the relay.
-Encrypted name audience/decryption, account-link/configuration drift under a
-held reply, final-club-reply delivery-time revocation, and complete picker
-integration remain unverified. No live acceptance or release authorization.
+The new `test-private-profile-pii-replica.mjs` installs real PII and club
+services on a disposable PocketIC fiduciary subnet using `key_1`. Actual SDK
+IBE encryption, authorized encrypted-key delivery, verification and name
+decryption pass for owners, explicit readers, and both admin and ordinary
+club role holders. The historical `read_has_club_staff_role` method accepts
+any exact-club role; the test checks that actual implementation rather than
+assuming its name implies staff-only access. Unrelated and anonymous callers
+receive no fresh ciphertext/key; overwrite/self-grant attempts fail. Different
+fields/subjects cannot decrypt with the owner-name key. The 100-ciphertext and
+25-key ceilings, explicit/club revocation, club removal/re-grant, stopped
+authority denial/recovery and original-key upgrade persistence also pass.
+
+These tests use fresh requests: previously delivered plaintext or keys cannot
+be recalled. They do not establish family-only, competition/league or global
+guardian-search name audiences, delivery-time revocation under a held PII
+callback, or location discovery across original authorities. No grants are
+created outside the disposable replica and no profile references are published.
+Run after compiling the two services' `.mops/.build` Wasm files:
+`POCKET_IC_BIN=<local binary> node frontend/scripts/test-private-profile-pii-replica.mjs`.
+Optional `PRIVATE_PROFILE_PII_WASM` and `PRIVATE_PROFILE_CLUB_WASM` select
+local artifacts. The script refuses errors instead of skipping crypto coverage.
+
+Account-link/configuration drift under a held reply, final-club-reply
+delivery-time revocation, and complete picker integration remain unverified.
+No live acceptance or release authorization.
 All 17 generated Candid contracts pass drift checking. These checks do not
 prove a mainnet guardian search or a completed encrypted-name conversion.
