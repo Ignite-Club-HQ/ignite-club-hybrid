@@ -7,10 +7,12 @@ const mocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
   dispose: vi.fn(),
   searchGuardianProfiles: vi.fn(),
+  hydrate: vi.fn(),
 }));
 vi.mock("../identityAccess", () => ({
   connectLiveIdentityAccessClientWithIdentity: vi.fn(async () => ({ client: mocks })),
 }));
+vi.mock("../privateProfileNames", () => ({ hydratePrivateProfileNames: mocks.hydrate }));
 
 import { listLiveProfilesByIds, searchLiveGuardianProfiles } from "./identityAccessClient";
 
@@ -48,6 +50,15 @@ describe("ICP media uploader profile resolution", () => {
   it("never substitutes the signed-in person's profile for another uploader", async () => {
     expect(await listLiveProfilesByIds(context, ["2vxsx-fae"])).toEqual([]);
     expect(mocks.getProfile).not.toHaveBeenCalled();
+  });
+
+  it("hydrates private references at the shared display boundary with the same caller context", async () => {
+    const row = { account_id: caller, display_name: "pii-display-name:v1:authority:subject" };
+    mocks.getProfilesByIds.mockResolvedValue([row]);
+    mocks.hydrate.mockResolvedValue([{ ...row, display_name: "Paul Cranwell" }]);
+    expect(await listLiveProfilesByIds(context, [caller])).toEqual([{ ...row, display_name: "Paul Cranwell" }]);
+    expect(mocks.hydrate).toHaveBeenCalledWith(context, [row]);
+    expect(mocks.dispose).toHaveBeenCalledOnce();
   });
 });
 

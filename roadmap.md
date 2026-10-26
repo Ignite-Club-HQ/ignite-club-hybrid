@@ -1,4 +1,6 @@
 ## Private names and guardian-only full search — 26 October 2026
+- [x] Continue: strict encrypted owner-name preparation requires decrypted readback; bounded reference hydration is wired at shared ID-based and own-profile readers. Legacy names take the zero-request path; no references published, plaintext converted, search changed or deployment run.
+- [ ] Next: verified private-name audience/location contracts and replacement scoped/guardian encrypted search; live conversion/release require separate approval. Current reference hydration is dormant until those coordinated contracts pass; signed-in acceptance remains unavailable locally.
 - [ ] Implement private personal names with existing in-app display preserved and authorized, bounded reads.
 - [x] Build purpose-bound guardian search with registered owning authority, repeated live exact-child checks, principal results and account/child-isolated sheet queries; four Rust and both-mode frontend checks pass locally.
 - [ ] Replace remaining unrestricted general searches with authorized scoped readers before privacy cutover; encrypted-name full-search design must not retain readable search sidecars. See docs/private-profile-search-2026-10-26.md.
