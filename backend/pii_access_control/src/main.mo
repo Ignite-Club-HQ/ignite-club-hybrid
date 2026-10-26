@@ -149,7 +149,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // never gates access — only the children set does.
   public type GuardianLabel = {
     guardian : Principal;
-    label : ?Text;
+    rel_label : ?Text;
     is_primary : ?Bool;
   };
 

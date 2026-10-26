@@ -143,7 +143,7 @@ export async function prepareFamilyCopy(input) {
     const src = guardians[i], key = mappedGuardians[i].user.toText();
     if (labelsByGuardian.has(key)) continue;
     if (src.relationship_type == null && src.is_primary == null) continue;
-    labelsByGuardian.set(key, { guardian: mappedGuardians[i].user, label: opt(src.relationship_type), is_primary: opt(src.is_primary) });
+    labelsByGuardian.set(key, { guardian: mappedGuardians[i].user, rel_label: opt(src.relationship_type), is_primary: opt(src.is_primary) });
   }
   return {
     domain: { ...membership, children: mappedChildren, guardians: mappedGuardians },
