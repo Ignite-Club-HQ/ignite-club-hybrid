@@ -306,6 +306,8 @@ persistent actor class Main(governorInit : Principal) = this {
         or s.records.any(func(x) = reservedMediaIdentity(x.pii_id, x.field_id))
         or s.records.any(func(x) = not (inG(x.pii_id)))
         or s.guardians.any(func(x) = not (x.children.any(inG)))) return #Err("Snapshot contains foreign records");
+    let incomingLabels = s.guardian_labels ?? [];
+    if (incomingLabels.any(func(x) = not s.guardians.any(func(g) = g.guardian.equal(x.guardian)))) return #Err("Guardian label without a relationship");
     if (s.records.any(func(e) = pii_records.any(func(x) = x.pii_id == e.pii_id and x.field_id == e.field_id and x.ciphertext != e.ciphertext))) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
     mediaAuthEpoch += 1;
@@ -321,6 +323,13 @@ persistent actor class Main(governorInit : Principal) = this {
         // only the child set merges.
         case (?cur) guardian_relationships.map(func(y) = if (y.guardian.equal(g.guardian)) { { y with children = y.children.concat(kids.filter(func(k) = not y.children.any(func(z) = z == k))) } } else y);
         case null guardian_relationships.concat([{ g with children = kids }]);
+      };
+    };
+    // Display-only labels: an existing destination entry stays authoritative.
+    for (l in incomingLabels.values()) {
+      if (not guardianLabels.any(func(y) = y.guardian.equal(l.guardian))) {
+        mediaAuthEpoch += 1;
+        guardianLabels := guardianLabels.concat([l]);
       };
     };
     #Ok(s.grants.size())
