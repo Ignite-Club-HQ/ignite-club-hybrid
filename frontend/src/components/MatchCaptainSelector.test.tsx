@@ -61,6 +61,7 @@ describe('ICP event captain loading', () => {
     const view = mount();
     // A failed season lookup stays settled until explicit retry; do not
     // alternate spinner and errors or repeat successful match reads.
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     await act(async () => { await vi.advanceTimersByTimeAsync(30_100); });
     expect(m.season).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
