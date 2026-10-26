@@ -908,6 +908,10 @@ persistent actor class Main(governorInit : Principal) = this {
       guardian_relationships.map(func(g) = if (g.guardian.equal(guardian)) { { g with children = g.children.filter(func(c) = c != child_id) } } else { g }),
       func(g) = g.children.size() > 0
     );
+    // Drop the display-only label when the guardian has no children left.
+    if (not guardian_relationships.any(func(g) = g.guardian.equal(guardian))) {
+      guardianLabels := guardianLabels.filter(func(l) = not l.guardian.equal(guardian));
+    };
     log_audit(caller, child_id, "guardian_relationship", "remove", true, "Guardian relationship removed");
     #Ok
   
@@ -1281,12 +1285,27 @@ persistent actor class Main(governorInit : Principal) = this {
       case null { guardian_relationships };
     };
 
+    // Display-only guardian labels follow the rekey; an existing label on the
+    // new principal stays authoritative.
+    let newGuardianLabels = switch (guardianLabels.find(func(l : GuardianLabel) : Bool = l.guardian.equal(old))) {
+      case (?ol) {
+        changed += 1;
+        if (guardianLabels.any(func(l : GuardianLabel) : Bool = l.guardian.equal(new))) {
+          guardianLabels.filter(func(l : GuardianLabel) : Bool = not l.guardian.equal(old))
+        } else {
+          guardianLabels.map(func(l : GuardianLabel) : GuardianLabel = if (l.guardian.equal(old)) { { l with guardian = new } } else l)
+        };
+      };
+      case null { guardianLabels };
+    };
+
     if (not dry_run) {
       mediaAuthEpoch += 1;
       pii_records := newPiiRecords;
       audit_log := newAuditLog;
       mediaAuthEpoch += 1;
       guardian_relationships := newGuardianRelationships;
+      guardianLabels := newGuardianLabels;
     };
 
     #ok(changed)
