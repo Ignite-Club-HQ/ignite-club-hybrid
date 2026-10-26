@@ -4,6 +4,18 @@ import { chatVaultLocation, readChatVaultCard } from "./chatVaultCardRead";
 import { cacheTeam } from "@/lib/clubTeamCache";
 
 describe("chat Vault card routing", () => {
+  it("uses the exact open team's resolved query before its disk cache is populated", () => {
+    const client = new QueryClient();
+    client.setQueryData(["team", "cold-u9"], { id: "cold-u9", club_id: "g2-test" });
+    expect(chatVaultLocation(client, "paul", "/messages/cold-u9")).toEqual({ clubId: "g2-test" });
+    client.clear();
+  });
+  it("does not use a mismatched team row as a club hint", () => {
+    const client = new QueryClient();
+    client.setQueryData(["team", "cold-u9"], { id: "other-team", club_id: "other-club" });
+    expect(chatVaultLocation(client, "paul", "/messages/cold-u9")).toEqual({ teamId: "cold-u9" });
+    client.clear();
+  });
   it("uses a listed team's club as a location hint without rediscovering that team", () => {
     cacheTeam({ id: "g2-u9", club_id: "g2-test", name: "U9", logo_url: null, level_age: null });
     const client = new QueryClient();

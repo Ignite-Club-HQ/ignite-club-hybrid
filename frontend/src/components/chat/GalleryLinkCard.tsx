@@ -30,9 +30,13 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
   const queryClient = useQueryClient();
   const { pathname } = useLocation();
   const location = isIcp ? chatVaultLocation(queryClient, user?.id, pathname) : undefined;
+  const locationKey = location && "clubId" in location ? `club:${location.clubId}`
+    : location && "teamId" in location ? `team:${location.teamId}` : "resource";
 
   const { data: card, isLoading, isError, refetch } = useQuery({
-    queryKey: ["gallery-chat-card", cardId, user?.id, isIcp],
+    // Resolving the open team's club must replace an earlier cold team/resource
+    // discovery, not leave this card attached to its stalled promise.
+    queryKey: ["gallery-chat-card", cardId, user?.id, isIcp, locationKey],
     queryFn: async ({ signal }) => {
       if (isIcp) {
         return withReadDeadline(readChatVaultCard(location, { galleryCardId: cardId }, scope => withFeatureBackend("media", {

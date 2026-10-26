@@ -17,18 +17,32 @@ vi.mock("@/hooks/useResolvedIcpBlobSrc", () => ({ isIcpBlobUrl: (url: string) =>
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: () => { throw Error("Supabase forbidden"); } } }));
 import { GalleryLinkCard } from "./GalleryLinkCard";
 
-function openCard() {
+function openCard(pathname = "/messages/club/g2-test") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const rendered = render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/messages/club/g2-test"]}>
+  const element = () => <QueryClientProvider client={client}><MemoryRouter initialEntries={[pathname]}>
     <GalleryLinkCard cardId="gallery-card-u9" />
-  </MemoryRouter></QueryClientProvider>);
-  return { client, ...rendered };
+  </MemoryRouter></QueryClientProvider>;
+  const rendered = render(element());
+  return { client, ...rendered, refresh: () => rendered.rerender(element()) };
 }
 beforeEach(() => { cleanup(); vi.clearAllMocks(); mocks.getTeam.mockReturnValue(new Promise(() => {}));
   mocks.resolveImage.mockResolvedValue("blob:gallery-photo");
   mocks.getCard.mockResolvedValue({ id: "gallery-card-u9", club_id: "g2-test", team_id: "u9", hero_image_url: ["https://store.icp0.io/clubs/g2-test/image"],
     photo_count: 1, event_id: [], is_prompt: false, created_at_ms: 1n }); });
 describe("Group 2 gallery announcement reads", () => {
+  it("replaces stalled cold team discovery once the open team's club is resolved", async () => {
+    mocks.getCard.mockReturnValueOnce(new Promise(() => {}));
+    const { client, unmount, refresh } = openCard("/messages/u9");
+    await waitFor(() => expect(mocks.dispatch.mock.calls[0]).toEqual(["media", { teamId: "u9" }]));
+    await act(async () => {
+      client.setQueryData(["team", "u9"], { id: "u9", club_id: "g2-test" });
+      refresh();
+    });
+    await screen.findByRole("button", { name: /View Gallery/ });
+    expect(mocks.dispatch.mock.calls[1]).toEqual(["media", { clubId: "g2-test" }]);
+    expect(mocks.getCard).toHaveBeenCalledTimes(2);
+    unmount(); client.clear();
+  });
   it("ends a stalled metadata read with retry instead of an endless blank card", async () => {
     vi.useFakeTimers();
     mocks.getCard.mockReturnValueOnce(new Promise(() => {}));
