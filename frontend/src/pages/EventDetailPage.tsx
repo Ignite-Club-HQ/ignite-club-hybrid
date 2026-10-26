@@ -572,7 +572,7 @@ export default function EventDetailPage() {
     }
   }, [myRsvp?.id]);
 
-  const { data: duties, isLoading: isDutiesLoading } = useQuery({
+  const { data: baseDuties, isLoading: isDutiesLoading } = useQuery({
     queryKey: eventKeys.duties(id),
     queryFn: async () => {
       if (useIcpLab) return [];
@@ -603,9 +603,8 @@ export default function EventDetailPage() {
             listLiveDuties(ctx, id!),
             listLiveOpenDuties(ctx, id!).catch(() => [] as any[]),
           ]);
-          const assigneeIds = Array.from(new Set(rows.map((d) => d.account_id).filter(Boolean)));
-          const profiles = assigneeIds.length > 0 ? await listLiveProfilesByIds(ctx, assigneeIds) : [];
-          const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
+          // Duty status/assignments are authoritative; display names must not hold them.
+          const profileMap = new Map<string, any>();
           return rows.map((d) => {
             const p = d.account_id ? profileMap.get(d.account_id) : null;
             return {
@@ -630,13 +629,32 @@ export default function EventDetailPage() {
               })),
           );
         },
-      }, { eventId: id! });
+      }, event?.club_id ? { clubId: event.club_id } : { eventId: id ?? "" });
     },
     enabled: !!id,
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
+
+  const dutyAssigneeIds = [...new Set((baseDuties ?? []).map(row => row.assigned_to).filter((value): value is string => !!value))].sort();
+  const { data: dutyDisplayProfiles } = useQuery({
+    queryKey: ["event-duty-display-names", user?.id, isIcpAuthBackend, id, dutyAssigneeIds],
+    enabled: !!id && isIcpAuthBackend && !useIcpLab && dutyAssigneeIds.length > 0,
+    staleTime: 60_000,
+    queryFn: () => withFeatureBackend("events", {
+      supabase: async () => [],
+      icp: ctx => listLiveProfilesByIds(ctx, dutyAssigneeIds),
+    }, event?.club_id ? { clubId: event.club_id } : { eventId: id ?? "" }),
+  });
+  const duties = useMemo(() => {
+    if (!baseDuties || !dutyDisplayProfiles) return baseDuties;
+    const profiles = new Map(dutyDisplayProfiles.map(person => [person.account_id, person]));
+    return baseDuties.map(row => {
+      const person = row.assigned_to ? profiles.get(row.assigned_to.replace(/^principal:/, "")) ?? profiles.get(row.assigned_to) : undefined;
+      return { ...row, profiles: person ? { display_name: person.display_name, avatar_url: person.avatar_ref?.[0] ?? null } : row.profiles };
+    });
+  }, [baseDuties, dutyDisplayProfiles]);
 
   // Check if user is app admin (global override)
   const { isAppAdmin } = useIsAppAdmin();
