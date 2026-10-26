@@ -34,6 +34,9 @@ export const STEPS = Object.freeze([
   { id: 'notifications', domain: 'notification_queue', tables: [['notifications', 'club_id', 'club']] },
   { id: 'media', domain: 'media_metadata', media: true, tables: [['photos', 'club_id', 'club'], ['photo_albums', 'club_id', 'club']] },
   { id: 'vault', domain: 'vault_domain', media: true, tables: [['vault_files', 'club_id', 'club']] },
+  // Byte copy-and-encrypt runs after both metadata steps; it patches their
+  // blob_ref pointers via idempotent snapshot re-import.
+  { id: 'media_bytes', domain: 'media_blob_store', media: true, tables: [] },
 ]);
 
 export const VERIFY_STEP = 'verify';

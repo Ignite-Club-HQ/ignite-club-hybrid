@@ -335,4 +335,22 @@ export const WRITERS = {
     await loadSnapshot(ctx, 'vault_domain', snap, 'fence');
     return { records: snap.folders.length + snap.files.length };
   },
+  async media_bytes(ctx) {
+    const [photos, vaultFiles] = await Promise.all([ctx.rows('photos', 'club_id'), ctx.rows('vault_files', 'club_id')]);
+    const items = planByteCopies({ clubId: ctx.clubId, photos, vaultFiles, claims: ctx.claims, creator: ctx.creator });
+    if (!items.length) return { records: 0 };
+    const publicKey = await productionPiiPublicKey(ctx.target);
+    const refs = await copyClubBytes(ctx.target, publicKey, items, {
+      download: ctx.download, blobStore: ctx.blobStoreActor(), pii: ctx.piiActor(), journal: ctx.byteJournal,
+    });
+    // Patch the blob_ref pointers into both metadata snapshots and re-import
+    // (idempotent replace; the clubs stay fenced throughout).
+    const mediaSnap = buildMediaSnapshot({ clubId: ctx.clubId, photos, albums: await ctx.rows('photo_albums', 'club_id'), claims: ctx.claims });
+    applyPhotoBlobRefs(mediaSnap, refs.photos);
+    await loadSnapshot(ctx, 'media_metadata', mediaSnap, 'fence');
+    const vaultSnap = buildVaultSnapshot({ clubId: ctx.clubId, folders: await ctx.rows('team_folders', 'club_id'), files: vaultFiles, claims: ctx.claims, creator: ctx.creator });
+    applyVaultBlobRefs(vaultSnap, refs.vault);
+    await loadSnapshot(ctx, 'vault_domain', vaultSnap, 'fence');
+    return { records: items.length };
+  },
 };
