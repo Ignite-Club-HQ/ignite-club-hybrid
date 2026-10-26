@@ -244,9 +244,11 @@ export async function searchLiveInvitableProfiles(
   if (!scope?.clubId?.trim()) throw new Error("A specific club is required for member search.");
   if (privateProfileSearchRehearsalEnabled()) {
     const { searchScopedClubProfiles } = await import("../scopedProfileSearch");
-    if (scope.privateAuthorityBinding) {
+    const { readPrivateProfileEvidence } = await import('../privateProfileEvidence');
+    const evidence = await readPrivateProfileEvidence(ctx, scope.privateAuthorityBinding);
+    if (evidence) {
       const { createLivePrivateProfileAuthorityResolver } = await import("../privateProfileAuthority");
-      return searchScopedClubProfiles(ctx, scope.clubId, query, limit, scope.signal, createLivePrivateProfileAuthorityResolver(ctx, scope.privateAuthorityBinding));
+      return searchScopedClubProfiles(ctx, scope.clubId, query, limit, scope.signal, createLivePrivateProfileAuthorityResolver(ctx, evidence));
     }
     return searchScopedClubProfiles(ctx, scope.clubId, query, limit, scope.signal);
   }

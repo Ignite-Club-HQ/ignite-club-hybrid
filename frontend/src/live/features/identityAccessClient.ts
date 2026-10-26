@@ -127,9 +127,11 @@ export async function searchLiveGuardianProfiles(
   if (query.trim().length < 2) return [];
   if (privateProfileSearchRehearsalEnabled()) {
     const { searchEncryptedGuardianProfiles } = await import("../guardianProfileSearch");
-    if (privateAuthorityBinding) {
+    const { readPrivateProfileEvidence } = await import('../privateProfileEvidence');
+    const evidence = await readPrivateProfileEvidence(ctx, privateAuthorityBinding);
+    if (evidence) {
       const { createLivePrivateProfileAuthorityResolver } = await import("../privateProfileAuthority");
-      return searchEncryptedGuardianProfiles(ctx, childId, query, limit, { signal, resolveAuthority: createLivePrivateProfileAuthorityResolver(ctx, privateAuthorityBinding) });
+      return searchEncryptedGuardianProfiles(ctx, childId, query, limit, { signal, resolveAuthority: createLivePrivateProfileAuthorityResolver(ctx, evidence) });
     }
     return searchEncryptedGuardianProfiles(ctx, childId, query, limit, { signal });
   }
