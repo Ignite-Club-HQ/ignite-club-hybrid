@@ -4,28 +4,38 @@ import { readMembershipInScope } from './membershipRouting';
 import { mergeMiniLeagueRows } from './miniLeagueRouting';
 import { readLeagueClub, readManageableLeagues } from './leagueReads';
 
+/** Optional sections never hold the sheet open: bounded and failure-tolerant. */
+function optional<T>(p: Promise<T[]>, ms = 8000): Promise<T[]> {
+  return new Promise(resolve => {
+    const t = setTimeout(() => resolve([]), ms);
+    p.then(v => { clearTimeout(t); resolve(v); }, () => { clearTimeout(t); resolve([]); });
+  });
+}
+
 export async function readLiveInviteTargets(ctx: FeatureBackendContext) {
   const { getLiveMyRoleGrants } = await import('./features/membership');
-  const grants = await getLiveMyRoleGrants(ctx);
-  const [miniLeagues, competitions] = await Promise.all([
+  const grantsP = getLiveMyRoleGrants(ctx);
+  const [grants, miniLeagues, competitions] = await Promise.all([
+    grantsP,
+    optional(
     withFeatureBackend('mini_leagues', {
       supabase: async () => { throw new Error('Internet Identity required'); },
       icp: readManageableLeagues,
-    }, { everyGroup: true, merge: mergeMiniLeagueRows }),
-    withFeatureBackend('competitions', {
+    }, { everyGroup: true, merge: mergeMiniLeagueRows })),
+    optional(withFeatureBackend('competitions', {
       supabase: async () => { throw new Error('Internet Identity required'); },
       icp: async scoped => (await import('./features/competitions')).listLiveMyNewsCompetitions(scoped),
-    }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map(row => [row.id, row])).values()] }),
+    }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map(row => [row.id, row])).values()] })),
   ]);
   const teamIds = [...new Set(grants.flatMap(g => g.team))];
   const teams = (await Promise.all(teamIds.map(teamId => readMembershipInScope(ctx, { teamId }, async scoped => {
     return (await (await import('./features/club')).getLiveTeam(scoped, teamId))[0] ?? null;
-  })))).filter(t => t?.is_active);
+  }).catch(() => null)))).filter(t => t?.is_active);
   const clubIds = [...new Set([
     ...grants.flatMap(g => g.club), ...miniLeagues.map(l => l.club_id),
     ...teams.flatMap(t => t ? [t.club_id] : []), ...competitions.flatMap(c => c.club_id ? [c.club_id] : []),
   ])];
-  const clubs = (await Promise.all(clubIds.map(id => readLeagueClub(ctx, id))))
+  const clubs = (await Promise.all(clubIds.map(id => readLeagueClub(ctx, id).catch(() => null))))
     .filter(c => c?.is_active).map(c => ({ id: c?.id ?? '', name: c?.name ?? '' }));
   const names = new Map(clubs.map(c => [c.id, c.name]));
   return {
