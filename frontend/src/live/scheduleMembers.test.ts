@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureBackendContext } from './featureRouter';
-const mocks = vi.hoisted(() => ({ events: vi.fn(), duties: vi.fn(), profile: vi.fn(), team: vi.fn(), scopes: vi.fn(), cachedTeam: vi.fn(), membershipScopes: vi.fn() }));
+const mocks = vi.hoisted(() => ({ events: vi.fn(), duties: vi.fn(), profile: vi.fn(), team: vi.fn(), scopes: vi.fn(), cachedTeam: vi.fn(), membershipScopes: vi.fn(), route: vi.fn() }));
 vi.mock('@/lib/clubTeamCache', () => ({ getCachedTeam: (id: string) => mocks.cachedTeam(id) }));
 vi.mock('./contentRouting', () => ({ readContentInScope: (ctx: unknown, feature: unknown, scope: unknown, read: (ctx: unknown) => unknown) => {
-  mocks.scopes(feature, scope); return read(ctx);
+  mocks.scopes(feature, scope); return mocks.route(ctx, read);
 } }));
 vi.mock('./membershipRouting', () => ({ readMembershipInScope: (ctx: unknown, scope: unknown, read: (ctx: unknown) => unknown) => {
   mocks.membershipScopes(scope); return read(ctx);
@@ -17,11 +17,42 @@ const event = { id: 'event-1', title: 'Training', event_type: 'training', starts
   updated_at_ms: 5000n, deleted: false, club_id: 'g1', team_id: [], address: [], location: [], mini_league_id: [],
   cancelled: false, series_id: [], opponent: [], description: '' };
 beforeEach(() => {
+  mocks.route.mockImplementation((ctx, read) => read(ctx));
   mocks.cachedTeam.mockReset().mockReturnValue(null);
   vi.clearAllMocks(); mocks.events.mockImplementation(async id => id === 'g1' ? [event] : []);
   mocks.profile.mockResolvedValue([{ name: 'Cats', sport: [] }]); mocks.team.mockResolvedValue([{ name: 'U9' }]); mocks.duties.mockResolvedValue([]);
 });
 describe('progressive member schedule', () => {
+  it('does not time out a healthy event service while cold group routing is still resolving', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.route.mockImplementation(async (ctx, read) => {
+        await new Promise(resolve => setTimeout(resolve, 25_000));
+        return read(ctx);
+      });
+      mocks.events.mockImplementation(async id => {
+        await new Promise(resolve => setTimeout(resolve, 15_000));
+        return id === 'g1' ? [event] : [];
+      });
+      const pending = loadMemberSchedule(ctx, { ...scope, clubIds: ['g1'] });
+      await vi.advanceTimersByTimeAsync(25_001);
+      expect(mocks.events).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(40_000);
+      const result = await pending;
+      expect(result.events.map(row => row.id)).toEqual(['event-1']);
+      expect(result.failed).toEqual([]);
+      expect(result.incomplete).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+  it('retains the event service deadline after routing completes', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.events.mockReturnValue(new Promise(() => {}));
+      const pending = expect(loadMemberSchedule(ctx, { ...scope, clubIds: ['g1'] })).rejects.toThrow('Schedule events timed out');
+      await vi.advanceTimersByTimeAsync(20_001);
+      await pending;
+    } finally { vi.useRealTimers(); }
+  });
   it('reveals a named team without waiting for another team in the same club', async () => {
     let finishSlow: ((value: unknown[]) => void) | undefined;
     mocks.events.mockResolvedValue([
