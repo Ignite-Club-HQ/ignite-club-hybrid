@@ -1,11 +1,12 @@
 import {beforeEach,describe,expect,it,vi} from "vitest";
 import type {FeatureBackendContext} from "../featureRouter";
+import {Principal} from '@icp-sdk/core/principal';
 const mocks=vi.hoisted(()=>({enabled:vi.fn(),search:vi.fn(),resolver:vi.fn()}));
 vi.mock("../privateProfileSearchMode",()=>({privateProfileSearchRehearsalEnabled:mocks.enabled}));
 vi.mock("../guardianProfileSearch",()=>({searchEncryptedGuardianProfiles:mocks.search}));
 vi.mock("../privateProfileAuthority",()=>({createLivePrivateProfileAuthorityResolver:mocks.resolver}));
 import {searchLiveGuardianProfiles} from "./identityAccessClient";
-const ctx={target:{},identity:{}} as FeatureBackendContext;
+const ctx={target:{alias:'mainnet',host:'https://icp-api.io',networkKind:'public_mainnet'},identity:{getPrincipal:()=>Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai')}} as FeatureBackendContext;
 beforeEach(()=>{vi.clearAllMocks();mocks.enabled.mockReturnValue(true);mocks.search.mockResolvedValue([]);});
 describe("guardian original-authority gateway",()=>{
   it("threads exact-child context, cancellation and independently approved inventory into encrypted search",async()=>{

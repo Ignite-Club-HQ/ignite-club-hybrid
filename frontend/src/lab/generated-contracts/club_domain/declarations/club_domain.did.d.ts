@@ -1643,9 +1643,19 @@ export interface Main {
     { 'Ok' : Page } |
       { 'Err' : string }
   >,
+  'read_profile_family_batch' : ActorMethod<
+    [Principal, string, Array<Principal>, [] | [bigint]],
+    { 'Ok' : Batch } |
+      { 'Err' : string }
+  >,
   'read_profile_membership_batch' : ActorMethod<
     [Principal, string, Array<Principal>, [] | [bigint]],
     { 'Ok' : Batch } |
+      { 'Err' : string }
+  >,
+  'read_profile_remote_revision' : ActorMethod<
+    [Array<Principal>, [] | [bigint]],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'read_removal_media_registry' : ActorMethod<

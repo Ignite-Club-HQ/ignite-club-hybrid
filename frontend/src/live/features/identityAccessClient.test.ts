@@ -60,6 +60,13 @@ describe("ICP media uploader profile resolution", () => {
     expect(mocks.hydrate).toHaveBeenCalledWith(context, [row]);
     expect(mocks.dispose).toHaveBeenCalledOnce();
   });
+  it.each(['family','competition','league'] as const)('passes exact %s audience through shared profile hydration',async kind=>{
+    const row={account_id:caller,display_name:'pii-display-name:v1:authority:subject'};
+    mocks.getProfilesByIds.mockResolvedValue([row]); mocks.hydrate.mockResolvedValue([{...row,display_name:'Paul Cranwell'}]);
+    const options={audience:{kind,authority:Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai'),resource:'exact-resource',profile_revision:0n}};
+    await listLiveProfilesByIds(context,[caller],options);
+    expect(mocks.hydrate).toHaveBeenCalledWith(context,[row],options);
+  });
 });
 
 describe("guardian-only full search", () => {

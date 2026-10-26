@@ -395,6 +395,12 @@ export interface Row {
   'authority' : Principal,
   'club_id' : string,
 }
+export interface Scope {
+  'resource' : string,
+  'kind' : string,
+  'authority' : Principal,
+  'profile_revision' : bigint,
+}
 export interface Snapshot {
   'groups' : Array<Group>,
   'placements' : Array<Placement>,
@@ -676,6 +682,15 @@ export interface _SERVICE {
    * Versions are account-scoped evidence, NOT globally atomic access tokens.
    */
   'read_principal_eligibility' : ActorMethod<[Principal], Result_28>,
+  /**
+   * Service-delegated name permission only. Registry placement authenticates
+   * both the ORIGINAL PII caller and owning audience service; location alone
+   * never admits a human. References must name this precise original PII caller.
+   */
+  'read_private_profile_name_authorization' : ActorMethod<
+    [Principal, Array<Principal>, Scope],
+    Result_20
+  >,
   /**
    * Local-only consensus recovery evidence. Reader lists/club receipts are NOT
    * a complete deployment inventory or an in-flight drain acknowledgement.

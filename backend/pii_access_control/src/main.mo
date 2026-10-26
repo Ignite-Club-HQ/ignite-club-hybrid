@@ -595,6 +595,81 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  type PrivateNameScope = { kind : Text; authority : Principal; resource : Text; profile_revision : Nat64 };
+  type PrivateNameRow = { account_id : Text; principal : Principal; display_name : Text; avatar_ref : ?Text };
+
+  // Explicit local configuration only. Neither scope nor PII references can
+  // choose the trusted identity verifier; no new permanent reader grants.
+  transient let privateNamesRehearsal = Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") == ?"1";
+  transient let privateNamesIdentity = Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_IDENTITY");
+  func privateNameVerifier() : ?Principal {
+    if (not privateNamesRehearsal) return null;
+    switch (privateNamesIdentity) {
+      case null null;
+      case (?id) { let p = Principal.fromText(id); if (p.isAnonymous() or p == Principal.fromText("aaaaa-aa")) null else ?p }
+    }
+  };
+  func authorizePrivateNames(caller : Principal, ids : [Text], scope : PrivateNameScope) : async [PrivateNameRow] {
+    let verifier = privateNameVerifier() ?? throw Error.reject("Private name audiences are not released or configured");
+    if (ids.size() > 25 or ids.any(func id = id == "" or id.size() > 63) or scope.resource == "" or scope.resource.size() > 128) throw Error.reject("Bounded exact private-name audience required");
+    let subjects = ids.map(func id = Principal.fromText(id));
+    if (subjects.any(func p = p.isAnonymous() or p.toText() == "aaaaa-aa") or subjects.size() != ids.filter(func id = ids.filter(func x = x == id).size() == 1).size()) throw Error.reject("Distinct active private-name subjects required");
+    let identity : actor { read_private_profile_name_authorization : shared (Principal, [Principal], PrivateNameScope) -> async { #Ok : [PrivateNameRow]; #Err : Text } } = actor(verifier.toText());
+    let epoch = mediaAuthEpoch;
+    let reply = await (with timeout = 10) identity.read_private_profile_name_authorization(caller, subjects, scope);
+    if (epoch != mediaAuthEpoch or privateNameVerifier() != ?verifier or removalReceiver.denied(caller)) throw Error.reject("Private-name authority changed");
+    let rows = switch (reply) { case (#Err(e)) throw Error.reject(e); case (#Ok(rows)) rows };
+    if (rows.size() != ids.size()) throw Error.reject("Incomplete private-name authorization");
+    for (i in ids.keys()) {
+      let row = rows[i];
+      if (row.principal != subjects[i] or row.display_name != "pii-display-name:v1:" # Principal.fromActor(this).toText() # ":" # ids[i]) throw Error.reject("Original private-name reference changed");
+      let record = pii_records.find(func r = r.pii_id == ids[i] and r.field_id == "display_name") ?? throw Error.reject("Private name not found");
+      if (record.domain_owner != subjects[i]) throw Error.reject("Private-name owner changed");
+    };
+    rows
+  };
+
+  // Field is fixed: guardian/family/member scopes NEVER unlock email/media.
+  public shared ({ caller }) func get_private_profile_names_batch(ids : [Text], scope : PrivateNameScope) : async { #Ok : [EncryptedPii]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      let epoch = mediaAuthEpoch;
+      let first = await authorizePrivateNames(caller, ids, scope);
+      await admitAccount(caller);
+      let final = await authorizePrivateNames(caller, ids, scope);
+      if (epoch != mediaAuthEpoch or first != final) return #Err("Private-name authorization changed");
+      var out : [EncryptedPii] = [];
+      for (id in ids.values()) {
+        let r = pii_records.find(func r = r.pii_id == id and r.field_id == "display_name") ?? return #Err("Private name not found");
+        log_audit(caller, id, "display_name", "private_name_read", true, scope.kind);
+        out := out.concat([{ pii_id = id; field_id = "display_name"; ciphertext = r.ciphertext; nonce = r.nonce; master_key_id = r.master_key_id }]);
+      };
+      #Ok(out)
+    } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
+  };
+  public shared ({ caller }) func get_private_profile_name_vetkeys_batch(ids : [Text], scope : PrivateNameScope, transport : Blob) : async { #Ok : [?Blob]; #Err : Text } {
+    if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      if (transport.size() != 48) return #Err("Invalid transport key");
+      let epoch = mediaAuthEpoch;
+      let first = await authorizePrivateNames(caller, ids, scope);
+      var out : [?Blob] = [];
+      for (id in ids.values()) {
+        let key = await ManagementCanister.vetKdDeriveKey(ibeIdentity(id, "display_name"), vetkdContext(), vetkdKeyId<system>(), transport);
+        if (epoch != mediaAuthEpoch) return #Err("Private-name authorization changed");
+        out := out.concat([?key]);
+      };
+      // One whole-batch closing authorization AFTER all derivations.
+      await admitAccount(caller);
+      let final = await authorizePrivateNames(caller, ids, scope);
+      if (epoch != mediaAuthEpoch or first != final) return #Err("Private-name authorization changed");
+      for (id in ids.values()) { log_audit(caller, id, "display_name", "private_name_vetkey", true, scope.kind) };
+      #Ok(out)
+    } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
+  };
+
   // ==================== Per-club photo key ====================
 
   // Club photos are IBE-encrypted to ONE identity per club

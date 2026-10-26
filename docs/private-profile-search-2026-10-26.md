@@ -55,6 +55,50 @@ and other details must remain viewable in the app.
 
 ## Not complete / do not enable a privacy cutover
 
+### Completion request — scoped name-key audiences, 22:35 UTC
+
+Implemented request-scoped `display_name` ciphertext/fresh-key endpoints on
+the original PII service and an identity-delegated verifier. All five audience
+selectors (club, exact-child family, competition, league, guardian search)
+verify the configured PII caller against the complete pinned registry, the
+owning service and the current subject/account/original reference. Browser
+selectors do not create grants and cannot request personal emails/media.
+Keys reauthorize the whole batch after every derivation has finished.
+
+Club family authorization requires both people to be current guardians of the
+same child. Competition excludes public visibility and stale mirrored admin
+roles; organizer administration checks live club roles. Competition and league
+bracket all human checks with trusted club membership generations, then bind
+the complete bounded local permission snapshot plus remote evidence into their
+two-observation token. League snapshots include only its own guardian rows.
+These are point-in-time fresh-request checks, not recall of previously delivered
+keys or atomic global revocation. Excessive evidence refuses, never truncates.
+
+Scoped club/guardian searches now carry the audience to both ciphertext and
+key reads. Refused, missing, timed-out or unverified private names fail search
+instead of certifying an empty result; ordinary display-only reads stay neutral.
+Shared profile hydration accepts family/competition/league scope and original
+authority resolver. A central optional independently supplied evidence reader
+is used by both search gateways; it has no automatic production source and
+never derives approval from a reply, localStorage or membership.
+
+Validation: 109 frontend checks in each sign-in mode, 143 identity Rust
+checks, four Motoko service compilations, 17 matching Candid contracts and ICP
+guards. New disposable fiduciary-subnet suite actually encrypts and decrypts
+through an original Group 1 PII service while all five audiences belong to
+Group 2. It verifies outsider/foreign child/authority, public competition,
+stale mirrored admin, email isolation, guardian/subject removal, remote
+generation invalidation and suspended subjects. Existing real SDK PII
+preservation suite also passes. No live data, grants, keys or settings changed.
+
+**Still not complete:** existing family/competition/league display callers must
+all supply the new scope (the shared API now supports it); production evidence
+must include original legacy Group 1 as well as every registered group; a
+protected coordinated release/backfill runner, approved conversion, real signed-in
+acceptance and held-final-callback tests for the new audiences remain required.
+The new service gate remains local-rehearsal-only; no live deployment, conversion,
+plaintext removal or search activation is authorized by this implementation.
+
 ### Original-authority transport connection — 21:56 continuation
 
 Added `readLiveAccountAuthoritySnapshot`, returning the complete validated

@@ -7,7 +7,7 @@ vi.mock("../privateProfileSearchMode",()=>({privateProfileSearchRehearsalEnabled
 vi.mock("../scopedProfileSearch",()=>({searchScopedClubProfiles:mocks.scoped}));
 vi.mock("../identityAccess",()=>({connectLiveIdentityAccessClientWithIdentity:async()=>({client:{searchProfiles:mocks.global,dispose:mocks.dispose}})}));
 import { searchLiveInvitableProfiles } from "./membership";
-const ctx={target:{canisterIds:{club_domain:"rrkah-fqaaa-aaaaa-aaaaq-cai"}},identity:{getPrincipal:()=>Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai")}} as FeatureBackendContext;
+const ctx={target:{alias:'mainnet',host:'https://icp-api.io',networkKind:'public_mainnet',canisterIds:{club_domain:"rrkah-fqaaa-aaaaa-aaaaq-cai"}},identity:{getPrincipal:()=>Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai")}} as FeatureBackendContext;
 beforeEach(()=>{vi.clearAllMocks();mocks.enabled.mockReturnValue(true);mocks.scoped.mockResolvedValue([{id:"person",account_id:"account",display_name:"Paul",avatar_ref:null}]);});
 describe("ordinary member search connection",()=>{
   it("connects approved original-authority evidence to scoped search without global discovery",async()=>{

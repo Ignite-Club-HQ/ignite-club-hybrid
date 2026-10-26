@@ -18,6 +18,7 @@ import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
+import PrivateProfileAudience "../../shared/PrivateProfileAudience";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -1992,6 +1993,70 @@ persistent actor class Main(governorInit : Principal) = this {
     }))
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  public shared ({ caller }) func read_profile_audience_batch(requester : Principal, id : Text, subjects : [Principal], expected : ?Nat) : async { #Ok : { revision : Nat; requester : Principal; club : Text; subjects : [Principal]; members : [Bool] }; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1") return #Err("Private league names are not released");
+    if (accountAdmissionAuthority != ?caller or caller.isAnonymous()) return #Err("Configured identity authority required");
+    if (requester.isAnonymous() or id == "" or id.size() > 128 or subjects.size() > 25 or subjects.any(func p = p.isAnonymous())) return #Err("Bounded exact league required");
+    if (not removalReceiver.enter(requester)) return #Err("Account removal fenced");
+    try {
+      let league = findLeague(id) ?? return #Err("League not found");
+      let playerChildren = players.filter(func p = p.mini_league_id == id).map(func p = p.child_id);
+      func snapshot() : Text = debug_show((findLeague(id), players.filter(func p = p.mini_league_id == id), guardians.filter(func g = playerChildren.any(func c = c == ?g.child_id)), admins.filter(func a = a.mini_league_id == id), roles.filter(func r = r.club_id == league.club_id), clubDomainCanister, accountAdmissionAuthority));
+      let pinned = snapshot();
+      if (Text.encodeUtf8(pinned).size() > 32_768) return #Err("League audience exceeds bounded evidence");
+      let remote = await privateNameRemoteRevision([requester].concat(subjects));
+      let revision = PrivateProfileAudience.snapshotRevision(debug_show((pinned, remote)));
+      func active() : Bool = snapshot() == pinned and not leagueFenced(id) and not removalReceiver.denied(requester);
+      switch (expected) { case (?r) if (r != revision) return #Err("League audience changed"); case null {} };
+      await admitAccount(requester);
+      if (not active()) return #Err("League audience changed");
+      if (not (await* privateNameLeagueMember(requester, league))) return #Err("League membership required");
+      if (not active()) return #Err("League audience changed");
+      var members : [Bool] = [];
+      for (subject in subjects.values()) {
+        await admitAccount(subject);
+        if (not active()) return #Err("League audience changed");
+        let allowed = await* privateNameLeagueMember(subject, league);
+        if (not active()) return #Err("League audience changed");
+        members := members.concat([allowed and not removalReceiver.denied(subject)]);
+      };
+      let closing = await privateNameRemoteRevision([requester].concat(subjects));
+      if (not active() or remote != closing) return #Err("Remote league membership changed");
+      #Ok({ revision; requester; club = id; subjects; members })
+    } finally { removalReceiver.leave(requester) }
+  };
+  func privateNameLeagueMember(user : Principal, league : Types.MiniLeague) : async* Bool {
+    if (leagueFenced(league.id) or removalReceiver.denied(user)) return false;
+    if (league.created_by == user or isLeagueAdminGrant(user, league.id)) return true;
+    let authority = clubDomainCanister;
+    switch (authority) {
+      case (?id) {
+        let domain : actor { read_has_club_staff_role : shared (Principal, Text) -> async Bool } = actor(id.toText());
+        let member = try { await (with timeout = 10) domain.read_has_club_staff_role(user, league.club_id) } catch (_) { return false };
+        if (clubDomainCanister != authority or removalReceiver.denied(user) or leagueFenced(league.id)) return false;
+        if (member) return true;
+      };
+      case null return false;
+    };
+    let candidates = players.filter(func p = p.mini_league_id == league.id);
+    if (candidates.size() > 500) return false;
+    for (player in candidates.values()) {
+      let allowed = await* playerAccessWrite(user, player);
+      if (clubDomainCanister != authority or removalReceiver.denied(user) or leagueFenced(league.id)) return false;
+      if (allowed and findPlayer(player.id) == ?player) return true;
+    };
+    false
+  };
+  func privateNameRemoteRevision(subjects : [Principal]) : async ?Nat {
+    switch (clubDomainCanister) {
+      case null null;
+      case (?authority) {
+        let domain : actor { read_profile_remote_revision : shared ([Principal], ?Nat) -> async { #Ok : Nat; #Err : Text } } = actor(authority.toText());
+        switch (await (with timeout = 10) domain.read_profile_remote_revision(subjects, null)) { case (#Ok(r)) ?r; case (#Err(e)) throw Error.reject(e) }
+      }
+    }
   };
 
   public shared ({ caller }) func read_account_get_league_members(id : Text) : async { #Ok : [{ user_id : Text; is_staff : Bool; is_parent : Bool }]; #Err : Text } {

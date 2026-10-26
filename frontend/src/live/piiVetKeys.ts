@@ -9,6 +9,7 @@ import {
 } from "@icp-sdk/vetkeys";
 import { connectLivePiiAccessControl } from "./domains";
 import type { FeatureBackendContext } from "./featureRouter";
+import type { PrivateProfileAudience } from './privateProfileAudience';
 import { unwrapCandid } from "./features/candid";
 import { clearDeviceMediaCaches, forgetStoredClubKey, loadStoredClubKey, storeClubKey } from "./deviceMediaCache";
 
@@ -209,9 +210,13 @@ export async function fetchPiiVetKeys(
   ctx: FeatureBackendContext,
   piiIds: string[],
   fieldId: string,
-  options: { fresh?: boolean; assertActive?: () => void } = {},
+  options: { fresh?: boolean; assertActive?: () => void; audience?: PrivateProfileAudience } = {},
 ): Promise<Map<string, VetKey>> {
   const active = options.assertActive ?? (() => {});
+  if (options.audience) {
+    if (fieldId !== 'display_name') throw new Error('Private-name audiences cannot unlock another field.');
+    options = { ...options, fresh: true, audience: { ...options.audience } };
+  }
   active();
   const out = new Map<string, VetKey>();
   const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
@@ -252,7 +257,9 @@ export async function fetchPiiVetKeys(
     // batch is encrypted under it.
     const transport = TransportSecretKey.random();
     const keys = await unwrapCandid(
-      actor.get_encrypted_pii_vetkeys_batch(chunk, fieldId, transport.publicKeyBytes()),
+      options.audience
+        ? actor.get_private_profile_name_vetkeys_batch(chunk, options.audience, transport.publicKeyBytes())
+        : actor.get_encrypted_pii_vetkeys_batch(chunk, fieldId, transport.publicKeyBytes()),
       "Fetch PII vetKeys",
     );
     active();

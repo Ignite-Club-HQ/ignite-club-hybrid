@@ -2361,9 +2361,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
         [],
       ),
+    'read_profile_family_batch' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Batch, 'Err' : IDL.Text })],
+        [],
+      ),
     'read_profile_membership_batch' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
         [IDL.Variant({ 'Ok' : Batch, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_profile_remote_revision' : IDL.Func(
+        [IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'read_removal_media_registry' : IDL.Func(

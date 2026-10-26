@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "./featureRouter";
 
-const mocks = vi.hoisted(() => ({ register: vi.fn(), read: vi.fn(), keys: vi.fn(), encrypt: vi.fn(), decrypt: vi.fn() }));
-vi.mock("./domains", () => ({ connectLivePiiAccessControl: vi.fn(async () => ({ actor: { register_pii: mocks.register, get_encrypted_pii_batch: mocks.read } })) }));
+const mocks = vi.hoisted(() => ({ register: vi.fn(), read: vi.fn(), scopedRead: vi.fn(), keys: vi.fn(), encrypt: vi.fn(), decrypt: vi.fn() }));
+vi.mock("./domains", () => ({ connectLivePiiAccessControl: vi.fn(async () => ({ actor: { register_pii: mocks.register, get_encrypted_pii_batch: mocks.read, get_private_profile_names_batch: mocks.scopedRead } })) }));
 vi.mock("./piiVetKeys", () => ({ encryptPiiText: mocks.encrypt, fetchPiiVetKeys: mocks.keys }));
 vi.mock("@icp-sdk/vetkeys", () => ({ IbeCiphertext: { deserialize: () => ({ decrypt: mocks.decrypt }) } }));
 
@@ -52,6 +52,24 @@ describe("private profile name preparation", () => {
 });
 
 describe("authorized name display", () => {
+  it.each(['club', 'family', 'competition', 'league', 'guardian_search'] as const)('carries exact %s audience to ciphertext and fresh-key reads without generic fallback', async kind => {
+    const audience = {kind,authority:Principal.fromText(authority),resource:'child-1',profile_revision:7n};
+    mocks.scopedRead.mockResolvedValue({Ok:[{pii_id:subject,field_id:'display_name',ciphertext:[9,8]}]});
+    expect((await hydratePrivateProfileNames(ctx,[{display_name:reference}],{audience}))[0].display_name).toBe('Paul Cranwell');
+    expect(mocks.scopedRead).toHaveBeenCalledWith([subject],audience);
+    expect(mocks.keys).toHaveBeenCalledWith(ctx,[subject],'display_name',{fresh:true,assertActive:expect.any(Function),audience});
+    expect(mocks.read).not.toHaveBeenCalled(); expect(mocks.register).not.toHaveBeenCalled();
+  });
+  it('refuses denied audience reads rather than reporting an empty successful search', async()=>{
+    mocks.scopedRead.mockResolvedValue({Err:'Guardian removed'});
+    await expect(hydratePrivateProfileNames(ctx,[{display_name:reference}],{audience:{kind:'guardian_search',authority:Principal.fromText(authority),resource:'child-1',profile_revision:7n}})).rejects.toThrow('Guardian removed');
+    expect(mocks.read).not.toHaveBeenCalled(); expect(mocks.keys).not.toHaveBeenCalled();
+  });
+  it('refuses missing original-authority evidence in scoped search',async()=>{
+    const foreign=privateProfileNameReference('ryjl3-tyaaa-aaaaa-aaaba-cai',subject);
+    await expect(hydratePrivateProfileNames(ctx,[{display_name:foreign}],{audience:{kind:'club',authority:Principal.fromText(authority),resource:'club-1',profile_revision:0n}})).rejects.toThrow('unverified');
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
   it("does not display a private reference belonging to a different returned principal", async () => {
     expect(await hydratePrivateProfileNames(ctx, [{ principal: Principal.fromText(authority), display_name: reference }])).toEqual([{principal:Principal.fromText(authority),display_name:null}]);
     expect(mocks.read).not.toHaveBeenCalled();

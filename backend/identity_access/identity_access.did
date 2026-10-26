@@ -313,6 +313,12 @@ type RoleGrant = record {
   site_id : opt text;
 };
 type Row = record { group_id : text; authority : principal; club_id : text };
+type Scope = record {
+  resource : text;
+  kind : text;
+  authority : principal;
+  profile_revision : nat64;
+};
 type Snapshot = record {
   groups : vec Group;
   placements : vec Placement;
@@ -493,6 +499,14 @@ service : (Init) -> {
   // Consensus reads; never create an account or grant resource permissions.
   // Versions are account-scoped evidence, NOT globally atomic access tokens.
   read_principal_eligibility : (principal) -> (Result_28);
+  // Service-delegated name permission only. Registry placement authenticates
+  // both the ORIGINAL PII caller and owning audience service; location alone
+  // never admits a human. References must name this precise original PII caller.
+  read_private_profile_name_authorization : (
+      principal,
+      vec principal,
+      Scope,
+    ) -> (Result_20);
   // Local-only consensus recovery evidence. Reader lists/club receipts are NOT
   // a complete deployment inventory or an in-flight drain acknowledgement.
   read_removal_history_manifest : () -> (Result_29);

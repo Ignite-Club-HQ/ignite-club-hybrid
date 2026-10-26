@@ -42,6 +42,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function listLiveProfilesByIds(
   ctx: FeatureBackendContext,
   ids: readonly string[],
+  privateOptions?: { audience?: import('../privateProfileAudience').PrivateProfileAudience; resolveAuthority?: import('../privateProfileAuthority').PrivateProfileAuthorityResolver; signal?: AbortSignal },
 ) {
   if (ids.length === 0) return [];
   const requestedByAccount = new Map<string, string[]>();
@@ -86,7 +87,7 @@ export async function listLiveProfilesByIds(
     }
     if (out.some(profile => profile.display_name?.startsWith("pii-display-name:"))) {
       const { hydratePrivateProfileNames } = await import("../privateProfileNames");
-      return hydratePrivateProfileNames(ctx, out);
+      return privateOptions ? hydratePrivateProfileNames(ctx, out, privateOptions) : hydratePrivateProfileNames(ctx, out);
     }
     return out;
   } finally {
@@ -104,7 +105,7 @@ export async function searchLiveProfiles(
   ctx: FeatureBackendContext,
   query: string,
   limit: number,
-  scope?: { clubId: string; signal?: AbortSignal },
+  scope?: { clubId: string; signal?: AbortSignal; privateAuthorityBinding?: import('../accountAuthorityRegistry').AccountRegistryBinding },
 ): Promise<Array<{ id: string; display_name: string | null; avatar_url: string | null }>> {
   const { searchLiveInvitableProfiles } = await import("./membership");
   const rows = await searchLiveInvitableProfiles(ctx, query, limit, scope);
@@ -126,9 +127,11 @@ export async function searchLiveGuardianProfiles(
   if (query.trim().length < 2) return [];
   if (privateProfileSearchRehearsalEnabled()) {
     const { searchEncryptedGuardianProfiles } = await import("../guardianProfileSearch");
-    if (privateAuthorityBinding) {
+    const { readPrivateProfileEvidence } = await import('../privateProfileEvidence');
+    const evidence = await readPrivateProfileEvidence(ctx, privateAuthorityBinding);
+    if (evidence) {
       const { createLivePrivateProfileAuthorityResolver } = await import("../privateProfileAuthority");
-      return searchEncryptedGuardianProfiles(ctx, childId, query, limit, { signal, resolveAuthority: createLivePrivateProfileAuthorityResolver(ctx, privateAuthorityBinding) });
+      return searchEncryptedGuardianProfiles(ctx, childId, query, limit, { signal, resolveAuthority: createLivePrivateProfileAuthorityResolver(ctx, evidence) });
     }
     return searchEncryptedGuardianProfiles(ctx, childId, query, limit, { signal });
   }

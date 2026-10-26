@@ -574,12 +574,11 @@ export interface DirectoryAcceptanceCheck {
     source_revisions: Array<[string, bigint]>;
     app_enabled: boolean;
 }
-export interface UnlinkIntent {
-    account_id: string;
-    principal: Principal;
-    acknowledged: Array<Principal>;
-    version: bigint;
-    authorities: Array<Principal>;
+export interface Scope {
+    resource: string;
+    kind: string;
+    authority: Principal;
+    profile_revision: bigint;
 }
 export interface ReleasedReply {
     page: Reply;
@@ -587,6 +586,13 @@ export interface ReleasedReply {
     instance: bigint;
     photo_stores: Array<[string, Principal | null]>;
     registry: Snapshot;
+}
+export interface UnlinkIntent {
+    account_id: string;
+    principal: Principal;
+    acknowledged: Array<Principal>;
+    version: bigint;
+    authorities: Array<Principal>;
 }
 export interface Cursor {
     after: string;
@@ -771,6 +777,7 @@ export interface identity_accessInterface {
     read_owner_test_creation_eligible(arg0: Principal): Promise<Result_9>;
     read_principal_eligibilities(arg0: Array<Principal>): Promise<Result_27>;
     read_principal_eligibility(arg0: Principal): Promise<Result_28>;
+    read_private_profile_name_authorization(arg0: Principal, arg1: Array<Principal>, arg2: Scope): Promise<Result_20>;
     read_removal_history_manifest(): Promise<Result_29>;
     read_removal_history_page(arg0: bigint, arg1: RemovalHistoryCursor, arg2: number): Promise<Result_30>;
     read_removal_inventory_evidence(arg0: bigint): Promise<Result_31>;
@@ -1014,6 +1021,10 @@ export class Identity_access implements identity_accessInterface {
     async read_principal_eligibility(arg0: Principal): Promise<Result_28> {
         const result = await this.actor.read_principal_eligibility(arg0);
         return from_candid_Result_28_n106(result);
+    }
+    async read_private_profile_name_authorization(arg0: Principal, arg1: Array<Principal>, arg2: Scope): Promise<Result_20> {
+        const result = await this.actor.read_private_profile_name_authorization(arg0, arg1, arg2);
+        return from_candid_Result_20_n69(result);
     }
     async read_removal_history_manifest(): Promise<Result_29> {
         const result = await this.actor.read_removal_history_manifest();

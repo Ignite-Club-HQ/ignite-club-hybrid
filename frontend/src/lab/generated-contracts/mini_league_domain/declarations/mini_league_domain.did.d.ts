@@ -435,6 +435,19 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_profile_audience_batch' : ActorMethod<
+    [Principal, string, Array<Principal>, [] | [bigint]],
+    {
+        'Ok' : {
+          'requester' : Principal,
+          'members' : Array<boolean>,
+          'subjects' : Array<Principal>,
+          'club' : string,
+          'revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |

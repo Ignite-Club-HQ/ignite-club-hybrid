@@ -13,6 +13,7 @@ import Blob "mo:core/Blob";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
 import Nat32 "mo:core/Nat32";
+import PrivateProfileAudience "../../shared/PrivateProfileAudience";
 import Int "mo:core/Int";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
@@ -2938,6 +2939,76 @@ persistent actor class Main(governorInit : Principal) = this {
     playhqClaims:=playhqClaims.concat([{tenant;player_id;user=caller}]);#Ok
   
     } finally { removalReceiver.leave(caller) };
+  };
+
+  // Name audiences never inherit public competition visibility. Snapshot all
+  // local permission-bearing inputs and recheck after every consensus await.
+  public shared ({ caller }) func read_profile_audience_batch(requester : Principal, competition_id : Text, subjects : [Principal], expected : ?Nat) : async { #Ok : { revision : Nat; requester : Principal; club : Text; subjects : [Principal]; members : [Bool] }; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1") return #Err("Private competition names are not released");
+    if (accountAdmissionAuthority != ?caller or caller.isAnonymous()) return #Err("Configured identity authority required");
+    if (requester.isAnonymous() or subjects.size() > 25 or subjects.any(func p = p.isAnonymous()) or competition_id == "" or competition_id.size() > 128) return #Err("Bounded exact competition required");
+    if (not removalReceiver.enter(requester)) return #Err("Account removal fenced");
+    try {
+      func snapshot() : Text = debug_show((competitions.filter(func c = c.id == competition_id), roles.filter(func r = r.competition_id == competition_id or r.role == "club_admin"), entries.filter(func e = e.competition_id == competition_id), personalCompetitionOwners.filter(func o = o.0 == competition_id), clubDomainCanister, participantClubAuthorities, accountAdmissionAuthority));
+      let pinned = snapshot();
+      if (Text.encodeUtf8(pinned).size() > 32_768) return #Err("Competition audience exceeds bounded evidence");
+      func active() : Bool = pinned == snapshot() and not compFenced(competition_id) and not removalReceiver.denied(requester);
+      let remote = await privateNameRemoteRevisions([requester].concat(subjects));
+      if (not active()) return #Err("Competition audience changed");
+      let revision = PrivateProfileAudience.snapshotRevision(debug_show((pinned, remote)));
+      switch (expected) { case (?r) if (r != revision) return #Err("Competition audience changed"); case null {} };
+      await admitAccount(requester);
+      if (not active()) return #Err("Competition audience changed");
+      if (not (await privateNameParticipant(requester, competition_id))) return #Err("Private competition membership required");
+      if (not active()) return #Err("Competition audience changed");
+      var members : [Bool] = [];
+      for (subject in subjects.values()) {
+        await admitAccount(subject);
+        if (not active()) return #Err("Competition audience changed");
+        let allowed = await privateNameParticipant(subject, competition_id);
+        if (not active()) return #Err("Competition audience changed");
+        members := members.concat([allowed and not removalReceiver.denied(subject)]);
+      };
+      let closing = await privateNameRemoteRevisions([requester].concat(subjects));
+      if (not active() or remote != closing) return #Err("Remote competition membership changed");
+      #Ok({ revision; requester; club = competition_id; subjects; members })
+    } finally { removalReceiver.leave(requester) }
+  };
+  func privateNameParticipant(user : Principal, id : Text) : async Bool {
+    if (not competitions.any(func c = c.id == id)) return false;
+    if (isGovernor(user) or personalCompetitionOwners.any(func o = o.0 == id and o.1 == user) or roles.any(func r = r.competition_id == id and r.user == user and r.role != "club_admin")) return true;
+    let competition = competitions.find(func c = c.id == id) ?? return false;
+    switch (clubDomainCanister) {
+      case (?authority) {
+        let domain : actor { read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor(authority.toText());
+        let grants = try { await (with timeout = 10) domain.read_account_list_user_club_roles(user, competition.club_id) } catch (_) { return false };
+        if (removalReceiver.denied(user) or compFenced(id)) return false;
+        if (grants.any(func g = g.0 == "club_admin" or g.0 == "app_admin")) return true;
+      };
+      case null {};
+    };
+    let accepted = entries.filter(func e = e.competition_id == id and (e.status == "accepted" or e.status == "registered"));
+    if (accepted.size() > 500) return false;
+    for (entry in accepted.values()) {
+      for (authority in participantAuthorities().values()) {
+        let domain : actor { read_account_read_competition_team_access : shared (Text, Principal) -> async TeamAccess } = actor(authority.toText());
+        let access = try { await (with timeout = 10) domain.read_account_read_competition_team_access(entry.team_id, user) } catch (_) { return false };
+        if (compFenced(id) or removalReceiver.denied(user)) return false;
+        if (access.is_member and entries.any(func e = e == entry)) return true;
+      }
+    };
+    false
+  };
+  func privateNameRemoteRevisions(subjects : [Principal]) : async [(Principal, Nat)] {
+    var evidence : [(Principal, Nat)] = [];
+    if (participantAuthorities().size() > 64) throw Error.reject("Bounded participant authorities required");
+    for (authority in participantAuthorities().values()) {
+      let domain : actor { read_profile_remote_revision : shared ([Principal], ?Nat) -> async { #Ok : Nat; #Err : Text } } = actor(authority.toText());
+      let reply = await (with timeout = 10) domain.read_profile_remote_revision(subjects, null);
+      let revision = switch (reply) { case (#Ok(r)) r; case (#Err(e)) throw Error.reject(e) };
+      evidence := evidence.concat([(authority, revision)]);
+    };
+    evidence
   };
 
   public shared ({ caller }) func get_vault_access(competition_id : Text, requester : Principal) : async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text } {
