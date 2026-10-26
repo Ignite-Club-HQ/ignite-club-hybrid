@@ -47,7 +47,7 @@ mod tests {
         assert!(permit(true,true,true).is_ok());
     }
     #[test]
-    fn_identity_or_configuration_drift_denies_disclosure() {
+    fn identity_or_configuration_drift_denies_disclosure() {
         assert!(permit(true,false,true).is_err());
         assert!(permit(true,true,false).is_err());
     }
