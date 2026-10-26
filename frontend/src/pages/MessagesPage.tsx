@@ -1875,6 +1875,14 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
     },
   });
 
+  // The inbox already knows every thread's display name, so keep a small
+  // account-scoped copy of those labels: opening a thread then paints its real
+  // name in the header immediately instead of skeleton bars for the whole read.
+  // Labels only — preview text on the row is never stored here.
+  useEffect(() => {
+    rememberChatThreadLabels(user?.id, unifiedConversations);
+  }, [user?.id, unifiedConversations]);
+
   const { eventTitleMap, vaultFolderNameMap, vaultFileNameMap } =
     useInboxPreviewReferenceNames(unifiedConversations, supabase);
 
