@@ -55,6 +55,7 @@ import { useChatOnlineCount } from "@/hooks/useChatOnlineCount";
 import { useChatPageReady } from "@/hooks/useChatPageReady";
 import { ChatSearchBar, ChatSearchLoadingState } from "@/components/chat/ChatSearch";
 import { useChatHistorySearch } from "@/hooks/useChatHistorySearch";
+import { useChatSearchResultJump } from "@/hooks/useChatSearchResultJump";
 import { createChatHistorySearchFetcher } from "@/features/messaging/thread/chatHistorySearchFetcher";
 import { GROUP_CHAT_SCOPE } from "@/features/messaging/scopes/chatScopeAdapters";
 import {
@@ -334,40 +335,31 @@ export default function GroupChatPage() {
       { tryLoadOlder: () => loadOlderMessagesRef.current?.() },
     );
 
-  const handleSearchResultClick = async (mid: string) => {
-    const target = (localMessagesRef.current ?? []).find((m) => m.id === mid);
-    // Preserve the query for highlighting the jumped-to row until the
-    // highlight ring clears — clearing searchQuery here would strip the
-    // <mark> spans mid-jump and leave the user unsure why the row matched.
-    setHighlightQuery(searchQuery);
-    setSearchQuery("");
-    setSearchOpen(false);
-    if (target?.created_at && groupId) {
-      if (useIcpLab || resolveAuthBackend() === "icp") {
-        requestAnimationFrame(() => handleJumpToMessage(mid));
-        return;
-      }
-      try {
-        const ctx = await fetchMessagesAround({
+  const handleSearchResultClick = useChatSearchResultJump<GroupMessage>({
+    scopeKey: `group:${user?.id}:${groupId}`,
+    getMessages: () => localMessagesRef.current ?? [],
+    closeSearch: () => {
+      setHighlightQuery(searchQuery);
+      setSearchQuery("");
+      setSearchOpen(false);
+    },
+    jump: handleJumpToMessage,
+    loadContext: async (target) => {
+      if (!target.created_at || !groupId || useIcpLab || resolveAuthBackend() === "icp") return [];
+      return fetchMessagesAround({
           table: "group_messages",
           scope: { group_id: groupId },
           createdAt: target.created_at,
           selectColumns:
             "id, text, image_url, created_at, edited_at, author_id, group_id, reply_to_id, is_system_message, forwarded_from_user_id, forwarded_at, forwarded_source_label",
-        });
-        if (ctx.length) {
-          setLocalMessages((prev) => {
-            const existing = new Set((prev || []).map((m) => m.id));
-            const adds = ctx.filter((m) => !existing.has(m.id));
-            return adds.length ? [...(prev || []), ...adds] : prev;
-          });
-        }
-      } catch {
-        // best-effort
-      }
-    }
-    requestAnimationFrame(() => handleJumpToMessage(mid));
-  };
+      });
+    },
+    mergeContext: (rows) => setLocalMessages((prev) => {
+      const existing = new Set((prev ?? []).map((m) => m.id));
+      const adds = rows.filter((m) => !existing.has(m.id));
+      return adds.length ? [...(prev ?? []), ...adds] : prev;
+    }),
+  });
 
   // Fetch group details
   // Fetch group details.
@@ -1853,7 +1845,7 @@ export default function GroupChatPage() {
       <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden overscroll-none">
         {showLoading ? (
           <p className="text-center text-muted-foreground">Loading messages...</p>
-        ) : (isSearchFetching || (!!searchQuery && !searchCanShowEmpty)) ? (
+        ) : (!!searchQuery.trim() && !filteredMessages?.length && (isSearchFetching || !searchCanShowEmpty)) ? (
           <ChatSearchLoadingState />
         ) : filteredMessages?.length === 0 ? (
           <ChatEmptyState

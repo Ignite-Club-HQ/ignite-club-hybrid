@@ -1265,7 +1265,7 @@ export default function BroadcastChatPage() {
 
       {/* Messages */}
       <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden overscroll-none">
-        {(isSearchFetching || (!!searchQuery && !searchCanShowEmpty)) ? (
+        {(!!searchQuery.trim() && !filteredMessages?.length && (isSearchFetching || !searchCanShowEmpty)) ? (
           <ChatSearchLoadingState />
         ) : filteredMessages?.length === 0 ? (
           <ChatEmptyState

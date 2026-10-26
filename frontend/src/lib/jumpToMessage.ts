@@ -399,8 +399,10 @@ export function jumpToMessageInVirtualizedChat<TMessage extends { id: string }>(
     }
   };
 
-  // Defer first attempt so the messages list has a chance to mount.
-  nextTickTimer = setTimeout(tick, 50);
+  // Listed search results already have an authorized mounted message list.
+  // Cold/deep-link targets retain the mount delay and bounded recovery loop.
+  const readyMessages = getMessages();
+  const canFocusNow = readyMessages.length > 1 && readyMessages.some((m) => m.id === messageId) && getHandle();
 
   const cancel = () => {
     cancelled = true;
@@ -412,5 +414,7 @@ export function jumpToMessageInVirtualizedChat<TMessage extends { id: string }>(
     if (activeCancel === cancel) activeCancel = null;
   };
   activeCancel = cancel;
+  if (canFocusNow) tick();
+  else nextTickTimer = setTimeout(tick, 50);
   return cancel;
 }
