@@ -157,6 +157,7 @@ const AdminIcpDataPage = lazyWithRetry(() => import("./pages/AdminIcpDataPage"))
 const AdminIcpHealthPage = lazyWithRetry(() => import("./pages/AdminIcpHealthPage"));
 const AdminGroupInfrastructurePage = lazyWithRetry(() => import("./pages/AdminGroupInfrastructurePage"));
 const AdminClubMigrationPage = lazyWithRetry(() => import("./pages/AdminClubMigrationPage"));
+const ClaimAccountPage = lazyWithRetry(() => import("./pages/ClaimAccountPage"));
 const PlacementAdminSettingsPage = lazyWithRetry(() => import("./pages/PlacementAdminSettingsPage"));
 const AdMobSettingsPage = lazyWithRetry(() => import("./pages/AdMobSettingsPage"));
 const ClassEnrolmentPage = lazyWithRetry(() => import("./pages/ClassEnrolmentPage"));
@@ -556,6 +557,7 @@ const App = () => {
               <Routes>
                 {/* Public routes */}
                 <Route path="/auth" element={<AuthPage />} />
+                <Route path="/claim-account" element={<ClaimAccountPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/verify-reset-code" element={<VerifyResetCodePage />} />
                 <Route path="/complete-profile" element={<CompleteProfilePage />} />

@@ -10,7 +10,7 @@ on:
         type: choice
         required: true
         default: check
-        options: [check, migrate, recover]
+        options: [check, migrate, recover, invite]
       club_id:
         description: Club ID (from the Migrate club admin page)
         required: true
@@ -43,7 +43,7 @@ jobs:
       - name: Install existing dependencies
         run: node scripts/ensure-frontend-deps.mjs
       - name: Test migration safety rules
-        run: node --test scripts/migrate-club-plan.test.mjs scripts/migrate-club-writers.test.mjs scripts/migrate-club-run.test.mjs
+        run: node --test scripts/migrate-club-plan.test.mjs scripts/migrate-club-writers.test.mjs scripts/migrate-club-run.test.mjs scripts/migrate-club-claims.test.mjs
       - name: Run
         env:
           ACTION: ${{ inputs.action }}
@@ -54,5 +54,8 @@ jobs:
           SUPABASE_URL: ${{ vars.IGNITE_LIVE_SUPABASE_URL || 'https://cdrxmelhysdqrccttsjg.supabase.co' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ICP_EMAIL_FROM: ${{ vars.ICP_EMAIL_FROM }}
+          ICP_EMAIL_APP_URL: ${{ vars.ICP_EMAIL_APP_URL }}
           NODE_PATH: ${{ github.workspace }}/frontend/node_modules
         run: node scripts/migrate-club.mjs

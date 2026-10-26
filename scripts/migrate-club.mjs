@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import { STEPS, validateRequest, gateReasons, buildPlan, newJournal, nextAction, normalizePlan, recordIntent, recordReply } from './migrate-club-plan.mjs';
 import { createPrivateKey } from 'node:crypto';
+import { sendClaimInvites } from './migrate-club-claims.mjs';
 
 const root = process.env.GITHUB_WORKSPACE || join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -132,6 +133,7 @@ export async function main(env = process.env) {
   const req = { action: env.ACTION, clubId: env.CLUB_ID?.trim(), groupId: env.GROUP_ID?.trim(), plan: env.PLAN, confirmation: env.CONFIRMATION };
   validateRequest(req);
   const target = loadGroup(req.groupId);
+  if (req.action === 'invite') return invite(req, target);
   const groups = allGroupIds().map(loadGroup).filter(Boolean);
   const inventory = await inventoryClub(req.clubId);
   const clubOnChain = await findClubOnChain(req.clubId, groups);
@@ -163,6 +165,54 @@ export async function main(env = process.env) {
   await runSteps({ journal, path, ctx: writerContext(req.clubId, target) });
 }
 
+/** Claimed Supabase user -> principal pairs on the destination club service. */
+async function claimedAccounts(ctx) {
+  const { IDL } = ctx.require('@icp-sdk/core/candid');
+  const { Actor } = ctx.require('@icp-sdk/core/agent');
+  const Claimed = IDL.Record({ source_user: IDL.Text, principal: IDL.Principal, claimed_ms: IDL.Nat64 });
+  const actor = Actor.createActor(({ IDL }) => IDL.Service({
+    export_account_claims: IDL.Func([IDL.Text, IDL.Nat, IDL.Nat], [IDL.Variant({ Ok: IDL.Vec(Claimed), Err: IDL.Text })], ['query']),
+  }), { agent: ctx.agent, canisterId: ctx.target.canisters.club_domain });
+  const out = new Map();
+  for (let offset = 0; ; offset += 500) {
+    const r = await actor.export_account_claims(ctx.clubId, BigInt(offset), 500n);
+    if ('Err' in r) throw Error(`Claim read refused: ${r.Err}`);
+    for (const c of r.Ok) out.set(c.source_user, c.principal);
+    if (r.Ok.length < 500) return out;
+  }
+}
+
+async function invite(req, target) {
+  if (!target?.canisters?.club_domain) throw Error('Target group has no club service');
+  const appUrl = process.env.ICP_EMAIL_APP_URL, from = process.env.ICP_EMAIL_FROM, resend = process.env.RESEND_API_KEY;
+  if (!appUrl || !from || !resend) throw Error('ICP_EMAIL_APP_URL, ICP_EMAIL_FROM and RESEND_API_KEY are required');
+  const ctx = writerContext(req.clubId, target);
+  const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const { IDL } = ctx.require('@icp-sdk/core/candid');
+  const { Actor } = ctx.require('@icp-sdk/core/agent');
+  const Reg = IDL.Record({ token_hash: IDL.Text, source_user: IDL.Text, email_hint: IDL.Text, expires_ms: IDL.Nat64 });
+  const club = Actor.createActor(({ IDL }) => IDL.Service({
+    register_account_claims: IDL.Func([IDL.Text, IDL.Vec(Reg)], [IDL.Variant({ Ok: IDL.Nat, Err: IDL.Text })], []),
+  }), { agent: ctx.agent, canisterId: target.canisters.club_domain });
+  const db = supabase();
+  const r = await sendClaimInvites({
+    clubId: req.clubId, group: req.groupId, appUrl, now: Date.now(), db,
+    claimedUsers: async () => [...(await claimedAccounts(ctx)).keys()],
+    authEmail: async (id) => {
+      const res = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(id)}`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+      if (!res.ok) return null;
+      const u = await res.json();
+      return u.email_confirmed_at ? u.email : null; // verified addresses only
+    },
+    registerPage: async (rows) => { const x = await club.register_account_claims(req.clubId, rows); if ('Err' in x) throw Error(`Claim registration refused: ${x.Err}`); },
+    sendEmail: async ({ to, subject, text }) => {
+      const res = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${resend}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from, to: [to], subject, text }) });
+      if (!res.ok) throw Error(`Email ${res.status}`);
+    },
+  });
+  summary(`## Account claim emails → ${req.groupId}\n| Members | Already linked | Sent | No verified email | Failed |\n|---|---|---|---|---|\n| ${r.members} | ${r.alreadyLinked} | ${r.sent} | ${r.noEmail} | ${r.failed} |`);
+}
+
 /** Signed context for writers: deploy identity agent + exact-club Supabase reads. */
 function writerContext(clubId, target) {
   const require = createRequire(join(root, 'frontend/package.json'));
@@ -179,11 +229,14 @@ function writerContext(clubId, target) {
     agent: HttpAgent.createSync({ host: 'https://icp-api.io', identity }),
     rows: (table, col) => db.all(table, `${col}=eq.${encodeURIComponent(clubId)}`),
     rowsIn: async (table, col, ids) => { const out = []; for (let i = 0; i < ids.length; i += 100) out.push(...await db.all(table, `${col}=${inList(ids.slice(i, i + 100))}`)); return out; },
+    claims: null, // filled by loadClaims() before member-owned steps
     schemaFile: (domain) => new URL(`./migrate-schemas/${domain}.snapshot.did.js`, import.meta.url).href,
   };
 }
 
 /** Executes writer steps in journal order; a lost reply is recorded as unknown and stops the run. */
+export { claimedAccounts };
+
 export async function runSteps({ journal, path, ctx, writers = WRITERS, save = (j) => writeFileSync(path, JSON.stringify(j, null, 2)) }) {
   for (;;) {
     const next = nextAction(journal);

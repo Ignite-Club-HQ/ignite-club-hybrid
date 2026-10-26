@@ -60,6 +60,11 @@ export interface Child {
   'club_id' : [] | [string],
   'parent' : [] | [Principal],
 }
+export interface Claimed {
+  'principal' : Principal,
+  'claimed_ms' : bigint,
+  'source_user' : string,
+}
 export interface ClassEnrolment {
   'id' : string,
   'status' : string,
@@ -605,6 +610,11 @@ export interface Main {
   >,
   'erase_my_membership' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'execute' : ActorMethod<[string], Result__2>,
+  'export_account_claims' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : Array<Claimed> } |
+      { 'Err' : string }
+  >,
   'export_acl' : ActorMethod<[], { 'Ok' : Config } | { 'Err' : string }>,
   'export_club_snapshot' : ActorMethod<
     [string],
@@ -1647,6 +1657,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'redeem_account_claim' : ActorMethod<
+    [string],
+    { 'Ok' : { 'club_id' : string } } |
+      { 'Err' : string }
+  >,
   /**
    * / Redeems a storage promo code for a club. Returns the new add-on total (GB).
    */
@@ -1661,6 +1676,11 @@ export interface Main {
    */
   'redeem_team_promo_code' : ActorMethod<
     [string, string, string, boolean],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'register_account_claims' : ActorMethod<
+    [string, Array<Registration>],
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
@@ -2419,6 +2439,12 @@ export interface Reference {
   'content_hash' : [] | [string],
   'store' : [] | [string],
   'resource_id' : string,
+}
+export interface Registration {
+  'email_hint' : string,
+  'source_user' : string,
+  'expires_ms' : bigint,
+  'token_hash' : string,
 }
 export interface RemovedMember {
   'club' : string,

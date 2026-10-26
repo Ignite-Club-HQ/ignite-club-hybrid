@@ -27,6 +27,7 @@ import Time "mo:core/Time";
 import Timer "mo:core/Timer";
 import Types "types";
 import AccountErasure "accountErasure";
+import AccountClaims "accountClaims";
 import AccountUnlinkFence "accountUnlinkFence";
 import Oql "../../shared/Oql";
 import OqlClubs "oqlClubs";
@@ -205,6 +206,8 @@ persistent actor class Main(governorInit : Principal) = this {
   var pendingInvites : [Types.PendingInvite];
   var familyInvites : [{ request_id : Text; created_by : Principal; primary : Text; secondary : ?Text; children : [Text]; bound_secondary : ?Principal }];
   var emailJobs : Map.Map<Text, EmailOutbox.Job>;
+  var accountClaims : Map.Map<Text, AccountClaims.Claim>;
+  var claimsByPrincipal : Map.Map<Text, Text>;
   var emailWorkers : [Principal];
   var broadcastRelayReceipts : Map.Map<Text, BroadcastRelay.Receipt>;
   var broadcastErasureSubjects : Map.Map<Principal, [Principal]>;
@@ -2832,6 +2835,22 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(getListing(club))
   };
 
+  // ---- One-time Supabase account claims (club migration tool) ----
+  public shared ({ caller }) func register_account_claims(club : Text, rows : [AccountClaims.Registration]) : async { #Ok : Nat; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor required");
+    AccountClaims.register(accountClaims, club, rows)
+  };
+
+  public shared ({ caller }) func redeem_account_claim(token : Text) : async { #Ok : { club_id : Text }; #Err : Text } {
+    AccountClaims.redeem(accountClaims, claimsByPrincipal, caller, token, nowMs())
+  };
+
+  public query ({ caller }) func export_account_claims(club : Text, offset : Nat, limit : Nat) : async { #Ok : [AccountClaims.Claimed]; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok(AccountClaims.claimed(accountClaims, club, offset, limit))
+  };
+
   public shared ({ caller }) func import_frozen_club(club : Text, listing : Types.Listing) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor required");
@@ -2980,6 +2999,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   func eraseMembership(principals : [Principal], accountId : Text) : { #Ok; #Err : Text } {
+    AccountClaims.erase(accountClaims, claimsByPrincipal, principals);
     if (principals.any(func(p) = p.equal(governor))) return #Err("Governor account cannot be erased");
     let erasedInvites=pendingInvites.filter(func i = principals.any(func p = p==i.invited_by or i.accepted_by==?p)).map(func i = i.id);
     ignore emailOutbox.scrub(func j = erasedInvites.any(func id = id==j.resource));
