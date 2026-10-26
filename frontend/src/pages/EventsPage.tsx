@@ -9,6 +9,7 @@ import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useStableVisibleList } from "@/hooks/useStableVisibleList";
+import { useReadingPosition } from "@/hooks/useReadingPosition";
 import { useQuery, useQueryClient, onlineManager } from "@tanstack/react-query";
 import { Calendar as CalendarIcon, List, CalendarDays, Filter, CalendarPlus, RefreshCw, ChevronRight } from "lucide-react";
 import { exportEventsIcs } from "@/lib/icsExport";
@@ -1031,6 +1032,7 @@ export default function EventsPage() {
     );
 
   const visibleScope = JSON.stringify([user?.id, eventsScopeKey, pastDaysBack, filter]);
+  const readingPosition = useReadingPosition(isIcpAuthBackend, visibleScope);
   const stableUpcoming = useStableVisibleList(freshUpcomingEvents ?? [], {
     enabled: isIcpAuthBackend, scope: `${visibleScope}:upcoming`, key: event => event.id,
   });
@@ -1213,6 +1215,7 @@ export default function EventsPage() {
 
   return (
     <div
+      ref={readingPosition}
       className="py-6 space-y-6 [overflow-anchor:none]"
       data-schedule-scroll-anchor="disabled"
     >
@@ -1578,9 +1581,11 @@ export default function EventsPage() {
               </Card>
             ) : (
               <>
-                {upcomingEvents?.slice(0, 10).map((event, idx) => ("is_competition_fixture" in event && event.is_competition_fixture)
-                  ? <CompetitionFixtureCard key={event.id} event={event} />
-                  : <EventCard key={event.id} event={event} isAdmin={isAdminForEvent(event)} hasViewed={viewedEventIds?.has(event.id) ?? true} stackIndex={idx} />)}
+                {upcomingEvents?.slice(0, 10).map((event, idx) => <div key={event.id} data-reading-row={event.id}>
+                  {("is_competition_fixture" in event && event.is_competition_fixture)
+                    ? <CompetitionFixtureCard event={event} />
+                    : <EventCard event={event} isAdmin={isAdminForEvent(event)} hasViewed={viewedEventIds?.has(event.id) ?? true} stackIndex={idx} />}
+                </div>)}
                 {(upcomingEvents?.length || 0) > 10 && (
                   <p className="text-center text-xs text-muted-foreground py-2">
                     +{upcomingEvents!.length - 10} more upcoming events
@@ -1607,9 +1612,11 @@ export default function EventsPage() {
               </Card>
             ) : (
               <>
-                {pastEvents?.map((event, idx) => ("is_competition_fixture" in event && event.is_competition_fixture)
-                  ? <CompetitionFixtureCard key={event.id} event={event} />
-                  : <EventCard key={event.id} event={event} isAdmin={isAdminForEvent(event)} hasViewed={viewedEventIds?.has(event.id) ?? true} stackIndex={idx} />)}
+                {pastEvents?.map((event, idx) => <div key={event.id} data-reading-row={event.id}>
+                  {("is_competition_fixture" in event && event.is_competition_fixture)
+                    ? <CompetitionFixtureCard event={event} />
+                    : <EventCard event={event} isAdmin={isAdminForEvent(event)} hasViewed={viewedEventIds?.has(event.id) ?? true} stackIndex={idx} />}
+                </div>)}
                 {pastDaysBack < 365 && (
                   <div className="pt-2 pb-1 flex justify-center">
                     <Button

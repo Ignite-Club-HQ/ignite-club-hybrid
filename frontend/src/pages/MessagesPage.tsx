@@ -1,6 +1,7 @@
 import { useStickyList } from "@/hooks/useStickyList";
 import { useStableInboxReadModel } from "@/hooks/useStableInboxReadModel";
 import { useStableVisibleList } from "@/hooks/useStableVisibleList";
+import { useReadingPosition } from "@/hooks/useReadingPosition";
 import {
   conversationTypeAccentStyle,
   conversationTypeActiveStyle,
@@ -183,6 +184,7 @@ export default function MessagesPage() {
   // Effective club filter: use theme filter if active, otherwise use local filter
   const effectiveClubFilter = activeClubFilter || (localClubFilter !== "all" ? localClubFilter : null);
   const hasLocalFilter = !activeClubFilter && localClubFilter !== "all";
+  const readingPosition = useReadingPosition(useIcpLab, JSON.stringify([user?.id, effectiveClubFilter, searchQuery, typeFilter]));
 
   // Gate Chat Recap to the active club context so a free active club can't
   // borrow Pro access from another club the user belongs to.
@@ -1962,8 +1964,8 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
   const renderConversationCard = (item: UnifiedConversation) => {
     const typeLabel = typeLabels[item.type];
     return (
+      <div key={item.key} data-reading-row={item.key}>
       <ConversationRow
-        key={item.key}
         item={item}
         currentUserId={user?.id}
         typeLabel={typeLabel}
@@ -1975,11 +1977,12 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
         onHideDM={onHideDM}
         onHideGroup={onHideGroup}
       />
+      </div>
     );
   };
 
   return (
-    <div className="py-4 space-y-4">
+    <div ref={readingPosition} className="py-4 space-y-4">
 
       {!isOnline && (
         <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
