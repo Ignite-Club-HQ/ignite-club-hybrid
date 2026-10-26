@@ -8,6 +8,21 @@
 
 
 export const idlFactory = ({ IDL }) => {
+  const RewardRedemption = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'points_spent' : IDL.Nat32,
+    'redeemed_at_ms' : IDL.Opt(IDL.Nat64),
+    'user_id' : IDL.Opt(IDL.Text),
+    'child_id' : IDL.Opt(IDL.Text),
+    'verified_at_ms' : IDL.Opt(IDL.Nat64),
+    'created_at_ms' : IDL.Nat64,
+    'reward_id' : IDL.Text,
+    'verified_by' : IDL.Opt(IDL.Principal),
+    'club_id' : IDL.Text,
+    'idempotency_key' : IDL.Opt(IDL.Text),
+  });
+  const Subject = IDL.Variant({ 'User' : IDL.Text, 'Child' : IDL.Text });
   const PointsHistoryEntry = IDL.Record({
     'id' : IDL.Text,
     'balance_after' : IDL.Int32,
@@ -21,36 +36,6 @@ export const idlFactory = ({ IDL }) => {
     'source_type' : IDL.Text,
     'amount' : IDL.Int32,
     'club_id' : IDL.Text,
-  });
-  const ChildClubPoints = IDL.Record({
-    'updated_at_ms' : IDL.Nat64,
-    'child_id' : IDL.Text,
-    'club_id' : IDL.Text,
-    'points' : IDL.Int32,
-  });
-  const PointsCooldown = IDL.Record({
-    'id' : IDL.Text,
-    'action_type' : IDL.Text,
-    'awarded_date' : IDL.Text,
-    'points_awarded' : IDL.Nat32,
-    'user_id' : IDL.Text,
-    'created_at_ms' : IDL.Nat64,
-    'club_id' : IDL.Text,
-    'scope_id' : IDL.Text,
-  });
-  const ClubPointsSettings = IDL.Record({
-    'points_icon_url' : IDL.Opt(IDL.Text),
-    'updated_at_ms' : IDL.Nat64,
-    'display_name' : IDL.Opt(IDL.Text),
-    'disabled' : IDL.Bool,
-    'club_id' : IDL.Text,
-    'disable_team_pom_rewards' : IDL.Bool,
-  });
-  const UserClubPoints = IDL.Record({
-    'updated_at_ms' : IDL.Nat64,
-    'user_id' : IDL.Text,
-    'club_id' : IDL.Text,
-    'points' : IDL.Int32,
   });
   const ClubReward = IDL.Record({
     'id' : IDL.Text,
@@ -69,25 +54,60 @@ export const idlFactory = ({ IDL }) => {
     'is_active' : IDL.Bool,
     'club_id' : IDL.Text,
   });
-  const RewardRedemption = IDL.Record({
-    'id' : IDL.Text,
-    'status' : IDL.Text,
-    'points_spent' : IDL.Nat32,
-    'redeemed_at_ms' : IDL.Opt(IDL.Nat64),
-    'user_id' : IDL.Opt(IDL.Text),
-    'child_id' : IDL.Opt(IDL.Text),
-    'verified_at_ms' : IDL.Opt(IDL.Nat64),
-    'created_at_ms' : IDL.Nat64,
-    'reward_id' : IDL.Text,
-    'verified_by' : IDL.Opt(IDL.Principal),
+  const UserClubPoints = IDL.Record({
+    'updated_at_ms' : IDL.Nat64,
+    'user_id' : IDL.Text,
     'club_id' : IDL.Text,
-    'idempotency_key' : IDL.Opt(IDL.Text),
+    'points' : IDL.Int32,
+  });
+  const PointsCooldown = IDL.Record({
+    'id' : IDL.Text,
+    'action_type' : IDL.Text,
+    'awarded_date' : IDL.Text,
+    'points_awarded' : IDL.Nat32,
+    'user_id' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'club_id' : IDL.Text,
+    'scope_id' : IDL.Text,
   });
   const RoleGrant = IDL.Record({
     'role' : IDL.Text,
     'user' : IDL.Principal,
     'team_id' : IDL.Opt(IDL.Text),
     'club_id' : IDL.Text,
+  });
+  const ChildClubPoints = IDL.Record({
+    'updated_at_ms' : IDL.Nat64,
+    'child_id' : IDL.Text,
+    'club_id' : IDL.Text,
+    'points' : IDL.Int32,
+  });
+  const ClubPointsSettings = IDL.Record({
+    'points_icon_url' : IDL.Opt(IDL.Text),
+    'updated_at_ms' : IDL.Nat64,
+    'display_name' : IDL.Opt(IDL.Text),
+    'disabled' : IDL.Bool,
+    'club_id' : IDL.Text,
+    'disable_team_pom_rewards' : IDL.Bool,
+  });
+  const LeaderboardEntry = IDL.Record({
+    'subject_id' : IDL.Text,
+    'points' : IDL.Int32,
+  });
+  const HistoryPage = IDL.Record({
+    'total' : IDL.Nat,
+    'items' : IDL.Vec(PointsHistoryEntry),
+  });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
+  const Receipt = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
   });
   const PointsSnapshot = IDL.Record({
     'history' : IDL.Vec(PointsHistoryEntry),
@@ -99,10 +119,366 @@ export const idlFactory = ({ IDL }) => {
     'redemptions' : IDL.Vec(RewardRedemption),
     'roles' : IDL.Vec(RoleGrant),
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
+    'addBulkAccessPrincipal' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'approve_redemption' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : RewardRedemption, 'Err' : IDL.Text })],
+        [],
+      ),
+    'award_points' : IDL.Func(
+        [
+          IDL.Text,
+          Subject,
+          IDL.Text,
+          IDL.Text,
+          IDL.Int32,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Nat32),
+        ],
+        [IDL.Variant({ 'Ok' : PointsHistoryEntry, 'Err' : IDL.Text })],
+        [],
+      ),
+    'award_points_once' : IDL.Func(
+        [
+          IDL.Text,
+          Subject,
+          IDL.Text,
+          IDL.Text,
+          IDL.Int32,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : PointsHistoryEntry, 'Err' : IDL.Text })],
+        [],
+      ),
+    'cancel_redemption' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : RewardRedemption, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_reward' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Nat32,
+          IDL.Bool,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : ClubReward, 'Err' : IDL.Text })],
+        [],
+      ),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
+    'delete_reward' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'export_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'export_state' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'userClubPoints' : IDL.Vec(UserClubPoints),
+              'schema' : IDL.Nat32,
+              'cooldowns' : IDL.Vec(PointsCooldown),
+              'governor' : IDL.Principal,
+              'clubRewards' : IDL.Vec(ClubReward),
+              'redemptions' : IDL.Vec(RewardRedemption),
+              'roles' : IDL.Vec(RoleGrant),
+              'childClubPoints' : IDL.Vec(ChildClubPoints),
+              'pointsHistory' : IDL.Vec(PointsHistoryEntry),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'fulfill_redemption' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : RewardRedemption, 'Err' : IDL.Text })],
+        [],
+      ),
+    'get_child_points' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Int32, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_child_points_all_clubs' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'get_child_points_batch' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'get_club_points_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ClubPointsSettings), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_engagement_streak' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_leaderboard' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Variant({ 'User' : IDL.Null, 'Child' : IDL.Null }),
+          IDL.Text,
+          IDL.Nat,
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Vec(LeaderboardEntry), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_user_points' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Int32, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_user_points_all_clubs' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'grant_role' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'import_club_snapshot' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'listBulkAccessPrincipals' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_points_history' : IDL.Func(
+        [IDL.Text, IDL.Opt(Subject), IDL.Nat, IDL.Nat],
+        [IDL.Variant({ 'Ok' : HistoryPage, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_redemptions' : IDL.Func(
+        [IDL.Text, IDL.Opt(Subject)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RewardRedemption), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_rewards' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubReward), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'purge_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_child_points' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Int32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_child_points_all_clubs' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_child_points_batch' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_club_points_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ClubPointsSettings), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_engagement_streak' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_leaderboard' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Variant({ 'User' : IDL.Null, 'Child' : IDL.Null }),
+          IDL.Text,
+          IDL.Nat,
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Vec(LeaderboardEntry), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_user_points' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Int32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_user_points_all_clubs' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_points_history' : IDL.Func(
+        [IDL.Text, IDL.Opt(Subject), IDL.Nat, IDL.Nat],
+        [IDL.Variant({ 'Ok' : HistoryPage, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_redemptions' : IDL.Func(
+        [IDL.Text, IDL.Opt(Subject)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RewardRedemption), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_rewards' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubReward), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_group_opening_configuration' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
+    'redeem_reward' : IDL.Func(
+        [IDL.Text, Subject, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : RewardRedemption, 'Err' : IDL.Text })],
+        [],
+      ),
+    'refresh_club_roles' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'removeBulkAccessPrincipal' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_club_points_settings' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool, IDL.Opt(IDL.Text), IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubPointsSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_transfer_fence' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'transfer_governorship' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'update_reward' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Nat32,
+          IDL.Bool,
+          IDL.Bool,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : ClubReward, 'Err' : IDL.Text })],
+        [],
+      ),
     'zz_migrate_schema' : IDL.Func([PointsSnapshot], [], ['query']),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

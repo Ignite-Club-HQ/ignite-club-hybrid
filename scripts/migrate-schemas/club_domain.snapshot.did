@@ -260,6 +260,13 @@ type RemovedMember =
    removed_by: principal;
    user: principal;
  };
+type Registration = 
+ record {
+   email_hint: text;
+   expires_ms: nat64;
+   source_user: text;
+   token_hash: text;
+ };
 type Reference = 
  record {
    content_hash: opt text;
@@ -792,6 +799,11 @@ type Main =
                                  Ok;
                                });
    execute: (input: text) -> (Result__2) query;
+   export_account_claims: (club: text, offset: nat, limit: nat) ->
+    (variant {
+       Err: text;
+       Ok: vec Claimed;
+     }) query;
    export_acl: () -> (variant {
                         Err: text;
                         Ok: Config;
@@ -1847,6 +1859,11 @@ type Main =
                                        Err: text;
                                        Ok;
                                      });
+   redeem_account_claim: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: record {club_id: text;};
+     });
    /// Redeems a storage promo code for a club. Returns the new add-on total (GB).
    redeem_club_storage_promo_code: (code: text, club_id: text) ->
     (variant {
@@ -1860,6 +1877,11 @@ type Main =
                 Err: text;
                 Ok: nat64;
               });
+   register_account_claims: (club: text, rows: vec Registration) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    register_media_quota_store: (store: principal) ->
     (variant {
        Err: text;
@@ -2713,6 +2735,12 @@ type ClassEnrolment =
    status: text;
    term_id: text;
    updated_at_ms: nat64;
+ };
+type Claimed = 
+ record {
+   claimed_ms: nat64;
+   "principal": principal;
+   source_user: text;
  };
 type Child = 
  record {

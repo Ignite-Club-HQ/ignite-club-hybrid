@@ -45,6 +45,17 @@ type Receipt =
    receiver: principal;
    request: Request;
  };
+type PointsSnapshot = 
+ record {
+   children: vec ChildClubPoints;
+   cooldowns: vec PointsCooldown;
+   history: vec PointsHistoryEntry;
+   redemptions: vec RewardRedemption;
+   rewards: vec ClubReward;
+   roles: vec RoleGrant;
+   settings: vec ClubPointsSettings;
+   users: vec UserClubPoints;
+ };
 type PointsHistoryEntry = 
  record {
    amount: int32;
@@ -366,6 +377,7 @@ type Main =
        Err: text;
        Ok: ClubReward;
      });
+   zz_migrate_schema: (PointsSnapshot) -> () query;
  };
 type LeaderboardEntry = 
  record {
@@ -411,5 +423,4 @@ type ChildClubPoints =
    points: int32;
    updated_at_ms: nat64;
  };
-type PointsSnapshot = record { roles: vec RoleGrant; history: vec PointsHistoryEntry; users: vec UserClubPoints; children: vec ChildClubPoints; rewards: vec ClubReward; redemptions: vec RewardRedemption; cooldowns: vec PointsCooldown; settings: vec ClubPointsSettings; };
-service : { zz_migrate_schema: (PointsSnapshot) -> () query; }
+service : (governorInit: principal) -> Main
