@@ -311,6 +311,13 @@ persistent actor class Main(governorInit : Principal) = this {
     gamePlayerStats:=gamePlayerStats.filter(func(r)=not evs.any(func(e)=r.event_id==e.id));
     for ((id, _) in Map.entries(gamePlayerDetails).toArray().values()) if (evs.any(func e = e.id == id)) Map.remove(gamePlayerDetails, Text.compare, id);
     gameSummaries:=gameSummaries.filter(func(r)=not evs.any(func(e)=r.event_id==e.id));
+    duties:=duties.filter(func(d)=not evs.any(func(e)=e.id==d.event_id));
+    eventDutyTeams:=eventDutyTeams.filter(func(d)=not evs.any(func(e)=e.id==d.event_id));
+    openDuties:=openDuties.filter(func(d)=not evs.any(func(e)=e.id==d.event_id));
+    eventGuests:=eventGuests.filter(func(g)=not evs.any(func(e)=e.id==g.event_id));
+    eventCaptains:=eventCaptains.filter(func(c)=not evs.any(func(e)=e.id==c.event_id));
+    eventGoalkeepers:=eventGoalkeepers.filter(func(g)=not evs.any(func(e)=e.id==g.event_id));
+    eventPotm:=eventPotm.filter(func(p)=not evs.any(func(e)=e.id==p.event_id));
     competitionEventOperations:=competitionEventOperations.map(func(o)={o with event_ids=o.event_ids.filter(func(id)=not evs.any(func(e)=e.id==id))});
     #Ok(evs.size())
   };
@@ -984,6 +991,12 @@ persistent actor class Main(governorInit : Principal) = this {
         lineups := lineups.filter(func(item) = not isDoomed(item.event_id));
         lineupSnapshots := lineupSnapshots.filter(func(item) = not isDoomed(item.event_id));
         duties := duties.filter(func(item) = not isDoomed(item.event_id));
+        eventDutyTeams := eventDutyTeams.filter(func(item) = not isDoomed(item.event_id));
+        openDuties := openDuties.filter(func(item) = not isDoomed(item.event_id));
+        eventGuests := eventGuests.filter(func(item) = not isDoomed(item.event_id));
+        eventCaptains := eventCaptains.filter(func(item) = not isDoomed(item.event_id));
+        eventGoalkeepers := eventGoalkeepers.filter(func(item) = not isDoomed(item.event_id));
+        eventPotm := eventPotm.filter(func(item) = not isDoomed(item.event_id));
         roster := roster.filter(func(item) = not isDoomed(item.event_id));
         recurrences := recurrences.filter(func(item) = not isDoomed(item.event_id));
         if (not events.any(func(item) = item.series_id == ?id)) {
@@ -4165,6 +4178,9 @@ persistent actor class Main(governorInit : Principal) = this {
     eventGroupDuties := eventGroupDuties.filter(func(d) = not inDoomedGroup(d.group_id));
     autoReminders := autoReminders.filter(func(r) = not inDoomed(r.event_id));
     eventDutyTeams := eventDutyTeams.filter(func(item) = not inDoomed(item.event_id) and not inDoomedTeam(item.team_id));
+    eventCaptains := eventCaptains.filter(func(c) = not inDoomed(c.event_id) and not inDoomedTeam(c.team_id));
+    eventGoalkeepers := eventGoalkeepers.filter(func(g) = not inDoomed(g.event_id) and not inDoomedTeam(g.team_id));
+    eventPotm := eventPotm.filter(func(p) = not inDoomed(p.event_id) and (switch (p.team_id) { case (?t) { not inDoomedTeam(t) }; case null { true } }));
     dutyTeamReminderSent := dutyTeamReminderSent.filter(func(id) = not inDoomed(id));
     pointsReminderSent := pointsReminderSent.filter(func(id) = not inDoomed(id));
     individualDutyReminderSent := individualDutyReminderSent.filter(func(id) = not inDoomed(id));
