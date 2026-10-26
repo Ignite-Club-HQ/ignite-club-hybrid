@@ -102,9 +102,10 @@ try {
     for (const at of [1,2]) {
       const finishConfig = await hold(at);
       i.setPrincipal(governor);
-      ok(await i.configure_membership_directory(binding,sources,BigInt(at+1)));
-      assert.ok('Err' in await finishConfig(), `Configuration replacement at held reply ${at} must disclose no names`);
-      assert.equal(ok(await read(0)).length,1,'Retry verifies replacement configuration');
+      const replacement=await i.configure_membership_directory(binding,sources,BigInt(at+1));
+      assert.ok('Err' in replacement && replacement.Err.includes('fenced recovery'), 'Ordinary configuration replacement must remain unavailable');
+      assert.equal(ok(await finishConfig()).length,1,'Rejected configuration mutation does not poison an authorized held read');
+      assert.equal(ok(await read(0)).length,1,'Retry retains the original configuration');
     }
     for (const at of [1,2]) {
       const alias=p(110+at);
