@@ -108,7 +108,7 @@ test('copyByteItem encrypts, registers, chunks and finalizes with hash check', a
 // production key. For unit tests we pass the real derived key.
 async function fakePublicKey() {
   const { productionPiiPublicKey } = await import('./migrate-club-family.mjs');
-  return productionPiiPublicKey({ canisters: { pii_access_control: 'aaaaa-aa' } });
+  return productionPiiPublicKey({ canisters: { pii_access_control: 'vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae' } });
 }
 
 test('copyByteItem refuses to replay an unknown outcome', async () => {
