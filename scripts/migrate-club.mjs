@@ -295,22 +295,62 @@ function byteJournal(path) {
 /** Executes writer steps in journal order; a lost reply is recorded as unknown and stops the run. */
 export { claimedAccounts };
 
-export async function runSteps({ journal, path, ctx, approval, writers = WRITERS, save = (j) => writeFileSync(path, JSON.stringify(j, null, 2)) }) {
+/** Read back one domain's decoded snapshot; messaging exports page by page. */
+export async function readSnapshot(ctx, domain) {
+  const { IDL } = ctx.require('@icp-sdk/core/candid');
+  const { Actor } = ctx.require('@icp-sdk/core/agent');
+  const canisterId = ctx.target.canisters[domain];
+  if (!canisterId) throw Error(`Destination ${domain} missing`);
+  const type = await snapshotType(ctx.require, ctx.schemaFile(domain));
+  const decode = (blob) => IDL.decode([type], Buffer.from(blob))[0];
+  if (domain === 'messaging_domain') {
+    const actor = Actor.createActor(({ IDL }) => IDL.Service({
+      export_club_snapshot_page: IDL.Func([IDL.Text, IDL.Nat, IDL.Nat], [IDL.Variant({ Ok: IDL.Vec(IDL.Nat8), Err: IDL.Text })], []),
+    }), { agent: ctx.agent, canisterId });
+    const merged = { conversations: [], messages: [] };
+    for (let offset = 0; ; offset += 1) {
+      const r = await actor.export_club_snapshot_page(ctx.clubId, BigInt(offset), 1n);
+      if ('Err' in r) throw Error(`messaging export refused: ${r.Err}`);
+      const page = decode(r.Ok);
+      merged.conversations.push(...(page.conversations ?? []));
+      merged.messages.push(...(page.messages ?? []));
+      if (!(page.conversations?.length) && !(page.messages?.length)) return merged;
+    }
+  }
+  const actor = Actor.createActor(({ IDL }) => IDL.Service({
+    export_club_snapshot: IDL.Func([IDL.Text], [IDL.Variant({ Ok: IDL.Vec(IDL.Nat8), Err: IDL.Text })], []),
+  }), { agent: ctx.agent, canisterId });
+  const r = await actor.export_club_snapshot(ctx.clubId);
+  if ('Err' in r) throw Error(`${domain} export refused: ${r.Err}`);
+  return decode(r.Ok);
+}
+
+export async function runSteps({ journal, path, ctx, approval, writers = WRITERS, save = (j) => writeFileSync(path, JSON.stringify(j, null, 2)), onSave = async () => {} }) {
   assertMigrationApproval(approval, 'data', ctx.clubId, ctx.target?.groupId, journal.planHash);
+  const persist = async (j) => { save(j); await onSave(j); };
   for (;;) {
     const next = nextAction(journal);
     if (next.done || next.blocked) { if (next.blocked) throw Error(next.blocked); return journal; }
     if (next.step === 'route') throw Error('Data migration approval does not authorize sign-in/routing cutover; separate authentication approval is required');
+    if (next.step === 'verify') {
+      journal = recordIntent(journal, next.step, next.page); await persist(journal);
+      try {
+        const report = await reconcileClub(ctx, journal, { readSnapshot: (d) => readSnapshot(ctx, d) });
+        summary(`### Reconciliation\n| Domain | Expected | On-chain | OK |\n|---|---|---|---|\n${report.map((r) => `| ${r.domain} | ${r.expected} | ${r.actual} | ${r.ok ? 'yes' : 'NO'} |`).join('\n')}`);
+      } catch (e) { journal = recordReply(journal, next.step, next.page, { unknown: true }); await persist(journal); throw e; }
+      journal = recordReply(journal, next.step, next.page, { ok: true, last: true }); await persist(journal);
+      continue;
+    }
     const write = writers[next.step];
-    if (!write) return journal; // verify/route steps run separately
+    if (!write) return journal;
     if (['children', 'events', 'rewards', 'messaging', 'notifications', 'media', 'vault', 'media_bytes'].includes(next.step) && !ctx.claims) {
       ctx.claims = await (ctx.readClaims ? ctx.readClaims() : claimedAccounts(ctx));
     }
-    journal = recordIntent(journal, next.step, next.page); save(journal);
+    journal = recordIntent(journal, next.step, next.page); await persist(journal);
     let reply;
-    try { const r = await write(ctx); reply = { ok: true, last: true }; summary(`- ${next.step}: ${r.records} records loaded`); }
-    catch (e) { reply = /refused|missing/.test(e.message) ? { ok: false } : { unknown: true }; journal = recordReply(journal, next.step, next.page, reply); save(journal); throw e; }
-    journal = recordReply(journal, next.step, next.page, reply); save(journal);
+    try { const r = await write(ctx); reply = { ok: true, last: true, counts: r.counts }; summary(`- ${next.step}: ${r.records} records loaded`); }
+    catch (e) { reply = /refused|missing/.test(e.message) ? { ok: false } : { unknown: true }; journal = recordReply(journal, next.step, next.page, reply); await persist(journal); throw e; }
+    journal = recordReply(journal, next.step, next.page, reply); await persist(journal);
   }
 }
 
