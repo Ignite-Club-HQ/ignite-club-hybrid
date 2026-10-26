@@ -9,6 +9,16 @@ and other details must remain viewable in the app.
 
 ## Implemented locally
 
+- Added dormant, original-authority-bound adult-name reference hydration to the
+  shared ID-based profile reader and own-profile reader. Legacy names incur no
+  additional requests. Private references decrypt in bounded deduplicated
+  batches through existing authorization-gated PII APIs; unavailable or foreign
+  authorities yield a neutral name, never a ciphertext/reference display.
+- Added strict owner-only encrypted-name preparation with decrypted readback.
+  It is intentionally not invoked by profile saves: publishing references,
+  changing search, granting member audiences, and deleting plaintext remain
+  blocked on their coordinated contracts and separate approvals. No new
+  decrypted-name persistence or automatic data conversion is introduced.
 - `search_guardian_profiles` is a consensus update on shared identity access.
   It accepts an exact child ID and the owning club authority, which must occur
   in the configured membership source inventory. It calls that authority's

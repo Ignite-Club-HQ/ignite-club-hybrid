@@ -1,0 +1,92 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Principal } from "@icp-sdk/core/principal";
+import type { FeatureBackendContext } from "./featureRouter";
+
+const mocks = vi.hoisted(() => ({ register: vi.fn(), read: vi.fn(), keys: vi.fn(), encrypt: vi.fn(), decrypt: vi.fn() }));
+vi.mock("./domains", () => ({ connectLivePiiAccessControl: vi.fn(async () => ({ actor: { register_pii: mocks.register, get_encrypted_pii_batch: mocks.read } })) }));
+vi.mock("./piiVetKeys", () => ({ encryptPiiText: mocks.encrypt, fetchPiiVetKeys: mocks.keys }));
+vi.mock("@icp-sdk/vetkeys", () => ({ IbeCiphertext: { deserialize: () => ({ decrypt: mocks.decrypt }) } }));
+
+import { hydratePrivateProfileNames, preparePrivateOwnProfileName, privateProfileNameReference } from "./privateProfileNames";
+
+const subject = "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe";
+const authority = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+const ctx = { identity: { getPrincipal: () => Principal.fromText(subject) }, target: { host: "https://icp-api.io", canisterIds: { pii_access_control: authority } } } as FeatureBackendContext;
+const reference = privateProfileNameReference(authority, subject);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.encrypt.mockResolvedValue(new Uint8Array([9, 8]));
+  mocks.register.mockResolvedValue({ Ok: {} });
+  mocks.read.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: "display_name", ciphertext: [9, 8] }] });
+  mocks.keys.mockResolvedValue(new Map([[subject, "authorized-key"]]));
+  mocks.decrypt.mockReturnValue(new TextEncoder().encode("Paul Cranwell"));
+});
+
+describe("private profile name preparation", () => {
+  it("encrypts only the caller's own name and confirms decrypted readback", async () => {
+    expect(await preparePrivateOwnProfileName(ctx, " Paul Cranwell ")).toBe(reference);
+    expect(mocks.encrypt).toHaveBeenCalledWith(ctx, subject, "display_name", "Paul Cranwell");
+    expect(mocks.register).toHaveBeenCalledWith(subject, "display_name", new Uint8Array([9, 8]), Principal.fromText(subject));
+  });
+  it("does not acknowledge or replay an unknown private write", async () => {
+    mocks.register.mockRejectedValue(new Error("Unknown reply"));
+    await expect(preparePrivateOwnProfileName(ctx, "Paul Cranwell")).rejects.toThrow("Unknown reply");
+    expect(mocks.register).toHaveBeenCalledOnce();
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it("refuses preparation without exact readback", async () => {
+    mocks.decrypt.mockReturnValue(new TextEncoder().encode("Different name"));
+    await expect(preparePrivateOwnProfileName(ctx, "Paul Cranwell")).rejects.toThrow("readback");
+  });
+  it("rejects anonymous ownership before encryption", async () => {
+    await expect(preparePrivateOwnProfileName({ ...ctx, identity: { getPrincipal: () => Principal.anonymous() } } as FeatureBackendContext, "Paul")).rejects.toThrow("identity");
+    expect(mocks.encrypt).not.toHaveBeenCalled();
+  });
+});
+
+describe("authorized name display", () => {
+  it("leaves legacy names and avatars intact without network work", async () => {
+    const row = { display_name: "Paul Cranwell", avatar_ref: ["avatar"] };
+    expect(await hydratePrivateProfileNames(ctx, [row])).toEqual([row]);
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it("deduplicates private names and preserves each row's metadata", async () => {
+    expect(await hydratePrivateProfileNames(ctx, [{ id: "one", display_name: reference }, { id: "two", display_name: reference }])).toEqual([
+      { id: "one", display_name: "Paul Cranwell" }, { id: "two", display_name: "Paul Cranwell" },
+    ]);
+    expect(mocks.read).toHaveBeenCalledOnce();
+    expect(mocks.read.mock.calls[0][0]).toEqual([subject]);
+    expect(mocks.keys).toHaveBeenCalledWith(ctx, [subject], "display_name");
+  });
+  it("never substitutes another group's PII authority", async () => {
+    const foreign = privateProfileNameReference("ryjl3-tyaaa-aaaaa-aaaba-cai", subject);
+    expect(await hydratePrivateProfileNames(ctx, [{ display_name: foreign }])).toEqual([{ display_name: null }]);
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it("keeps unreadable private names neutral without exposing their reference", async () => {
+    mocks.keys.mockResolvedValue(new Map());
+    expect(await hydratePrivateProfileNames(ctx, [{ display_name: reference }])).toEqual([{ display_name: null }]);
+    expect(mocks.decrypt).not.toHaveBeenCalled();
+  });
+  it("does not reuse another account's decrypted results", async () => {
+    await hydratePrivateProfileNames(ctx, [{ display_name: reference }]);
+    mocks.read.mockResolvedValue({ Ok: [] });
+    const other = { ...ctx, identity: { getPrincipal: () => Principal.fromText(authority) } } as FeatureBackendContext;
+    expect(await hydratePrivateProfileNames(other, [{ display_name: reference }])).toEqual([{ display_name: null }]);
+    expect(mocks.read).toHaveBeenCalledTimes(2);
+  });
+  it("bounds stalled reads and discards late decryption without caching", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.read.mockReturnValue(new Promise(() => {}));
+      const pending = hydratePrivateProfileNames(ctx, [{ display_name: reference }]);
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(await pending).toEqual([{ display_name: null }]);
+    } finally { vi.useRealTimers(); }
+  });
+  it("never renders a malformed or future-version private reference", async () => {
+    expect(await hydratePrivateProfileNames(ctx, [{ display_name: "pii-display-name:v2:secret" }])).toEqual([{ display_name: null }]);
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+});
