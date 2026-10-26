@@ -19,6 +19,7 @@ import { buildMediaSnapshot } from './migrate-club-media.mjs';
 import { buildVaultSnapshot } from './migrate-club-vault.mjs';
 import { buildGameResults, assertNoUnsupportedEventRows, UNSUPPORTED_EVENT_TABLES } from './migrate-club-event-results.mjs';
 import { prepareFamilyCopy, productionPiiPublicKey } from './migrate-club-family.mjs';
+import { planByteCopies, copyClubBytes, applyPhotoBlobRefs, applyVaultBlobRefs } from './migrate-club-bytes.mjs';
 const ms = (iso) => (iso ? BigInt(Date.parse(iso)) : null);
 const opt = (v) => (v === null || v === undefined || v === '' ? [] : [v]);
 const optMs = (iso) => opt(ms(iso));
