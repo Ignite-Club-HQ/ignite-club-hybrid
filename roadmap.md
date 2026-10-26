@@ -1,7 +1,8 @@
 ## Thread search and result-jump responsiveness — 26 October 2026
-- [ ] Remove duplicated search waiting and reveal already-loaded matches during historical retrieval.
-- [ ] Make selected-result jumps reuse authorized loaded context and settle without fighting user scrolling; preserve cold-link recovery and thread authorization.
-- [ ] Run focused dual-mode regressions and browser result-to-thread verification; no new persistent private-message copies or deployment.
+- [x] Remove bar-level debounce; retain one historical-search debounce and display loaded matches during retrieval across all six chat pages. Closing/changing search aborts and discards old requests immediately.
+- [x] Team/group/club result jumps start before optional context reads, with latest-selection/account/thread-bound continuation guards; loaded targets focus without a polling wait and unrelated neighbouring photos no longer block reveal. Cold-link recovery, exact-target alignment, scrolling protections and authorization retained.
+- [x] 91 focused checks pass per mode; preview build OK. Browser fixture using actual search/history/jump/virtualized-list controls shows loaded matches during a stalled search and selected text in thread while context remains pending, with no errors. No new persistent private-message copies or deployment.
+- [ ] Paul's real signed-in thread search timing needs the updated app and his Internet Identity session; the browser fixture does not verify his on-chain search latency.
 
 ## Scheduled-message panel formatting — 26 October 2026
 - [x] Use the existing keyboard-safe drawer, remove competing mobile outer sizing/scrolling and place the attachment label above its control; scheduling and access rules unchanged.
