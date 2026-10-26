@@ -25,6 +25,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { withReadDeadline } from "@/live/readDeadline";
 
 /**
  * Children page for secure sign-in (ICP) users. Child records live on
@@ -50,9 +52,9 @@ async function load() {
   return { ctx: await icpCtx(), club, vault };
 }
 
-const KEY = ["icp-own-children"];
-
 export default function IcpChildrenPage() {
+  const { user } = useAuth();
+  const KEY = ["icp-own-children", user?.id];
   const navigate = useNavigate();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -62,16 +64,17 @@ export default function IcpChildrenPage() {
   const [guardiansFor, setGuardiansFor] = useState<IcpChild | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data: children, isLoading } = useQuery({
+  const { data: childRows, isLoading, isError, refetch } = useQuery({
     queryKey: KEY,
+    enabled: !!user,
+    retry: false,
     queryFn: async (): Promise<IcpChild[]> => {
-      const { ctx, club, vault } = await load();
+      const { ctx, club } = await load();
       const me = ctx.identity.getPrincipal().toText();
-      const rows = (await club.listMyLiveOwnChildren(ctx)) as any[];
-      const names = await vault.resolveLivePiiTextBatch(ctx, rows.map((r) => r.id), "name", "read", "children_page");
+      const rows = (await withReadDeadline(club.listMyLiveOwnChildren(ctx), 'Children list', 20_000)) as any[];
       return rows.map((r) => ({
         id: r.id,
-        name: names.get(r.id) ?? "Child",
+        name: "",
         teams: r.teams as string[],
         isPrimary: r.parent?.[0]?.toText?.() === me,
       }));
@@ -83,19 +86,40 @@ export default function IcpChildrenPage() {
     placeholderData: (prev) => prev,
   });
 
+  // Authorized child records reveal independently of private-name unlocking.
+  // This separate account-scoped query never changes guardianship or teams.
+  const childIds = (childRows ?? []).map(child => child.id);
+  const namesQuery = useQuery({
+    queryKey: ['icp-own-child-names', user?.id, childIds],
+    enabled: !!user && childIds.length > 0,
+    retry: false,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { ctx, vault } = await load();
+      return Object.fromEntries(await withReadDeadline(vault.resolveLivePiiTextBatch(ctx, childIds, 'name', 'read', 'children_page'), 'Child names', 20_000));
+    },
+  });
+  const children = childRows?.map(child => ({ ...child, name: namesQuery.data?.[child.id] ?? child.name }));
+
   const { data: teams } = useQuery({
-    queryKey: ["icp-children-teams"],
+    queryKey: ["icp-children-teams", user?.id],
+    enabled: !!user && (!!teamFor || !!childRows?.some(child => child.teams.length > 0)),
+    staleTime: 5 * 60_000,
+    retry: false,
     queryFn: async (): Promise<TeamOpt[]> => {
-      const { icpListClubs, icpListTeams } = await import("@/lib/icpClubTeamLookup");
-      const { ctx } = await load();
+      const { ctx, club } = await load();
+      const { readMembershipInScope } = await import('@/live/membershipRouting');
       const membership = await import("@/live/features/membership");
-      const grants = (await membership.getLiveMyRoleGrants(ctx).catch(() => [])) as any[];
+      const grants = (await withReadDeadline(membership.getLiveMyRoleGrants(ctx), 'Children memberships', 20_000)) as any[];
       const myClubIds = new Set(grants.map((g) => g.club?.[0]).filter(Boolean));
-      const clubs = (await icpListClubs()).filter((c) => myClubIds.has(c.id));
       const lists = await Promise.all(
-        clubs.map(async (c) =>
-          (await icpListTeams(c.id).catch(() => [])).map((t) => ({ id: t.id, name: t.name, club_id: c.id, club_name: c.name })),
-        ),
+        [...myClubIds].map(async (id) => {
+          const clubId = String(id);
+          return withReadDeadline(readMembershipInScope(ctx, { clubId }, async scoped => {
+            const [profile, teams] = await Promise.all([club.getLiveClubProfile(scoped, clubId), club.listLiveTeams(scoped, clubId)]);
+            return teams.filter(t => !t.deleted_at_ms?.length).map(t => ({ id: t.id, name: t.name, club_id: clubId, club_name: profile[0]?.name ?? 'Club' }));
+          }), 'Children teams', 20_000);
+        }),
       );
       return lists.flat();
     },
@@ -104,6 +128,7 @@ export default function IcpChildrenPage() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: KEY });
+    qc.invalidateQueries({ queryKey: ['icp-own-child-names', user?.id] });
     qc.invalidateQueries({ queryKey: ["children"] });
     qc.invalidateQueries({ queryKey: ["own_children"] });
   };
@@ -186,6 +211,8 @@ export default function IcpChildrenPage() {
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-muted-foreground">Loading children...</p>
         </div>
+      ) : isError && !children ? (
+        <div className="space-y-3"><p className="text-muted-foreground">Your children’s details could not be retrieved.</p><Button variant="outline" onClick={() => void refetch()}>Try again</Button></div>
       ) : !children?.length ? (
         <Card>
           <CardContent className="py-10 text-center space-y-3">
@@ -201,7 +228,7 @@ export default function IcpChildrenPage() {
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold">{c.name}</p>
+                    {c.name ? <p className="font-semibold">{c.name}</p> : namesQuery.isLoading ? <div className="h-5 w-32 rounded bg-muted animate-pulse" aria-label="Retrieving child name" /> : <p className="font-semibold">Child</p>}
                     {!c.isPrimary && <p className="text-xs text-muted-foreground">You're a guardian</p>}
                   </div>
                   <div className="flex gap-1">
@@ -240,6 +267,7 @@ export default function IcpChildrenPage() {
         </div>
       )}
 
+      {namesQuery.isError && <Button variant="outline" onClick={() => void namesQuery.refetch()}>Retry child names</Button>}
       <ResponsiveDialog open={addOpen} onOpenChange={setAddOpen}>
         <ResponsiveDialogContent>
           <ResponsiveDialogHeader><ResponsiveDialogTitle>Add child</ResponsiveDialogTitle></ResponsiveDialogHeader>
