@@ -23,8 +23,8 @@ const wasm=d=>resolve(root,`backend/${d}/.mops/.build/${d}.wasm`);
 const server=await PocketIcServer.start();let pic;
 try {
   pic=await PocketIc.create(server.getUrl(),{fiduciary:{state:{type:'new'}}});
-  const identity=await pic.setupCanister({idlFactory:identityIdl,wasm:resolve(root,'target/wasm32-unknown-unknown/release/identity_access.wasm'),sender:governor,controllers:[governor],arg:identityArg,environmentVariables:[{name:'IGNITE_BOUND_DELETION_RELEASE',value:'1'}]});
-  const router=await pic.setupCanister({idlFactory:routerIdl,wasm:resolve(root,'target/wasm32-unknown-unknown/release/shard_router.wasm'),sender:governor,controllers:[governor],arg:identityArg,environmentVariables:[{name:'IGNITE_BOUND_DELETION_RELEASE',value:'1'}]});
+  const identity=await pic.setupCanister({idlFactory:identityIdl,wasm:resolve(root,'target/wasm32-unknown-unknown/release/identity_access.wasm'),sender:governor,controllers:[governor],arg:identityArg,environmentVariables:[{name:'IGNITE_BOUND_DELETION_RELEASE',value:'1'},{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'}]});
+  const router=await pic.setupCanister({idlFactory:routerIdl,wasm:resolve(root,'target/wasm32-unknown-unknown/release/shard_router.wasm'),sender:governor,controllers:[governor],arg:identityArg,environmentVariables:[{name:'IGNITE_BOUND_DELETION_RELEASE',value:'1'},{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'}]});
   const groups=[];
   for(let n=0;n<2;n++) {
     const club=await pic.setupCanister({idlFactory:clubIdl,wasm:wasm('club_domain'),sender:governor,controllers:[governor],arg,environmentVariables:[privacy,{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'}]});
