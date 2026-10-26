@@ -1,6 +1,7 @@
 import type { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "../featureRouter";
 import { connectLiveIdentityAccessClientWithIdentity } from "../identityAccess";
+import { privateProfileSearchRehearsalEnabled } from "../privateProfileSearchMode";
 
 /**
  * Identity feature ("membership") -> identity_access canister: batch
@@ -103,6 +104,7 @@ export async function searchLiveProfiles(
   ctx: FeatureBackendContext,
   query: string,
   limit: number,
+  signal?: AbortSignal,
 ): Promise<Array<{ id: string; display_name: string | null; avatar_url: string | null }>> {
   const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
   try {
@@ -125,16 +127,23 @@ export async function searchLiveGuardianProfiles(
   childId: string,
   query: string,
   limit: number,
+  signal?: AbortSignal,
 ): Promise<Array<{ id: string; display_name: string | null; avatar_url: string | null }>> {
   if (!childId.trim()) throw new Error("A specific child is required for guardian search.");
   if (query.trim().length < 2) return [];
+  if (privateProfileSearchRehearsalEnabled()) {
+    const { searchEncryptedGuardianProfiles } = await import("../guardianProfileSearch");
+    return searchEncryptedGuardianProfiles(ctx, childId, query, limit, { signal });
+  }
   const authorityId = ctx.target.canisterIds.club_domain;
   if (!authorityId) throw new Error("The child's club connection is not configured.");
   const { Principal } = await import("@icp-sdk/core/principal");
   const authority = Principal.fromText(authorityId);
   const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
   try {
+    if (signal?.aborted) throw new Error("Guardian search cancelled.");
     const rows = await client.searchGuardianProfiles(authority, childId, query.trim(), Math.min(25, Math.max(1, limit)));
+    if (signal?.aborted) throw new Error("Guardian search cancelled.");
     return rows.map((row) => ({
       id: row.principal.toText(),
       display_name: row.display_name,
