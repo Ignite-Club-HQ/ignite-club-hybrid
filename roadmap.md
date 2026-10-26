@@ -801,4 +801,5 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [ ] Member-account placeholders + verified email claim (club_domain/identity change, protected all-group upgrade).
 - [ ] Owner: add SUPABASE_SERVICE_ROLE_KEY secret to the group-2-admin-controls GitHub environment.
 - [x] Club migration loaders, slice 1: club/teams/sponsors loader (lock + idempotent import, schema generated from club service source), tested.
-- [ ] Club migration loaders, remaining 9 steps (children, events, messaging, rewards, competitions, mini-leagues, notifications, photos, Vault). Member-owned data blocked on the member account claim (Supabase users have no ICP identity yet); real check blocked on SUPABASE_SERVICE_ROLE_KEY secret.
+- [x] Club migration loaders, slice 2: events, competitions (hidden scores/ladders kept hidden), mini-leagues; signed step runner with never-resend journal.
+- [ ] Club migration loaders, remaining 6 steps (children, messaging, rewards, notifications, photos, Vault). Member-owned data blocked on the member account claim (Supabase users have no ICP identity yet); real check blocked on SUPABASE_SERVICE_ROLE_KEY secret.
