@@ -45,6 +45,7 @@ import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorSt
 import { MediaSponsorTile } from "@/components/media/MediaSponsorTile";
 import { IcpUploadPhotoSheet } from "@/components/media/IcpUploadPhotoSheet";
 import { usePendingGalleryUploads, reconcileGalleryUploads } from './pendingGalleryUploads';
+import { acknowledgedGalleryPosts } from './acknowledgedGalleryPosts';
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 import { mediaProfileDirectory } from "./mediaProfileDirectory";
@@ -744,11 +745,19 @@ export function IcpMediaFeedPage() {
     const linked = linkedFeedAsset.data;
     const known = new Set(loaded.flatMap(p => p.assets.map(a => a.id)));
     const extra = (cardPhotoQuery.data ?? []).filter(p => !known.has(p.representativeAssetId));
-    return [...(linked && !known.has(link.photoId ?? '') ? [linked] : []), ...extra, ...loaded];
-  }, [feedQuery.data?.posts, linkedFeedAsset.data, link.photoId, cardPhotoQuery.data]);
+    const confirmed = [...(linked && !known.has(link.photoId ?? '') ? [linked] : []), ...extra, ...loaded];
+    const local = principal ? acknowledgedGalleryPosts(pendingUploads, principal) : [];
+    const merged = confirmed.map(post => {
+      const addition = local.find(row => row.clubId === post.clubId && row.id === post.id);
+      if (!addition) return post;
+      const ids = new Set(post.assets.map(asset => asset.id));
+      return { ...post, assets: [...post.assets, ...addition.assets.filter(asset => !ids.has(asset.id))] };
+    });
+    return [...local.filter(row => !confirmed.some(post => post.clubId === row.clubId && post.id === row.id)), ...merged];
+  }, [feedQuery.data?.posts, linkedFeedAsset.data, link.photoId, cardPhotoQuery.data, pendingUploads, principal]);
   useEffect(() => {
-    if (principal) reconcileGalleryUploads(queryClient, principal, allFeedPosts.flatMap(post => post.assets.map(asset => asset.id)));
-  }, [principal, queryClient, allFeedPosts]);
+    if (principal) reconcileGalleryUploads(queryClient, principal, (feedQuery.data?.posts ?? []).flatMap(post => post.assets.map(asset => asset.id)));
+  }, [principal, queryClient, feedQuery.data?.posts]);
   const loadedAssetIds = new Set(allFeedPosts.flatMap(post => post.assets.map(asset => asset.id)));
   const pendingPreviews = pendingUploads.filter(row => (!row.assetId || !loadedAssetIds.has(row.assetId))
     && (effectiveClubId === 'all' || row.clubId === effectiveClubId)

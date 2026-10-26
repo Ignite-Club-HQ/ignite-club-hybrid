@@ -255,7 +255,7 @@ export function IcpUploadPhotoSheet({
               contentLength: prepared.file.size,
               blobRef: uploaded.blobRef,
             });
-            acknowledgeGalleryUpload(queryClient, principal, previews[i].id, asset.id);
+            let scopeConfirmed = false;
             try {
               await setLiveAssetScope(ctx, asset.id, {
                 teamId: teamId || null,
@@ -265,6 +265,7 @@ export function IcpUploadPhotoSheet({
                 caption: trimmedCaption,
                 albumId,
               });
+              scopeConfirmed = true;
             } catch (err) {
               if (SCOPE_UNSUPPORTED.test(String(err))) {
                 // Deployed canister predates set_asset_scope; tags apply
@@ -274,11 +275,14 @@ export function IcpUploadPhotoSheet({
                 throw err;
               }
             }
-            if (!scopePending) {
+            if (scopeConfirmed) {
+              acknowledgeGalleryUpload(queryClient, principal, previews[i].id, asset.id, {
+                albumId, miniLeagueId: miniLeagueId || null, eventId: defaultEventId ?? null,
+                caption: trimmedCaption, createdAtMs: Number(asset.created_at_ms),
+              });
               // The photo is published now; show it in the feed straight away
               // and let the Vault copy finish behind the scenes.
               registeredAssetIds.push(asset.id);
-              void queryClient.invalidateQueries({ queryKey: ['icp-media-feed', principal], exact: true });
               vaultCopies.push(import('./galleryVaultCopy').then(({ copyGalleryAssetToVault }) =>
                 copyGalleryAssetToVault(ctx, { assetId: asset.id, clubId, teamId: teamId || null,
                   file: prepared.file, name: raw.name || 'Gallery photo' })).catch(() => { vaultCopyFailed = true; }));

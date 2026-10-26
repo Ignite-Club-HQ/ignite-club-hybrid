@@ -13,6 +13,13 @@ export interface PendingGalleryUpload {
   assetId?: string;
   isVideo: boolean;
   settled?: boolean;
+  publication?: {
+    albumId: string | null;
+    miniLeagueId: string | null;
+    eventId: string | null;
+    caption: string | null;
+    createdAtMs: number;
+  };
 }
 const empty: readonly PendingGalleryUpload[] = [];
 type Store = { rows: readonly PendingGalleryUpload[]; listeners: Set<() => void> };
@@ -32,8 +39,8 @@ function update(client: QueryClient, principal: string, edit: (rows: readonly Pe
 export function beginGalleryUpload(client: QueryClient, principal: string, rows: PendingGalleryUpload[]) {
   update(client, principal, old => [...old, ...rows]);
 }
-export function acknowledgeGalleryUpload(client: QueryClient, principal: string, id: string, assetId: string) {
-  update(client, principal, rows => rows.map(row => row.id === id ? { ...row, assetId } : row));
+export function acknowledgeGalleryUpload(client: QueryClient, principal: string, id: string, assetId: string, publication?: PendingGalleryUpload['publication']) {
+  update(client, principal, rows => rows.map(row => row.id === id ? { ...row, assetId, ...(publication ? { publication, settled: true } : {}) } : row));
 }
 export async function finishGalleryUpload(client: QueryClient, principal: string, batchId: string) {
   update(client, principal, rows => rows.flatMap(row => row.batchId !== batchId ? [row]
