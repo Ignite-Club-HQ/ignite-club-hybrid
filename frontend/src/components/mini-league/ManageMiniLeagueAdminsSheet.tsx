@@ -147,7 +147,7 @@ export function ManageMiniLeagueAdminsSheet({
       icp: async ctx => {
         const { listLiveRoleGrants } = await import('@/live/features/membership');
         const grants = await listLiveRoleGrants(ctx, clubId);
-        const ids = [...new Set(grants.map(grant => grant.principal.toText()))];
+        const ids = [...new Set(grants.map(grant => grant.user.toText()))];
         const profiles = await readRelationshipProfiles(ctx, ids, { kind: 'club', resource: clubId });
         return profiles.map(profile => ({ user_id: profile.account_id, display_name: profile.display_name, avatar_url: profile.avatar_ref[0] ?? null }));
       },
