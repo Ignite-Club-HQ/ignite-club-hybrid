@@ -258,6 +258,12 @@ export default function MatchCaptainSelector({
   );
 
   const displayedCaptain = captain ?? seasonCaptain;
+  const displayedRsvp = displayedCaptain ? rsvps.find(r => displayedCaptain.child_id
+    ? r.child_id === displayedCaptain.child_id
+    : !r.child_id && r.user_id?.replace(/^principal:/, "") === displayedCaptain.user_id?.replace(/^principal:/, "")) : null;
+  const displayedName = displayedCaptain?.profiles?.display_name || displayedRsvp?.profiles?.display_name ||
+    displayedCaptain?.children?.name || displayedRsvp?.children?.name || adultName(displayedCaptain?.user_id) || "Team captain";
+  const displayedAvatar = displayedCaptain?.profiles?.avatar_url || displayedRsvp?.profiles?.avatar_url || adultAvatar(displayedCaptain?.user_id);
 
   return (
     <>
@@ -275,18 +281,18 @@ export default function MatchCaptainSelector({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10 ring-2 ring-blue-500">
-                  {(displayedCaptain.profiles?.avatar_url || adultAvatar(displayedCaptain.user_id)) && (
-                    <AvatarImage src={displayedCaptain.profiles?.avatar_url || adultAvatar(displayedCaptain.user_id) || undefined} />
+                  {displayedAvatar && (
+                    <AvatarImage src={displayedAvatar} />
                   )}
                   <AvatarFallback className="bg-blue-500/20 text-blue-600">
-                    {(displayedCaptain.profiles?.display_name || displayedCaptain.children?.name || adultName(displayedCaptain.user_id) || "?")
+                    {displayedName
                       .charAt(0)
                       .toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">
-                    {displayedCaptain.profiles?.display_name || displayedCaptain.children?.name || adultName(displayedCaptain.user_id) || "Team captain"}
+                    {displayedName}
                   </span>
                   {displayedCaptain.isSeasonCaptain && <Badge variant="secondary">Season captain</Badge>}
                 </div>

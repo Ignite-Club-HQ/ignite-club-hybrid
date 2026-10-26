@@ -1834,9 +1834,20 @@ export async function listLiveDetailedGamePlayerStats(ctx: FeatureBackendContext
   const names = await resolveNameRefs(ctx,refs,"Read detailed game player stats");
   return rows.map(row => {const positions=row.detail[0]?.position_seconds[0];return {...row.stat, fill_in_player_name: row.stat.fill_in_player_name.map(raw => raw.startsWith("fillin:") ? names.get(raw) ?? "Fill-in player" : raw), child_id: row.detail[0]?.child_id[0] ?? null, position_minutes: positions == null ? null : Object.fromEntries(positions.map(([key,value]) => [key,Number(value)])) }});
 }
+// Captain and goalkeeper widgets/RSVP markers can mount together. Share only
+// in-flight authorized replies from the exact actor (identity + target), never
+// a resolved cross-account result or a failed request.
+const eventHonoursReads = new WeakMap<object, Map<string, ReturnType<EventsActor['read_event_honours']>>>();
 export async function readLiveEventHonours(ctx: FeatureBackendContext,eventId:string) {
   const { actor } = await connectLiveEventsDomain(ctx.target,ctx.identity);
-  return unwrapCandid(actor.read_event_honours(eventId),"Read exact event honours");
+  let pending = eventHonoursReads.get(actor);
+  if (!pending) { pending = new Map(); eventHonoursReads.set(actor, pending); }
+  const existing = pending.get(eventId);
+  if (existing) return unwrapCandid(existing, "Read exact event honours");
+  const request = actor.read_event_honours(eventId);
+  pending.set(eventId, request);
+  try { return await unwrapCandid(request, "Read exact event honours"); }
+  finally { if (pending.get(eventId) === request) pending.delete(eventId); }
 }
 
 export interface LiveGameResultInput {
