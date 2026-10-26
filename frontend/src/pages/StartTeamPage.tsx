@@ -35,7 +35,7 @@ export default function StartTeamPage() {
   const autoRoutedRef = useRef(false);
 
   const { data: clubs = [], isLoading } = useQuery({
-    queryKey: ["my-admin-clubs-for-team", user?.id, providerKey],
+    queryKey: ["my-admin-clubs-for-team", user?.id, providerKey, isIcp],
     enabled: !!user,
     queryFn: async () => {
       if (useIcpLab) {
