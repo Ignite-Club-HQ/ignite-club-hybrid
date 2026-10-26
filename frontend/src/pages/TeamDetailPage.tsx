@@ -99,7 +99,7 @@ import {
   listLiveTeamRoleGrants,
 } from "@/live/features/membership";
 import { getLiveTeam, getLiveClubProfile, getLiveClubSubscription, getLiveTeamSubscription, saveLiveTeamSubscription, saveLiveTeamPitchSettings } from "@/live/features/club";
-import { listLiveProfilesByIds, accountIdForPrincipal } from "@/live/features/identityAccessClient";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { Principal } from "@icp-sdk/core/principal";
 import * as fixtureData from "@/lab/fixtureDataLayer";
@@ -126,7 +126,6 @@ import { TeamLeaveDialog } from "@/components/team/TeamLeaveDialog";
 import { TeamQuickActionsSection } from "@/components/team/TeamQuickActionsSection";
 import { TeamDetailAccordionSections } from "@/components/team/TeamDetailAccordionSections";
 import { getCachedTeam, getCachedClub, cacheTeam, cacheClub } from "@/lib/clubTeamCache";
-import { loadTeamClubDetails } from "@/lib/teamClubDetails";
 import { readIcpTeamPendingInvites } from "@/features/membership/teamPendingInvites";
 import { readTeamChildRows, teamRoleRows } from '@/lib/teamRosterReads';
 
@@ -189,7 +188,7 @@ export default function TeamDetailPage() {
   const adminInviteEmail = locationState?.inviteEmail || "";
   const adminInviteTeamName = locationState?.teamName || "";
 
-  const { data: team, isLoading, error: teamError, refetch: refetchTeam, fetchStatus: teamFetchStatus } = useQuery({
+  const { data: teamData, isLoading, error: teamError, refetch: refetchTeam, fetchStatus: teamFetchStatus } = useQuery({
     queryKey: ["team", id],
     queryFn: async () => {
       if (isFeatureRoutedToIcp("membership") && id) {
@@ -199,12 +198,6 @@ export default function TeamDetailPage() {
             const row = await getLiveTeam(ctx, id);
             const t = row.length ? row[0] : null;
             if (!t) return null;
-            const [profileRow, sub, generalSettings] = await loadTeamClubDetails({
-              profile: () => getLiveClubProfile(ctx, t.club_id),
-              subscription: () => getLiveClubSubscription(ctx, t.club_id),
-              settings: () => import("@/live/features/club").then(module => module.getLiveClubGeneralSettings(ctx, t.club_id)),
-            });
-            const club = profileRow.length ? profileRow[0] : null;
             // Map the canister team + club onto the Supabase row shape this
             // page renders (including the clubs join).
             return {
@@ -221,23 +214,14 @@ export default function TeamDetailPage() {
               is_archived: t.archived,
               is_shell: t.is_shell,
               folder_id: t.folder_id[0] ?? null,
-              is_pro: sub?.is_pro ?? false,
+              is_pro: false,
               // Supabase-only columns with no canister equivalent.
               class_day: null,
               sponsor_id: null,
               deleted_at: t.deleted_at_ms.length
                 ? new Date(Number(t.deleted_at_ms[0])).toISOString()
                 : null,
-              clubs: club
-                ? {
-                    id: club.id,
-                    name: club.name,
-                    is_pro: sub?.is_pro ?? false,
-                    sport: club.sport[0] ?? null,
-                    class_mode_enabled: generalSettings?.classModeEnabled ?? false,
-                    bot_user_id: null,
-                  }
-                : null,
+              clubs: null,
             };
           },
         }, getCachedTeam(id)?.club_id ? { clubId: getCachedTeam(id)?.club_id ?? "" } : { teamId: id });
@@ -266,6 +250,29 @@ export default function TeamDetailPage() {
       } as any;
     },
   });
+  // The verified team reveals immediately; optional club labels/settings must
+  // not hold every roster, event and photo query behind their replies.
+  const { data: teamClubDisplay } = useQuery({
+    queryKey: ['team-club-display', user?.id, teamData?.club_id],
+    enabled: isIcpAccount && !!teamData?.club_id,
+    queryFn: () => withFeatureBackend('membership', {
+      supabase: () => { throw new Error('ICP club required'); },
+      icp: async ctx => {
+        const clubId = teamData?.club_id;
+        if (!clubId) return null;
+        const [profiles, settings] = await Promise.all([
+          getLiveClubProfile(ctx, clubId),
+          import('@/live/features/club').then(module => module.getLiveClubGeneralSettings(ctx, clubId)),
+        ]);
+        const club = profiles[0];
+        return club ? { id: club.id, name: club.name, is_pro: false, sport: club.sport[0] ?? null,
+          class_mode_enabled: settings?.classModeEnabled ?? false, bot_user_id: null } : null;
+      },
+    }, { clubId: teamData?.club_id ?? '' }),
+    staleTime: 5 * 60_000,
+  });
+  const team = useMemo(() => teamData && isIcpAccount && teamClubDisplay
+    ? { ...teamData, clubs: teamClubDisplay } : teamData, [teamData, isIcpAccount, teamClubDisplay]);
   useEffect(() => {
     if (team?.id && team.name && team.club_id) {
       cacheTeam({ id: team.id, name: team.name, logo_url: team.logo_url ?? null, club_id: team.club_id, level_age: (team as any).age_group ?? null, team_type: (team as any).team_type ?? undefined });
