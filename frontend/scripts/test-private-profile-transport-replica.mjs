@@ -59,7 +59,7 @@ try {
   const signature=identityIdl({IDL})._fields.find(([name])=>name==='read_club_profiles')?.[1];assert.ok(signature);
   const pending=await pic.client.submitCall({canisterId:identity.canisterId,sender:requester,method:'read_club_profiles',payload:new Uint8Array(IDL.encode(signature.argTypes,[clubs[0].canisterId,'club-0',[member]]))});
   await pic.tick(1);
-  const status=await pic.client.ingressStatus({messageId:{effective_principal:{CanisterId:Buffer.from(identity.canisterId.toUint8Array()).toString('base64')},message_id:pending.messageId},caller:requester});
+  const status=await pic.client.ingressStatus({messageId:{effective_principal:{CanisterId:Buffer.from(identity.canisterId.toUint8Array()).toString('base64')},message_id:pending.messageId}});
   assert.equal(status,null,'Profile request must still be pending before the caller is suspended');
   i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(requester.toText()),{Suspended:null}));
   const pendingReply=IDL.decode(signature.retTypes,(await pic.client.awaitCall(pending)).body)[0];
