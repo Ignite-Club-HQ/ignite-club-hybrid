@@ -123,13 +123,26 @@ export async function listLiveMessagesPage(
 let openConversationSupported: boolean | null = null;
 const OPEN_BUNDLE_TTL_MS = 10_000;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
-const openBundleCache = new Map<string, { at: number; reactions: LiveReaction[] | null; pins: any[] | null }>();
+const openBundleCache = new Map<string, { at: number; reactions: LiveReaction[] | null; pins: any[] | null; polls: Map<string, unknown> | null }>();
 function takeBundled<K extends "reactions" | "pins">(conversationId: string, key: K) {
   const entry = openBundleCache.get(conversationId);
   if (!entry || Date.now() - entry.at > OPEN_BUNDLE_TTL_MS) return null;
   const value = entry[key];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
   entry[key] = null as any;
+  return value;
+}
+
+/**
+ * Poll results that rode along with open_conversation, taken once per poll so
+ * poll cards render without their own canister round trip. null = not bundled
+ * (older canister, expired, or already consumed) — the caller fetches then.
+ */
+export function takeBundledPollResult(conversationId: string, pollId: string): unknown | null {
+  const entry = openBundleCache.get(conversationId);
+  if (!entry || Date.now() - entry.at > OPEN_BUNDLE_TTL_MS || !entry.polls) return null;
+  const value = entry.polls.get(pollId) ?? null;
+  entry.polls.delete(pollId);
   return value;
 }
 
@@ -190,11 +203,19 @@ async function readLatestMessagesPage(
       ) as any;
       openConversationSupported = true;
       const pins = Array.isArray(bundle.pins) && bundle.pins.length > 0 ? bundle.pins[0] : null;
+      // Poll results bundled with the page (absent on canisters deployed
+      // before the bundle included them — cards then fetch individually).
+      const bundledPolls = new Map<string, unknown>();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
+      for (const pr of (bundle.polls ?? []) as any[]) {
+        if (pr?.poll?.id) bundledPolls.set(pr.poll.id, pr);
+      }
       openBundleCache.set(conversationId, {
         at: Date.now(),
         reactions: bundle.reactions as LiveReaction[],
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped candid actor
         pins: pins as any[] | null,
+        polls: bundledPolls,
       });
       return bundle.page;
     } catch (err) {
