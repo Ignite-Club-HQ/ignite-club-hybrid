@@ -30,6 +30,7 @@ import { linkLiveGuardian, listLiveChildGuardians, unlinkLiveGuardian, setLiveGu
 import { grantLiveGuardianChildNameRead } from "@/live/features/vault";
 import { readRelationshipProfiles } from "@/live/relationshipProfileRead";
 import { Principal } from "@icp-sdk/core/principal";
+import { useAuth } from '@/hooks/useAuth';
 
 interface Guardian {
   id: string;
@@ -80,13 +81,14 @@ export default function ManageGuardiansDialog({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isIcp = resolveAuthBackend() === "icp";
+  const { user: profileViewer } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [relationshipType, setRelationshipType] = useState("guardian");
 
   // Fetch current guardians
   const { data: guardians, isLoading: loadingGuardians } = useQuery({
-    queryKey: ["child_guardians", childId],
+    queryKey: ["child_guardians", childId, profileViewer?.id, resolveAuthBackend()],
     queryFn: async () => withFeatureBackend("membership", {
       supabase: async () => {
         const { data, error } = await supabase

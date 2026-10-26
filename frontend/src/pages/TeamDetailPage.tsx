@@ -99,7 +99,6 @@ import {
   listLiveTeamRoleGrants,
 } from "@/live/features/membership";
 import { getLiveTeam, getLiveClubProfile, getLiveClubSubscription, getLiveTeamSubscription, saveLiveTeamSubscription, saveLiveTeamPitchSettings } from "@/live/features/club";
-import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { readRelationshipProfiles } from "@/live/relationshipProfileRead";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { Principal } from "@icp-sdk/core/principal";
@@ -844,7 +843,7 @@ export default function TeamDetailPage() {
   const adultNameIds = useMemo(() => [...new Set(rawMembersData.map(row => row.user_id))].sort(), [rawMembersData]);
   const childNameIds = useMemo(() => teamChildrenData.map(row => row.child_id).sort(), [teamChildrenData]);
   const { data: adultNames = [] } = useQuery({
-    queryKey: ['team-roster-adult-names', user?.id, id, adultNameIds],
+    queryKey: ['team-roster-adult-names', user?.id, id, team?.club_id, adultNameIds],
     enabled: isIcpAccount && adultNameIds.length > 0,
     queryFn: () => withFeatureBackend('membership', {
       supabase: () => { throw new Error('ICP names required'); },
