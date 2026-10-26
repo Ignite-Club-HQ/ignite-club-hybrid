@@ -850,8 +850,11 @@ export default function GroupChatPage() {
   
   // Use fresh profile data that refreshes on visibility change (fixes names vanishing after phone lock)
   const authorIds = useMemo(() => {
-    return [...new Set((localMessages || []).map(m => m.author_id).filter(Boolean))];
-  }, [localMessages]);
+    return [...new Set([
+      ...(localMessages || []).flatMap(m => [m.author_id, m.forwarded_from_user_id]),
+      ...reactions.map(r => r.user_id),
+    ].filter((id): id is string => !!id))];
+  }, [localMessages, reactions]);
   const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
   const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
   const getPrivateProfile = usePrivateChatProfiles(groupId, user?.id, authorIds, privateChatNames);

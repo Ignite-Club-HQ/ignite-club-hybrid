@@ -41,6 +41,8 @@ import { observeChatElementHeight } from "@/lib/chatScrollActivity";
 import { scrollMessageIntoLowerThird } from "@/lib/scrollMessageIntoLowerThird";
 import { cacheProfiles, fetchProfilesWithCache, getProfileFromCache, selectCachedProfilesByIds } from "@/lib/profileCache";
 import { claimFirstBubbleHint } from "@/hooks/useChatActionsOnboarding";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 
 const GROUP_REACTION_EMOJI_MAP: Record<string, string> = {
@@ -338,19 +340,23 @@ export const GroupChatMessageRow = memo(function GroupChatMessageRow({
   }, []);
 
   const profile = getProfile(msg.author_id);
-  const displayName = profile?.display_name || msg.author?.display_name || "Loading...";
-  const avatarUrl = profile?.avatar_url || msg.author?.avatar_url || undefined;
+  const privateNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const displayName = profile?.display_name || (privateNames ? null : msg.author?.display_name) || (privateNames ? "Member" : "Loading...");
+  const avatarUrl = profile?.avatar_url || (privateNames ? null : msg.author?.avatar_url) || undefined;
   const frontierReaders = readFrontier[msg.id] || [];
   const fallbackReplyMessage = !msg.reply_to && msg.reply_to_id
     ? messagesById.get(msg.reply_to_id) ?? null
     : null;
-  const replyPreview = msg.reply_to ?? (fallbackReplyMessage
+  const replyPreview = (privateNames && msg.reply_to ? {
+    ...msg.reply_to,
+    author: { display_name: getProfile(messagesById.get(msg.reply_to_id ?? "")?.author_id ?? "")?.display_name ?? null },
+  } : msg.reply_to) ?? (fallbackReplyMessage
     ? {
         text: fallbackReplyMessage.text,
         author: {
           display_name:
             getProfile(fallbackReplyMessage.author_id)?.display_name ||
-            fallbackReplyMessage.author?.display_name ||
+            (privateNames ? null : fallbackReplyMessage.author?.display_name) ||
             null,
         },
       }
@@ -882,11 +888,12 @@ function GroupReactionsDialog({
   onClose: () => void;
   onChangeType: (type: string) => void;
 }) {
+  const privateNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
   const initialUsers = (() => {
     const seeded: Array<{ id: string; display_name: string | null }> = [];
     for (const id of allUserIds) {
       const displayName = normalizeDisplayName(getProfile(id)?.display_name)
-        || normalizeDisplayName(getProfileFromCache(id)?.display_name);
+        || (privateNames ? null : normalizeDisplayName(getProfileFromCache(id)?.display_name));
       if (displayName) seeded.push({ id, display_name: displayName });
     }
     return seeded;
@@ -915,15 +922,15 @@ function GroupReactionsDialog({
         display_name: normalizeDisplayName(map.get(id)?.display_name),
       }));
     },
-    enabled: !!viewingType && allUserIds.length > 0,
+    enabled: !privateNames && !!viewingType && allUserIds.length > 0,
     staleTime: 60_000,
-    initialData: initialUsers.length === allUserIds.length && allUserIds.length > 0 ? initialUsers : undefined,
+    initialData: !privateNames && initialUsers.length === allUserIds.length && allUserIds.length > 0 ? initialUsers : undefined,
   });
 
   const getUserName = (uid: string) =>
-    normalizeDisplayName(users.find((u: any) => u.id === uid)?.display_name)
+    (privateNames ? null : normalizeDisplayName(users.find((u: any) => u.id === uid)?.display_name))
       || normalizeDisplayName(getProfile(uid)?.display_name)
-      || normalizeDisplayName(getProfileFromCache(uid)?.display_name)
+      || (privateNames ? null : normalizeDisplayName(getProfileFromCache(uid)?.display_name))
       || "";
 
   const viewingReactors = viewingType ? (grouped[viewingType] || []) : [];
