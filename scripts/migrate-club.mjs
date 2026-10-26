@@ -14,7 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
-import { STEPS, validateRequest, gateReasons, buildPlan, newJournal, nextAction, normalizePlan, recordIntent, recordReply } from './migrate-club-plan.mjs';
+import { STEPS, validateRequest, assertMigrationApproval, gateReasons, buildPlan, newJournal, nextAction, normalizePlan, recordIntent, recordReply } from './migrate-club-plan.mjs';
 import { createPrivateKey } from 'node:crypto';
 import { sendClaimInvites } from './migrate-club-claims.mjs';
 
@@ -130,7 +130,7 @@ import { WRITERS } from './migrate-club-writers.mjs';
 function summary(md) { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md + '\n'); console.log(md); }
 
 export async function main(env = process.env) {
-  const req = { action: env.ACTION, clubId: env.CLUB_ID?.trim(), groupId: env.GROUP_ID?.trim(), plan: env.PLAN, confirmation: env.CONFIRMATION };
+  const req = { action: env.ACTION, clubId: env.CLUB_ID?.trim(), groupId: env.GROUP_ID?.trim(), plan: env.PLAN, confirmation: env.CONFIRMATION, approvalScope: env.APPROVAL_SCOPE };
   validateRequest(req);
   const target = loadGroup(req.groupId);
   if (req.action === 'invite') return invite(req, target);
@@ -162,7 +162,7 @@ export async function main(env = process.env) {
   const next = nextAction(journal);
   if (next.blocked) throw Error(next.blocked);
   writeFileSync(path, JSON.stringify(journal, null, 2));
-  await runSteps({ journal, path, ctx: writerContext(req.clubId, target) });
+  await runSteps({ journal, path, ctx: writerContext(req.clubId, target), approval: req });
 }
 
 /** Claimed Supabase user -> principal pairs on the destination club service. */
@@ -196,7 +196,7 @@ async function invite(req, target) {
   }), { agent: ctx.agent, canisterId: target.canisters.club_domain });
   const db = supabase();
   const r = await sendClaimInvites({
-    clubId: req.clubId, group: req.groupId, appUrl, now: Date.now(), db,
+    clubId: req.clubId, group: req.groupId, approval: req, appUrl, now: Date.now(), db,
     claimedUsers: async () => [...(await claimedAccounts(ctx)).keys()],
     authEmail: async (id) => {
       const res = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(id)}`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
@@ -237,10 +237,12 @@ function writerContext(clubId, target) {
 /** Executes writer steps in journal order; a lost reply is recorded as unknown and stops the run. */
 export { claimedAccounts };
 
-export async function runSteps({ journal, path, ctx, writers = WRITERS, save = (j) => writeFileSync(path, JSON.stringify(j, null, 2)) }) {
+export async function runSteps({ journal, path, ctx, approval, writers = WRITERS, save = (j) => writeFileSync(path, JSON.stringify(j, null, 2)) }) {
+  assertMigrationApproval(approval, 'data', ctx.clubId, ctx.target?.groupId, journal.planHash);
   for (;;) {
     const next = nextAction(journal);
     if (next.done || next.blocked) { if (next.blocked) throw Error(next.blocked); return journal; }
+    if (next.step === 'route') throw Error('Data migration approval does not authorize sign-in/routing cutover; separate authentication approval is required');
     const write = writers[next.step];
     if (!write) return journal; // verify/route steps run separately
     journal = recordIntent(journal, next.step, next.page); save(journal);

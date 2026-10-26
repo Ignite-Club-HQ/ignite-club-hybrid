@@ -44,7 +44,7 @@ export default function AdminClubMigrationPage() {
       <Card>
         <CardHeader>
           <CardTitle>Migrate club to canisters</CardTitle>
-          <CardDescription>Moves one whole club — records, photos, chat files and Vault — into the group you choose. The Supabase copy is never changed. Members switch over only after every item is verified.</CardDescription>
+          <CardDescription>Copying club data and moving member sign-ins require separate owner approvals for this club and group. Building this tool or running a check approves neither. The Supabase copy is never changed.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
@@ -64,8 +64,9 @@ export default function AdminClubMigrationPage() {
           </div>
           <ol className="list-decimal space-y-2 pl-5 text-sm">
             <li>Open the workflow, choose <b>check</b>, and paste the club ID and group. It only reads and prints a plan hash.</li>
-            <li>If nothing is blocked, run it again with <b>migrate</b>, the plan hash and the words <code>MIGRATE CLUB TO CANISTERS</code>.</li>
-            <li>If a run is interrupted, use <b>recover</b> with the same plan hash and <code>RECOVER CLUB MIGRATION</code>.</li>
+            <li>Only with your approval to copy data, choose approval scope <b>data</b> and <b>migrate</b>, the plan hash and <code>MIGRATE CLUB TO CANISTERS</code>. This does not authorize account links or changing sign-in.</li>
+            <li>Resuming needs fresh data approval: choose <b>data</b> and <b>recover</b> with the same plan hash and <code>RECOVER CLUB MIGRATION</code>.</li>
+            <li>Account links require a separate approval: choose <b>auth</b> and <b>invite</b>, with <code>SEND CLAIM EMAILS</code>. This does not authorize copying data. Sign-in cutover remains blocked until separately approved.</li>
           </ol>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" disabled={!ready} onClick={() => copy(clubId.trim())}><Copy className="mr-2 h-4 w-4" />Copy club ID</Button>

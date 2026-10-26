@@ -1,3 +1,6 @@
+## Separate migration approvals — 26 October 2026
+- [ ] Require explicit, separate club/group-bound approval for data copying versus account claim activation; data approval must never run sign-in/routing cutover. Validate with local tests only; no live migration or emails authorized.
+
 ## Club upgrade subscription warning — 26 October 2026
 - [x] Subscription display uses the actual feature dispatcher with exact club/account identity; mounted/restored II guards ancillary reads/realtime. ICP cancellation/downgrade cannot reach Supabase or self-write privileged canister subscription rows; unsupported local actions withheld. Provider fulfillment and paid-term rules unchanged.
 - [x] Focused checks passed: Supabase 47 / ICP 46, with mode skips; preview build OK. Browser isolated subscription reader returned the exact ICP club plan while Supabase access threw if attempted. No live subscription mutation or deployment.

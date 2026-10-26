@@ -7,6 +7,7 @@
 // address. Already-claimed members are skipped. A lost registration reply sends
 // no email for that page; rerunning simply issues fresh links.
 import { createHash, randomBytes } from 'node:crypto';
+import { assertMigrationApproval } from './migrate-club-plan.mjs';
 
 export const CONFIRM_INVITE = 'SEND CLAIM EMAILS';
 export const CLAIM_TTL_MS = 14 * 24 * 3600 * 1000;
@@ -46,6 +47,7 @@ export function claimEmail({ clubName, link }) {
  * ctx = { clubId, group, db: { all(table, query) }, authEmail(userId), registerPage(rows), claimedUsers(), sendEmail({to, subject, text}), appUrl, now, log }
  */
 export async function sendClaimInvites(ctx) {
+  assertMigrationApproval(ctx.approval, 'auth', ctx.clubId, ctx.group);
   const inList = (ids) => `in.(${ids.map((i) => `"${i}"`).join(',')})`;
   const [roles, teams, [club]] = await Promise.all([
     ctx.db.all('user_roles', `club_id=eq.${ctx.clubId}`),
