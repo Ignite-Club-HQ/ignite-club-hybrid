@@ -34,7 +34,13 @@ interface ChatPageSkeletonProps {
  * that would cause the re-measure flicker documented in
  * mem://features/chat/virtuoso-identity-stability.
  */
-export function ChatPageSkeleton({ title, subtitle, bubbleCount = 6 }: ChatPageSkeletonProps) {
+export function ChatPageSkeleton({
+  title,
+  subtitle,
+  avatarUrl,
+  avatarType = "group",
+  bubbleCount = 6,
+}: ChatPageSkeletonProps) {
   const rows = Array.from({ length: bubbleCount }, (_, i) => i);
   return (
     <div className="flex flex-col h-[100dvh] bg-background">
@@ -43,7 +49,11 @@ export function ChatPageSkeleton({ title, subtitle, bubbleCount = 6 }: ChatPageS
         <div className="h-9 w-9 flex items-center justify-center text-muted-foreground">
           <ChevronLeft className="h-5 w-5" />
         </div>
-        <Skeleton className="h-9 w-9 rounded-full" />
+        {title ? (
+          <ConversationAvatar type={avatarType} name={title} avatarUrl={avatarUrl} className="h-9 w-9" />
+        ) : (
+          <Skeleton className="h-9 w-9 rounded-full" />
+        )}
         <div className="flex-1 min-w-0 space-y-1.5">
           {title ? (
             <div className="text-sm font-semibold truncate">{title}</div>
