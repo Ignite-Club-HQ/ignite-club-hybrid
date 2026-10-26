@@ -82,6 +82,18 @@ function storageHarness() {
   return { rows, delay: () => { hold = true; }, release: () => { hold = false; opens.splice(0).forEach(f => f()); } };
 }
 describe('account and transaction lifecycle', () => {
+  it('keeps persisted page copies within the separate 2 MiB budget', async () => {
+    vi.useFakeTimers(); const storage = storageHarness();
+    const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+    const stop = startIcpQueryCachePersist(client, true, () => 'alice:target');
+    for (let i = 0; i < 50; i++) client.setQueryData(['team', String(i)], 'x'.repeat(50000));
+    await vi.advanceTimersByTimeAsync(5000);
+    const rows = [...storage.rows.values()] as Array<{ bytes: number }>;
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(50);
+    expect(rows.reduce((sum, row) => sum + row.bytes, 0)).toBeLessThanOrEqual(2 * 1024 * 1024);
+    stop();
+  });
   it('writes a changed query and restores its exact bigint shape', async () => {
     vi.useFakeTimers(); const storage = storageHarness();
     const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });

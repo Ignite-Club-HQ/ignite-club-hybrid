@@ -45,6 +45,19 @@ describe('bounded viewed-photo storage', () => {
     await writeCachedPhoto('alice', 'store', 'large', new ArrayBuffer(8 * 1024 * 1024 + 1));
     expect(stores.size).toBe(0);
   });
+  it('removes photos older than seven days on reading', async () => {
+    const stores = photoStorage();
+    await writeCachedPhoto('alice', 'store', 'old', new ArrayBuffer(1));
+    const rows = stores.get('ignite-media-v1:alice');
+    if (!rows) throw new Error('missing cache');
+    const key = [...rows.keys()][0];
+    if (!key) throw new Error('missing photo');
+    rows.set(key, new Response(new ArrayBuffer(1), { headers: {
+      'x-ignite-bytes': '1', 'x-ignite-saved-at': String(Date.now() - 8 * 86400000),
+    } }));
+    expect(await readCachedPhoto('alice', 'store', 'old')).toBeNull();
+    expect(rows.size).toBe(0);
+  });
   it('clears photos but preserves retained keys and unrelated browser caches', async () => {
     const stores = photoStorage();
     localStorage.setItem('ignite.clubkey.v1:alice', 'key');
