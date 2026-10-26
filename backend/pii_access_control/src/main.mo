@@ -218,6 +218,8 @@ persistent actor class Main(governorInit : Principal) = this {
   // grant_pii_read authorization. Seeded empty, populated via
   // add_guardian_relationship.
   var guardian_relationships : [GuardianRelationship];
+  // Display-only guardian metadata sidecar (migration 20261110_000000).
+  var guardianLabels : [GuardianLabel];
 
   // Club-scoped read grants: any principal holding a role in `club_id`
   // (verified via club_domain's has_club_staff_role at read time) may read
@@ -269,13 +271,15 @@ persistent actor class Main(governorInit : Principal) = this {
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
   };
-  type FenceSnapshot = { grants : [ClubReadGrant]; records : [PiiRecord]; guardians : [GuardianRelationship] };
+  type FenceSnapshot = { grants : [ClubReadGrant]; records : [PiiRecord]; guardians : [GuardianRelationship]; guardian_labels : ?[GuardianLabel] };
   func fenceSnapshot(c : Text) : FenceSnapshot {
     let rootG = club_read_grants.filter(func(x) = x.club_id == c);
     let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
+    let gs = guardian_relationships.filter(func(x) = x.children.any(inG));
     { grants = club_read_grants.filter(func(x) = x.club_id == c);
       records = pii_records.filter(func(x) = inG(x.pii_id));
-      guardians = guardian_relationships.filter(func(x) = x.children.any(inG)) }
+      guardians = gs;
+      guardian_labels = ?guardianLabels.filter(func(x) = gs.any(func(g) = g.guardian.equal(x.guardian))) }
   };
   func fenceDrop(c : Text) {
     let rootG = club_read_grants.filter(func(x) = x.club_id == c);
