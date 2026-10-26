@@ -76,6 +76,16 @@ export interface Main {
     { 'Ok' : Array<[] | [Uint8Array]> } |
       { 'Err' : string }
   >,
+  'get_private_profile_name_vetkeys_batch' : ActorMethod<
+    [Array<string>, PrivateNameScope, Uint8Array],
+    { 'Ok' : Array<[] | [Uint8Array]> } |
+      { 'Err' : string }
+  >,
+  'get_private_profile_names_batch' : ActorMethod<
+    [Array<string>, PrivateNameScope],
+    { 'Ok' : Array<EncryptedPii> } |
+      { 'Err' : string }
+  >,
   'grant_pii_read' : ActorMethod<
     [string, string, Principal],
     { 'Ok' : null } |
@@ -221,6 +231,12 @@ export interface Main {
 export interface PiiDeleteResult {
   'shredded_at' : bigint,
   'key_destroyed' : boolean,
+}
+export interface PrivateNameScope {
+  'resource' : string,
+  'kind' : string,
+  'authority' : Principal,
+  'profile_revision' : bigint,
 }
 export interface Receipt {
   'outstanding' : bigint,

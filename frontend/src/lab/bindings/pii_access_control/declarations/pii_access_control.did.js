@@ -36,6 +36,12 @@ export const idlFactory = ({ IDL }) => {
     'nonce' : IDL.Vec(IDL.Nat8),
     'field_id' : IDL.Text,
   });
+  const PrivateNameScope = IDL.Record({
+    'resource' : IDL.Text,
+    'kind' : IDL.Text,
+    'authority' : IDL.Principal,
+    'profile_revision' : IDL.Nat64,
+  });
   const Request = IDL.Record({
     'account_id' : IDL.Text,
     'inventory_digest' : IDL.Vec(IDL.Nat8),
@@ -94,6 +100,21 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        [],
+      ),
+    'get_private_profile_name_vetkeys_batch' : IDL.Func(
+        [IDL.Vec(IDL.Text), PrivateNameScope, IDL.Vec(IDL.Nat8)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Opt(IDL.Vec(IDL.Nat8))),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'get_private_profile_names_batch' : IDL.Func(
+        [IDL.Vec(IDL.Text), PrivateNameScope],
+        [IDL.Variant({ 'Ok' : IDL.Vec(EncryptedPii), 'Err' : IDL.Text })],
         [],
       ),
     'grant_pii_read' : IDL.Func(

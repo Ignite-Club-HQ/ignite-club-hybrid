@@ -359,6 +359,12 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : PrincipalEligibility,
     'Err' : IDL.Text,
   });
+  const Scope = IDL.Record({
+    'resource' : IDL.Text,
+    'kind' : IDL.Text,
+    'authority' : IDL.Principal,
+    'profile_revision' : IDL.Nat64,
+  });
   const RemovalHistoryManifest = IDL.Record({
     'removal_receipts' : IDL.Nat64,
     'erased_accounts' : IDL.Nat64,
@@ -577,6 +583,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_principal_eligibility' : IDL.Func([IDL.Principal], [Result_28], []),
+    'read_private_profile_name_authorization' : IDL.Func(
+        [IDL.Principal, IDL.Vec(IDL.Principal), Scope],
+        [Result_20],
+        [],
+      ),
     'read_removal_history_manifest' : IDL.Func([], [Result_29], []),
     'read_removal_history_page' : IDL.Func(
         [IDL.Nat64, RemovalHistoryCursor, IDL.Nat16],

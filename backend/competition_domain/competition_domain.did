@@ -788,6 +788,19 @@ type Main =
           stats: vec PlayHQStat;
         };
      });
+   read_profile_audience_batch: (requester: principal, competition_id: 
+    text, subjects: vec principal, expected: opt nat) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          club: text;
+          members: vec bool;
+          requester: principal;
+          revision: nat;
+          subjects: vec principal;
+        };
+     });
    read_resource_club: (kind: text, id: text) ->
     (variant {
        Err: text;

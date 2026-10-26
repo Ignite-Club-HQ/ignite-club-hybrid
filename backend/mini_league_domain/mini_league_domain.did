@@ -531,6 +531,19 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_profile_audience_batch: (requester: principal, id: text, subjects:
+    vec principal, expected: opt nat) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          club: text;
+          members: vec bool;
+          requester: principal;
+          revision: nat;
+          subjects: vec principal;
+        };
+     });
    rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;

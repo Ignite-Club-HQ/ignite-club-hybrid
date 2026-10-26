@@ -1643,6 +1643,11 @@ export interface Main {
     { 'Ok' : Page } |
       { 'Err' : string }
   >,
+  'read_profile_family_batch' : ActorMethod<
+    [Principal, string, Array<Principal>, [] | [bigint]],
+    { 'Ok' : Batch } |
+      { 'Err' : string }
+  >,
   'read_profile_membership_batch' : ActorMethod<
     [Principal, string, Array<Principal>, [] | [bigint]],
     { 'Ok' : Batch } |

@@ -1404,7 +1404,7 @@ export interface MainInterface {
         stable_bytes: bigint;
         heap_bytes: bigint;
     }>;
-    merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -2046,6 +2046,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_profile_family_batch(requester: Principal, child_id: string, subjects: Array<Principal>, expected: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: Batch;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_profile_membership_batch(requester: Principal, club_id: string, subjects: Array<Principal>, expected: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: Batch;
@@ -2168,7 +2175,7 @@ export interface MainInterface {
      * / Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
      * / Any NEW stored principal / principal-text field added to this canister must be added here.
      */
-    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -6082,6 +6089,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.read_profile_candidates(arg0, to_candid_opt_n303(arg1));
         return from_candid_variant_n304(result);
+    }
+    async read_profile_family_batch(arg0: Principal, arg1: string, arg2: Array<Principal>, arg3: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: Batch;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_profile_family_batch(arg0, arg1, arg2, to_candid_opt_n269(arg3));
+        return from_candid_variant_n308(result);
     }
     async read_profile_membership_batch(arg0: Principal, arg1: string, arg2: Array<Principal>, arg3: bigint | null): Promise<{
         __kind__: "Ok";

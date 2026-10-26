@@ -1060,6 +1060,22 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_profile_audience_batch' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'requester' : IDL.Principal,
+              'members' : IDL.Vec(IDL.Bool),
+              'subjects' : IDL.Vec(IDL.Principal),
+              'club' : IDL.Text,
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'read_resource_club' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],

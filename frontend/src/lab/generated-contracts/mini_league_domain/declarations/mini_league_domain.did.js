@@ -687,6 +687,22 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
         [],
       ),
+    'read_profile_audience_batch' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'requester' : IDL.Principal,
+              'members' : IDL.Vec(IDL.Bool),
+              'subjects' : IDL.Vec(IDL.Principal),
+              'club' : IDL.Text,
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
     'rekey_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],

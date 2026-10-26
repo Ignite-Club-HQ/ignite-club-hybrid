@@ -11,6 +11,13 @@ type Receipt =
    receiver: principal;
    request: Request;
  };
+type PrivateNameScope = 
+ record {
+   authority: principal;
+   kind: text;
+   profile_revision: nat64;
+   resource: text;
+ };
 type PiiDeleteResult = 
  record {
    key_destroyed: bool;
@@ -56,6 +63,17 @@ type Main =
                                       Err: text;
                                       Ok: vec opt blob;
                                     });
+   get_private_profile_name_vetkeys_batch: (ids: vec text, scope:
+    PrivateNameScope, transport: blob) ->
+    (variant {
+       Err: text;
+       Ok: vec opt blob;
+     });
+   get_private_profile_names_batch: (ids: vec text, scope:
+    PrivateNameScope) -> (variant {
+                            Err: text;
+                            Ok: vec EncryptedPii;
+                          });
    grant_pii_read: (pii_id: text, field_id: text, reader: principal) ->
     (variant {
        Err: text;

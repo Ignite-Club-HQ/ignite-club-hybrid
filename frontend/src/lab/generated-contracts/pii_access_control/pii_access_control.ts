@@ -65,6 +65,12 @@ export interface Receipt {
     request: Request;
     receiver: Principal;
 }
+export interface PrivateNameScope {
+    resource: string;
+    kind: string;
+    authority: Principal;
+    profile_revision: bigint;
+}
 export interface MainInterface {
     add_guardian_relationship(guardian: Principal, child_id: string): Promise<{
         __kind__: "Ok";
@@ -117,6 +123,20 @@ export interface MainInterface {
     get_encrypted_pii_vetkeys_batch(pii_ids: Array<string>, field_id: string, transport_public_key: Uint8Array): Promise<{
         __kind__: "Ok";
         Ok: Array<Uint8Array | null>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_private_profile_name_vetkeys_batch(ids: Array<string>, scope: PrivateNameScope, transport: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Uint8Array | null>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_private_profile_names_batch(ids: Array<string>, scope: PrivateNameScope): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EncryptedPii>;
     } | {
         __kind__: "Err";
         Err: string;
@@ -308,14 +328,14 @@ export interface MainInterface {
         Err: string;
     }>;
 }
+export interface PiiDeleteResult {
+    shredded_at: bigint;
+    key_destroyed: boolean;
+}
 export interface ClubMediaAuthority {
     move_id: string;
     authority?: Principal;
     revision: bigint;
-}
-export interface PiiDeleteResult {
-    shredded_at: bigint;
-    key_destroyed: boolean;
 }
 export interface EncryptedPii {
     master_key_id: string;
@@ -423,6 +443,26 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.get_encrypted_pii_vetkeys_batch(arg0, arg1, arg2);
         return from_candid_variant_n7(result);
+    }
+    async get_private_profile_name_vetkeys_batch(arg0: Array<string>, arg1: PrivateNameScope, arg2: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Uint8Array | null>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_private_profile_name_vetkeys_batch(arg0, arg1, arg2);
+        return from_candid_variant_n7(result);
+    }
+    async get_private_profile_names_batch(arg0: Array<string>, arg1: PrivateNameScope): Promise<{
+        __kind__: "Ok";
+        Ok: Array<EncryptedPii>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_private_profile_names_batch(arg0, arg1);
+        return from_candid_variant_n6(result);
     }
     async grant_pii_read(arg0: string, arg1: string, arg2: Principal): Promise<{
         __kind__: "Ok";

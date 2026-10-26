@@ -541,6 +541,19 @@ export interface MainInterface {
         Err: string;
     }>;
     read_group_opening_configuration(): Promise<Array<[string, string]>>;
+    read_profile_audience_batch(requester: Principal, id: string, subjects: Array<Principal>, expected: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            requester: Principal;
+            members: Array<boolean>;
+            subjects: Array<Principal>;
+            club: string;
+            revision: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -1527,6 +1540,22 @@ export class Mini_league_domain implements mini_league_domainInterface {
         const result = await this.actor.read_group_opening_configuration();
         return result;
     }
+    async read_profile_audience_batch(arg0: Principal, arg1: string, arg2: Array<Principal>, arg3: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            requester: Principal;
+            members: Array<boolean>;
+            subjects: Array<Principal>;
+            club: string;
+            revision: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_profile_audience_batch(arg0, arg1, arg2, to_candid_opt_n76(arg3));
+        return from_candid_variant_n77(result);
+    }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -1535,7 +1564,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n76(result);
+        return from_candid_variant_n78(result);
     }
     async remove_admin(arg0: string, arg1: Principal): Promise<{
         __kind__: "Ok";
@@ -1595,7 +1624,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_availability(arg0, arg1, arg2);
-        return from_candid_variant_n77(result);
+        return from_candid_variant_n79(result);
     }
     async set_club_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -2770,7 +2799,38 @@ function from_candid_variant_n73(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n76(value: {
+function from_candid_variant_n77(value: {
+    Ok: {
+        requester: Principal;
+        members: Array<boolean>;
+        subjects: Array<Principal>;
+        club: string;
+        revision: bigint;
+    };
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: {
+        requester: Principal;
+        members: Array<boolean>;
+        subjects: Array<Principal>;
+        club: string;
+        revision: bigint;
+    };
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n78(value: {
     ok: bigint;
 } | {
     err: string;
@@ -2789,7 +2849,7 @@ function from_candid_variant_n76(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n77(value: {
+function from_candid_variant_n79(value: {
     Ok: _MiniLeagueSessionAvailability;
 } | {
     Err: string;
@@ -2854,6 +2914,9 @@ function to_candid_opt_n5(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_opt_n6(value: number | null): [] | [number] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n76(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n38(value: {
