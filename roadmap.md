@@ -1,6 +1,7 @@
 ## Club upgrade subscription warning — 26 October 2026
-- [ ] Bind subscription display to actual feature dispatch and prevent ICP plan-management actions from reaching Supabase.
-- [ ] Verify scoped ICP/Supabase reads and failure behavior; keep provider fulfillment and paid-term rules unchanged.
+- [x] Subscription display uses the actual feature dispatcher with exact club/account identity; mounted/restored II guards ancillary reads/realtime. ICP cancellation/downgrade cannot reach Supabase or self-write privileged canister subscription rows; unsupported local actions withheld. Provider fulfillment and paid-term rules unchanged.
+- [x] Focused checks passed: Supabase 47 / ICP 46, with mode skips; preview build OK. Browser isolated subscription reader returned the exact ICP club plan while Supabase access threw if attempted. No live subscription mutation or deployment.
+- [ ] Screenshot's exact live source and Paul's signed-in upgrade-page readback remain unverified without his updated app/Internet Identity session; provider-owned cancellation remains outside this local read repair.
 
 ## Thread search and result-jump responsiveness — 26 October 2026
 - [x] Remove bar-level debounce; retain one historical-search debounce and display loaded matches during retrieval across all six chat pages. Closing/changing search aborts and discards old requests immediately.
