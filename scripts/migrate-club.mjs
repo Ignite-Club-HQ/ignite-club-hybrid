@@ -246,12 +246,19 @@ function writerContext(clubId, target) {
       const canisterId = target.canisters.media_blob_store;
       if (!canisterId) throw Error('Destination media_blob_store missing');
       const agent = HttpAgent.createSync({ host: 'https://icp-api.io', identity });
-      return Actor.createActor(({ IDL }) => IDL.Service({
+      const actor = Actor.createActor(({ IDL }) => IDL.Service({
         begin_upload: IDL.Func([IDL.Text, IDL.Text, IDL.Nat64, IDL.Nat32], [IDL.Variant({ Ok: IDL.Text, Err: IDL.Text })], []),
         put_chunk: IDL.Func([IDL.Text, IDL.Nat32, IDL.Vec(IDL.Nat8)], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
         finalize_upload: IDL.Func([IDL.Text], [IDL.Variant({ Ok: IDL.Record({ canister: IDL.Text, path: IDL.Text, content_hash: IDL.Text }), Err: IDL.Text })], []),
         abort_upload: IDL.Func([IDL.Text], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
       }), { agent, canisterId });
+      const unwrap = async (p, label) => { const r = await p; if (r && 'Err' in r) throw Error(`${label} refused: ${r.Err}`); return r?.Ok; };
+      return {
+        begin_upload: (path, mime, size, chunks) => unwrap(actor.begin_upload(path, mime, size, chunks), 'Begin blob upload'),
+        put_chunk: (id, i, data) => unwrap(actor.put_chunk(id, i, Array.from(data)), `Upload blob chunk ${i}`),
+        finalize_upload: (id) => unwrap(actor.finalize_upload(id), 'Finalize blob upload'),
+        abort_upload: (id) => unwrap(actor.abort_upload(id), 'Abort blob upload'),
+      };
     },
     piiActor: () => {
       const { IDL } = require('@icp-sdk/core/candid');
@@ -263,9 +270,10 @@ function writerContext(clubId, target) {
         register_pii: IDL.Func([IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Principal], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
         grant_pii_read_club: IDL.Func([IDL.Text, IDL.Text, IDL.Text], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
       }), { agent, canisterId });
+      const { Principal } = require('@icp-sdk/core/principal');
       const unwrap = async (p, label) => { const r = await p; if (r && 'Err' in r) throw Error(`${label} refused: ${r.Err}`); return r?.Ok; };
       return {
-        register_pii: (id, field, marker, owner) => unwrap(actor.register_pii(id, field, marker, owner), 'Register PII'),
+        register_pii: (id, field, marker, owner) => unwrap(actor.register_pii(id, field, marker, Principal.fromText(owner)), 'Register PII'),
         grant_pii_read_club: (id, field, club) => unwrap(actor.grant_pii_read_club(id, field, club), 'Grant club read'),
       };
     },
