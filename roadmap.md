@@ -1,3 +1,6 @@
+## Event-associated duty teams — 26 October 2026
+- [ ] Scope create/edit/detail duty-team choices to primary team or selected audience, retaining all-club choices only for unrestricted club events; test concrete restrictions.
+
 ## Cold chat header visibility — 26 October 2026
 - [x] Replace shared cold-header action/subtitle placeholders with visible, disabled standard icons and remembered/type labels. 14 existing label/header tests pass; actual shared-component browser check at 320/411/1280px shows no header placeholders/overflow and disabled pending controls. Preview build OK. Signed-in phone verification remains unavailable without Paul's Internet Identity session; no deployment.
 

@@ -13,6 +13,18 @@ interface TeamOption {
   name: string;
 }
 
+/** An explicit empty target list stays restricted, never becomes all-club. */
+export function eventDutyTeamIds(teamId?: string | null, targetTeamIds?: string[] | null): string[] | null {
+  if (teamId) return [teamId];
+  return Array.isArray(targetTeamIds) ? [...new Set(targetTeamIds)] : null;
+}
+
+export function scopeDutyTeamOptions(teams: TeamOption[], allowedIds: string[] | null): TeamOption[] {
+  if (allowedIds === null) return teams;
+  const allowed = new Set(allowedIds);
+  return teams.filter((team) => allowed.has(team.id));
+}
+
 /**
  * Pick duty-eligible teams from the canister's club team list. Candid
  * optionals arrive as arrays: deleted_at_ms is [] for a live team, so it
@@ -33,30 +45,39 @@ export function filterDutyTeamOptions(rows: Array<{
 
 export function DutyTeamPicker({
   clubId,
+  teamId,
+  targetTeamIds,
   value,
   onChange,
   disabled = false,
   readOnly = false,
 }: {
   clubId: string | null | undefined;
+  teamId?: string | null;
+  targetTeamIds?: string[] | null;
   value: string | null;
   onChange: (teamId: string | null) => void;
   disabled?: boolean;
   readOnly?: boolean;
 }) {
+  const allowedIds = eventDutyTeamIds(teamId, targetTeamIds);
   const { data: teams = [] } = useQuery({
-    queryKey: ["active-club-teams-for-duty", clubId],
+    queryKey: ["active-club-teams-for-duty", clubId, allowedIds],
     enabled: !!clubId,
-    queryFn: async () => withFeatureBackend("membership", {
+    queryFn: async () => {
+      if (!clubId || allowedIds?.length === 0) return [];
+      return withFeatureBackend("membership", {
       supabase: async () => {
-        const { data, error } = await supabase
+        let query = supabase
           .from("teams")
           .select("id, name, is_archived, is_shell, deleted_at, lifecycle_status")
-          .eq("club_id", clubId!)
+          .eq("club_id", clubId)
           .eq("is_archived", false)
           .eq("is_shell", false)
           .is("deleted_at", null)
           .order("name");
+        if (allowedIds) query = query.in("id", allowedIds);
+        const { data, error } = await query;
         if (error) throw error;
         return (data ?? [])
           .filter((team) => team.lifecycle_status !== "archived")
@@ -64,10 +85,11 @@ export function DutyTeamPicker({
       },
       icp: async (ctx) => {
         const { listLiveMembershipTeams } = await import("@/live/features/membership");
-        const rows = await listLiveMembershipTeams(ctx, clubId!);
-        return filterDutyTeamOptions(rows as any);
+        const rows = await listLiveMembershipTeams(ctx, clubId);
+        return scopeDutyTeamOptions(filterDutyTeamOptions(rows as any), allowedIds);
       },
-    }, { clubId: clubId! }),
+    }, { clubId });
+    },
   });
 
   if (!clubId) return null;
@@ -80,7 +102,10 @@ export function DutyTeamPicker({
       <Label>Team on duty</Label>
       <Select
         value={value && teams.some((team) => team.id === value) ? value : NO_TEAM}
-        onValueChange={(next) => onChange(next === NO_TEAM ? null : next)}
+        onValueChange={(next) => {
+          if (next === NO_TEAM) onChange(null);
+          else if (teams.some((team) => team.id === next)) onChange(next);
+        }}
         disabled={disabled}
       >
         <SelectTrigger aria-label="Team on duty"><SelectValue placeholder="No team on duty" /></SelectTrigger>
@@ -97,10 +122,14 @@ export function DutyTeamPicker({
 export function EventDutyTeamAssignment({
   eventId,
   clubId,
+  teamId: eventTeamId,
+  targetTeamIds,
   canEdit,
 }: {
   eventId: string;
   clubId: string;
+  teamId?: string | null;
+  targetTeamIds?: string[] | null;
   canEdit: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -154,7 +183,7 @@ export function EventDutyTeamAssignment({
   return (
     <section className="space-y-2">
       {canEdit ? (
-        <DutyTeamPicker clubId={clubId} value={teamId} onChange={update} disabled={saving} />
+        <DutyTeamPicker clubId={clubId} teamId={eventTeamId} targetTeamIds={targetTeamIds} value={teamId} onChange={update} disabled={saving} />
       ) : (
         <DutyTeamPicker clubId={clubId} value={teamId} onChange={() => undefined} readOnly />
       )}
