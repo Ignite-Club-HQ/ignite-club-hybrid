@@ -28,6 +28,7 @@ mod membership_wire;
 mod membership_acceptance;
 mod admin_accounts;
 mod guardian_search;
+mod club_profiles;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -1909,6 +1910,54 @@ async fn search_guardian_profiles(authority: Principal, child: String, query: St
     let guardian: bool = reply.candid().map_err(|_| "Invalid guardian verification")?;
     guardian_search::permit_disclosure(guardian, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
     results.retain(|result| account_for_write(result.principal).is_ok());
+    Ok(results)
+}
+
+/// Additive candidate reader for scoped client-side name matching. It does not
+/// enable a privacy cutover or use the unreleased membership directory index.
+#[ic_cdk::update]
+async fn read_club_profiles(authority: Principal, club: String, subjects: Vec<Principal>) -> Outcome<Vec<ProfileSearchResult>> {
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1") {
+        return Err("Private profile candidate reads are not released".into());
+    }
+    let caller = ic_cdk::api::msg_caller();
+    let account = account_for_write(caller)?;
+    let config = directory_config()?;
+    let sources: Vec<Principal> = config.sources.iter().map(|(_, p)| *p).collect();
+    let subjects = club_profiles::validate(authority, &sources, &club, &subjects)?;
+    let check = |subject: Principal| {
+        let club = club.clone();
+        async move {
+            let reply = ic_cdk::call::Call::bounded_wait(authority, "read_has_club_membership")
+                .with_args(&(subject, club)).await.map_err(|_| "Club membership verification unavailable")?;
+            reply.candid::<bool>().map_err(|_| "Invalid club membership verification")
+        }
+    };
+    club_profiles::permit(check(caller).await?, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+    let mut candidates = Vec::new();
+    for subject in subjects {
+        let subject_account = match account_for_write(subject) { Ok(value) => value, Err(_) => continue };
+        let member = check(subject).await?;
+        club_profiles::permit(true, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+        if !member || account_for_write(subject).ok().as_ref() != Some(&subject_account) { continue; }
+        candidates.push((subject, subject_account));
+    }
+    // A stale first membership reply never suffices for disclosure.
+    let mut verified = Vec::new();
+    for (subject, subject_account) in candidates {
+        let member = check(subject).await?;
+        club_profiles::permit(true, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+        if member && account_for_write(subject).ok().as_ref() == Some(&subject_account) { verified.push((subject,subject_account)); }
+    }
+    club_profiles::permit(check(caller).await?, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+    // Read profiles after the final await, not from a suspended plaintext copy.
+    let mut results = Vec::new();
+    for (subject, subject_account) in verified {
+        if account_for_write(subject).ok().as_ref() != Some(&subject_account) { continue; }
+        if let Some(profile) = get_profile_entry(&subject_account.id) {
+            results.push(ProfileSearchResult { account_id: profile.account_id, principal: subject, display_name: profile.display_name, avatar_ref: profile.avatar_ref });
+        }
+    }
     Ok(results)
 }
 
