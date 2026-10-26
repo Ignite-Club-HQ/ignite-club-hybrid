@@ -60,10 +60,9 @@ try {
   const ownerKey = await derive(owner); assert.ok(ownerKey);
   const wrongField = IbeCiphertext.encrypt(verification, IbeIdentity.fromBytes(bytes.encode(`${subject}\u001femail`)), bytes.encode('Not a display name'), IbeSeed.random());
   assert.throws(() => wrongField.decrypt(ownerKey), 'A display-name key cannot unlock another personal field');
-  const foreignVerification = DerivedPublicKey.deserialize(Uint8Array.from(await club.actor.cycles_balance().then(() => verification.publicKeyBytes())));
   // Encrypting to a different subject is sufficient to prove identity binding;
   // no synthetic or mainnet key material is introduced into the replica.
-  const wrongSubject = IbeCiphertext.encrypt(foreignVerification, IbeIdentity.fromBytes(bytes.encode(`${outsider.toText()}\u001f${field}`)), bytes.encode(name), IbeSeed.random());
+  const wrongSubject = IbeCiphertext.encrypt(verification, IbeIdentity.fromBytes(bytes.encode(`${outsider.toText()}\u001f${field}`)), bytes.encode(name), IbeSeed.random());
   assert.throws(() => wrongSubject.decrypt(ownerKey), 'The key is bound to the original subject');
   assert.ok('Err' in await as(owner).get_encrypted_pii_batch(Array(101).fill(subject), field, 'profile_display', 'Bound test'));
   assert.ok('Err' in await as(owner).get_encrypted_pii_vetkeys_batch(Array(26).fill(subject), field, TransportSecretKey.random().publicKeyBytes()));
