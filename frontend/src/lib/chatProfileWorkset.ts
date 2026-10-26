@@ -15,7 +15,11 @@ export function chatProfileWorkset(
   const wanted = new Set(visibleIds?.slice(0, 100));
   const rows = visibleIds === undefined
     ? messages.slice(-25).reverse()
-    : messages.filter(row => wanted.has(row.id)).slice(0, 100);
+    : [];
+  if (visibleIds !== undefined) for (const row of messages) {
+    if (wanted.has(row.id)) { rows.push(row); wanted.delete(row.id); }
+    if (!wanted.size || rows.length === 100) break;
+  }
   // Keep only referenced reply authors, never another full history index.
   const replies = new Set(rows.flatMap(row => row.reply_to_id ? [row.reply_to_id] : []));
   const replyAuthors = new Map<string, string | null | undefined>();

@@ -27,4 +27,10 @@ describe('private chat viewport workset', () => {
     expect(ids.slice(0, 40)).toEqual(rows.map(row => row.author_id));
     expect(new Set(ids).size).toBe(100);
   });
+  it('stops touching reaction payloads once the hundred-name budget is full', () => {
+    const rows = history.slice(0, 100).map(row => ({ ...row,
+      get reactions(): { user_id: string }[] { throw new Error('Budget already full'); },
+    }));
+    expect(chatProfileWorkset(rows, rows.map(row => row.id))).toHaveLength(100);
+  });
 });
