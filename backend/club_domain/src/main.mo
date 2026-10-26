@@ -3267,6 +3267,48 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(user) };
   };
 
+  // Authority-owned candidates for club-only private name matching. Each call
+  // scans <=100 source rows and emits <=25 principals, with a durable cursor.
+  public shared ({ caller }) func read_profile_candidates(club_id : Text, cursor : ?ProfileMembership.Cursor) : async { #Ok : ProfileMembership.Page; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1") return #Err("Private profile candidate paging is not released");
+    if (caller.isAnonymous() or club_id == "" or club_id.size() > 128) return #Err("Authenticated club scope required");
+    if (not removalReceiver.enter(caller)) return #Err("Account removal fenced or operation capacity reached");
+    try {
+      let revision = membershipEpoch();
+      let authority = identityAccessCanister;
+      var phase = 0; var offset = 0;
+      switch (cursor) {
+        case (?c) { if (c.revision != revision or c.phase > 2) return #Err("Profile candidate cursor changed"); phase := c.phase; offset := c.offset };
+        case null {};
+      };
+      await admitAccount(caller);
+      if (not ProfileMembership.unchanged(revision, membershipEpoch(), authority == identityAccessCanister, removalReceiver.denied(caller) or isTransferFenced(club_id))) return #Err("Profile candidate scope changed");
+      if (not profiles.any(func p = p.id == club_id and p.deleted_at_ms == null)) return #Err("Active club required");
+      let aliases = switch (accountFor(caller)) { case (?a) a.principals; case null [caller] };
+      if (isExcluded(caller, club_id) or not aliases.any(func p = not removalReceiver.denied(p) and isMember(p, club_id))) return #Err("Club membership required");
+      let sizes = [acl.roles.size(), acl.children.size(), acl.guardians.size()];
+      if (offset > sizes[phase]) return #Err("Invalid profile candidate offset");
+      var scanned = 0; var subjects : [Principal] = [];
+      label scan while (phase < 3 and scanned < 100 and subjects.size() < 25) {
+        if (offset == sizes[phase]) { phase += 1; offset := 0; continue scan };
+        let subject : ?Principal = switch (phase) {
+          case (0) ?acl.roles[offset].user;
+          case (1) acl.children[offset].parent;
+          case (_) ?acl.guardians[offset].user;
+        };
+        offset += 1; scanned += 1;
+        switch (subject) {
+          case (?p) { if (not p.isAnonymous() and not removalReceiver.denied(p) and isMember(p, club_id) and not subjects.any(func existing = existing == p)) subjects := subjects.concat([p]) };
+          case null {};
+        };
+      };
+      // Normalize exhausted phases so an exact-boundary page can finish.
+      while (phase < 3 and offset == sizes[phase]) { phase += 1; offset := 0 };
+      let next = if (phase == 3) null else ?{ revision; phase; offset };
+      #Ok({ revision; subjects; next; scanned })
+    } finally { removalReceiver.leave(caller) };
+  };
+
   // Consensus booleans only: no child names, guardian lists or stored grants.
   // Rehearsal-only identity-service delegation. This is an atomic bounded
   // membership observation, not a public roster or a new readable name index.
