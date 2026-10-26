@@ -65,13 +65,19 @@ export function buildFamilyMemberships(input) {
   return { roles, account_roles, exclusions: mappedExclusions };
 }
 
-/** Encrypt using the same immutable production identity/context as the app. */
-export async function encryptFamilyField(target, publicKey, childId, field, text) {
+/** The destination group's production PII public key (key_1, immutable context). */
+export async function productionPiiPublicKey(target) {
   const { Principal } = require('@icp-sdk/core/principal');
-  const { MasterPublicKey, DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import(new URL('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js', import.meta.url).href);
-  const expected = MasterPublicKey.productionKey('key_1')
+  const { MasterPublicKey } = await import(new URL('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js', import.meta.url).href);
+  return MasterPublicKey.productionKey('key_1')
     .deriveCanisterKey(Principal.fromText(target.canisters.pii_access_control).toUint8Array())
     .deriveSubKey(encoder.encode('ignite-pii-v1')).publicKeyBytes();
+}
+
+/** Encrypt using the same immutable production identity/context as the app. */
+export async function encryptFamilyField(target, publicKey, childId, field, text) {
+  const { DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import(new URL('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js', import.meta.url).href);
+  const expected = await productionPiiPublicKey(target);
   if (!(publicKey instanceof Uint8Array) || publicKey.length !== expected.length || publicKey.some((b, i) => b !== expected[i])) throw Error('Destination PII public key mismatch');
   return IbeCiphertext.encrypt(DerivedPublicKey.deserialize(publicKey),
     IbeIdentity.fromBytes(encoder.encode(`${childId}\u001f${field}`)), encoder.encode(text), IbeSeed.random()).serialize();
