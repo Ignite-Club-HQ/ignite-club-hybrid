@@ -28,8 +28,9 @@ export function sha256Hex(bytes) {
 
 /** Deterministic club-scoped destination path for a migrated byte item. */
 export function destinationPath(clubId, kind, id, sourcePath) {
-  const base = String(sourcePath ?? '').split('/').pop() || 'file';
-  if (base.includes('..') || base.includes('\0')) throw Error(`Unsafe source path refused: ${sourcePath}`);
+  const src = String(sourcePath ?? '');
+  const base = src.split('/').pop() || 'file';
+  if (src.split('/').includes('..') || src.includes('\0')) throw Error(`Unsafe source path refused: ${sourcePath}`);
   return `clubs/${clubId}/migrated/${kind}/${id}/${base}`;
 }
 
@@ -41,11 +42,12 @@ export function destinationPath(clubId, kind, id, sourcePath) {
  */
 export function planByteCopies({ clubId, photos = [], vaultFiles = [], claims, creator }) {
   const items = [];
+  const creatorText = typeof creator === 'string' ? creator : creator.toText();
   const ownerFor = (userId, label) => {
-    if (!userId) return creator;
+    if (!userId) return creatorText;
     const p = claims?.get(userId);
     if (!p) throw Error(`${label} uploader ${userId} has not claimed an account; refusing to copy their bytes`);
-    return p.toText();
+    return typeof p === 'string' ? p : p.toText();
   };
   for (const ph of photos) {
     if (ph.club_id !== clubId) throw Error('Foreign photo refused');

@@ -66,7 +66,7 @@ test('planByteCopies refuses foreign rows, missing paths and unclaimed uploaders
   assert.throws(() => planByteCopies({ clubId: CLUB, claims, creator: CREATOR, photos: [{ id: 'x', club_id: 'other', storage_path: 'a' }] }), /Foreign photo/);
   assert.throws(() => planByteCopies({ clubId: CLUB, claims, creator: CREATOR, photos: [{ id: 'x', club_id: CLUB }] }), /no storage path/);
   assert.throws(() => planByteCopies({ clubId: CLUB, claims, creator: CREATOR, photos: [{ id: 'x', club_id: CLUB, storage_path: 'a', uploaded_by: 'stranger' }] }), /not claimed/);
-  assert.throws(() => planByteCopies({ clubId: CLUB, claims, creator: CREATOR, vaultFiles: [{ id: 'x', club_id: CLUB, file_url: 'http://x' }] }), /no source URL/);
+  assert.throws(() => planByteCopies({ clubId: CLUB, claims, creator: CREATOR, vaultFiles: [{ id: 'x', club_id: CLUB, file_url: '' }] }), /no source URL/);
 });
 
 test('destinationPath rejects traversal and NUL', () => {
