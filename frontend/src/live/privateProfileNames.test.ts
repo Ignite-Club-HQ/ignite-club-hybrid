@@ -106,11 +106,11 @@ describe("authorized name display", () => {
 
 describe("private own email preparation", () => {
   it("registers a validated email only for its authenticated owner and verifies private readback", async () => {
-    mocks.read.mockResolvedValue({Ok:[{pii_id:subject,field_id:"email",ciphertext:[9,8]}]});
+    mocks.read.mockResolvedValue({Ok:[{pii_id:subject,field_id:"contact_email",ciphertext:[9,8]}]});
     mocks.decrypt.mockReturnValue(new TextEncoder().encode("paul@example.test"));
     expect(await preparePrivateOwnProfileEmail(ctx," paul@example.test ")).toBe(`pii-email:v1:${authority}:${subject}`);
-    expect(mocks.encrypt).toHaveBeenCalledWith(ctx,subject,"email","paul@example.test");
-    expect(mocks.keys).toHaveBeenCalledWith(ctx,[subject],"email");
+    expect(mocks.encrypt).toHaveBeenCalledWith(ctx,subject,"contact_email","paul@example.test");
+    expect(mocks.keys).toHaveBeenCalledWith(ctx,[subject],"contact_email");
   });
   it("refuses invalid email before any encryption or write",async()=>{
     await expect(preparePrivateOwnProfileEmail(ctx,"not-an-email")).rejects.toThrow();
@@ -121,5 +121,12 @@ describe("private own email preparation", () => {
     mocks.register.mockRejectedValue(new Error("Unknown reply"));
     await expect(preparePrivateOwnProfileEmail(ctx,"paul@example.test")).rejects.toThrow("Unknown reply");
     expect(mocks.register).toHaveBeenCalledOnce();
+  });
+  it("clears an existing optional email using verified empty ciphertext in the original field",async()=>{
+    mocks.read.mockResolvedValue({Ok:[{pii_id:subject,field_id:"contact_email",ciphertext:[9,8]}]});
+    mocks.decrypt.mockReturnValue(new Uint8Array());
+    await preparePrivateOwnProfileEmail(ctx," ");
+    expect(mocks.encrypt).toHaveBeenCalledWith(ctx,subject,"contact_email","");
+    expect(mocks.register).toHaveBeenCalledWith(subject,"contact_email",expect.any(Uint8Array),Principal.fromText(subject));
   });
 });

@@ -16,7 +16,7 @@
  */
 import type { FeatureBackendContext } from "../featureRouter";
 import { getLiveCompetitionWelcomeEmail, registerLiveMemberWelcomeJob } from "./competitions";
-import { registerLivePiiText, resolveLivePiiTextBatch } from "./vault";
+import { resolveLivePiiTextBatch } from "./vault";
 // icp-guard: allow external email transport only; eligibility and recipient jobs are registered and verified on competition_domain, and only the job token reaches this delivery endpoint.
 
 export const CONTACT_EMAIL_FIELD_ID = "contact_email";
@@ -35,9 +35,10 @@ export async function readLiveContactEmail(ctx: FeatureBackendContext): Promise<
   return value ? value : null;
 }
 
-/** Saves (upserts) the caller's own contact email. Best effort. */
+/** Save/clear is strict; welcome-email dispatch remains best effort. */
 export async function saveLiveContactEmail(ctx: FeatureBackendContext, email: string): Promise<void> {
-  await registerLivePiiText(ctx, ctx.identity.getPrincipal().toText(), CONTACT_EMAIL_FIELD_ID, email.trim());
+  const { preparePrivateOwnProfileEmail } = await import("../privateProfileNames");
+  await preparePrivateOwnProfileEmail(ctx, email);
 }
 
 /**

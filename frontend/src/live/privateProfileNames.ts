@@ -17,11 +17,13 @@ const emailSchema = z.string().trim().email().max(254);
 
 /** Preparation only: never publishes an email or broadens its reader grants. */
 export async function preparePrivateOwnProfileEmail(ctx: FeatureBackendContext, email: string): Promise<string> {
-  const value = emailSchema.parse(email);
-  return prepareOwnField(ctx, "email", value);
+  // Empty ciphertext deliberately clears the existing contact_email value;
+  // the existing welcome reader interprets an empty decrypted value as unset.
+  const value = email.trim() ? emailSchema.parse(email) : "";
+  return prepareOwnField(ctx, "contact_email", value);
 }
 
-async function prepareOwnField(ctx: FeatureBackendContext, field: "email" | "display_name", value: string): Promise<string> {
+async function prepareOwnField(ctx: FeatureBackendContext, field: "contact_email" | "display_name", value: string): Promise<string> {
   const authority = ctx.target.canisterIds.pii_access_control;
   if (!authority) throw new Error("Private profile authority is not configured.");
   const subject = canonicalPrincipal(ctx.identity.getPrincipal().toText());
