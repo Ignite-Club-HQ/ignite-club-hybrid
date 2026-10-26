@@ -19,6 +19,7 @@ import { buildMediaSnapshot } from './migrate-club-media.mjs';
 import { buildVaultSnapshot } from './migrate-club-vault.mjs';
 import { buildGameResults, assertNoUnsupportedEventRows, UNSUPPORTED_EVENT_TABLES } from './migrate-club-event-results.mjs';
 import { prepareFamilyCopy, productionPiiPublicKey } from './migrate-club-family.mjs';
+import { planByteCopies, copyClubBytes, applyPhotoBlobRefs, applyVaultBlobRefs } from './migrate-club-bytes.mjs';
 const ms = (iso) => (iso ? BigInt(Date.parse(iso)) : null);
 const opt = (v) => (v === null || v === undefined || v === '' ? [] : [v]);
 const optMs = (iso) => opt(ms(iso));
@@ -334,5 +335,23 @@ export const WRITERS = {
     const snap = buildVaultSnapshot({ clubId: ctx.clubId, folders, files, claims: ctx.claims, creator: ctx.creator });
     await loadSnapshot(ctx, 'vault_domain', snap, 'fence');
     return { records: snap.folders.length + snap.files.length };
+  },
+  async media_bytes(ctx) {
+    const [photos, vaultFiles] = await Promise.all([ctx.rows('photos', 'club_id'), ctx.rows('vault_files', 'club_id')]);
+    const items = planByteCopies({ clubId: ctx.clubId, photos, vaultFiles, claims: ctx.claims, creator: ctx.creator });
+    if (!items.length) return { records: 0 };
+    const publicKey = await productionPiiPublicKey(ctx.target);
+    const refs = await copyClubBytes(ctx.target, publicKey, items, {
+      download: ctx.download, blobStore: ctx.blobStoreActor(), pii: ctx.piiActor(), journal: ctx.byteJournal,
+    });
+    // Patch the blob_ref pointers into both metadata snapshots and re-import
+    // (idempotent replace; the clubs stay fenced throughout).
+    const mediaSnap = buildMediaSnapshot({ clubId: ctx.clubId, photos, albums: await ctx.rows('photo_albums', 'club_id'), claims: ctx.claims });
+    applyPhotoBlobRefs(mediaSnap, refs.photos);
+    await loadSnapshot(ctx, 'media_metadata', mediaSnap, 'fence');
+    const vaultSnap = buildVaultSnapshot({ clubId: ctx.clubId, folders: await ctx.rows('team_folders', 'club_id'), files: vaultFiles, claims: ctx.claims, creator: ctx.creator });
+    applyVaultBlobRefs(vaultSnap, refs.vault);
+    await loadSnapshot(ctx, 'vault_domain', vaultSnap, 'fence');
+    return { records: items.length };
   },
 };

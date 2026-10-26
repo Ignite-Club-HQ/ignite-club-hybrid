@@ -232,6 +232,63 @@ function writerContext(clubId, target) {
     rowsIn: async (table, col, ids) => { const out = []; for (let i = 0; i < ids.length; i += 100) out.push(...await db.all(table, `${col}=${inList(ids.slice(i, i + 100))}`)); return out; },
     claims: null, // read from this exact destination before member-owned steps
     schemaFile: (domain) => new URL(`./migrate-schemas/${domain}.snapshot.did.js`, import.meta.url).href,
+    // Byte copy-and-encrypt support (media_bytes step).
+    download: async (sourcePath) => {
+      const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const href = /^https?:\/\//.test(sourcePath) ? sourcePath : `${url}/storage/v1/object/${sourcePath}`;
+      const res = await fetch(href, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+      if (!res.ok) throw Error(`Download ${sourcePath} failed: ${res.status}`);
+      return new Uint8Array(await res.arrayBuffer());
+    },
+    blobStoreActor: () => {
+      const { IDL } = require('@icp-sdk/core/candid');
+      const { Actor } = require('@icp-sdk/core/agent');
+      const canisterId = target.canisters.media_blob_store;
+      if (!canisterId) throw Error('Destination media_blob_store missing');
+      const agent = HttpAgent.createSync({ host: 'https://icp-api.io', identity });
+      const actor = Actor.createActor(({ IDL }) => IDL.Service({
+        begin_upload: IDL.Func([IDL.Text, IDL.Text, IDL.Nat64, IDL.Nat32], [IDL.Variant({ Ok: IDL.Text, Err: IDL.Text })], []),
+        put_chunk: IDL.Func([IDL.Text, IDL.Nat32, IDL.Vec(IDL.Nat8)], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
+        finalize_upload: IDL.Func([IDL.Text], [IDL.Variant({ Ok: IDL.Record({ canister: IDL.Text, path: IDL.Text, content_hash: IDL.Text }), Err: IDL.Text })], []),
+        abort_upload: IDL.Func([IDL.Text], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
+      }), { agent, canisterId });
+      const unwrap = async (p, label) => { const r = await p; if (r && 'Err' in r) throw Error(`${label} refused: ${r.Err}`); return r?.Ok; };
+      return {
+        begin_upload: (path, mime, size, chunks) => unwrap(actor.begin_upload(path, mime, size, chunks), 'Begin blob upload'),
+        put_chunk: (id, i, data) => unwrap(actor.put_chunk(id, i, Array.from(data)), `Upload blob chunk ${i}`),
+        finalize_upload: (id) => unwrap(actor.finalize_upload(id), 'Finalize blob upload'),
+        abort_upload: (id) => unwrap(actor.abort_upload(id), 'Abort blob upload'),
+      };
+    },
+    piiActor: () => {
+      const { IDL } = require('@icp-sdk/core/candid');
+      const { Actor } = require('@icp-sdk/core/agent');
+      const canisterId = target.canisters.pii_access_control;
+      if (!canisterId) throw Error('Destination pii_access_control missing');
+      const agent = HttpAgent.createSync({ host: 'https://icp-api.io', identity });
+      const actor = Actor.createActor(({ IDL }) => IDL.Service({
+        register_pii: IDL.Func([IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Principal], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
+        grant_pii_read_club: IDL.Func([IDL.Text, IDL.Text, IDL.Text], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
+      }), { agent, canisterId });
+      const { Principal } = require('@icp-sdk/core/principal');
+      const unwrap = async (p, label) => { const r = await p; if (r && 'Err' in r) throw Error(`${label} refused: ${r.Err}`); return r?.Ok; };
+      return {
+        register_pii: (id, field, marker, owner) => unwrap(actor.register_pii(id, field, marker, Principal.fromText(owner)), 'Register PII'),
+        grant_pii_read_club: (id, field, club) => unwrap(actor.grant_pii_read_club(id, field, club), 'Grant club read'),
+      };
+    },
+    byteJournal: byteJournal(join(root, 'scripts', '.migrate-bytes-cache', `${clubId}.json`)),
+  };
+}
+
+/** File-backed per-item byte journal; plaintext is never persisted. */
+function byteJournal(path) {
+  let entries = {};
+  try { entries = JSON.parse(readFileSync(path, 'utf8')); } catch { /* first run */ }
+  const flush = () => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, JSON.stringify(entries, null, 2)); };
+  return {
+    get: (id) => entries[id],
+    put: (id, v) => { entries[id] = { ...entries[id], ...v }; flush(); },
   };
 }
 
@@ -246,7 +303,7 @@ export async function runSteps({ journal, path, ctx, approval, writers = WRITERS
     if (next.step === 'route') throw Error('Data migration approval does not authorize sign-in/routing cutover; separate authentication approval is required');
     const write = writers[next.step];
     if (!write) return journal; // verify/route steps run separately
-    if (['children', 'events', 'rewards', 'messaging', 'notifications', 'media', 'vault'].includes(next.step) && !ctx.claims) {
+    if (['children', 'events', 'rewards', 'messaging', 'notifications', 'media', 'vault', 'media_bytes'].includes(next.step) && !ctx.claims) {
       ctx.claims = await (ctx.readClaims ? ctx.readClaims() : claimedAccounts(ctx));
     }
     journal = recordIntent(journal, next.step, next.page); save(journal);
