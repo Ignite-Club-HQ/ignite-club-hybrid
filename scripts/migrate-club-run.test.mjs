@@ -52,3 +52,14 @@ test('even verified data approval never invokes a sign-in routing writer', async
   assert.equal(calls, 0);
   assert.equal(journal.routed, false);
 });
+
+test('member claim reads are destination-bound and occur before member writer intent', async () => {
+  let journal = newJournal(hash);
+  for (const step of ['club', 'children']) journal = recordReply(recordIntent(journal, step, 0), step, 0, { ok: true, last: true });
+  const order = [];
+  const context = { ...ctx, readClaims: async () => { order.push('claims'); return new Map(); } };
+  await runSteps({ journal, ctx: context, approval, save: () => order.push('intent-or-reply'), writers: { events: async c => {
+    assert.ok(c.claims instanceof Map); order.push('writer'); return { records: 0 };
+  } } });
+  assert.deepEqual(order, ['claims', 'intent-or-reply', 'writer', 'intent-or-reply']);
+});
