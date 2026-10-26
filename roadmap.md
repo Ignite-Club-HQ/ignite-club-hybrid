@@ -1,6 +1,6 @@
 ## Bounded device caching — 26 October 2026
-- [ ] Bound saved page/message/list information and viewed photos, evict older copies, and add a safe clear-downloads control without deleting authentication, photo keys or upload recovery.
-- [ ] Improve existing Schedule/Home/Clubs/team/Vault snapshot reuse without authorizing from cached labels or downloading private files; run focused dual-mode storage/lifecycle and UI checks.
+- [x] Shared disposable local read copies capped at 2 MiB plus existing 2 MiB ICP snapshots; viewed ICP photos capped at 20 MiB/100 entries with seven-day expiry and serialized eviction. Clear downloaded content removes read copies/mirrors/pending cache writes while retaining authentication, photo keys, drafts and upload recovery. No new automatic media/document downloads; native manually opened/exported files and app installation are outside these read-cache budgets.
+- [x] Existing Schedule/Home/Clubs/team/Vault snapshot consumers retained; primary page inventories now restore ahead of incidental widgets within the startup budget. 112 focused checks passed in each mode (Supabase 110 plus two added rules rerun), isolation guard and preview build OK. Browser control fixture verified removal of event/photo copies with retained keys/recovery and no page errors; not signed-in production acceptance. Existing native sign-out retention policy unchanged.
 - [ ] Signed-in phone timing requires Paul's Internet Identity session and updated frontend; no deployment requested.
 
 ## Stable background refresh — 26 October 2026

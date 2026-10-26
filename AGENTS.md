@@ -12,7 +12,7 @@
 - Preview: frontend/ via lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY; root stays dependency-free.
 - Health merges group IDs; Vault retains account/club ICP caches across filters; labels never authorize files.
 - Install via scripts/ensure-frontend-deps.mjs only: npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
-- Read nested AGENTS.md before edits. Poll uses keyboardSafe to avoid competing offsets.
+- Read nested AGENTS.md; frontend owns bounded disposable caches. Poll uses keyboardSafe.
 - notification_queue authorizes schedule scopes/update_reminder admin/club audiences in enqueue/fan_out; polls use caller signals. Normalize roster principals; gate admin reads and report queued, not delivered, counts. Why: browsers cannot authorize writes.
 - Schedule: omission keeps; empty image/zero end-date clears; monthly dates clamp in UTC. Why: Candid compatibility.
 - Self/admin erasure retains inventory; router locks persist through commit. Gallery copies decrypt under club keys.

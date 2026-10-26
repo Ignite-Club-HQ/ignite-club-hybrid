@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { snapshotQuery, startIcpQueryCachePersist, restoreIcpQueryCache, clearPersistedIcpQueryCache } from './icpQueryCachePersist';
+import { snapshotQuery, startIcpQueryCachePersist, restoreIcpQueryCache, clearPersistedIcpQueryCache, savedPagePriority } from './icpQueryCachePersist';
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 function result(data: unknown, key = ['clubs'], meta?: Record<string, unknown>) {
@@ -11,6 +11,11 @@ function result(data: unknown, key = ['clubs'], meta?: Record<string, unknown>) 
   return snapshotQuery(query);
 }
 describe('bounded ICP snapshots', () => {
+  it('restores primary Schedule, Clubs, team and Vault inventories ahead of incidental widgets', () => {
+    for (const key of ['events', 'clubs', 'team', 'vault-subfolders', 'next-up-events']) {
+      expect(savedPagePriority([key])).toBeGreaterThan(savedPagePriority(['notification-count']));
+    }
+  });
   it('retains bigint and byte data without JSON conversion', () => {
     const data = { revision: 32n, count: new Uint8Array([1, 2]) };
     expect(result(data)?.snapshot.state.data).toEqual(data);
@@ -77,6 +82,18 @@ function storageHarness() {
   return { rows, delay: () => { hold = true; }, release: () => { hold = false; opens.splice(0).forEach(f => f()); } };
 }
 describe('account and transaction lifecycle', () => {
+  it('keeps persisted page copies within the separate 2 MiB budget', async () => {
+    vi.useFakeTimers(); const storage = storageHarness();
+    const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+    const stop = startIcpQueryCachePersist(client, true, () => 'alice:target');
+    for (let i = 0; i < 50; i++) client.setQueryData(['team', String(i)], 'x'.repeat(50000));
+    await vi.advanceTimersByTimeAsync(5000);
+    const rows = [...storage.rows.values()] as Array<{ bytes: number }>;
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(50);
+    expect(rows.reduce((sum, row) => sum + row.bytes, 0)).toBeLessThanOrEqual(2 * 1024 * 1024);
+    stop();
+  });
   it('writes a changed query and restores its exact bigint shape', async () => {
     vi.useFakeTimers(); const storage = storageHarness();
     const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
