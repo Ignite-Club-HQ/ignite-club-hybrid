@@ -13,6 +13,7 @@ import Blob "mo:core/Blob";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
 import Nat32 "mo:core/Nat32";
+import PrivateProfileAudience "../../shared/PrivateProfileAudience";
 import Int "mo:core/Int";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
@@ -2948,10 +2949,11 @@ persistent actor class Main(governorInit : Principal) = this {
     if (requester.isAnonymous() or subjects.size() > 25 or subjects.any(func p = p.isAnonymous()) or competition_id == "" or competition_id.size() > 128) return #Err("Bounded exact competition required");
     if (not removalReceiver.enter(requester)) return #Err("Account removal fenced");
     try {
-      let pinned = (competitions, roles, entries, personalCompetitionOwners, clubDomainCanister, participantClubAuthorities, accountAdmissionAuthority);
-      func active() : Bool = pinned == (competitions, roles, entries, personalCompetitionOwners, clubDomainCanister, participantClubAuthorities, accountAdmissionAuthority) and not compFenced(competition_id) and not removalReceiver.denied(requester);
-      // Two-observation token hashes the full frozen local permission inputs.
-      let revision = Text.hash(debug_show(pinned)).toNat();
+      func snapshot() : Text = debug_show((competitions.filter(func c = c.id == competition_id), roles.filter(func r = r.competition_id == competition_id or r.role == "club_admin"), entries.filter(func e = e.competition_id == competition_id), personalCompetitionOwners.filter(func o = o.0 == competition_id), clubDomainCanister, participantClubAuthorities, accountAdmissionAuthority));
+      let pinned = snapshot();
+      if (Text.encodeUtf8(pinned).size() > 32_768) return #Err("Competition audience exceeds bounded evidence");
+      func active() : Bool = pinned == snapshot() and not compFenced(competition_id) and not removalReceiver.denied(requester);
+      let revision = PrivateProfileAudience.snapshotRevision(pinned);
       switch (expected) { case (?r) if (r != revision) return #Err("Competition audience changed"); case null {} };
       await admitAccount(requester);
       if (not active()) return #Err("Competition audience changed");
