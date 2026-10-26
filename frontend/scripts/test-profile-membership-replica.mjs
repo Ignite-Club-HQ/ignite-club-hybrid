@@ -28,6 +28,13 @@ try {
       {user:requester,role:'member',club:[id],team:[]}, {user:member,role:'member',club:[id],team:[]}
     ]}));
     const subjects=[member,stranger,parent];
+    a.setPrincipal(requester);
+    const candidates=ok(await a.read_profile_candidates(id,[]));
+    assert.ok(candidates.scanned<=100n && candidates.subjects.length<=25);
+    assert.deepEqual(new Set(candidates.subjects.map(p=>p.toText())),new Set([requester,member,parent].map(p=>p.toText())));
+    a.setPrincipal(stranger);assert.ok('Err'in await a.read_profile_candidates(id,[]));
+    a.setPrincipal(Principal.anonymous());assert.ok('Err'in await a.read_profile_candidates(id,[]));
+    a.setPrincipal(requester);assert.ok('Err'in await a.read_profile_candidates(id,[{revision:candidates.revision,phase:3n,offset:0n}]));
     a.setPrincipal(requester);assert.ok('Err'in await a.read_profile_membership_batch(requester,id,subjects,[]),'Humans cannot impersonate the identity service');
     a.setPrincipal(Principal.anonymous());assert.ok('Err'in await a.read_profile_membership_batch(requester,id,subjects,[]));
     a.setPrincipal(identity);
@@ -39,6 +46,7 @@ try {
     assert.equal(first.requester.toText(),requester.toText());assert.equal(first.club,id);
     assert.deepEqual(ok(await a.read_profile_membership_batch(requester,id,subjects,[first.revision])),first);
     a.setPrincipal(governor);ok(await a.remove_member(id,member));a.setPrincipal(identity);
+    a.setPrincipal(requester);assert.ok('Err'in await a.read_profile_candidates(id,[{revision:candidates.revision,phase:0n,offset:0n}]),'Candidate pages reject stale revision');a.setPrincipal(identity);
     assert.ok('Err'in await a.read_profile_membership_batch(requester,id,subjects,[first.revision]),'Stale first observation must reject the whole batch');
     const removed=ok(await a.read_profile_membership_batch(requester,id,subjects,[]));assert.deepEqual(removed.members,[false,false,true]);
     a.setPrincipal(governor);ok(await a.restore_member(id,member));
@@ -51,6 +59,7 @@ try {
     assert.deepEqual(ok(await a.read_profile_membership_batch(requester,id,subjects,[restored.revision])),restored,'Membership revision survives upgrade');
     a.setPrincipal(governor);ok(await a.remove_member(id,requester));a.setPrincipal(identity);
     assert.ok('Err'in await a.read_profile_membership_batch(requester,id,subjects,[]),'Removed requester cannot read');
+    a.setPrincipal(requester);assert.ok('Err'in await a.read_profile_candidates(id,[]),'Removed requester cannot read candidate identities');
     groups.push(f);
   }
   groups[0].actor.setPrincipal(identity);
@@ -58,5 +67,19 @@ try {
   // Disabling the privacy gate refuses reads without deleting membership.
   await pic.updateCanisterSettings({canisterId:groups[1].canisterId,sender:governor,environmentVariables:[]});
   assert.ok('Err'in await groups[1].actor.read_profile_membership_batch(requester,'club-b',[member],[]));
+  // A large source spans bounded pages, not one full private directory read.
+  const f=groups[0],a=f.actor;a.setPrincipal(governor);
+  ok(await a.restore_member('club-a',requester));
+  const many=Array.from({length:251},(_,n)=>Principal.fromUint8Array(Uint8Array.from([n%256,Math.floor(n/256)+9,1])));
+  ok(await a.replace_acl(2n,{clubs:['club-a'],teams:[],children:[],guardians:[],exclusions:[],roles:[{user:requester,role:'member',club:['club-a'],team:[]},...many.map(user=>({user,role:'member',club:['club-a'],team:[]}))]}));
+  a.setPrincipal(requester);let cursor=[],seen=new Set(),pages=0,revision;
+  do {
+    const page=ok(await a.read_profile_candidates('club-a',cursor));
+    assert.ok(page.scanned<=100n && page.subjects.length<=25);
+    if(revision!==undefined)assert.equal(page.revision,revision);revision=page.revision;
+    for(const p of page.subjects)seen.add(p.toText());cursor=page.next;pages++;
+    assert.ok(pages<=20);
+  }while(cursor.length);
+  assert.equal(seen.size,252);assert.ok(pages>1);
   console.log('PASS: two real club authorities; service-only delegation, exact club, bounded candidates, family membership, removal, ABA revision rejection, upgrade preservation and closed release gate. No live changes.');
 } finally {await pic?.tearDown();await server.stop();}

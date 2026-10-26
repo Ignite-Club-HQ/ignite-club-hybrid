@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "./featureRouter";
-const mocks = vi.hoisted(() => ({ read: vi.fn(), hydrate: vi.fn(), dispose: vi.fn(), connect: vi.fn() }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), hydrate: vi.fn(), dispose: vi.fn(), connect: vi.fn(), page: vi.fn() }));
 vi.mock("./identityAccess", () => ({ connectLiveIdentityAccessClientWithIdentity: mocks.connect }));
 vi.mock("./privateProfileNames", () => ({ hydratePrivateProfileNames: mocks.hydrate }));
-import { searchScopedProfileCandidates } from "./scopedProfileSearch";
+vi.mock("./domains", () => ({ connectLiveClubDomain: vi.fn(async () => ({ actor: { read_profile_candidates: mocks.page } })) }));
+import { searchScopedProfileCandidates, searchScopedClubProfiles } from "./scopedProfileSearch";
 const subject = "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe";
 const authority = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 const ctx = { identity: { getPrincipal: () => Principal.fromText(subject) }, target: { canisterIds: { club_domain: authority } } } as FeatureBackendContext;
@@ -14,6 +15,7 @@ beforeEach(() => {
   mocks.connect.mockResolvedValue({ client: { readClubProfiles: mocks.read, dispose: mocks.dispose } });
   mocks.read.mockResolvedValue([row]);
   mocks.hydrate.mockImplementation(async (_, rows) => rows);
+  mocks.page.mockResolvedValue({ Ok: { revision: 7n, subjects: [row.principal], next: [], scanned: 1n } });
 });
 describe("scoped decrypted person matching", () => {
   it("sends exact club authority and deduplicated principal candidates, not a search term", async () => {
@@ -47,5 +49,39 @@ describe("scoped decrypted person matching", () => {
     mocks.read.mockResolvedValue([{ ...row, principal: Principal.fromText(authority) }]);
     await expect(searchScopedProfileCandidates(ctx, "club-a", [subject], "Paul")).rejects.toThrow("unexpected identity");
     expect(mocks.hydrate).not.toHaveBeenCalled();
+  });
+  it("discards name results when cancellation occurs during decryption", async () => {
+    const controller = new AbortController();
+    mocks.hydrate.mockImplementation(async () => { controller.abort(); return [row]; });
+    await expect(searchScopedProfileCandidates(ctx,"club-a",[subject],"Paul",10,controller.signal)).rejects.toThrow("cancelled");
+    expect(mocks.dispose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("authority-owned paged club search", () => {
+  it("uses authorized candidates and confirms the opening revision after names", async () => {
+    expect((await searchScopedClubProfiles(ctx,"club-a","Paul"))[0]?.id).toBe(subject);
+    expect(mocks.page).toHaveBeenNthCalledWith(1,"club-a",[]);
+    expect(mocks.page).toHaveBeenNthCalledWith(2,"club-a",[{revision:7n,phase:0n,offset:0n}]);
+  });
+  it("discards earlier matches if membership changes before final confirmation", async () => {
+    mocks.page.mockResolvedValueOnce({ Ok: { revision:7n,subjects:[row.principal],next:[],scanned:1n } }).mockResolvedValueOnce({Err:"revision changed"});
+    await expect(searchScopedClubProfiles(ctx,"club-a","Paul")).rejects.toThrow("revision changed");
+  });
+  it("rejects mixed-revision pages without reading names for the changed page", async () => {
+    mocks.page.mockResolvedValueOnce({Ok:{revision:7n,subjects:[],next:[{revision:7n,phase:0n,offset:100n}],scanned:100n}}).mockResolvedValueOnce({Ok:{revision:8n,subjects:[row.principal],next:[],scanned:1n}});
+    await expect(searchScopedClubProfiles(ctx,"club-a","Paul")).rejects.toThrow("changed");
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it("refuses non-advancing continuations", async () => {
+    mocks.page.mockResolvedValue({Ok:{revision:7n,subjects:[],next:[{revision:7n,phase:0n,offset:100n}],scanned:100n}});
+    await expect(searchScopedClubProfiles(ctx,"club-a","Paul")).rejects.toThrow("continuation");
+    expect(mocks.page).toHaveBeenCalledTimes(2);
+  });
+  it("deduplicates repeated identities across candidate pages", async () => {
+    mocks.read.mockResolvedValue([]);
+    mocks.page.mockResolvedValueOnce({Ok:{revision:7n,subjects:[row.principal],next:[{revision:7n,phase:1n,offset:0n}],scanned:1n}}).mockResolvedValue({Ok:{revision:7n,subjects:[row.principal],next:[],scanned:1n}});
+    expect(await searchScopedClubProfiles(ctx,"club-a","Paul")).toEqual([]);
+    expect(mocks.read).toHaveBeenCalledOnce();
   });
 });
