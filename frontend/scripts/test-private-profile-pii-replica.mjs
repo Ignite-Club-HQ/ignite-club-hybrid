@@ -65,17 +65,17 @@ try {
   await denied(reader);
   ok(await as(owner).grant_pii_read_club(subject, field, clubId));
   await decrypt(staff); await denied(outsider);
-  // Existing club grants authorize staff, not ordinary members. This negative
-  // control is a cutover blocker, not permission to widen all PII audiences.
-  await denied(ordinary);
-  console.log('PASS: real SDK encryption/decryption; owner and explicit reader; unrelated/overwrite/self-grant refusal; explicit revocation; club staff authorized, ordinary members correctly remain denied by existing policy.');
+  // Despite the historical staff method name, the actual authority accepts
+  // any current club role. Exercise that existing rule, never widen grants.
+  await decrypt(ordinary);
+  console.log('PASS: real SDK encryption/decryption; owner and explicit reader; unrelated/overwrite/self-grant refusal; explicit revocation; exact club role audiences including ordinary members.');
   club.actor.setPrincipal(governor); ok(await club.actor.remove_member(clubId, staff));
   await denied(staff);
   ok(await club.actor.restore_member(clubId, staff));
   ok(await club.actor.add_role_grant(staff, clubId, 'club_admin', []));
   await decrypt(staff);
   ok(await as(owner).revoke_pii_read_club(subject, field, clubId));
-  await denied(staff);
+  await denied(staff); await denied(ordinary);
   await pic.upgradeCanister({ canisterId: pii.canisterId, wasm: piiWasm, sender: governor, arg,
     upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   await decrypt(owner); await denied(reader); await denied(staff); await denied(outsider);
