@@ -1839,7 +1839,13 @@ export default function ClubChatPage() {
     : "Club chat";
 
   if (isLoadingClubSubscription && !club) {
-    return <ChatPageSkeleton title={clubDisplayName || undefined} />;
+    return (
+      <ChatPageSkeleton
+        title={clubDisplayName || getChatThreadLabel(user?.id, "club", clubId)?.title}
+        subtitle={clubHeaderSublabel}
+        avatarType="club"
+      />
+    );
   }
 
   // Block access for non-Pro users - show full page blocker
