@@ -1,24 +1,59 @@
-import { QueryClient } from '@tanstack/react-query';
-import { describe, it, expect, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ results: vi.fn(), dispatch: vi.fn() }));
-vi.mock('@/live/features/messaging', () => ({ getLivePollResults: mocks.results }));
-vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: mocks.dispatch }));
-import { pollQueryOptions, prefetchMessagePolls } from './pollReadRepository';
-describe('team and club poll early loading', () => {
-  for (const scope of [{ teamId: 'u9' }, { clubId: 'goat' }]) {
-    it(`shares the early authorized read with a card in ${JSON.stringify(scope)}`, async () => {
-      vi.clearAllMocks();
-      const ctx = { target: 'owning-group' } as never;
-      mocks.results.mockResolvedValue({ poll: { id: 'poll', question: 'Play?', options: ['Yes'], creator: { toText: () => 'coach' }, created_at_ms: 1000n, closed: false }, counts: [1] });
-      const client = new QueryClient();
-      prefetchMessagePolls(client, [{ body: '[poll:poll] [poll:poll]' }], 'paul', scope, true, ctx);
-      const data = await client.ensureQueryData(pollQueryOptions('poll', 'paul', scope, true));
-      expect(data?.poll.question).toBe('Play?');
-      expect(mocks.results).toHaveBeenCalledTimes(1);
-      expect(mocks.results).toHaveBeenCalledWith(ctx, 'poll');
-      expect(mocks.dispatch).not.toHaveBeenCalled();
-      expect(client.getQueryData(pollQueryOptions('poll', 'other', scope, true).queryKey)).toBeUndefined();
-      client.clear();
-    });
-  }
+import { describe, expect, it } from "vitest";
+import { pollResultsToData } from "./pollReadRepository";
+
+const principal = (text: string) => ({ toText: () => text });
+
+function candidResults(overrides: Record<string, unknown> = {}) {
+  return {
+    poll: {
+      id: "poll-1",
+      question: "Training day?",
+      options: ["Tuesday", "Thursday"],
+      closed: false,
+      created_at_ms: 1_760_000_000_000,
+      creator: principal("aaaaa-aa"),
+    },
+    counts: [3, 1],
+    total_votes: 4,
+    votes: [
+      [
+        { user: principal("user-a"), option_index: 0 },
+        { user: principal("user-b"), option_index: 0 },
+      ],
+    ],
+    ...overrides,
+  };
+}
+
+describe("pollResultsToData", () => {
+  it("maps individual votes when the canister provides them", () => {
+    const data = pollResultsToData("poll-1", candidResults());
+    expect(data.poll.question).toBe("Training day?");
+    expect(data.options).toEqual([
+      { id: "0", label: "Tuesday", position: 0 },
+      { id: "1", label: "Thursday", position: 1 },
+    ]);
+    expect(data.votes).toEqual([
+      { id: "poll-1:user-a", option_id: "0", user_id: "user-a" },
+      { id: "poll-1:user-b", option_id: "0", user_id: "user-b" },
+    ]);
+    expect(data.voterDetailsAvailable).toBe(true);
+    expect(data.closed).toBe(false);
+  });
+
+  it("expands anonymous counts when individual votes are absent", () => {
+    const data = pollResultsToData("poll-1", candidResults({ votes: [] }));
+    expect(data.votes).toHaveLength(4);
+    expect(data.votes.filter(v => v.option_id === "0")).toHaveLength(3);
+    expect(data.votes.filter(v => v.option_id === "1")).toHaveLength(1);
+    expect(data.voterDetailsAvailable).toBe(false);
+  });
+
+  it("marks closed polls with a closed_at timestamp", () => {
+    const data = pollResultsToData("poll-1", candidResults({
+      poll: { ...candidResults().poll, closed: true },
+    }));
+    expect(data.closed).toBe(true);
+    expect(data.poll.closed_at).not.toBeNull();
+  });
 });
