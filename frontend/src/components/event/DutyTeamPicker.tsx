@@ -65,11 +65,7 @@ export function DutyTeamPicker({
       icp: async (ctx) => {
         const { listLiveMembershipTeams } = await import("@/live/features/membership");
         const rows = await listLiveMembershipTeams(ctx, clubId!);
-        // Candid optionals arrive as arrays: deleted_at_ms is [] for a live
-        // team, so it must be unwrapped ([] is truthy and would hide every team).
-        return rows
-          .filter((team: any) => team.is_active && !team.archived && !team.is_shell && !team.deleted_at_ms?.[0])
-          .map((team: any) => ({ id: team.id, name: team.name }));
+        return filterDutyTeamOptions(rows as any);
       },
     }, { clubId: clubId! }),
   });
