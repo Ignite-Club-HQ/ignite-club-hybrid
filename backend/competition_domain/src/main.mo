@@ -3036,6 +3036,7 @@ persistent actor class Main(governorInit : Principal) = this {
       // Deduplicate so the remote <=26-person admission contract stays bounded.
       var unique : [Principal] = [];
       for (p in people.values()) if (not unique.any(func q = q == p)) unique := unique.concat([p]);
+      if (unique.size() > 26) return #Err("Bounded admin thread people required");
       let remote = await privateNameRemoteRevisions(unique);
       if (not active()) return #Err("Admin thread authority changed");
       let revision = PrivateProfileAudience.snapshotRevision(debug_show((pinned, remote, member)));
@@ -3047,6 +3048,19 @@ persistent actor class Main(governorInit : Principal) = this {
       if (not active() or closing != remote) return #Err("Admin thread remote membership changed");
       #Ok({ revision; requester; club = competition_id; subjects; members = subjects.map(func _ = true) })
     } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(requester) }
+  };
+
+  // Existing thread-open/list callers cannot read a manager-only role list
+  // as their service principal. Delegate the original human, and disclose
+  // only current admin principals after the owning membership checks.
+  public shared ({ caller }) func read_private_admin_thread_participants(requester : Principal, competition_id : Text) : async { #Ok : [Principal]; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1" or privateMessagingAuthority != ?caller.toText()) return #Err("Configured private messaging required");
+    let pinned = debug_show((roles.filter(func r = r.competition_id == competition_id), competitions.filter(func c = c.id == competition_id), clubDomainCanister, participantClubAuthorities));
+    if (Text.encodeUtf8(pinned).size() > 32_768) return #Err("Bounded competition required");
+    await admitAccount(requester);
+    if (not (await privateNameParticipant(requester, competition_id))) return #Err("Competition membership required");
+    if (pinned != debug_show((roles.filter(func r = r.competition_id == competition_id), competitions.filter(func c = c.id == competition_id), clubDomainCanister, participantClubAuthorities)) or compFenced(competition_id) or removalReceiver.denied(requester)) return #Err("Competition authority changed");
+    #Ok(roles.filter(func r = r.competition_id == competition_id and (r.role == "competition_admin" or r.role == "admin" or r.role == "owner")).map(func r = r.user))
   };
 
   public shared ({ caller }) func get_vault_access(competition_id : Text, requester : Principal) : async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text } {
