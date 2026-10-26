@@ -317,15 +317,20 @@ persistent actor class Main(governorInit : Principal) = this {
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
   };
-  type ChatPage = { conversations : [Types.Conversation]; messages : [Types.Message]; next : ?Nat };
+  // Polls and their votes travel on the first page (with conversations);
+  // later pages carry messages only. Optional so pre-poll pages decode null.
+  type ChatPage = { conversations : [Types.Conversation]; messages : [Types.Message]; polls : ?[Types.Poll]; poll_votes : ?[Types.PollVote]; next : ?Nat };
   // Paged: conversations are returned on the first page; messages in order.
   public query ({ caller }) func export_club_snapshot_page(club : Text, offset : Nat, limit : Nat) : async { #Ok : Blob; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before export");
     let convs = conversations.filter(func(c) = c.club_id == club);
     let msgs = messages.filter(func(m) = convs.any(func(c) = c.id == m.conversation_id));
+    let clubPolls = polls.filter(func(p) = convs.any(func(c) = c.id == p.conversation_id));
     let cap = Nat.min(limit, 500); let end = Nat.min(offset + cap, msgs.size());
     let page : ChatPage = { conversations = if (offset == 0) convs else []; messages = if (offset >= msgs.size()) [] else msgs.sliceToArray(offset, end);
+      polls = if (offset == 0) ?clubPolls else null;
+      poll_votes = if (offset == 0) ?pollVotes.filter(func(v) = clubPolls.any(func(p) = p.id == v.poll_id)) else null;
       next = if (end < msgs.size()) ?end else null };
     #Ok(to_candid (page))
   };
@@ -341,11 +346,27 @@ persistent actor class Main(governorInit : Principal) = this {
     let staged = conversations.filter(func(c) = not page.conversations.any(func(y) = y.id == c.id)).concat(page.conversations);
     let known = func(id : Text) : Bool = staged.any(func(c) = c.id == id and c.club_id == club);
     if (page.messages.any(func(m) = not known(m.conversation_id))) return #Err("Message for unknown conversation");
+    let incomingPolls = page.polls ?? [];
+    let incomingVotes = page.poll_votes ?? [];
+    if (incomingPolls.any(func(p) = not known(p.conversation_id))) return #Err("Poll for unknown conversation");
+    if (incomingPolls.any(func(p) = removalReceiver.denied(p.creator)) or incomingVotes.any(func(v) = removalReceiver.denied(v.user))) return #Err("Snapshot contains removed identities");
+    // Votes are authoritative per poll on the same page: every vote must
+    // reference a poll carried here, within its option range, one per voter.
+    if (incomingVotes.any(func(v) = not incomingPolls.any(func(p) = p.id == v.poll_id and Nat32.toNat(v.option_index) < p.options.size()))) return #Err("Vote for unknown poll or option");
+    var seenVotes : [Text] = [];
+    for (v in incomingVotes.values()) {
+      let key = v.poll_id # "/" # Principal.toText(v.user);
+      if (seenVotes.any(func(k) = k == key)) return #Err("Duplicate poll vote");
+      seenVotes := seenVotes.concat([key]);
+    };
+    if (incomingPolls.any(func(p) = polls.any(func(x) = x.id == p.id and not known(x.conversation_id)))) return #Err("Poll id collides with another club");
     mediaEvidenceRevision += 1;
     conversations := staged;
     // Idempotent per message id: re-importing a page never duplicates.
     mediaEvidenceRevision += 1;
     messages := messages.filter(func(m) = not page.messages.any(func(y) = y.id == m.id)).concat(page.messages);
+    polls := polls.filter(func(p) = not incomingPolls.any(func(y) = y.id == p.id)).concat(incomingPolls);
+    pollVotes := pollVotes.filter(func(v) = not incomingPolls.any(func(p) = p.id == v.poll_id)).concat(incomingVotes);
     #Ok(page.messages.size())
   };
 
