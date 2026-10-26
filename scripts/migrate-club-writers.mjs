@@ -256,4 +256,35 @@ export const WRITERS = {
     await loadSnapshot(ctx, 'mini_league_domain', snap, 'fence');
     return { records: snap.leagues.length + snap.sessions.length + snap.groups.length };
   },
+  async messaging(ctx) {
+    const [teams, teamMessages, clubMessages, chatGroups, clubAdminConversations, polls] = await Promise.all([
+      ctx.rows('teams', 'club_id'), ctx.rows('team_messages', 'club_id'), ctx.rows('club_messages', 'club_id'),
+      ctx.rows('chat_groups', 'club_id'), ctx.rows('club_admin_conversations', 'club_id'),
+      ctx.rowsIn('polls', 'chat_id', (await ctx.rows('teams', 'club_id')).map((t) => t.id)),
+    ]);
+    const groupMessages = await ctx.rowsIn('group_messages', 'group_id', chatGroups.map((g) => g.id));
+    const clubAdminMessages = await ctx.rowsIn('club_admin_messages', 'conversation_id', clubAdminConversations.map((c) => c.id));
+    const pages = buildChatPages({ clubId: ctx.clubId, teams: teams.filter((t) => !t.deleted_at), teamMessages, clubMessages,
+      chatGroups, groupMessages, clubAdminConversations, clubAdminMessages, polls, claims: ctx.claims, creator: ctx.creator });
+    await loadChatPages(ctx, pages);
+    return { records: pages.reduce((s, p) => s + p.conversations.length + p.messages.length, 0) };
+  },
+  async notifications(ctx) {
+    const [notifications, scheduledMessages] = await Promise.all([ctx.rows('notifications', 'club_id'), ctx.rows('scheduled_messages', 'club_id')]);
+    const snap = buildNotificationSnapshot({ clubId: ctx.clubId, notifications, scheduledMessages, claims: ctx.claims });
+    await loadSnapshot(ctx, 'notification_queue', snap, 'fence');
+    return { records: snap.items.length + snap.scheduled.length };
+  },
+  async media(ctx) {
+    const [photos, albums] = await Promise.all([ctx.rows('photos', 'club_id'), ctx.rows('photo_albums', 'club_id')]);
+    const snap = buildMediaSnapshot({ clubId: ctx.clubId, photos, albums, claims: ctx.claims });
+    await loadSnapshot(ctx, 'media_metadata', snap, 'fence');
+    return { records: snap.assets.length };
+  },
+  async vault(ctx) {
+    const [folders, files] = await Promise.all([ctx.rows('team_folders', 'club_id'), ctx.rows('vault_files', 'club_id')]);
+    const snap = buildVaultSnapshot({ clubId: ctx.clubId, folders, files, claims: ctx.claims, creator: ctx.creator });
+    await loadSnapshot(ctx, 'vault_domain', snap, 'fence');
+    return { records: snap.folders.length + snap.files.length };
+  },
 };
