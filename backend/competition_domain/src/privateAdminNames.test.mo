@@ -1,0 +1,13 @@
+import Policy "privateAdminNames";
+import Principal "mo:core/Principal";
+let member = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
+let admin = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+let other = Principal.fromText("r7inp-6aaaa-aaaaa-aaabq-cai");
+assert Policy.permitted(member, member, [admin], [admin]);
+assert Policy.permitted(admin, member, [member], [admin]);
+assert not Policy.permitted(other, member, [admin], [admin]);
+assert not Policy.permitted(member, member, [other], [admin]);
+assert not Policy.permitted(admin, member, [member], []);
+assert not Policy.permitted(member, member, [admin, admin], [admin]);
+assert not Policy.permitted(member, member, [], [admin]);
+assert not Policy.permitted(Principal.anonymous(), member, [admin], [admin]);

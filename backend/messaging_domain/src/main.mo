@@ -29,6 +29,7 @@ import Timer "mo:core/Timer";
 import PhotoReminderPolicy "photoReminderPolicy";
 import DefaultChatPolicy "defaultChatPolicy";
 import PrivateDirectNames "privateDirectNames";
+import PrivateProfileAudience "../../shared/PrivateProfileAudience";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
@@ -128,6 +129,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // where the member thread participants are derived from the competition's
   // admin-role list rather than browser-supplied input.
   var competitionDomainCanister : ?Principal;
+  var privateAdminThreads : [{ conversation : Text; competition : Text; member : Principal }];
   var vaultDomainCanister : ?Principal;
 
   // Global broadcast conversation id. Mirrors the Supabase broadcast_messages
@@ -863,6 +865,12 @@ persistent actor class Main(governorInit : Principal) = this {
           };
         };
         let conversationId = competitionAdminThreadId(competition_id, member);
+        // Authoritative mapping is created only by the existing admitted
+        // thread-opening operation, never parsed from a browser chat ID.
+        switch (privateAdminThreads.find(func t = t.conversation == conversationId)) {
+          case (?t) { if (t.competition != competition_id or t.member != member) return #Err("Admin thread binding mismatch") };
+          case null { privateAdminThreads := privateAdminThreads.concat([{ conversation = conversationId; competition = competition_id; member }]) };
+        };
         switch (findConversationIndex(conversationId)) {
           case (?i) {
             let updated : Types.Conversation = { conversations[i] with participants };
@@ -4036,6 +4044,30 @@ persistent actor class Main(governorInit : Principal) = this {
       if (not active()) return #Err("Broadcast name audience changed");
       for (subject in subjects.values()) { await admitAccount(subject); if (not active()) return #Err("Broadcast name audience changed") };
       #Ok({ revision; requester; club = message_id; subjects; members = subjects.map(func _ = true) })
+    } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(requester) }
+  };
+
+  public shared ({ caller }) func read_profile_competition_admin_batch(requester : Principal, conversation_id : Text, subjects : [Principal], expected : ?Nat) : async { #Ok : PrivateDirectNames.Batch; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1" or caller.isAnonymous() or accountAdmissionAuthority != ?caller) return #Err("Configured identity authority required");
+    if (subjects.size() == 0 or subjects.size() > 25 or conversation_id == "" or conversation_id.size() > 128) return #Err("Exact bounded admin thread required");
+    let binding = privateAdminThreads.find(func t = t.conversation == conversation_id) ?? return #Err("Verified admin thread mapping required");
+    let configured = competitionDomainCanister ?? return #Err("Competition authority missing");
+    let revision = mediaEvidenceRevision;
+    func active() : Bool = accountAdmissionAuthority == ?caller and competitionDomainCanister == ?configured and mediaEvidenceRevision == revision
+      and privateAdminThreads.any(func t = t == binding) and not convFenced(conversation_id) and not removalReceiver.denied(requester)
+      and not subjects.any(func p = removalReceiver.denied(p) or isBlockedPair(requester, p))
+      and conversations.any(func c = c.id == conversation_id and c.participants.any(func p = p == requester));
+    if (not active()) return #Err("Admin thread access denied");
+    if (not removalReceiver.enter(requester)) return #Err("Account removal fenced");
+    try {
+      let service : actor { read_profile_admin_thread_batch : shared (Principal, Text, Principal, [Principal], ?Nat) -> async { #Ok : PrivateDirectNames.Batch; #Err : Text } } = actor(configured.toText());
+      let first = switch (await (with timeout = 10) service.read_profile_admin_thread_batch(requester, binding.competition, binding.member, subjects, null)) { case (#Err(e)) return #Err(e); case (#Ok(r)) r };
+      if (not active() or first.requester != requester or first.club != binding.competition or first.subjects != subjects or first.members != subjects.map(func _ = true)) return #Err("Admin thread audience changed");
+      let combined = PrivateProfileAudience.snapshotRevision(debug_show((revision, configured, binding, first.revision)));
+      switch (expected) { case (?r) if (r != combined) return #Err("Admin thread revision changed"); case null {} };
+      let closing = switch (await (with timeout = 10) service.read_profile_admin_thread_batch(requester, binding.competition, binding.member, subjects, ?first.revision)) { case (#Err(e)) return #Err(e); case (#Ok(r)) r };
+      if (not active() or first != closing) return #Err("Admin thread closing audience changed");
+      #Ok({ revision = combined; requester; club = conversation_id; subjects; members = first.members })
     } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(requester) }
   };
 

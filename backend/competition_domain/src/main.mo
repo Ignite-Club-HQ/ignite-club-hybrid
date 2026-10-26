@@ -29,6 +29,7 @@ import FixtureOperations "fixtureOperations";
 import BroadcastPlan "broadcastPlan";
 import ScorePrivacy "scorePrivacy";
 import ClubSnapshot "clubSnapshot";
+import PrivateAdminNames "privateAdminNames";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -3009,6 +3010,42 @@ persistent actor class Main(governorInit : Principal) = this {
       evidence := evidence.concat([(authority, revision)]);
     };
     evidence
+  };
+
+  // Exact thread member/current administrators only; broad competition
+  // membership and stale role mirrors cannot stand in for a private inbox.
+  public shared ({ caller }) func read_profile_admin_thread_batch(requester : Principal, competition_id : Text, member : Principal, subjects : [Principal], expected : ?Nat) : async { #Ok : { revision : Nat; requester : Principal; club : Text; subjects : [Principal]; members : [Bool] }; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1"
+      or Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_MESSAGING") != ?caller.toText() or caller.isAnonymous()) return #Err("Configured private messaging authority required");
+    if (competition_id == "" or competition_id.size() > 128 or not competitions.any(func c = c.id == competition_id)) return #Err("Exact existing competition required");
+    func admins() : [Principal] {
+      roles.filter(func r = r.competition_id == competition_id and (r.role == "competition_admin" or r.role == "admin" or r.role == "owner")).map(func r = r.user)
+    };
+    if (not PrivateAdminNames.permitted(requester, member, subjects, admins())) return #Err("Exact admin thread participants required");
+    if (not removalReceiver.enter(requester)) return #Err("Account removal fenced");
+    try {
+      func snapshot() : Text = debug_show((competitions.filter(func c = c.id == competition_id), roles.filter(func r = r.competition_id == competition_id or r.role == "club_admin"), entries.filter(func e = e.competition_id == competition_id), personalCompetitionOwners.filter(func o = o.0 == competition_id), clubDomainCanister, participantClubAuthorities));
+      let pinned = snapshot();
+      if (Text.encodeUtf8(pinned).size() > 32_768) return #Err("Bounded competition evidence required");
+      func active() : Bool = pinned == snapshot() and not compFenced(competition_id)
+        and Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_MESSAGING") == ?caller.toText()
+        and not removalReceiver.denied(requester) and not removalReceiver.denied(member)
+        and not subjects.any(func p = removalReceiver.denied(p));
+      let people = [requester, member].concat(subjects).filter(func p = not p.isAnonymous());
+      // Deduplicate so the remote <=26-person admission contract stays bounded.
+      var unique : [Principal] = [];
+      for (p in people.values()) if (not unique.any(func q = q == p)) unique := unique.concat([p]);
+      let remote = await privateNameRemoteRevisions(unique);
+      if (not active()) return #Err("Admin thread authority changed");
+      let revision = PrivateProfileAudience.snapshotRevision(debug_show((pinned, remote, member)));
+      switch (expected) { case (?r) if (r != revision) return #Err("Admin thread revision changed"); case null {} };
+      for (p in unique.values()) { await admitAccount(p); if (not active()) return #Err("Admin thread admission changed") };
+      let validMember = await privateNameParticipant(member, competition_id);
+      if (not active() or not validMember or not PrivateAdminNames.permitted(requester, member, subjects, admins())) return #Err("Admin thread membership changed");
+      let closing = await privateNameRemoteRevisions(unique);
+      if (not active() or closing != remote) return #Err("Admin thread remote membership changed");
+      #Ok({ revision; requester; club = competition_id; subjects; members = subjects.map(func _ = true) })
+    } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(requester) }
   };
 
   public shared ({ caller }) func get_vault_access(competition_id : Text, requester : Principal) : async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text } {

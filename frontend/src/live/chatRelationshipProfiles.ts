@@ -67,6 +67,8 @@ export async function readChatRelationshipProfiles(
   if (metadata.kind === 'broadcast' && conversationId === 'broadcast' && !metadata.clubId && !metadata.teamId) {
     if (!broadcastMessageId?.startsWith('msg-broadcast-')) throw new Error('Exact broadcast drawer message required.');
     relationship = { kind: 'broadcast', resource: broadcastMessageId };
+  } else if (metadata.kind === 'competition_admin' && metadata.clubId === null && metadata.teamId === null) {
+    relationship = { kind: 'competition_admin', resource: conversationId };
   } else if (metadata.kind.startsWith('mini_league:')) {
     const resource = metadata.kind.slice('mini_league:'.length);
     const league = await getLiveMiniLeague(owner, resource);
