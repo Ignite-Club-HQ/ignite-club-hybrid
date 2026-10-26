@@ -13,6 +13,6 @@ sha2 = "0.2.5"
 main = "src/main.mo"
 candid = "club_domain.did"
 
-  [canisters.club_domain.migrations]
-  chain = "src/backend/migrations"
-  check-limit = 1
+[canisters.club_domain.migrations]
+chain = "src/backend/migrations"
+check-limit = 1
