@@ -1,3 +1,6 @@
+## Private names and emails completion — 26 October 2026
+- [ ] Complete the remaining local privacy implementation and acceptance as one coordinated batch: strict personal-field preparation, subject-bound display, whole-search post-decryption authorization, and held identity/configuration regressions. Existing live data and pickers stay unchanged until all audience contracts and separate release/conversion approvals are satisfied.
+
 ## Immediate RSVP status feedback — 26 October 2026
 - [x] Self/child/admin/mini-league-player RSVP paths now show the selected status before acknowledgement; existing canonical IDs remain, principal-prefix self matching is normalized, and rollback affects only the failed subject. Pending roster indicators/child controls are subject-specific. Known club routes avoid extra event discovery for self/child/existing-admin updates. 29 focused checks pass, including held writes and refusal recovery; preview build OK. Signed-in phone timing remains unavailable locally; remote saving still needs acknowledgement. No deployment.
 
