@@ -112,7 +112,7 @@ export function EventAttendanceRosterSection({
         userId: rsvp.user_id,
         isPaid: paidUserIds.has(rsvp.user_id),
       }) : undefined}
-      isPending={togglePaymentMutation.isPending || adminUpdateRsvpMutation.isPending}
+      isPending={(togglePaymentMutation.isPending && togglePaymentMutation.variables?.userId === rsvp.user_id) || (adminUpdateRsvpMutation.isPending && adminUpdateRsvpMutation.variables?.rsvpId === rsvp.id)}
       isMiniLeague={isMiniLeagueEvent}
       currentStatus={status}
       onChangeStatus={(newStatus) => adminUpdateRsvpMutation.mutate({
@@ -303,7 +303,7 @@ export function EventAttendanceRosterSection({
             });
           }
         }}
-        isPending={adminRsvpMutation.isPending || rsvpForChildMutation.isPending}
+        isPending={(adminRsvpMutation.isPending && adminRsvpMutation.variables?.playerId === child.id) || (rsvpForChildMutation.isPending && rsvpForChildMutation.variables?.childId === child.id)}
       />
     ) : null;
 
@@ -337,7 +337,7 @@ export function EventAttendanceRosterSection({
           memberName: member.display_name,
           status,
         })}
-        isPending={rsvpForMemberMutation.isPending}
+        isPending={rsvpForMemberMutation.isPending && rsvpForMemberMutation.variables?.memberId === member.id}
       />
     ) : null;
 

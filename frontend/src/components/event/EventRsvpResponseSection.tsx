@@ -179,7 +179,7 @@ export function EventRsvpResponseSection({
                       size="sm"
                       className="flex flex-col h-auto py-2"
                       onClick={() => childRsvpMutation.mutate({ childId: child.id, status: value, childName: child.name })}
-                      disabled={childRsvpMutation.isPending || attendanceActionsDisabled}
+                      disabled={(childRsvpMutation.isPending && childRsvpMutation.variables?.childId === child.id) || attendanceActionsDisabled}
                     >
                       <span>{icon}</span>
                       <span className="text-xs">{label}</span>
@@ -361,7 +361,7 @@ export function EventRsvpResponseSection({
                           size="sm"
                           className="flex flex-col h-auto py-2"
                           onClick={() => parentLeaguePlayerRsvpMutation.mutate({ playerId: player.id, status: value })}
-                          disabled={parentLeaguePlayerRsvpMutation.isPending || attendanceActionsDisabled}
+                          disabled={(parentLeaguePlayerRsvpMutation.isPending && parentLeaguePlayerRsvpMutation.variables?.playerId === player.id) || attendanceActionsDisabled}
                         >
                           <span>{icon}</span>
                           <span className="text-xs">{label}</span>
