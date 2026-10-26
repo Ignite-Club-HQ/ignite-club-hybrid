@@ -17,6 +17,8 @@ import { buildChatPages } from './migrate-club-messaging.mjs';
 import { buildNotificationSnapshot } from './migrate-club-notifications.mjs';
 import { buildMediaSnapshot } from './migrate-club-media.mjs';
 import { buildVaultSnapshot } from './migrate-club-vault.mjs';
+import { buildGameResults, assertNoUnsupportedEventRows, UNSUPPORTED_EVENT_TABLES } from './migrate-club-event-results.mjs';
+import { prepareFamilyCopy, productionPiiPublicKey } from './migrate-club-family.mjs';
 const ms = (iso) => (iso ? BigInt(Date.parse(iso)) : null);
 const opt = (v) => (v === null || v === undefined || v === '' ? [] : [v]);
 const optMs = (iso) => opt(ms(iso));
@@ -94,8 +96,8 @@ const optN16 = (v) => (v == null ? [] : [n16(v)]);
 const EVENT_TYPES = new Set(['game', 'training', 'social', 'mini_league']);
 const HOUR = 3_600_000n;
 
-/** Supabase events -> events_domain EventsSnapshot (event details only; RSVPs/results wait for the claim). */
-export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], claims, migratedChildren }) {
+/** Supabase events -> events_domain EventsSnapshot (details, RSVPs and game results; duties/captains/guests refuse earlier). */
+export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], claims, migratedChildren, gameResults = [], gameSummaries = [], gamePlayerStats = [] }) {
   const rows = events.filter((e) => e.club_id === clubId).map((e) => {
     const start = ms(e.start_time ?? e.event_date) ?? 0n;
     const end = ms(e.end_time);
@@ -109,8 +111,9 @@ export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], 
       target_team_ids: e.target_team_ids?.length ? [e.target_team_ids] : [],
     };
   });
+  const game = buildGameResults({ eventIds: rows.map((e) => e.id), gameResults, gameSummaries, gamePlayerStats, claims, migratedChildren });
   return { events: rows, rsvps: buildClaimedRsvps({ events: rows, rsvps, claims, migratedChildren }), series: [], groups: [], group_players: [], group_duties: [], match_links: [], materializations: [],
-    operations: [], player_details: [], results: [], stats: [], summaries: [] };
+    operations: [], player_details: [game.player_details], results: [game.results], stats: [game.stats], summaries: [game.summaries] };
 }
 
 /** Supabase competitions organised by this club -> competition_domain FenceSnapshot. Hidden scores stay hidden. */
@@ -227,10 +230,52 @@ export const WRITERS = {
   },
   async events(ctx) {
     const events = await ctx.rows('events', 'club_id');
-    const rsvps = await ctx.rowsIn('rsvps', 'event_id', events.map(e => e.id));
-    const snap = buildEventsSnapshot({ clubId: ctx.clubId, events, creator: ctx.creator, rsvps, claims: ctx.claims, migratedChildren: ctx.migratedChildren });
+    const eventIds = events.map((e) => e.id);
+    const [rsvps, gameResults, gameSummaries, gamePlayerStats, ...unsupported] = await Promise.all([
+      ctx.rowsIn('rsvps', 'event_id', eventIds), ctx.rowsIn('game_results', 'event_id', eventIds),
+      ctx.rowsIn('game_summaries', 'event_id', eventIds), ctx.rowsIn('game_player_stats', 'event_id', eventIds),
+      ...UNSUPPORTED_EVENT_TABLES.map((t) => ctx.rowsIn(t, 'event_id', eventIds)),
+    ]);
+    // Duties, captains, goalkeepers, player-of-the-match and guests have no
+    // destination contract yet; any row stops the step rather than dropping it.
+    assertNoUnsupportedEventRows(Object.fromEntries(UNSUPPORTED_EVENT_TABLES.map((t, i) => [t, unsupported[i]])));
+    const snap = buildEventsSnapshot({ clubId: ctx.clubId, events, creator: ctx.creator, rsvps, claims: ctx.claims, migratedChildren: ctx.migratedChildren, gameResults, gameSummaries, gamePlayerStats });
     await loadSnapshot(ctx, 'events_domain', snap, 'fence');
-    return { records: snap.events.length + snap.rsvps.length };
+    return { records: snap.events.length + snap.rsvps.length + gameResults.length + gamePlayerStats.length + gameSummaries.length };
+  },
+  async children(ctx) {
+    const teams = (await ctx.rows('teams', 'club_id')).filter((t) => !t.deleted_at);
+    const assignments = await ctx.rowsIn('child_team_assignments', 'team_id', teams.map((t) => t.id));
+    const childIds = [...new Set(assignments.map((a) => a.child_id))];
+    const [children, guardians, userRoles, exclusions] = await Promise.all([
+      ctx.rowsIn('children', 'id', childIds), ctx.rowsIn('child_guardians', 'child_id', childIds),
+      ctx.rows('user_roles', 'club_id'), ctx.rows('club_member_exclusions', 'club_id'),
+    ]);
+    // Primary-guardian flags and relationship labels have no destination field.
+    if (guardians.some((g) => g.is_primary === true || (g.relationship_type ?? '') !== '')) {
+      throw Error('Guardian relationship metadata has no destination contract; refusing to drop it');
+    }
+    // Account mirrors use the canister's own fallback convention (accountIdFor).
+    const accounts = new Map([...ctx.claims.entries()].map(([u, p]) => [u, { principal: p.toText(), accountId: `principal:${p.toText()}` }]));
+    const prepared = await prepareFamilyCopy({
+      clubId: ctx.clubId, groupId: ctx.target.groupId, target: ctx.target,
+      // The check gate confirmed this club is absent from every group; shared
+      // children from another migrated club are refused canister-side by the
+      // PII ciphertext-collision check.
+      destination: { clubId: ctx.clubId, groupId: ctx.target.groupId, clubDomain: ctx.target.canisters.club_domain,
+        piiDomain: ctx.target.canisters.pii_access_control, childIds: new Set(), piiIds: new Set() },
+      claims: ctx.claims, accounts, teams, children, assignments, guardians, userRoles, exclusions,
+      publicKey: await productionPiiPublicKey(ctx.target),
+    });
+    await loadSnapshot(ctx, 'pii_access_control', prepared.pii, 'fence');
+    ctx.migratedChildren = new Set(childIds); // later steps verify child references against this
+    // Re-import the club snapshot with the family arrays filled (idempotent replace).
+    const [clubs, allTeams, sponsors] = await Promise.all([ctx.rows('clubs', 'id'), ctx.rows('teams', 'club_id'), ctx.rows('sponsors', 'club_id')]);
+    const snap = buildClubSnapshot({ club: clubs[0], teams: allTeams, sponsors });
+    Object.assign(snap, { roles: prepared.domain.roles, account_roles: prepared.domain.account_roles,
+      exclusions: prepared.domain.exclusions, children: prepared.domain.children, guardians: prepared.domain.guardians });
+    await loadSnapshot(ctx, 'club_domain', snap, 'freeze');
+    return { records: prepared.counts.children + prepared.counts.privateFields + prepared.counts.guardians + prepared.counts.roles };
   },
   async rewards(ctx) {
     const tables = ['clubs', 'club_subscriptions', 'club_rewards', 'user_club_points', 'child_club_points', 'points_history', 'reward_redemptions', 'points_cooldowns'];

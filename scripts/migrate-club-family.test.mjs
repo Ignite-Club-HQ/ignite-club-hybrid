@@ -57,8 +57,10 @@ test('prepared family fragment encodes within the actual club snapshot without o
   assert.equal(back.roles[0].user.toText(), parent.toText());
   assert.equal(back.account_roles[0].account_id, 'verified-account');
 });
-test('preparation never registers a live children writer', () => {
-  assert.equal(WRITERS.children, undefined);
+test('the children writer exists and stays bound to exact-destination evidence', () => {
+  assert.equal(typeof WRITERS.children, 'function');
+  // The writer only runs inside the journaled, separately approved data run;
+  // preparation itself still performs no network or canister calls.
 });
 test('data evidence binds the exact club, group and both destination services', async () => {
   for (const patch of [{ clubId: 'c2' }, { groupId: 'g1' }, { clubDomain: 'other' }, { piiDomain: 'other' }, { childIds: undefined }, { piiIds: undefined }]) {

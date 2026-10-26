@@ -32,6 +32,14 @@ records, destination canisters, account claims, emails or routing were changed.
   NOT copied: storage_path/file_url keep pointing at Supabase and blob_ref
   stays empty until the separate copy-and-encrypt job moves bytes into the
   group's blob store.
+- Children writer (the `children` step): encrypted child names/birth years load
+  into pii_access_control under the pinned production key; family, role and
+  exclusion arrays re-import into club_domain (idempotent replace of the club
+  step's snapshot). Account mirrors use the canister's own `principal:` fallback
+  convention. Cross-club shared children are refused canister-side by the PII
+  ciphertext-collision check.
+- Game results (`migrate-club-event-results.mjs`): scores, period/player stat
+  JSON blobs, formations and per-player stats import into the events snapshot.
 
 ## Family preparation boundary
 The new helper accepts local input arrays only. It neither fetches source data nor
@@ -57,16 +65,23 @@ create membership or grant platform/competition administrator roles.
   than enabling duplicate awards or silently omitting records.
 - Polls and photo albums: votes and album names/covers have no field in the
   destination snapshots, so clubs carrying them refuse rather than lose data.
+- Event duties, captains, goalkeepers, player-of-the-match and event guests:
+  no destination snapshot contract; any row stops the events step.
+- MVP and fill-in player names, assists, position minutes, guardian
+  relationship labels/primary flags, and live in-progress games: refused
+  rather than stored as plaintext, converted with unverified units, or dropped.
+- Event payments: excluded by design — payments stay in Supabase.
 - Direct messages: account-to-account, not club-owned; excluded from the club
   migration entirely.
-- Missing overall writers still refuse execution before any live data write.
-  Claim emails remain a separately approved auth action; routing remains blocked.
+- Claim emails remain a separately approved auth action; routing remains blocked.
 
 ## Not completed or verified live
-Live child PII/membership loading, full event duties/results/award receipts,
-poll/album preservation contracts, media/Vault byte copy-and-encrypt, stable
-source inventory and durable remote recovery, destination reconciliation and
-separately approved sign-in cutover remain. The children step has no writer,
-so the missing-writer gate still refuses every live data write.
+Preservation contracts for the refused event/guardian/poll/album data (needs
+new canister snapshot fields and a separately approved service upgrade),
+media/Vault byte copy-and-encrypt, stable source inventory and durable remote
+recovery, destination reconciliation and separately approved sign-in cutover
+remain. All ten plan steps now have writers, so a live run is gated only by
+the owner setting, the exact-club/group data approval, the plan hash and the
+typed confirmation.
 The adapter tests exercise encoding, fencing and acknowledgement with fixtures;
 they do not establish live Supabase consistency or Internet Identity acceptance.
