@@ -17,7 +17,7 @@ const backendMocks = vi.hoisted(() => ({
   getLiveTeam: vi.fn(),
   createLivePendingInvite: vi.fn(),
   linkLiveGuardian: vi.fn(),
-  searchLiveProfiles: vi.fn(),
+  searchLiveGuardianProfiles: vi.fn(),
 }));
 const supabaseMode = process.env.IGNITE_TEST_BACKEND_MODE !== "icp";
 
@@ -41,7 +41,7 @@ vi.mock("@/live/features/club", () => ({
   linkLiveGuardian: (...args: unknown[]) => backendMocks.linkLiveGuardian(...args),
 }));
 vi.mock("@/live/features/identityAccessClient", () => ({
-  searchLiveProfiles: (...args: unknown[]) => backendMocks.searchLiveProfiles(...args),
+  searchLiveGuardianProfiles: (...args: unknown[]) => backendMocks.searchLiveGuardianProfiles(...args),
 }));
 
 interface Scenario {
@@ -158,7 +158,7 @@ beforeEach(() => {
   backendMocks.getLiveTeam.mockReset();
   backendMocks.createLivePendingInvite.mockReset();
   backendMocks.linkLiveGuardian.mockReset();
-  backendMocks.searchLiveProfiles.mockReset().mockResolvedValue([]);
+  backendMocks.searchLiveGuardianProfiles.mockReset().mockResolvedValue([]);
   toastMock.mockClear();
   invokeMock.mockClear();
   calls.inserts = [];
@@ -172,6 +172,18 @@ beforeEach(() => {
 
 const inviteInserts = () => calls.inserts.filter((i) => i.table === "pending_invites");
 const sentAtUpdates = () => calls.updates.filter((u) => u.values?.email_sent_at);
+
+describe("child-bound ICP guardian search", () => {
+  it("passes the specific child rather than calling an unrestricted search", async () => {
+    backendMocks.mode = "icp";
+    backendMocks.getLiveTeam.mockResolvedValue([{ id: "team-1", club_id: "club-1" }]);
+    renderSheet();
+    await userEvent.setup().type(screen.getByPlaceholderText(/search or type parent's name/i), "Paul");
+    await waitFor(() => expect(backendMocks.searchLiveGuardianProfiles).toHaveBeenCalledWith(
+      expect.anything(), "child-1", "Paul", 6,
+    ));
+  });
+});
 
 // ----------------------------------------------------------------- tests ---
 

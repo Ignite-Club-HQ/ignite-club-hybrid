@@ -6,12 +6,13 @@ const mocks = vi.hoisted(() => ({
   getProfilesByIds: vi.fn(),
   getProfile: vi.fn(),
   dispose: vi.fn(),
+  searchGuardianProfiles: vi.fn(),
 }));
 vi.mock("../identityAccess", () => ({
   connectLiveIdentityAccessClientWithIdentity: vi.fn(async () => ({ client: mocks })),
 }));
 
-import { listLiveProfilesByIds } from "./identityAccessClient";
+import { listLiveProfilesByIds, searchLiveGuardianProfiles } from "./identityAccessClient";
 
 const caller = "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe";
 const context = {
@@ -47,5 +48,29 @@ describe("ICP media uploader profile resolution", () => {
   it("never substitutes the signed-in person's profile for another uploader", async () => {
     expect(await listLiveProfilesByIds(context, ["2vxsx-fae"])).toEqual([]);
     expect(mocks.getProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe("guardian-only full search", () => {
+  const scoped = { ...context, target: { canisterIds: { club_domain: "rrkah-fqaaa-aaaaa-aaaaq-cai" } } } as FeatureBackendContext;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.searchGuardianProfiles.mockResolvedValue([{ account_id: "account-uuid", principal: Principal.fromText(caller), display_name: "Paul Cranwell", avatar_ref: [] }]);
+  });
+  it("uses the owning authority and exact child, returning a linkable principal", async () => {
+    expect(await searchLiveGuardianProfiles(scoped, "child-1", " Paul ", 6)).toEqual([
+      { id: caller, display_name: "Paul Cranwell", avatar_url: null },
+    ]);
+    expect(mocks.searchGuardianProfiles).toHaveBeenCalledWith(Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai"), "child-1", "Paul", 6);
+    expect(mocks.dispose).toHaveBeenCalledOnce();
+  });
+  it("does not disclose matches after a guardian refusal", async () => {
+    mocks.searchGuardianProfiles.mockRejectedValue(new Error("Verified guardian relationship required"));
+    await expect(searchLiveGuardianProfiles(scoped, "child-1", "Paul", 6)).rejects.toThrow("Verified guardian relationship required");
+    expect(mocks.dispose).toHaveBeenCalledOnce();
+  });
+  it("refuses a missing child before making a directory call", async () => {
+    await expect(searchLiveGuardianProfiles(scoped, "", "Paul", 6)).rejects.toThrow("specific child");
+    expect(mocks.searchGuardianProfiles).not.toHaveBeenCalled();
   });
 });

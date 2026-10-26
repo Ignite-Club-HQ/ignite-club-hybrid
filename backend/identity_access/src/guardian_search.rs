@@ -2,6 +2,13 @@
 //! The authority is checked against configured sources before any remote call.
 use candid::Principal;
 
+pub fn permit_disclosure(guardian: bool, account_unchanged: bool, authority_unchanged: bool) -> Result<(), String> {
+    if !guardian || !account_unchanged || !authority_unchanged {
+        return Err("Guardian relationship, account or child authority changed".into());
+    }
+    Ok(())
+}
+
 pub fn validate_request(authority: Principal, sources: &[Principal], child: &str, query: &str, limit: u16) -> Result<(String, usize), String> {
     if authority == Principal::anonymous() || !sources.contains(&authority) {
         return Err("Registered child authority required".into());
@@ -34,5 +41,15 @@ mod tests {
         assert!(validate_request(authority, &[authority], "child-1", "P", 6).is_err());
         assert!(validate_request(authority, &[authority], "child-1", &"p".repeat(81), 6).is_err());
         assert_eq!(validate_request(authority, &[authority], "child-1", "Paul", 100).unwrap().1, 25);
+    }
+    #[test]
+    fn non_guardians_never_receive_full_search_results() {
+        assert!(permit_disclosure(false, true, true).is_err());
+        assert!(permit_disclosure(true, true, true).is_ok());
+    }
+    #[test]
+    fn_account_or_authority_drift_refuses_disclosure() {
+        assert!(permit_disclosure(true, false, true).is_err());
+        assert!(permit_disclosure(true, true, false).is_err());
     }
 }
