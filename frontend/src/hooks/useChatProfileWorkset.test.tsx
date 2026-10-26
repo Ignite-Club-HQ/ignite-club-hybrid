@@ -11,7 +11,7 @@ describe('mounted viewport scope', () => {
     act(() => hook.result.current.onVisibleMessageIds(['m140']));
     expect(hook.result.current.ids).toEqual(['p140']);
     hook.rerender({ chat: 'b', viewer: 'v1' });
-    expect(hook.result.current.ids).not.toContain('p140');
+    expect(hook.result.current.ids).toEqual(rows.slice(-25).reverse().map(row => row.author_id));
     act(() => hook.result.current.onVisibleMessageIds(['m0']));
     hook.rerender({ chat: 'b', viewer: 'v2' });
     expect(hook.result.current.ids).not.toContain('p0');
