@@ -885,7 +885,7 @@ export function IcpMediaFeedPage() {
       </div>
 
       <main className="mx-auto w-full max-w-lg flex-1">
-        {(feedQuery.isLoading || (feedQuery.isError && isCancelledError(feedQuery.error))) && !feedQuery.data?.posts.length && (
+        {(feedQuery.isLoading || feedQuery.isFetching || feedQuery.data?.sources?.some(source => source.state === "loading") || (feedQuery.isError && isCancelledError(feedQuery.error))) && !feedQuery.data?.posts.length && (
           <div className="space-y-6" aria-label="Photos loading">
             <PhotoSkeleton />
             <PhotoSkeleton />
@@ -1183,6 +1183,7 @@ function MediaPostArticle({ post: base, principal, userId, profile, index, onRea
                       // LazyImage renders its pulsing skeleton until the
                       // decrypted bytes arrive.
                       file_url: asset.loading ? null : asset.url,
+                      loading: asset.loading,
                     }))}
                     onTap={(i) => onPhoto(post, i)}
                     priority={index < 2}
