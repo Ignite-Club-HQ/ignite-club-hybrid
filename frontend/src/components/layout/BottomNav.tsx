@@ -60,8 +60,17 @@ export function BottomNav() {
     const isEditable = (el: Element | null) => {
       if (!el) return false;
       const tag = el.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-      return (el as HTMLElement).isContentEditable === true;
+      const editable =
+        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
+        (el as HTMLElement).isContentEditable === true;
+      if (!editable) return false;
+      // Kept background tabs stay mounted but hidden (display:none +
+      // aria-hidden). If their chat composer still holds focus after
+      // switching tabs, counting it would keep the nav translated off-screen
+      // whenever the keyboard height is stuck — taps then land where the nav
+      // used to be and "nothing happens".
+      if ((el as HTMLElement).closest('[aria-hidden="true"], .hidden')) return false;
+      return true;
     };
     const update = () => setHasEditableFocus(isEditable(document.activeElement));
     update();
