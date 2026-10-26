@@ -38,7 +38,7 @@ export function verifyUpgradeStatus(service, actual, governor, expectedHash) {
   if (actual.subnetId !== service.subnetId) fail(`subnet mismatch (expected ${service.subnetId}, found ${actual.subnetId})`);
   if (!/^[a-f0-9]{64}$/.test(actual.moduleHash ?? '')) fail('module hash missing or invalid');
   if (actual.cycles < GROUP2_FUEL_FLOOR)
-    fail(`fuel under the 1T floor: ${(Number(actual.cycles) / 1e12).toFixed(3)}T — run the g2 card top-up, then retry`);
+    fail(`fuel under the 1T floor: ${(Number(actual.cycles) / 1e12).toFixed(3)}T on ${service.groupId ?? 'group'} canister ${service.canisterId} — top up that canister, then retry`);
   if (expectedHash && actual.moduleHash !== expectedHash) fail('module hash differs from the staged artifact');
   if (actual.environment.some(e => e.name.endsWith('LOCAL_REHEARSAL') && e.name !== ADMISSION_RELEASE_FLAG && e.value !== '' && e.value !== '0'))
     throw new Error(`Rehearsal settings forbidden: ${service.name}`);
