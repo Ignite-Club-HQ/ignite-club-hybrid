@@ -3275,18 +3275,22 @@ persistent actor class Main(governorInit : Principal) = this {
     let authority = identityAccessCanister;
     if (authority != ?caller or caller.isAnonymous()) return #Err("Configured identity authority required");
     switch (ProfileMembership.validate(requester, club_id, subjects)) { case (?message) return #Err(message); case null {} };
+    if (not profiles.any(func p = p.id == club_id and p.deleted_at_ms == null)) return #Err("Active club required");
     if (not removalReceiver.enter(requester)) return #Err("Account removal fenced or operation capacity reached");
     try {
       let revision = membershipEpoch();
       switch (expected) { case (?value) { if (value != revision) return #Err("Profile membership revision changed") }; case null {} };
       await admitAccount(requester);
+      if (not ProfileMembership.unchanged(revision, membershipEpoch(), identityAccessCanister == authority, removalReceiver.denied(requester) or isTransferFenced(club_id))) return #Err("Profile membership authority changed");
       // Admit subjects once, before the local atomic membership observation.
       var eligible : [Bool] = [];
       for (subject in subjects.values()) {
         let allowed = try { await admitAccount(subject); true } catch (_) { false };
+        if (not ProfileMembership.unchanged(revision, membershipEpoch(), identityAccessCanister == authority, removalReceiver.denied(requester) or isTransferFenced(club_id))) return #Err("Profile membership authority changed");
         eligible := eligible.concat([allowed]);
       };
       if (not ProfileMembership.unchanged(revision, membershipEpoch(), identityAccessCanister == authority, removalReceiver.denied(requester) or isTransferFenced(club_id))) return #Err("Profile membership authority changed");
+      if (not profiles.any(func p = p.id == club_id and p.deleted_at_ms == null)) return #Err("Active club required");
       func currentMember(subject : Principal) : Bool {
         if (subject.isAnonymous() or removalReceiver.denied(subject) or isExcluded(subject, club_id)) return false;
         let aliases = switch (accountFor(subject)) { case (?account) account.principals; case null [subject] };
