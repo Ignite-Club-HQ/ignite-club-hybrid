@@ -14,7 +14,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
-import { STEPS, validateRequest, gateReasons, buildPlan, newJournal, nextAction, normalizePlan } from './migrate-club-plan.mjs';
+import { STEPS, validateRequest, gateReasons, buildPlan, newJournal, nextAction, normalizePlan, recordIntent, recordReply } from './migrate-club-plan.mjs';
+import { createPrivateKey } from 'node:crypto';
 
 const root = process.env.GITHUB_WORKSPACE || join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -54,7 +55,17 @@ function supabase() {
     if (!Number.isFinite(total)) throw Error(`${table}: count unavailable`);
     return total;
   }
-  return { rows, count };
+  /** Every row of `table` where `col` = value, paged so large clubs are complete. */
+  async function all(table, query) {
+    const out = [];
+    for (let from = 0; ; from += 1000) {
+      const r = await fetch(`${url}/rest/v1/${table}?select=*&${query}&order=id`, { headers: { ...headers, Range: `${from}-${from + 999}` } });
+      if (!r.ok) throw Error(`${table}: ${r.status} ${await r.text()}`);
+      const page = await r.json(); out.push(...page);
+      if (page.length < 1000) return out;
+    }
+  }
+  return { rows, count, all };
 }
 
 const inList = ids => `in.(${ids.map(i => `"${i}"`).join(',')})`;
@@ -149,6 +160,42 @@ export async function main(env = process.env) {
   const next = nextAction(journal);
   if (next.blocked) throw Error(next.blocked);
   writeFileSync(path, JSON.stringify(journal, null, 2));
+  await runSteps({ journal, path, ctx: writerContext(req.clubId, target) });
+}
+
+/** Signed context for writers: deploy identity agent + exact-club Supabase reads. */
+function writerContext(clubId, target) {
+  const require = createRequire(join(root, 'frontend/package.json'));
+  const { HttpAgent } = require('@icp-sdk/core/agent');
+  const { Ed25519KeyIdentity } = require('@icp-sdk/core/identity');
+  const { Secp256k1KeyIdentity } = require('@icp-sdk/core/identity/secp256k1');
+  if (!process.env.DEPLOYER_PEM) throw Error('DEPLOYER_PEM is required to write');
+  const jwk = createPrivateKey(process.env.DEPLOYER_PEM.replace(/\r/g, '').replace(/\\n/g, '\n')).export({ format: 'jwk' });
+  const secret = new Uint8Array(Buffer.from(jwk.d, 'base64url'));
+  const identity = jwk.kty === 'OKP' ? Ed25519KeyIdentity.fromSecretKey(secret) : Secp256k1KeyIdentity.fromSecretKey(secret);
+  const db = supabase();
+  return {
+    require, target, clubId, creator: identity.getPrincipal(),
+    agent: HttpAgent.createSync({ host: 'https://icp-api.io', identity }),
+    rows: (table, col) => db.all(table, `${col}=eq.${encodeURIComponent(clubId)}`),
+    rowsIn: async (table, col, ids) => { const out = []; for (let i = 0; i < ids.length; i += 100) out.push(...await db.all(table, `${col}=${inList(ids.slice(i, i + 100))}`)); return out; },
+    schemaFile: (domain) => new URL(`./migrate-schemas/${domain}.snapshot.did.js`, import.meta.url).href,
+  };
+}
+
+/** Executes writer steps in journal order; a lost reply is recorded as unknown and stops the run. */
+export async function runSteps({ journal, path, ctx, writers = WRITERS, save = (j) => writeFileSync(path, JSON.stringify(j, null, 2)) }) {
+  for (;;) {
+    const next = nextAction(journal);
+    if (next.done || next.blocked) { if (next.blocked) throw Error(next.blocked); return journal; }
+    const write = writers[next.step];
+    if (!write) return journal; // verify/route steps run separately
+    journal = recordIntent(journal, next.step, next.page); save(journal);
+    let reply;
+    try { const r = await write(ctx); reply = { ok: true, last: true }; summary(`- ${next.step}: ${r.records} records loaded`); }
+    catch (e) { reply = /refused|missing/.test(e.message) ? { ok: false } : { unknown: true }; journal = recordReply(journal, next.step, next.page, reply); save(journal); throw e; }
+    journal = recordReply(journal, next.step, next.page, reply); save(journal);
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main().catch(e => { summary(`### Failed\n${e.message}`); process.exit(1); });

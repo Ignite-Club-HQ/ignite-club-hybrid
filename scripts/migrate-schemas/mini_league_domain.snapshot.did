@@ -1,0 +1,677 @@
+type RoleGrant = 
+ record {
+   club_id: text;
+   role: text;
+   team_id: opt text;
+   user: principal;
+ };
+type Request = 
+ record {
+   account_id: text;
+   generation: nat64;
+   inventory_digest: blob;
+   subjects: vec principal;
+ };
+type Receipt = 
+ record {
+   outstanding: nat;
+   receiver: principal;
+   request: Request;
+ };
+type PublicMiniLeagueSummary = 
+ record {
+   club_id: text;
+   id: text;
+   name: text;
+ };
+type PlayerGuardianStatus = 
+ record {
+   guardian_count: nat;
+   parent_linked: bool;
+   pending: bool;
+ };
+type MiniLeagueSessionAvailability = 
+ record {
+   created_at_ms: nat64;
+   id: text;
+   marked_by: opt principal;
+   player_id: text;
+   session_id: text;
+   status: text;
+   updated_at_ms: nat64;
+ };
+type MiniLeagueSession = 
+ record {
+   address: opt text;
+   created_at_ms: nat64;
+   created_by: principal;
+   end_time: opt text;
+   id: text;
+   linked_event_id: opt text;
+   location_name: opt text;
+   mini_league_id: text;
+   postcode: opt text;
+   session_date: text;
+   start_time: text;
+   status: text;
+   team_size_override: opt nat16;
+   updated_at_ms: nat64;
+ };
+type MiniLeaguePlayer = 
+ record {
+   ability_rating: opt nat16;
+   child_id: opt text;
+   claimed_by: opt principal;
+   created_at_ms: nat64;
+   id: text;
+   mini_league_id: text;
+   name: text;
+   notes: opt text;
+   parent_user_id: opt text;
+   updated_at_ms: nat64;
+ };
+type MiniLeagueNewsAudience = 
+ record {
+   club_id: text;
+   recipients: vec principal;
+ };
+type MiniLeagueJoinLink = 
+ record {
+   created_at_ms: nat64;
+   created_by: principal;
+   mini_league_id: text;
+   revision: nat64;
+   revoked: bool;
+   role: text;
+   token: text;
+ };
+type MiniLeagueInvite = 
+ record {
+   claimed_at_ms: opt nat64;
+   claimed_by: opt principal;
+   created_at_ms: nat64;
+   created_by: principal;
+   label_text: opt text;
+   mini_league_id: text;
+   player_id: opt text;
+   status: text;
+   token: text;
+ };
+type MiniLeagueGuardian = 
+ record {
+   child_id: text;
+   created_at_ms: nat64;
+   guardian_user_id: principal;
+ };
+type MiniLeagueGroupPlayer = 
+ record {
+   created_at_ms: nat64;
+   group_id: text;
+   jersey_number: opt nat16;
+   player_id: text;
+ };
+type MiniLeagueGroupDuty = 
+ record {
+   assigned_to: opt text;
+   completed: bool;
+   created_at_ms: nat64;
+   group_id: text;
+   id: text;
+   name: text;
+   points: opt nat16;
+   points_awarded: bool;
+   status: text;
+   updated_at_ms: nat64;
+ };
+type MiniLeagueGroup = 
+ record {
+   ability_band: opt text;
+   created_at_ms: nat64;
+   display_order: nat16;
+   id: text;
+   linked_event_id: opt text;
+   name: text;
+   pitch_name: opt text;
+   session_id: text;
+   target_size: nat16;
+   updated_at_ms: nat64;
+ };
+type MiniLeagueChild = 
+ record {
+   claimed_by: opt principal;
+   created_at_ms: nat64;
+   id: text;
+   parent_user_id: opt principal;
+   updated_at_ms: nat64;
+ };
+type MiniLeagueAdmin = 
+ record {
+   created_at_ms: nat64;
+   granted_by: opt principal;
+   id: text;
+   mini_league_id: text;
+   user_id: principal;
+ };
+type MiniLeague = 
+ record {
+   bib_colors: vec text;
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   description: opt text;
+   id: text;
+   logo_url: opt text;
+   min_players_per_side: nat16;
+   minutes_per_half: nat16;
+   name: text;
+   show_matches_to_members: bool;
+   status: text;
+   team_size: nat16;
+   updated_at_ms: nat64;
+ };
+type Main = 
+ service {
+   add_admin: (mini_league_id: text, user_id: principal) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueAdmin;
+     });
+   add_player: (mini_league_id: text, name: text, child_id: opt text,
+    parent_user_id: opt text, ability_rating: opt nat16, notes: opt text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeaguePlayer;
+     });
+   assign_player_to_group: (group_id: text, player_id: text, jersey_number:
+    opt nat16) -> (variant {
+                     Err: text;
+                     Ok: MiniLeagueGroupPlayer;
+                   });
+   can_read_league_matches: (viewer: principal, league_id: text, club_id:
+    text) -> (bool) composite_query;
+   cancel_session: (id: text) -> (variant {
+                                    Err: text;
+                                    Ok: MiniLeagueSession;
+                                  });
+   claim_admin_join_link: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             club_id: text;
+             mini_league_id: text;
+           };
+     });
+   claim_duty: (id: text, player_id: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueGroupDuty;
+     });
+   claim_invite: (token: text, player_name: text) ->
+    (variant {
+       Err: text;
+       Ok: ClaimedInvite;
+     });
+   complete_duty: (id: text, points_awarded: bool) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueGroupDuty;
+     });
+   create_duty: (group_id: text, name: text, points: opt nat16) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueGroupDuty;
+     });
+   create_group: (session_id: text, name: text, ability_band: opt text,
+    display_order: nat16, target_size: nat16, pitch_name: opt text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueGroup;
+     });
+   create_invite: (mini_league_id: text, player_id: opt text, label_text:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: MiniLeagueInvite;
+                  });
+   create_mini_league: (club_id: text, name: text, description: opt text,
+    logo_url: opt text, team_size: nat16, min_players_per_side: nat16,
+    minutes_per_half: nat16, bib_colors: vec text, show_matches_to_members:
+    bool) -> (variant {
+                Err: text;
+                Ok: MiniLeague;
+              });
+   create_mini_league_join_link: (mini_league_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueJoinLink;
+     });
+   create_session: (mini_league_id: text, session_date: text, start_time:
+    text, end_time: opt text, location_name: opt text, address: opt text,
+    postcode: opt text, team_size_override: opt nat16) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueSession;
+     });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
+   delete_mini_league: (mini_league_id: text) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
+   duplicate_mini_league: (mini_league_id: text, new_name: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeague;
+     });
+   export_club_snapshot: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     }) query;
+   filter_visible_leagues: (viewer: principal, candidates: vec MiniLeague) ->
+    (vec MiniLeague) composite_query;
+   get_availability: (session_id: text, player_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt MiniLeagueSessionAvailability;
+     }) composite_query;
+   get_join_link_by_token: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueJoinLink;
+     }) query;
+   get_league_members: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 is_parent: bool;
+                 is_staff: bool;
+                 user_id: text;
+               };
+     }) composite_query;
+   get_mini_league: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeague;
+     }) composite_query;
+   get_mini_leagues: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeague;
+     }) composite_query;
+   get_my_league_access: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok:
+        vec
+         record {
+           can_delete: bool;
+           can_manage: bool;
+           id: text;
+           is_club_admin: bool;
+         };
+     }) composite_query;
+   get_news_audience: (mini_league_id: text, requester: principal) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueNewsAudience;
+     }) composite_query;
+   get_player_guardian_status: (player_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PlayerGuardianStatus;
+     }) composite_query;
+   get_player_invite_preview: (token: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        opt
+         record {
+           club_id: text;
+           league_name: text;
+           mini_league_id: text;
+           player_name: opt text;
+           status: text;
+           token: text;
+         };
+     }) query;
+   grant_role: ("principal": principal, role: text, club_id: text, team_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok;
+                  });
+   import_club_snapshot: (club: text, snapshot: blob) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
+   join_mini_league_by_token: (token: text, player_name: text) ->
+    (variant {
+       Err: text;
+       Ok: ClaimedInvite;
+     });
+   link_mini_league_guardian: (child_id: text, guardian_user_id:
+    principal) -> (variant {
+                     Err: text;
+                     Ok;
+                   });
+   list_admins: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueAdmin;
+     }) query;
+   list_duties: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueGroupDuty;
+     }) composite_query;
+   list_group_players: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueGroupPlayer;
+     }) composite_query;
+   list_groups: (session_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueGroup;
+     }) composite_query;
+   list_invites: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueInvite;
+     }) query;
+   list_mini_league_join_links: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueJoinLink;
+     }) query;
+   list_mini_leagues_by_club: (club_id: text) ->
+    (vec MiniLeague) composite_query;
+   list_mini_leagues_by_clubs: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeague;
+     }) composite_query;
+   list_players: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeaguePlayer;
+     }) composite_query;
+   list_public_mini_leagues: () -> (vec PublicMiniLeagueSummary) query;
+   list_session_availability: (session_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueSessionAvailability;
+     }) composite_query;
+   list_sessions: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueSession;
+     }) composite_query;
+   memory_stats: () ->
+    (record {
+       heap_bytes: nat;
+       memory_bytes: nat;
+       stable_bytes: nat;
+     }) query;
+   my_availability: () -> (vec MiniLeagueSessionAvailability) composite_query;
+   my_leagues: () -> (vec MiniLeague) composite_query;
+   prepare_account_removal: (request: Request) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   purge_club_snapshot: (club: text) -> (variant {
+                                           Err: text;
+                                           Ok: nat;
+                                         });
+   read_account_can_read_league_matches: (viewer: principal, league_id: 
+    text, club_id: text) -> (bool);
+   read_account_filter_visible_leagues: (viewer: principal, candidates:
+    vec MiniLeague) -> (vec MiniLeague);
+   read_account_get_availability: (session_id: text, player_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt MiniLeagueSessionAvailability;
+     });
+   read_account_get_league_members: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 is_parent: bool;
+                 is_staff: bool;
+                 user_id: text;
+               };
+     });
+   read_account_get_mini_league: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeague;
+     });
+   read_account_get_mini_leagues: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeague;
+     });
+   read_account_get_my_league_access: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok:
+        vec
+         record {
+           can_delete: bool;
+           can_manage: bool;
+           id: text;
+           is_club_admin: bool;
+         };
+     });
+   read_account_get_news_audience: (mini_league_id: text, requester:
+    principal) -> (variant {
+                     Err: text;
+                     Ok: MiniLeagueNewsAudience;
+                   });
+   read_account_get_player_guardian_status: (player_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PlayerGuardianStatus;
+     });
+   read_account_list_admins: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueAdmin;
+     });
+   read_account_list_duties: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueGroupDuty;
+     });
+   read_account_list_group_players: (group_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueGroupPlayer;
+     });
+   read_account_list_groups: (session_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueGroup;
+     });
+   read_account_list_invites: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueInvite;
+     });
+   read_account_list_mini_league_join_links: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueJoinLink;
+     });
+   read_account_list_mini_leagues_by_club: (club_id: text) ->
+    (vec MiniLeague);
+   read_account_list_mini_leagues_by_clubs: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeague;
+     });
+   read_account_list_players: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeaguePlayer;
+     });
+   read_account_list_session_availability: (session_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueSessionAvailability;
+     });
+   read_account_list_sessions: (mini_league_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeagueSession;
+     });
+   read_account_my_availability: () -> (vec MiniLeagueSessionAvailability);
+   read_account_my_leagues: () -> (vec MiniLeague);
+   read_account_removal_drain: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   read_account_verify_child_guardian: (user: principal, child: text) ->
+    (bool);
+   read_account_verify_league_access: (viewer: principal, league:
+    MiniLeague) -> (bool);
+   read_account_verify_player_access: (user: principal, player:
+    MiniLeaguePlayer) -> (bool);
+   read_can_read_league_matches: (viewer: principal, league_id: text,
+    club_id: text) -> (bool);
+   read_event_notification_subjects: (league_id: text, club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 child: opt text;
+                 user: text;
+               };
+     });
+   read_group_opening_configuration: () -> (vec record {
+                                                  text;
+                                                  text;
+                                                });
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
+   remove_admin: (mini_league_id: text, user_id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_player: (id: text) -> (variant {
+                                   Err: text;
+                                   Ok;
+                                 });
+   revoke_mini_league_join_link: (mini_league_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   rotate_mini_league_join_link: (mini_league_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueJoinLink;
+     });
+   seal_account_removal: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   set_availability: (session_id: text, player_id: text, status: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueSessionAvailability;
+     });
+   set_club_domain_canister: (id: principal) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
+   set_events_domain_canister: (id: principal) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   set_mini_league_status: (id: text, status: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeague;
+     });
+   set_session_status: (id: text, status: text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueSession;
+     });
+   set_transfer_fence: (club: text, fenced: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   unassign_player_from_group: (group_id: text, player_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   update_group: (id: text, name: text, ability_band: opt text,
+    display_order: nat16, target_size: nat16, pitch_name: opt text) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueGroup;
+     });
+   update_mini_league: (id: text, name: text, description: opt text,
+    logo_url: opt text, team_size: nat16, min_players_per_side: nat16,
+    minutes_per_half: nat16, bib_colors: vec text, show_matches_to_members:
+    bool) -> (variant {
+                Err: text;
+                Ok: MiniLeague;
+              });
+   update_player: (id: text, name: text, ability_rating: opt nat16, notes:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: MiniLeaguePlayer;
+                  });
+   update_session: (id: text, session_date: text, start_time: text, end_time:
+    opt text, location_name: opt text, address: opt text, postcode: opt text,
+    team_size_override: opt nat16) ->
+    (variant {
+       Err: text;
+       Ok: MiniLeagueSession;
+     });
+   verify_child_guardian: (user: principal, child: text) ->
+    (bool) composite_query;
+   verify_league_access: (viewer: principal, league: MiniLeague) ->
+    (bool) composite_query;
+   verify_player_access: (user: principal, player: MiniLeaguePlayer) ->
+    (bool) composite_query;
+   zz_migrate_schema: (LeagueSnapshot) -> () query;
+ };
+type LeagueSnapshot = 
+ record {
+   admins: vec MiniLeagueAdmin;
+   availability: vec MiniLeagueSessionAvailability;
+   children: vec MiniLeagueChild;
+   duties: vec MiniLeagueGroupDuty;
+   group_players: vec MiniLeagueGroupPlayer;
+   groups: vec MiniLeagueGroup;
+   guardians: vec MiniLeagueGuardian;
+   invites: vec MiniLeagueInvite;
+   join_links: vec MiniLeagueJoinLink;
+   leagues: vec MiniLeague;
+   players: vec MiniLeaguePlayer;
+   roles: vec RoleGrant;
+   sessions: vec MiniLeagueSession;
+ };
+type ClaimedInvite = 
+ record {
+   club_id: text;
+   mini_league_id: text;
+   player_id: text;
+ };
+service : (governorInit: principal) -> Main

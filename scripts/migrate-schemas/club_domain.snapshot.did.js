@@ -7,26 +7,124 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 
-
 export const idlFactory = ({ IDL }) => {
-  const Draft = IDL.Record({
-    'url' : IDL.Text,
-    'title' : IDL.Text,
-    'icon' : IDL.Text,
-    'is_active' : IDL.Bool,
-    'open_mode' : IDL.Text,
-    'subtitle' : IDL.Opt(IDL.Text),
-  });
-  const Link = IDL.Record({
+  const Account = IDL.Record({
     'id' : IDL.Text,
-    'sort_order' : IDL.Nat32,
+    'legacy_subject' : IDL.Principal,
+    'version' : IDL.Nat64,
+    'principals' : IDL.Vec(IDL.Principal),
+  });
+  const ParentInvite = IDL.Record({
+    'id' : IDL.Text,
+    'accepted_by' : IDL.Opt(IDL.Principal),
+    'team_id' : IDL.Opt(IDL.Text),
+    'child_id' : IDL.Text,
     'created_at_ms' : IDL.Nat64,
-    'draft' : Draft,
+    'invited_by' : IDL.Principal,
+    'club_id' : IDL.Text,
+    'expires_at_ms' : IDL.Nat64,
+  });
+  const PendingInvite = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'kind' : IDL.Text,
+    'resent_at_ms' : IDL.Opt(IDL.Nat64),
+    'role' : IDL.Opt(IDL.Text),
+    'accepted_by' : IDL.Opt(IDL.Principal),
+    'team_id' : IDL.Opt(IDL.Text),
+    'email' : IDL.Text,
+    'child_id' : IDL.Opt(IDL.Text),
+    'created_at_ms' : IDL.Nat64,
+    'accepted_at_ms' : IDL.Opt(IDL.Nat64),
+    'invited_by' : IDL.Principal,
     'club_id' : IDL.Text,
   });
-  const Listing = IDL.Record({
-    'links' : IDL.Vec(Link),
-    'revision' : IDL.Nat64,
+  const TeamInvite = IDL.Record({
+    'id' : IDL.Text,
+    'revoked' : IDL.Bool,
+    'role' : IDL.Text,
+    'accepted_by' : IDL.Opt(IDL.Principal),
+    'team_id' : IDL.Text,
+    'email' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'invited_by' : IDL.Principal,
+    'club_id' : IDL.Text,
+    'expires_at_ms' : IDL.Nat64,
+  });
+  const TeamInviteLink = IDL.Record({
+    'id' : IDL.Text,
+    'token' : IDL.Text,
+    'revoked' : IDL.Bool,
+    'role' : IDL.Text,
+    'rotated_at_ms' : IDL.Opt(IDL.Nat64),
+    'team_id' : IDL.Text,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'club_id' : IDL.Text,
+  });
+  const Binding = IDL.Record({
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'deployment' : IDL.Text,
+    'generation' : IDL.Nat64,
+    'group' : IDL.Text,
+    'identity' : IDL.Principal,
+    'router' : IDL.Principal,
+  });
+  const SeasonTeamAssignment = IDL.Record({
+    'season_id' : IDL.Text,
+    'added_at_ms' : IDL.Nat64,
+    'team_id' : IDL.Text,
+    'member_id' : IDL.Text,
+  });
+  const Child = IDL.Record({
+    'id' : IDL.Text,
+    'teams' : IDL.Vec(IDL.Text),
+    'club_id' : IDL.Opt(IDL.Text),
+    'parent' : IDL.Opt(IDL.Principal),
+  });
+  const ClubJoinRequest = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'decided_at_ms' : IDL.Opt(IDL.Nat64),
+    'user' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'club_id' : IDL.Text,
+    'decided_by' : IDL.Opt(IDL.Principal),
+  });
+  const RoleRequest = IDL.Record({
+    'id' : IDL.Text,
+    'account_id' : IDL.Text,
+    'status' : IDL.Text,
+    'decided_at_ms' : IDL.Opt(IDL.Nat64),
+    'club' : IDL.Text,
+    'role' : IDL.Text,
+    'team' : IDL.Opt(IDL.Text),
+    'user' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'decided_by' : IDL.Opt(IDL.Principal),
+  });
+  const TeamCreationRequest = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'decided_at_ms' : IDL.Opt(IDL.Nat64),
+    'name' : IDL.Text,
+    'division' : IDL.Opt(IDL.Text),
+    'team_id' : IDL.Opt(IDL.Text),
+    'requested_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'club_id' : IDL.Text,
+    'decided_by' : IDL.Opt(IDL.Principal),
+    'age_group' : IDL.Opt(IDL.Text),
+  });
+  const Season = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'name' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'end_date' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'start_date' : IDL.Text,
+    'club_id' : IDL.Text,
   });
   const ClubTeam = IDL.Record({
     'id' : IDL.Text,
@@ -53,7 +151,99 @@ export const idlFactory = ({ IDL }) => {
     'age_group' : IDL.Opt(IDL.Text),
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
   });
-  const Guardian = IDL.Record({ 'child' : IDL.Text, 'user' : IDL.Principal });
+  const Challenge = IDL.Record({
+    'id' : IDL.Nat64,
+    'account_id' : IDL.Text,
+    'issuer' : IDL.Principal,
+    'target' : IDL.Principal,
+    'accepted' : IDL.Bool,
+    'expires_at_ns' : IDL.Nat64,
+    'expected_version' : IDL.Nat64,
+  });
+  const Reservation = IDL.Record({
+    'status' : IDL.Variant({
+      'reserved' : IDL.Null,
+      'committed' : IDL.Null,
+      'released' : IDL.Null,
+    }),
+    'token' : IDL.Text,
+    'cycle' : IDL.Nat,
+    'store' : IDL.Principal,
+    'category' : IDL.Text,
+    'bytes' : IDL.Nat,
+    'club_id' : IDL.Text,
+  });
+  const Result = IDL.Variant({ 'Ok' : Reservation, 'Err' : IDL.Text });
+  const Object = IDL.Record({
+    'club' : IDL.Text,
+    'path' : IDL.Text,
+    'store' : IDL.Principal,
+    'bytes' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
+  const Operation = IDL.Record({
+    'token' : IDL.Text,
+    'previous' : IDL.Opt(Object),
+    'club' : IDL.Text,
+    'path' : IDL.Text,
+    'state' : IDL.Variant({
+      'reserved' : IDL.Null,
+      'committed' : IDL.Null,
+      'released' : IDL.Null,
+    }),
+    'store' : IDL.Principal,
+    'bytes' : IDL.Nat,
+  });
+  const Result__1 = IDL.Variant({ 'Ok' : Operation, 'Err' : IDL.Text });
+  const Job = IDL.Record({
+    'id' : IDL.Text,
+    'resource' : IDL.Text,
+    'ciphertext' : IDL.Text,
+    'attempt' : IDL.Nat,
+    'kind' : IDL.Text,
+    'provider_id' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'state' : IDL.Text,
+    'worker' : IDL.Opt(IDL.Principal),
+  });
+  const ClubSettings = IDL.Record({
+    'logo_only_mode' : IDL.Bool,
+    'invite_email_style' : IDL.Opt(IDL.Text),
+    'theme_dark_accent_color' : IDL.Opt(IDL.Text),
+    'theme_primary_color' : IDL.Opt(IDL.Text),
+    'events_sponsor_strip_enabled' : IDL.Bool,
+    'header_logo_enabled' : IDL.Bool,
+    'chat_thread_ads_enabled' : IDL.Bool,
+    'theme_accent_color' : IDL.Opt(IDL.Text),
+    'contact_email' : IDL.Opt(IDL.Text),
+    'club_switcher_hint' : IDL.Opt(IDL.Text),
+    'theme_dark_primary_color' : IDL.Opt(IDL.Text),
+    'header_club_name_enabled' : IDL.Bool,
+    'membership_open' : IDL.Bool,
+    'announcement' : IDL.Opt(IDL.Text),
+    'public_directory' : IDL.Bool,
+    'theme_secondary_color' : IDL.Opt(IDL.Text),
+    'media_header_sponsors_enabled' : IDL.Bool,
+    'theme_dark_secondary_color' : IDL.Opt(IDL.Text),
+    'media_sponsors_enabled' : IDL.Bool,
+    'club_id' : IDL.Text,
+    'theme_enabled' : IDL.Bool,
+  });
+  const ClubProfile = IDL.Record({
+    'id' : IDL.Text,
+    'secondary_color' : IDL.Opt(IDL.Text),
+    'playhq_tenant' : IDL.Opt(IDL.Text),
+    'name' : IDL.Text,
+    'slug' : IDL.Text,
+    'description' : IDL.Opt(IDL.Text),
+    'created_at_ms' : IDL.Nat64,
+    'logo_url' : IDL.Opt(IDL.Text),
+    'sport' : IDL.Opt(IDL.Text),
+    'playhq_org_id' : IDL.Opt(IDL.Text),
+    'is_active' : IDL.Bool,
+    'primary_color' : IDL.Opt(IDL.Text),
+    'deleted_at_ms' : IDL.Opt(IDL.Nat64),
+  });
   const NewsAttachment = IDL.Record({
     'url' : IDL.Text,
     'kind' : IDL.Text,
@@ -79,87 +269,398 @@ export const idlFactory = ({ IDL }) => {
     'attachments' : IDL.Vec(NewsAttachment),
     'target_competition_id' : IDL.Opt(IDL.Text),
   });
-  const TeamInviteLink = IDL.Record({
+  const InvitePayload = IDL.Record({
+    'to' : IDL.Text,
+    'subject' : IDL.Text,
+    'body' : IDL.Text,
+  });
+  const PromoCode = IDL.Record({
     'id' : IDL.Text,
-    'token' : IDL.Text,
-    'revoked' : IDL.Bool,
-    'role' : IDL.Text,
-    'rotated_at_ms' : IDL.Opt(IDL.Nat64),
-    'team_id' : IDL.Text,
+    'access_level' : IDL.Text,
+    'uses_count' : IDL.Nat32,
+    'code' : IDL.Text,
+    'scope_type' : IDL.Text,
     'created_by' : IDL.Principal,
     'created_at_ms' : IDL.Nat64,
-    'club_id' : IDL.Text,
-  });
-  const ParentInvite = IDL.Record({
-    'id' : IDL.Text,
-    'accepted_by' : IDL.Opt(IDL.Principal),
-    'team_id' : IDL.Opt(IDL.Text),
-    'child_id' : IDL.Text,
-    'created_at_ms' : IDL.Nat64,
-    'invited_by' : IDL.Principal,
-    'club_id' : IDL.Text,
-    'expires_at_ms' : IDL.Nat64,
-  });
-  const Child = IDL.Record({
-    'id' : IDL.Text,
-    'teams' : IDL.Vec(IDL.Text),
+    'storage_gb' : IDL.Opt(IDL.Nat32),
+    'is_active' : IDL.Bool,
     'club_id' : IDL.Opt(IDL.Text),
-    'parent' : IDL.Opt(IDL.Principal),
+    'expires_at_ms' : IDL.Opt(IDL.Nat64),
   });
-  const ClubSettings = IDL.Record({
-    'logo_only_mode' : IDL.Bool,
-    'invite_email_style' : IDL.Opt(IDL.Text),
-    'theme_dark_accent_color' : IDL.Opt(IDL.Text),
-    'theme_primary_color' : IDL.Opt(IDL.Text),
-    'events_sponsor_strip_enabled' : IDL.Bool,
-    'header_logo_enabled' : IDL.Bool,
-    'chat_thread_ads_enabled' : IDL.Bool,
-    'theme_accent_color' : IDL.Opt(IDL.Text),
-    'contact_email' : IDL.Opt(IDL.Text),
-    'club_switcher_hint' : IDL.Opt(IDL.Text),
-    'theme_dark_primary_color' : IDL.Opt(IDL.Text),
-    'header_club_name_enabled' : IDL.Bool,
-    'membership_open' : IDL.Bool,
-    'announcement' : IDL.Opt(IDL.Text),
-    'public_directory' : IDL.Bool,
-    'theme_secondary_color' : IDL.Opt(IDL.Text),
-    'media_header_sponsors_enabled' : IDL.Bool,
-    'theme_dark_secondary_color' : IDL.Opt(IDL.Text),
-    'media_sponsors_enabled' : IDL.Bool,
-    'club_id' : IDL.Text,
-    'theme_enabled' : IDL.Bool,
-  });
-  const Team = IDL.Record({ 'id' : IDL.Text, 'club' : IDL.Text });
-  const Exclusion = IDL.Record({ 'club' : IDL.Text, 'user' : IDL.Principal });
-  const RoleRequest = IDL.Record({
+  const ClassEnrolment = IDL.Record({
     'id' : IDL.Text,
-    'account_id' : IDL.Text,
     'status' : IDL.Text,
-    'decided_at_ms' : IDL.Opt(IDL.Nat64),
-    'club' : IDL.Text,
+    'term_id' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'created_at_ms' : IDL.Nat64,
+    'member_id' : IDL.Text,
+    'club_id' : IDL.Text,
+    'class_id' : IDL.Text,
+  });
+  const Value = IDL.Variant({
+    'int' : IDL.Int,
+    'bool' : IDL.Bool,
+    'null' : IDL.Null,
+    'text' : IDL.Text,
+  });
+  const Cell = IDL.Record({ 'value' : Value, 'name' : IDL.Text });
+  const Row = IDL.Vec(Cell);
+  const Result__2 = IDL.Record({ 'hasMore' : IDL.Bool, 'rows' : IDL.Vec(Row) });
+  const Team = IDL.Record({ 'id' : IDL.Text, 'club' : IDL.Text });
+  const Guardian = IDL.Record({ 'child' : IDL.Text, 'user' : IDL.Principal });
+  const Exclusion = IDL.Record({ 'club' : IDL.Text, 'user' : IDL.Principal });
+  const RoleGrant = IDL.Record({
+    'club' : IDL.Opt(IDL.Text),
     'role' : IDL.Text,
     'team' : IDL.Opt(IDL.Text),
     'user' : IDL.Principal,
-    'created_at_ms' : IDL.Nat64,
-    'decided_by' : IDL.Opt(IDL.Principal),
   });
-  const TeamInvite = IDL.Record({
+  const Acl = IDL.Record({
+    'teams' : IDL.Vec(Team),
+    'guardians' : IDL.Vec(Guardian),
+    'clubs' : IDL.Vec(IDL.Text),
+    'children' : IDL.Vec(Child),
+    'exclusions' : IDL.Vec(Exclusion),
+    'roles' : IDL.Vec(RoleGrant),
+  });
+  const Config = IDL.Record({
+    'acl' : Acl,
+    'schema' : IDL.Nat32,
+    'governor' : IDL.Principal,
+    'acl_version' : IDL.Nat64,
+  });
+  const Draft = IDL.Record({
+    'url' : IDL.Text,
+    'title' : IDL.Text,
+    'icon' : IDL.Text,
+    'is_active' : IDL.Bool,
+    'open_mode' : IDL.Text,
+    'subtitle' : IDL.Opt(IDL.Text),
+  });
+  const Link = IDL.Record({
     'id' : IDL.Text,
-    'revoked' : IDL.Bool,
-    'role' : IDL.Text,
-    'accepted_by' : IDL.Opt(IDL.Principal),
-    'team_id' : IDL.Text,
-    'email' : IDL.Text,
+    'sort_order' : IDL.Nat32,
     'created_at_ms' : IDL.Nat64,
-    'invited_by' : IDL.Principal,
+    'draft' : Draft,
     'club_id' : IDL.Text,
-    'expires_at_ms' : IDL.Nat64,
   });
+  const Listing = IDL.Record({
+    'links' : IDL.Vec(Link),
+    'revision' : IDL.Nat64,
+  });
+  const AccountExclusion = IDL.Record({
+    'account_id' : IDL.Text,
+    'club' : IDL.Text,
+  });
+  const Family = IDL.Record({ 'account_id' : IDL.Text, 'child_id' : IDL.Text });
   const AccountRole = IDL.Record({
     'account_id' : IDL.Text,
     'club' : IDL.Opt(IDL.Text),
     'role' : IDL.Text,
     'team' : IDL.Opt(IDL.Text),
+  });
+  const State = IDL.Record({
+    'schema' : IDL.Nat32,
+    'accounts' : IDL.Vec(Account),
+    'exclusions' : IDL.Vec(AccountExclusion),
+    'families' : IDL.Vec(Family),
+    'challenges' : IDL.Vec(Challenge),
+    'roles' : IDL.Vec(AccountRole),
+    'next_challenge' : IDL.Nat64,
+  });
+  const Snapshot = IDL.Record({
+    'schema' : IDL.Nat32,
+    'clubs' : IDL.Vec(IDL.Tuple(IDL.Text, Listing)),
+  });
+  const PendingInviteEmailHash = IDL.Record({
+    'hash' : IDL.Text,
+    'invite_id' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
+  const ClubBranding = IDL.Record({
+    'name' : IDL.Text,
+    'contact_email' : IDL.Opt(IDL.Text),
+    'logo_url' : IDL.Opt(IDL.Text),
+  });
+  const ClubGeneralSettings = IDL.Record({
+    'class_mode_enabled' : IDL.Bool,
+    'allow_guests_default' : IDL.Bool,
+    'events_sponsor_strip_enabled' : IDL.Bool,
+    'max_guests_per_member_default' : IDL.Nat,
+    'club_id' : IDL.Text,
+  });
+  const InviteMessageDefault = IDL.Record({
+    'message' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
+  const ClubSubscription = IDL.Record({
+    'activated_at_ms' : IDL.Opt(IDL.Nat64),
+    'trial_ends_at_ms' : IDL.Opt(IDL.Nat64),
+    'team_limit' : IDL.Opt(IDL.Nat32),
+    'is_trial' : IDL.Bool,
+    'plan' : IDL.Text,
+    'is_pro' : IDL.Bool,
+    'is_pro_football' : IDL.Bool,
+    'admin_pro_football_override' : IDL.Bool,
+    'admin_pro_override' : IDL.Bool,
+    'cancelled_at_ms' : IDL.Opt(IDL.Nat64),
+    'club_id' : IDL.Text,
+    'expires_at_ms' : IDL.Opt(IDL.Nat64),
+  });
+  const GuardianMeta = IDL.Record({
+    'user' : IDL.Principal,
+    'is_primary' : IDL.Bool,
+    'relationship_type' : IDL.Text,
+    'child_id' : IDL.Text,
+  });
+  const ClubSponsor = IDL.Record({
+    'id' : IDL.Text,
+    'website_url' : IDL.Opt(IDL.Text),
+    'name' : IDL.Text,
+    'tier' : IDL.Text,
+    'sort_order' : IDL.Nat32,
+    'description' : IDL.Opt(IDL.Text),
+    'logo_url' : IDL.Opt(IDL.Text),
+    'is_team_only' : IDL.Bool,
+    'is_active' : IDL.Bool,
+    'club_id' : IDL.Text,
+    'exposure_percentage' : IDL.Opt(IDL.Nat8),
+  });
+  const PitchNotifyFlags = IDL.Record({
+    'subs_manager' : IDL.Bool,
+    'coach' : IDL.Bool,
+    'team_id' : IDL.Text,
+    'team_admin' : IDL.Bool,
+  });
+  const TeamPlayerPosition = IDL.Record({
+    'team_id' : IDL.Text,
+    'member_id' : IDL.Text,
+    'position' : IDL.Text,
+  });
+  const TeamPlayerPositionAssignment = IDL.Record({
+    'team_id' : IDL.Text,
+    'member_id' : IDL.Text,
+    'positions' : IDL.Vec(IDL.Text),
+    'jersey_number' : IDL.Opt(IDL.Nat16),
+  });
+  const TeamSubscription = IDL.Record({
+    'max_spread_minutes' : IDL.Opt(IDL.Nat32),
+    'formation' : IDL.Opt(IDL.Text),
+    'trial_ends_at_ms' : IDL.Opt(IDL.Nat64),
+    'is_trial' : IDL.Bool,
+    'rotate_gk_at_halftime' : IDL.Bool,
+    'show_lineup_picker' : IDL.Bool,
+    'team_id' : IDL.Text,
+    'rotation_speed' : IDL.Nat32,
+    'is_pro' : IDL.Bool,
+    'disable_auto_subs' : IDL.Bool,
+    'team_size' : IDL.Opt(IDL.Nat32),
+    'is_pro_football' : IDL.Bool,
+    'admin_pro_football_override' : IDL.Bool,
+    'disable_batch_subs' : IDL.Bool,
+    'admin_pro_override' : IDL.Bool,
+    'cancelled_at_ms' : IDL.Opt(IDL.Nat64),
+    'minutes_per_half' : IDL.Opt(IDL.Nat32),
+    'disable_position_swaps' : IDL.Bool,
+    'disable_team_pom_rewards' : IDL.Bool,
+  });
+  const TeamWelcomeEmail = IDL.Record({
+    'subject' : IDL.Text,
+    'team_id' : IDL.Text,
+    'enabled' : IDL.Bool,
+    'message' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
+  const WelcomeEmailJob = IDL.Record({
+    'to' : IDL.Text,
+    'subject' : IDL.Text,
+    'invite_id' : IDL.Text,
+    'team_name' : IDL.Text,
+    'message' : IDL.Text,
+    'club_name' : IDL.Text,
+  });
+  const HttpRequest = IDL.Record({
+    'url' : IDL.Text,
+    'method' : IDL.Text,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+  });
+  const HttpResponse = IDL.Record({
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+    'status_code' : IDL.Nat16,
+  });
+  const InviteStats = IDL.Record({ 'total' : IDL.Nat, 'accepted' : IDL.Nat });
+  const AcceptedInvite = IDL.Record({
+    'id' : IDL.Text,
+    'invited_user_id' : IDL.Text,
+    'accepted_at_ms' : IDL.Nat64,
+  });
+  const ClubTerm = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'name' : IDL.Text,
+    'end_date' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'start_date' : IDL.Text,
+    'is_active' : IDL.Bool,
+    'club_id' : IDL.Text,
+  });
+  const MemberPayment = IDL.Record({
+    'id' : IDL.Text,
+    'payment_type' : IDL.Text,
+    'marked_by' : IDL.Principal,
+    'user_id' : IDL.Text,
+    'child_id' : IDL.Opt(IDL.Text),
+    'created_at_ms' : IDL.Nat64,
+    'notes' : IDL.Opt(IDL.Text),
+    'payment_period' : IDL.Text,
+    'amount' : IDL.Float64,
+    'club_id' : IDL.Text,
+  });
+  const PitchFormation = IDL.Record({
+    'id' : IDL.Text,
+    'name' : IDL.Text,
+    'team_id' : IDL.Text,
+    'created_by' : IDL.Principal,
+    'drawing_json' : IDL.Opt(IDL.Text),
+    'created_at_ms' : IDL.Nat64,
+    'team_size' : IDL.Nat32,
+    'formation_json' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
+  const RemovedMember = IDL.Record({
+    'club' : IDL.Text,
+    'user' : IDL.Principal,
+    'removed_at_ms' : IDL.Nat64,
+    'removed_by' : IDL.Principal,
+  });
+  const SeasonPlayerStat = IDL.Record({
+    'season_id' : IDL.Text,
+    'team_id' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'player_name' : IDL.Text,
+    'club_player_id' : IDL.Text,
+    'events_total' : IDL.Nat32,
+    'attendance_pct' : IDL.Float64,
+    'events_attended' : IDL.Nat32,
+    'games_played' : IDL.Nat32,
+    'club_id' : IDL.Text,
+  });
+  const SeasonTeamSummary = IDL.Record({
+    'season_id' : IDL.Text,
+    'avg_attendance_pct' : IDL.Float64,
+    'team_id' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'roster_size' : IDL.Nat32,
+    'team_name' : IDL.Text,
+    'events_count' : IDL.Nat32,
+    'club_id' : IDL.Text,
+  });
+  const TeamCaptain = IDL.Record({
+    'user' : IDL.Principal,
+    'team_id' : IDL.Text,
+  });
+  const TeamFolder = IDL.Record({
+    'id' : IDL.Text,
+    'name' : IDL.Text,
+    'color' : IDL.Text,
+    'sort_order' : IDL.Nat32,
+    'description' : IDL.Opt(IDL.Text),
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'club_id' : IDL.Text,
+  });
+  const TeamSponsorAllocation = IDL.Record({
+    'team_id' : IDL.Text,
+    'sponsor_id' : IDL.Text,
+  });
+  const Progress = IDL.Record({
+    'total' : IDL.Opt(IDL.Nat),
+    'done' : IDL.Bool,
+    'offset' : IDL.Nat,
+  });
+  const Operation__1 = IDL.Variant({
+    'SetActive' : IDL.Record({ 'id' : IDL.Text, 'active' : IDL.Bool }),
+    'Save' : IDL.Record({ 'id' : IDL.Opt(IDL.Text), 'draft' : Draft }),
+    'Remove' : IDL.Record({ 'id' : IDL.Text }),
+    'Reorder' : IDL.Record({ 'first' : IDL.Text, 'second' : IDL.Text }),
+  });
+  const Request__1 = IDL.Record({
+    'request_id' : IDL.Text,
+    'club' : IDL.Text,
+    'operation' : Operation__1,
+    'expected_revision' : IDL.Nat64,
+  });
+  const Mutation = IDL.Record({
+    'link' : IDL.Opt(Link),
+    'revision' : IDL.Nat64,
+  });
+  const Request = IDL.Record({
+    'account_id' : IDL.Text,
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'generation' : IDL.Nat64,
+  });
+  const ProfileTeamHistoryEntry = IDL.Record({
+    'season_start_date' : IDL.Text,
+    'season_id' : IDL.Text,
+    'team_id' : IDL.Text,
+    'season_name' : IDL.Text,
+    'team_level_age' : IDL.Opt(IDL.Text),
+    'team_name' : IDL.Text,
+    'joined_at_ms' : IDL.Nat64,
+    'membership_id' : IDL.Text,
+    'season_end_date' : IDL.Text,
+    'club_name' : IDL.Text,
+    'club_id' : IDL.Text,
+    'season_status' : IDL.Text,
+  });
+  const Receipt__1 = IDL.Record({
+    'outstanding' : IDL.Nat,
+    'request' : Request,
+    'receiver' : IDL.Principal,
+  });
+  const Reference = IDL.Record({
+    'url' : IDL.Text,
+    'path' : IDL.Opt(IDL.Text),
+    'content_hash' : IDL.Opt(IDL.Text),
+    'store' : IDL.Opt(IDL.Text),
+    'resource_id' : IDL.Text,
+  });
+  const Page__1 = IDL.Record({
+    'references' : IDL.Vec(Reference),
+    'next' : IDL.Opt(IDL.Nat),
+    'scanned' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
+  const Cursor = IDL.Record({
+    'offset' : IDL.Nat,
+    'nested' : IDL.Nat,
+    'phase' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
+  const Edge = IDL.Variant({
+    'Parent' : IDL.Record({ 'subject' : IDL.Principal, 'child' : IDL.Text }),
+    'Club' : IDL.Record({ 'id' : IDL.Text, 'deleted' : IDL.Bool }),
+    'Role' : IDL.Record({
+      'subject' : IDL.Principal,
+      'club' : IDL.Opt(IDL.Text),
+    }),
+    'Team' : IDL.Record({
+      'id' : IDL.Text,
+      'deleted' : IDL.Bool,
+      'club' : IDL.Text,
+    }),
+    'ChildTeam' : IDL.Record({ 'child' : IDL.Text, 'team' : IDL.Text }),
+    'Guardian' : IDL.Record({ 'subject' : IDL.Principal, 'child' : IDL.Text }),
+    'Excluded' : IDL.Record({ 'subject' : IDL.Principal, 'club' : IDL.Text }),
+  });
+  const Page = IDL.Record({
+    'next' : IDL.Opt(Cursor),
+    'scanned' : IDL.Nat,
+    'edges' : IDL.Vec(Edge),
+    'revision' : IDL.Nat,
   });
   const NewsAudienceRecipient = IDL.Record({
     'news_id' : IDL.Text,
@@ -184,48 +685,6 @@ export const idlFactory = ({ IDL }) => {
     'season_id' : IDL.Text,
     'name' : IDL.Text,
   });
-  const SeasonTeamAssignment = IDL.Record({
-    'season_id' : IDL.Text,
-    'added_at_ms' : IDL.Nat64,
-    'team_id' : IDL.Text,
-    'member_id' : IDL.Text,
-  });
-  const Season = IDL.Record({
-    'id' : IDL.Text,
-    'status' : IDL.Text,
-    'name' : IDL.Text,
-    'updated_at_ms' : IDL.Nat64,
-    'end_date' : IDL.Text,
-    'created_at_ms' : IDL.Nat64,
-    'start_date' : IDL.Text,
-    'club_id' : IDL.Text,
-  });
-  const PendingInvite = IDL.Record({
-    'id' : IDL.Text,
-    'status' : IDL.Text,
-    'kind' : IDL.Text,
-    'resent_at_ms' : IDL.Opt(IDL.Nat64),
-    'role' : IDL.Opt(IDL.Text),
-    'accepted_by' : IDL.Opt(IDL.Principal),
-    'team_id' : IDL.Opt(IDL.Text),
-    'email' : IDL.Text,
-    'child_id' : IDL.Opt(IDL.Text),
-    'created_at_ms' : IDL.Nat64,
-    'accepted_at_ms' : IDL.Opt(IDL.Nat64),
-    'invited_by' : IDL.Principal,
-    'club_id' : IDL.Text,
-  });
-  const Job = IDL.Record({
-    'id' : IDL.Text,
-    'resource' : IDL.Text,
-    'ciphertext' : IDL.Text,
-    'attempt' : IDL.Nat,
-    'kind' : IDL.Text,
-    'provider_id' : IDL.Text,
-    'created_at_ms' : IDL.Nat64,
-    'state' : IDL.Text,
-    'worker' : IDL.Opt(IDL.Principal),
-  });
   const CompetitionRecovery = IDL.Record({
     'relays' : IDL.Vec(IDL.Tuple(IDL.Text, Receipt)),
     'clones' : IDL.Vec(IDL.Tuple(IDL.Text, SeasonCloneReceipt)),
@@ -234,50 +693,6 @@ export const idlFactory = ({ IDL }) => {
     'invites' : IDL.Vec(PendingInvite),
     'mail' : IDL.Vec(IDL.Tuple(IDL.Text, Job)),
     'copies' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text, IDL.Text)),
-  });
-  const ClubSponsor = IDL.Record({
-    'id' : IDL.Text,
-    'website_url' : IDL.Opt(IDL.Text),
-    'name' : IDL.Text,
-    'tier' : IDL.Text,
-    'sort_order' : IDL.Nat32,
-    'description' : IDL.Opt(IDL.Text),
-    'logo_url' : IDL.Opt(IDL.Text),
-    'is_team_only' : IDL.Bool,
-    'is_active' : IDL.Bool,
-    'club_id' : IDL.Text,
-    'exposure_percentage' : IDL.Opt(IDL.Nat8),
-  });
-  const ClubProfile = IDL.Record({
-    'id' : IDL.Text,
-    'secondary_color' : IDL.Opt(IDL.Text),
-    'playhq_tenant' : IDL.Opt(IDL.Text),
-    'name' : IDL.Text,
-    'slug' : IDL.Text,
-    'description' : IDL.Opt(IDL.Text),
-    'created_at_ms' : IDL.Nat64,
-    'logo_url' : IDL.Opt(IDL.Text),
-    'sport' : IDL.Opt(IDL.Text),
-    'playhq_org_id' : IDL.Opt(IDL.Text),
-    'is_active' : IDL.Bool,
-    'primary_color' : IDL.Opt(IDL.Text),
-    'deleted_at_ms' : IDL.Opt(IDL.Nat64),
-  });
-  const RoleGrant = IDL.Record({
-    'club' : IDL.Opt(IDL.Text),
-    'role' : IDL.Text,
-    'team' : IDL.Opt(IDL.Text),
-    'user' : IDL.Principal,
-  });
-  const TeamFolder = IDL.Record({
-    'id' : IDL.Text,
-    'name' : IDL.Text,
-    'color' : IDL.Text,
-    'sort_order' : IDL.Nat32,
-    'description' : IDL.Opt(IDL.Text),
-    'created_by' : IDL.Principal,
-    'created_at_ms' : IDL.Nat64,
-    'club_id' : IDL.Text,
   });
   const ClubSnapshot = IDL.Record({
     'member' : IDL.Bool,
@@ -301,8 +716,2333 @@ export const idlFactory = ({ IDL }) => {
     'roles' : IDL.Vec(RoleGrant),
     'team_folders' : IDL.Vec(TeamFolder),
   });
+  const Main = IDL.Service({
+    'accept_identity_link' : IDL.Func(
+        [IDL.Nat64],
+        [IDL.Variant({ 'Ok' : Account, 'Err' : IDL.Text })],
+        [],
+      ),
+    'accept_parent_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'accept_pending_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : PendingInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'accept_team_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'accept_team_invite_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamInviteLink, 'Err' : IDL.Text })],
+        [],
+      ),
+    'acknowledge_directory_membership_source' : IDL.Func(
+        [Binding, IDL.Nat],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'acknowledge_retained_media' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'activate_media_quota' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'activate_media_retained_quota' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'add_role_grant' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'add_season_team_assignment' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : SeasonTeamAssignment, 'Err' : IDL.Text })],
+        [],
+      ),
+    'add_team_captain' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'admin_link_child_to_parent' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
+        [],
+      ),
+    'approve_club_join_request' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubJoinRequest, 'Err' : IDL.Text })],
+        [],
+      ),
+    'approve_role_request' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : RoleRequest, 'Err' : IDL.Text })],
+        [],
+      ),
+    'approve_team_creation_request' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamCreationRequest, 'Err' : IDL.Text })],
+        [],
+      ),
+    'archive_season' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'archive_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'assign_returning_season_players' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(IDL.Record({ 'team_id' : IDL.Text, 'member_id' : IDL.Text })),
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'begin_identity_link' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : Challenge, 'Err' : IDL.Text })],
+        [],
+      ),
+    'bulk_add_team_members' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Vec(IDL.Principal)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'can_accept_public_eoi' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
+    'cancel_media_quota' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Nat],
+        [Result],
+        [],
+      ),
+    'cancel_retained_media' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+        [Result__1],
+        [],
+      ),
+    'canister_cycles' : IDL.Func([IDL.Principal], [IDL.Nat], []),
+    'carry_over_season_players' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'check_team_name_unique' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'claim_email_job' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(
+              IDL.Record({
+                'to' : IDL.Text,
+                'job' : Job,
+                'token' : IDL.Text,
+                'subject' : IDL.Text,
+                'body' : IDL.Text,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'claim_shell_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'clear_club_theme' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'commit_media_quota' : IDL.Func([IDL.Text], [Result], []),
+    'commit_retained_media' : IDL.Func([IDL.Text], [Result__1], []),
+    'compact_email_jobs' : IDL.Func(
+        [IDL.Opt(IDL.Text), IDL.Nat],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'scanned' : IDL.Nat,
+              'next_cursor' : IDL.Opt(IDL.Text),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'configure_media_growth' : IDL.Func(
+        [IDL.Nat, IDL.Nat, IDL.Nat, IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'configure_media_growth_router' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'configure_membership_directory_source' : IDL.Func(
+        [Binding],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_child_for_parent_in_club' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_child_for_parent_on_team' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_club' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : ClubProfile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_family_invite' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(IDL.Record({ 'id' : IDL.Text, 'existing' : IDL.Bool })),
+          IDL.Bool,
+          IDL.Opt(IDL.Principal),
+        ],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'secondary' : IDL.Opt(PendingInvite),
+              'invite' : PendingInvite,
+              'child_ids' : IDL.Vec(IDL.Text),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'create_invite_short_code' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_news_post' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Vec(IDL.Text)),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
+          IDL.Bool,
+          IDL.Opt(IDL.Text),
+          IDL.Vec(NewsAttachment),
+        ],
+        [IDL.Variant({ 'Ok' : NewsPost, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_own_child' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_parent_invite' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
+        [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_pending_invite' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+        ],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'invite' : PendingInvite,
+              'payload' : InvitePayload,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'create_promo_code' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat64),
+        ],
+        [IDL.Variant({ 'Ok' : PromoCode, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_shell_team_invite' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_team_invite' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_team_invite_link' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamInviteLink, 'Err' : IDL.Text })],
+        [],
+      ),
+    'credit_deleted_retained_media' : IDL.Func(
+        [IDL.Text, Object],
+        [Result__1],
+        [],
+      ),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
+    'delete_club_permanent' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_club_term' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_news_post' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_own_child' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_pitch_formation' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_promo_code' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_sponsor' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_team_folder' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_team_permanent' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'disable_membership_directory_source' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'duplicate_season_structure' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'enrol_in_class' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : ClassEnrolment, 'Err' : IDL.Text })],
+        [],
+      ),
+    'ensure_club_conversations' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'erase_account_membership' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'erase_my_membership' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'execute' : IDL.Func([IDL.Text], [Result__2], ['query']),
+    'export_acl' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : Config, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'export_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'export_frozen_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'export_identity_state' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'export_links' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : Snapshot, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'find_pending_invite_by_email_hash' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(PendingInviteEmailHash),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'finish_email_job' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'free_usage_counters' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'teams' : IDL.Nat,
+              'members' : IDL.Nat,
+              'pending_invites' : IDL.Nat,
+              'news_posts' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'freeze_club' : IDL.Func(
+        [IDL.Text, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
+        [],
+      ),
+    'getApiDoc' : IDL.Func([], [IDL.Text], ['query']),
+    'get_app_config' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
+    'get_club_branding' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubBranding, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_general_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubGeneralSettings, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_home_countries' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'get_club_invite_message_default' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(InviteMessageDefault),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'get_club_kind' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Link), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_profile' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_profiles' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_roster' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'children' : IDL.Vec(Child),
+              'roles' : IDL.Vec(RoleGrant),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'get_club_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ClubSettings), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_storage_purchased' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_subscription' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ClubSubscription), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_subscriptions' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubSubscription), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_theme_json' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(IDL.Text)],
+        ['query'],
+      ),
+    'get_current_season' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Season), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_guardian_relationships' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GuardianMeta), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_media_allowance' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'limit_bytes' : IDL.Nat,
+              'premium' : IDL.Bool,
+              'team_scoped' : IDL.Bool,
+              'base_bytes' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'get_my_accessibility_prefs' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_my_theme_preference' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_parent_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_pending_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : PendingInvite, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_pending_invite_label' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(IDL.Text)],
+        ['query'],
+      ),
+    'get_prepared_media_quota' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Reservation), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_public_eoi_config' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(
+              IDL.Record({
+                'club_logo_url' : IDL.Opt(IDL.Text),
+                'season_id' : IDL.Text,
+                'season_name' : IDL.Text,
+                'config_json' : IDL.Opt(IDL.Text),
+                'club_name' : IDL.Text,
+                'club_id' : IDL.Text,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'get_season_eoi_config' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_shell_team_by_token' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_sponsor' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ClubSponsor), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_team_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamInvite, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_team_invite_link_by_token' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamInviteLink, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_team_pitch_notify' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : PitchNotifyFlags, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_team_player_positions' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamPlayerPosition), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_team_player_positions_v2' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(TeamPlayerPositionAssignment),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'get_team_subscription' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(TeamSubscription), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_team_subscriptions' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamSubscription), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_team_welcome_email' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(TeamWelcomeEmail), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_teams' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_welcome_email_job' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : WelcomeEmailJob, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'has_child_guardian' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
+    'has_club_staff_role' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
+    'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
+    'import_club_snapshot' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'import_frozen_club' : IDL.Func(
+        [IDL.Text, Listing],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'import_links' : IDL.Func(
+        [Snapshot],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'import_media_quota_store' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'import_media_retained_store' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'invite_stats' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : InviteStats, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'is_app_admin' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
+    'is_club_member' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
+    'is_member_removed' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Bool],
+        ['query'],
+      ),
+    'is_user_on_any_team' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Principal],
+        [IDL.Bool],
+        ['query'],
+      ),
+    'link_guardian' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'list_accepted_invites' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AcceptedInvite), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_all_sponsors' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubSponsor), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_association_clubs' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_child_guardians' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_children' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Child), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_class_enrolments' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClassEnrolment), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_club_admins' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(IDL.Principal)],
+        ['query'],
+      ),
+    'list_club_join_requests' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubJoinRequest), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_club_terms' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTerm), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_clubs' : IDL.Func(
+        [IDL.Opt(IDL.Text), IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_links' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_member_payments' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(MemberPayment), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_my_children' : IDL.Func([], [IDL.Vec(Child)], ['query']),
+    'list_my_personal_teams' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_my_removed_clubs' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_news' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_news_authorized' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
+        [],
+      ),
+    'list_news_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_news_targets' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text, IDL.Text)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'list_online_presence' : IDL.Func(
+        [IDL.Nat],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'list_pending_invites_by_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PendingInvite), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_pitch_formations' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PitchFormation), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_promo_codes' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PromoCode), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_removed_members' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RemovedMember), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_role_grants' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AccountRole), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_role_requests' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RoleRequest), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_season_player_stats' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(SeasonPlayerStat), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_season_team_assignment' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(SeasonTeamAssignment),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'list_season_team_summary' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(SeasonTeamSummary), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_seasons' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_sponsors' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubSponsor), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_sponsors_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubSponsor), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_team_captains' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamCaptain), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_team_creation_requests' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(TeamCreationRequest),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'list_team_folders' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamFolder), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_team_invite_links' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamInviteLink), 'Err' : IDL.Text })],
+        [],
+      ),
+    'list_team_invites' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamInvite), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_team_role_grants' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AccountRole), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_team_sponsor_allocations' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(TeamSponsorAllocation),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'list_teams' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_teams_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_unaffiliated_clubs' : IDL.Func(
+        [IDL.Text, IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_user_club_roles' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Opt(IDL.Text)))],
+        ['query'],
+      ),
+    'mark_member_paid' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Float64,
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : MemberPayment, 'Err' : IDL.Text })],
+        [],
+      ),
+    'media_quota_cutover_status' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'stores' : IDL.Vec(IDL.Tuple(IDL.Principal, Progress)),
+            'active' : IDL.Bool,
+            'started' : IDL.Bool,
+          }),
+        ],
+        ['query'],
+      ),
+    'media_quota_ready' : IDL.Func([], [IDL.Bool], ['query']),
+    'memory_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'memory_bytes' : IDL.Nat,
+            'stable_bytes' : IDL.Nat,
+            'heap_bytes' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
+    'merge_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'move_child_to_team' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
+        [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
+        [],
+      ),
+    'move_member_to_team' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Opt(IDL.Text), IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'move_pending_invite_team' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : PendingInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'move_season_team_assignment' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : SeasonTeamAssignment, 'Err' : IDL.Text })],
+        [],
+      ),
+    'mutate' : IDL.Func(
+        [Request__1],
+        [IDL.Variant({ 'Ok' : Mutation, 'Err' : IDL.Text })],
+        [],
+      ),
+    'my_role_grants' : IDL.Func([], [IDL.Vec(RoleGrant)], ['query']),
+    'prepare_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'prepare_deleted_retained_media' : IDL.Func(
+        [IDL.Text, Object],
+        [Result__1],
+        [],
+      ),
+    'prepare_media_quota_reservation' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text, IDL.Text, IDL.Nat],
+        [Result],
+        [],
+      ),
+    'prepare_my_broadcast_erasure' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'profile_team_history' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(ProfileTeamHistoryEntry)],
+        ['query'],
+      ),
+    'publish_season' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'purge_club_snapshot' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'purge_expired_deletions' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'purge_my_broadcast_data' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'queue_pending_invite_email' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_execute' : IDL.Func([IDL.Text], [Result__2], []),
+    'read_account_find_pending_invite_by_email_hash' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(PendingInviteEmailHash),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_free_usage_counters' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'teams' : IDL.Nat,
+              'members' : IDL.Nat,
+              'pending_invites' : IDL.Nat,
+              'news_posts' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_club_branding' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubBranding, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_club_general_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubGeneralSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_club_invite_message_default' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(InviteMessageDefault),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_club_kind' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_club_roster' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'children' : IDL.Vec(Child),
+              'roles' : IDL.Vec(RoleGrant),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_current_season' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Season), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_guardian_relationships' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GuardianMeta), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_my_accessibility_prefs' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_my_theme_preference' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_parent_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_season_eoi_config' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_shell_team_by_token' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_team_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_team_invite_link_by_token' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamInviteLink, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_team_pitch_notify' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : PitchNotifyFlags, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_team_player_positions' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamPlayerPosition), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_get_team_player_positions_v2' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(TeamPlayerPositionAssignment),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_get_team_welcome_email' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(TeamWelcomeEmail), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_has_child_guardian' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
+    'read_account_has_club_staff_role' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
+    'read_account_invite_stats' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : InviteStats, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_is_app_admin' : IDL.Func([IDL.Principal], [IDL.Bool], []),
+    'read_account_is_club_member' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
+    'read_account_is_user_on_any_team' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Principal],
+        [IDL.Bool],
+        [],
+      ),
+    'read_account_list_accepted_invites' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AcceptedInvite), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_child_guardians' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_children' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Child), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_class_enrolments' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClassEnrolment), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_club_join_requests' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubJoinRequest), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_club_terms' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTerm), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_links' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_member_payments' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(MemberPayment), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_my_children' : IDL.Func([], [IDL.Vec(Child)], []),
+    'read_account_list_my_personal_teams' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_my_removed_clubs' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_news' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_news_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_news_targets' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text, IDL.Text)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_online_presence' : IDL.Func(
+        [IDL.Nat],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_pending_invites_by_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PendingInvite), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_pitch_formations' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PitchFormation), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_promo_codes' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PromoCode), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_removed_members' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RemovedMember), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_role_grants' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AccountRole), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_role_requests' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RoleRequest), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_season_player_stats' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(SeasonPlayerStat), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_season_team_assignment' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(SeasonTeamAssignment),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_season_team_summary' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(SeasonTeamSummary), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_seasons' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_team_captains' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamCaptain), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_team_creation_requests' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(TeamCreationRequest),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_account_list_team_invites' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamInvite), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_team_role_grants' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AccountRole), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_list_user_club_roles' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Opt(IDL.Text)))],
+        [],
+      ),
+    'read_account_membership_erased' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
+        [IDL.Bool],
+        [],
+      ),
+    'read_account_my_role_grants' : IDL.Func([], [IDL.Vec(RoleGrant)], []),
+    'read_account_profile_team_history' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(ProfileTeamHistoryEntry)],
+        [],
+      ),
+    'read_account_read_competition_team_access' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [
+          IDL.Record({
+            'can_manage' : IDL.Bool,
+            'is_member' : IDL.Bool,
+            'club_id' : IDL.Opt(IDL.Text),
+          }),
+        ],
+        [],
+      ),
+    'read_account_read_season_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_removal_drain' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_account_whoami' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : Account, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_club_media_references' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Page__1, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_club_retained_media_bytes' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'pending' : IDL.Nat, 'finalized' : IDL.Nat }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_competition_team_access' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [
+          IDL.Record({
+            'can_manage' : IDL.Bool,
+            'is_member' : IDL.Bool,
+            'club_id' : IDL.Opt(IDL.Text),
+          }),
+        ],
+        ['query'],
+      ),
+    'read_directory_membership_source_page' : IDL.Func(
+        [Binding, IDL.Opt(Cursor)],
+        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_directory_membership_status' : IDL.Func(
+        [Binding],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'pending' : IDL.Bool,
+              'acknowledged' : IDL.Nat,
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_event_notification_membership' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'guardians' : IDL.Vec(
+                IDL.Record({ 'user' : IDL.Principal, 'child_id' : IDL.Text })
+              ),
+              'children' : IDL.Vec(
+                IDL.Record({
+                  'id' : IDL.Text,
+                  'teams' : IDL.Vec(IDL.Text),
+                  'parent' : IDL.Opt(IDL.Principal),
+                })
+              ),
+              'roles' : IDL.Vec(
+                IDL.Record({
+                  'role' : IDL.Text,
+                  'user' : IDL.Principal,
+                  'team_id' : IDL.Opt(IDL.Text),
+                  'club_id' : IDL.Text,
+                })
+              ),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_family_invite_receipt' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'accepted_by' : IDL.Principal,
+              'team_id' : IDL.Opt(IDL.Text),
+              'accepted_at_ms' : IDL.Nat64,
+              'already_accepted' : IDL.Bool,
+              'child_ids' : IDL.Vec(IDL.Text),
+              'club_id' : IDL.Text,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_group_opening_configuration' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
+    'read_has_child_guardian' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
+    'read_has_club_membership' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
+    'read_has_club_staff_role' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
+    'read_media_quota_store_registry' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'stores' : IDL.Vec(IDL.Principal),
+              'active' : IDL.Bool,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_media_retained_ready' : IDL.Func([], [IDL.Bool], []),
+    'read_membership_directory_source_binding' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'enabled' : IDL.Bool,
+              'binding' : IDL.Opt(Binding),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_membership_discovery_status' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'pending' : IDL.Bool,
+              'acknowledged' : IDL.Nat,
+              'revision' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_membership_source_page' : IDL.Func(
+        [IDL.Opt(Cursor)],
+        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_my_club_memberships' : IDL.Func(
+        [IDL.Nat, IDL.Nat16],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'clubs' : IDL.Vec(IDL.Text),
+              'next' : IDL.Opt(IDL.Nat),
+              'acl_revision' : IDL.Nat64,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_my_club_memberships_indexed' : IDL.Func(
+        [IDL.Opt(IDL.Text), IDL.Nat16],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'clubs' : IDL.Vec(IDL.Text),
+              'next' : IDL.Opt(IDL.Text),
+              'acl_revision' : IDL.Nat64,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_removal_media_registry' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'stores' : IDL.Vec(IDL.Principal),
+              'active' : IDL.Bool,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'read_season_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'read_season_teams' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_vault_erasure_scope' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Bool],
+        ['query'],
+      ),
+    'reconcile_competition_broadcast' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Nat16), 'Err' : IDL.Text })],
+        [],
+      ),
+    'reconcile_email_job' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'record_presence_heartbeat' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'redeem_club_storage_promo_code' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'redeem_team_promo_code' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
+        [],
+      ),
+    'register_media_quota_store' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'reject_club_join_request' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubJoinRequest, 'Err' : IDL.Text })],
+        [],
+      ),
+    'reject_role_request' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : RoleRequest, 'Err' : IDL.Text })],
+        [],
+      ),
+    'reject_team_creation_request' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamCreationRequest, 'Err' : IDL.Text })],
+        [],
+      ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
+    'relay_competition_broadcast' : IDL.Func(
+        [
+          IDL.Principal,
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(IDL.Text),
+          IDL.Vec(IDL.Principal),
+          IDL.Text,
+          IDL.Text,
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
+    'relay_event_notice' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
+    'relay_gallery_notice' : IDL.Func(
+        [
+          IDL.Principal,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Principal,
+          IDL.Opt(IDL.Principal),
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
+    'relay_group_pitch_alert' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
+    'remove_member' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'remove_role_grant' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'remove_season_team_assignment' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'remove_team_captain' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'replace_acl' : IDL.Func(
+        [IDL.Nat64, Acl],
+        [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
+        [],
+      ),
+    'request_club_join' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubJoinRequest, 'Err' : IDL.Text })],
+        [],
+      ),
+    'request_role' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : RoleRequest, 'Err' : IDL.Text })],
+        [],
+      ),
+    'request_team_creation' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : TeamCreationRequest, 'Err' : IDL.Text })],
+        [],
+      ),
+    'resend_pending_invite' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'invite' : PendingInvite,
+              'payload' : InvitePayload,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'reserve_media_quota' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Nat, IDL.Nat],
+        [Result],
+        [],
+      ),
+    'reserve_retained_media' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat],
+        [Result__1],
+        [],
+      ),
+    'resolve_invite_short_code' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'restore_club' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubProfile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'restore_member' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'restore_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'retire_media_quota_records' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'reservation_cursor' : IDL.Text,
+              'usage_cursor' : IDL.Text,
+              'removed' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'retire_retained_media_records' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'cursor' : IDL.Text, 'removed' : IDL.Nat }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'revoke_identity' : IDL.Func(
+        [IDL.Principal, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : Account, 'Err' : IDL.Text })],
+        [],
+      ),
+    'revoke_linked_principal' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'revoke_pending_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'revoke_team_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'revoke_team_invite_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'rollover_season' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'rotate_team_invite_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamInviteLink, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_club_profile' : IDL.Func(
+        [ClubProfile],
+        [IDL.Variant({ 'Ok' : ClubProfile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_club_settings' : IDL.Func(
+        [ClubSettings],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_club_subscription' : IDL.Func(
+        [ClubSubscription],
+        [IDL.Variant({ 'Ok' : ClubSubscription, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_club_term' : IDL.Func(
+        [ClubTerm],
+        [IDL.Variant({ 'Ok' : ClubTerm, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_pitch_formation' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat32, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : PitchFormation, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_season' : IDL.Func(
+        [Season],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_season_player_stat' : IDL.Func(
+        [SeasonPlayerStat],
+        [IDL.Variant({ 'Ok' : SeasonPlayerStat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_season_team_summary' : IDL.Func(
+        [SeasonTeamSummary],
+        [IDL.Variant({ 'Ok' : SeasonTeamSummary, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_sponsor' : IDL.Func(
+        [ClubSponsor],
+        [IDL.Variant({ 'Ok' : ClubSponsor, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_team' : IDL.Func(
+        [ClubTeam],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_team_folder' : IDL.Func(
+        [TeamFolder],
+        [IDL.Variant({ 'Ok' : TeamFolder, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_team_pitch_settings' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Bool,
+          IDL.Nat32,
+          IDL.Bool,
+          IDL.Bool,
+          IDL.Bool,
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
+          IDL.Bool,
+        ],
+        [IDL.Variant({ 'Ok' : TeamSubscription, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_team_subscription' : IDL.Func(
+        [TeamSubscription],
+        [IDL.Variant({ 'Ok' : TeamSubscription, 'Err' : IDL.Text })],
+        [],
+      ),
+    'schema' : IDL.Func([], [IDL.Text], ['query']),
+    'seal_account_removal' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [],
+      ),
+    'send_fee_reminders' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_accessibility_prefs' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_app_config' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_general_settings' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Bool, IDL.Nat, IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubGeneralSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_header_toggles' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_home_country' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_invite_email_style' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_invite_message_default' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : InviteMessageDefault, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_kind' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_logo_only_mode' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_parent_org' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_switcher_hint' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_term_status' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTerm, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_theme_enabled' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_theme_json' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_theme_palette' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_competition_authorities' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_competition_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_email_workers' : IDL.Func(
+        [IDL.Vec(IDL.Principal)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_events_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_gallery_media_authority' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_guardian_relationship' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_identity_access_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_messaging_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_mini_league_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_news_post_target' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_notification_queue_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_own_child_guardian' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_own_child_team' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_owner_test_deletion_identity' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_pending_invite_email_hash' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_pending_invite_label' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_pii_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_promo_code_active' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_season_eoi_config' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_season_public_eoi_config' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_team_folder' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_team_pitch_notify' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Bool, IDL.Bool],
+        [IDL.Variant({ 'Ok' : PitchNotifyFlags, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_team_player_position' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_team_player_positions_v2' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Vec(IDL.Text), IDL.Opt(IDL.Nat16)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_team_sponsor_allocation' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_team_welcome_email' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamWelcomeEmail, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_theme_preference' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'settle_prepared_media_quota' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Bool],
+        [Result],
+        [],
+      ),
+    'soft_delete_club' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubProfile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'soft_delete_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'start_media_quota_cutover' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'start_media_retained_cutover' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'sync_my_linked_account' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'transfer_governorship' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'unarchive_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'unfreeze_club' : IDL.Func(
+        [IDL.Text, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'unlink_guardian' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'unmark_member_paid' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'update_news_post' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Vec(IDL.Text)),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
+          IDL.Bool,
+          IDL.Opt(IDL.Text),
+          IDL.Vec(NewsAttachment),
+          IDL.Nat64,
+        ],
+        [IDL.Variant({ 'Ok' : NewsPost, 'Err' : IDL.Text })],
+        [],
+      ),
+    'update_pending_invite_role' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : PendingInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'usage_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'teams' : IDL.Nat,
+            'clubs' : IDL.Nat,
+            'accounts' : IDL.Nat,
+            'news_posts' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
+    'whoami' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : Account, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'withdraw_from_class' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'zz_migrate_schema' : IDL.Func([ClubSnapshot], [], ['query']),
+  });
   
-  return IDL.Service({ 'schema' : IDL.Func([ClubSnapshot], [], ['query']) });
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };
