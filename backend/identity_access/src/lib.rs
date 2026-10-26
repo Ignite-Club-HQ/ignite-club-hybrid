@@ -1878,7 +1878,6 @@ fn search_profiles(query: String, limit: u16) -> Outcome<Vec<ProfileSearchResult
     Ok(results)
 }
 
-/// Every role grant held by the caller, across all clubs/teams.
 /// Purpose-bound full search. Browser-supplied authority IDs are locations,
 /// never permissions: only pinned membership sources may verify this child.
 #[ic_cdk::update]
@@ -1891,10 +1890,7 @@ async fn search_guardian_profiles(authority: Principal, child: String, query: St
     let reply = ic_cdk::call::Call::bounded_wait(authority, "read_has_child_guardian")
         .with_args(&(caller, child.clone())).await.map_err(|_| "Guardian verification unavailable")?;
     let guardian: bool = reply.candid().map_err(|_| "Invalid guardian verification")?;
-    if !guardian { return Err("Verified guardian relationship required".into()); }
-    if account_for_write(caller)? != account || !config.same_configuration(&directory_config()?) {
-        return Err("Account or child authority changed".into());
-    }
+    guardian_search::permit_disclosure(guardian, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
     // Retain active principals only; a UUID is never used as a role principal.
     let mut results = Vec::new();
     for profile in all_profiles() {
@@ -1911,12 +1907,12 @@ async fn search_guardian_profiles(authority: Principal, child: String, query: St
     let reply = ic_cdk::call::Call::bounded_wait(authority, "read_has_child_guardian")
         .with_args(&(caller, child)).await.map_err(|_| "Guardian verification unavailable")?;
     let guardian: bool = reply.candid().map_err(|_| "Invalid guardian verification")?;
-    if !guardian || account_for_write(caller)? != account || !config.same_configuration(&directory_config()?) {
-        return Err("Guardian relationship or account changed".into());
-    }
+    guardian_search::permit_disclosure(guardian, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+    results.retain(|result| account_for_write(result.principal).is_ok());
     Ok(results)
 }
 
+/// Every role grant held by the caller, across all clubs/teams.
 #[ic_cdk::query]
 fn my_roles() -> Outcome<Vec<RoleGrant>> {
     let state = state();

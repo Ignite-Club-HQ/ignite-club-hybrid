@@ -48,7 +48,7 @@ mod tests {
         assert!(permit_disclosure(true, true, true).is_ok());
     }
     #[test]
-    fn_account_or_authority_drift_refuses_disclosure() {
+    fn account_or_authority_drift_refuses_disclosure() {
         assert!(permit_disclosure(true, false, true).is_err());
         assert!(permit_disclosure(true, true, false).is_err());
     }
