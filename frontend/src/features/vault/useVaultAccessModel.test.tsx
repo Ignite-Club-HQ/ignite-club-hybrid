@@ -17,6 +17,9 @@ import type { VaultClubSummary } from "./vaultAccessRepository";
 const fetchVaultAppAdmin = vi.fn<(userId: string) => Promise<boolean>>();
 const fetchVaultUserRoles = vi.fn<(userId: string, client?: unknown, selectedClubId?: string | null) => Promise<any[]>>();
 const featureRouting = vi.hoisted(() => ({ icp: false }));
+const warmFolders = vi.hoisted(() => vi.fn(async () => []));
+const warmItems = vi.hoisted(() => vi.fn(async () => []));
+vi.mock("./vaultReadRepository", () => ({ fetchVaultSubfolders: warmFolders, fetchVaultItems: warmItems }));
 vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => featureRouting.icp }));
 const fetchVaultAccessibleClubs = vi.fn<(userId: string, isAppAdmin: boolean, client?: unknown, selectedClubId?: string | null) => Promise<VaultClubSummary[]>>();
 const fetchVaultClubHasPro = vi.fn<(clubId: string) => Promise<boolean>>();
@@ -91,6 +94,8 @@ function renderAccessModel(overrides: {
 }
 
 beforeEach(() => {
+  warmFolders.mockClear();
+  warmItems.mockClear();
   featureRouting.icp = false;
   fetchVaultAppAdmin.mockReset().mockResolvedValue(false);
   fetchVaultUserRoles.mockReset().mockResolvedValue([]);
@@ -348,6 +353,21 @@ describe("useVaultAccessModel — root auto-navigation", () => {
 });
 
 describe("useVaultAccessModel — eligible clubs query", () => {
+  it("warms root club folders only for the caller's qualifying club roles", async () => {
+    featureRouting.icp = true;
+    fetchVaultUserRoles.mockResolvedValue([{ role: "coach", club_id: "club-a", team_id: null }]);
+    fetchVaultAnyProAccess.mockResolvedValue(true);
+    fetchVaultAccessibleClubs.mockResolvedValue([
+      { id: "club-a", name: "Club A", is_pro: true, storage_used_bytes: 0 },
+      { id: "club-b", name: "Club B", is_pro: true, storage_used_bytes: 0 },
+    ]);
+    renderAccessModel();
+    await waitFor(() => expect(warmFolders).toHaveBeenCalledTimes(1));
+    expect(warmFolders).toHaveBeenCalledWith(expect.objectContaining({ view: clubView, clubRoles: new Set(["coach"]) }));
+    expect(warmItems).toHaveBeenCalledTimes(1);
+    expect(fetchVaultClubHasPro).toHaveBeenCalledWith("club-a");
+    expect(fetchVaultClubHasPro).not.toHaveBeenCalledWith("club-b");
+  });
   it("reveals the loaded selected club immediately while its exact allowance is pending, without granting access from labels", async () => {
     featureRouting.icp = true;
     fetchVaultUserRoles.mockResolvedValue([{ role: "club_admin", club_id: "club-a", team_id: null }]);

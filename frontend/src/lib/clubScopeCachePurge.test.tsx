@@ -13,12 +13,15 @@ describe("Next Up club-switch cache isolation", () => {
     client.setQueryData(directory, [{ id: "giddy-goat" }]);
     client.setQueryData(selected, [{ id: "giddy-goat", is_pro: true }]);
     client.setQueryData(allowance, true);
+    const folders = ["vault-subfolders", { type: "club", clubId: "giddy-goat" }, true, true, false, "coach", "paul", true];
+    client.setQueryData(folders, ["goat-folder"]);
     client.setQueryData(["vault-files"], ["private"]);
     client.setQueryData(["vault-clubs"], ["ambiguous"]);
     purgeClubScopedQueryCache(client);
     expect(client.getQueryData(directory)).toEqual([{ id: "giddy-goat" }]);
     expect(client.getQueryData(selected)).toEqual([{ id: "giddy-goat", is_pro: true }]);
     expect(client.getQueryData(allowance)).toBe(true);
+    expect(client.getQueryData(folders)).toEqual(["goat-folder"]);
     expect(client.getQueryData(["vault-files"])).toBeUndefined();
     expect(client.getQueryData(["vault-clubs"])).toBeUndefined();
     expect(client.getQueryState(directory)?.isInvalidated).toBe(false);
