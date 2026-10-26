@@ -330,6 +330,12 @@ function SupabaseAdminPage() {
               description="Live memory, fuel and club counts per group and per canister"
               onClick={() => navigate("/admin/group-infrastructure")}
             />
+            <AdminMenuItem
+              icon={Globe2}
+              label="Migrate Club"
+              description="Move one Supabase club into a chosen canister group"
+              onClick={() => navigate("/admin/club-migration")}
+            />
           </CardContent>
         </Card>
       )}
