@@ -22,7 +22,7 @@ export async function searchScopedClubProfiles(
   signal?: AbortSignal,
 ) {
   assertActive(signal);
-  if (!clubId.trim() || query.trim().length > 80 || !Number.isInteger(limit) || limit < 1 || limit > 25) throw new Error("Invalid club person search.");
+  if (!clubId.trim() || clubId !== clubId.trim() || query.trim().length > 80 || !Number.isInteger(limit) || limit < 1 || limit > 25) throw new Error("Invalid club person search.");
   if (query.trim().length < 2) return [];
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   const matches: Awaited<ReturnType<typeof searchScopedProfileCandidates>> = [];
@@ -96,6 +96,20 @@ export async function searchScopedProfileCandidates(
     if (rows.some(row => !requested.has(row.principal.toText()))) throw new Error("Person search returned an unexpected identity.");
     const hydrated = await hydratePrivateProfileNames(ctx, rows);
     assertActive(signal);
+    // Decryption adds asynchronous authorization boundaries. Verify identity
+    // admission and both memberships again, not just the club page revision:
+    // account links and profile references can change without that revision.
+    if (rows.length) {
+      const confirmed = await client.readClubProfiles(authority, clubId, subjects);
+      assertActive(signal);
+      const original = new Map(rows.map(row => [row.principal.toText(), row]));
+      const final = new Map(confirmed.map(row => [row.principal.toText(), row]));
+      if (original.size !== rows.length || final.size !== confirmed.length || final.size !== original.size
+        || confirmed.some(row => {
+          const prior = original.get(row.principal.toText());
+          return !prior || prior.account_id !== row.account_id || prior.display_name !== row.display_name;
+        })) throw new Error("Person search authority changed; please try again.");
+    }
     return hydrated.filter(row => row.display_name?.toLocaleLowerCase().includes(needle)).slice(0, limit).map(row => ({
       id: row.principal.toText(),
       account_id: row.account_id,

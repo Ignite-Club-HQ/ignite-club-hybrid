@@ -1,0 +1,32 @@
+import Principal "mo:core/Principal";
+import Runtime "mo:core/Runtime";
+// Disposable authorization transport only; never referenced by production.
+persistent actor class PrivateProfileClubRelay(owner : Principal, authority : Principal, pii : Principal) = this {
+  var calls : Nat = 0;
+  var holdAt : Nat = 0;
+  var held : Nat = 0;
+  var released : Bool = true;
+  public shared ({ caller }) func hold_on(n : Nat) : async () {
+    if (caller != owner or (n != 1 and n != 2)) Runtime.trap("Exact owner test reply required");
+    calls := 0; holdAt := n; held := 0; released := false;
+  };
+  public shared ({ caller }) func release() : async () {
+    if (caller != owner) Runtime.trap("Test owner required");
+    released := true;
+  };
+  public query func progress() : async (Nat, Nat, Bool) { (calls, held, released) };
+  public shared ({ caller }) func pulse() : async () {
+    if (caller != Principal.fromActor(this)) Runtime.trap("Local pulse required");
+  };
+  public shared ({ caller }) func read_has_club_staff_role(subject : Principal, club : Text) : async Bool {
+    if (caller != pii) Runtime.trap("Exact PII test service required");
+    let actual : actor { read_has_club_staff_role : shared (Principal, Text) -> async Bool } = actor(authority.toText());
+    let decision = await actual.read_has_club_staff_role(subject, club);
+    calls += 1;
+    if (calls == holdAt and not released) {
+      held := calls;
+      while (not released) { await this.pulse() };
+    };
+    decision
+  };
+}
