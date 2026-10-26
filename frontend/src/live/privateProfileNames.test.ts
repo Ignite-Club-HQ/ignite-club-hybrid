@@ -162,6 +162,25 @@ describe("original-authority display rehearsal", () => {
     expect(await hydratePrivateProfileNames(ctx, [{ display_name: foreignReference }], { resolveAuthority: async () => ({ context: ctx, confirm: async () => {} }) })).toEqual([{ display_name: null }]);
     expect(mocks.read).not.toHaveBeenCalled();
   });
+  it("bounds stalled original-authority discovery without starting private reads", async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = hydratePrivateProfileNames(ctx, [{ display_name: foreignReference }], { resolveAuthority: () => new Promise(() => {}) });
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(await pending).toEqual([{ display_name: null }]);
+      expect(mocks.read).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+  it("withholds decrypted names if closing authority confirmation stalls", async () => {
+    vi.useFakeTimers();
+    try {
+      const route = lease(vi.fn(() => new Promise<void>(() => {})));
+      const pending = hydratePrivateProfileNames(ctx, [{ display_name: foreignReference }], { resolveAuthority: async () => route });
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(await pending).toEqual([{ display_name: null }]);
+      expect(mocks.decrypt).toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
   it("does not fetch keys after a timed-out ciphertext read eventually returns", async () => {
     vi.useFakeTimers();
     try {

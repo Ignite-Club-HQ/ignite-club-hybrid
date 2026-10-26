@@ -125,6 +125,16 @@ async function boundedRead(ctx: FeatureBackendContext, subjects: string[], activ
   }
 }
 
+async function boundedAuthorityCheck<T>(read: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Private profile authority check timed out.")), READ_TIMEOUT_MS); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
 /** Purely display enrichment. No new persistent names/cache, no grants and no
  * guessed group searches. Legacy names take the zero-network path unchanged.
  * Foreign authorities require the explicit rehearsal resolver; existing readers
@@ -171,7 +181,7 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
       active();
       let lease = leases.get(authority);
       if (!lease) {
-        lease = options.resolveAuthority ? await options.resolveAuthority(authority) : { context: ctx, confirm: async () => {} };
+        lease = options.resolveAuthority ? await boundedAuthorityCheck(() => options.resolveAuthority ? options.resolveAuthority(authority) : Promise.reject(new Error("Missing original authority resolver."))) : { context: ctx, confirm: async () => {} };
         active();
         if (lease.context.identity !== identity || lease.context.target.host !== ctx.target.host || lease.context.target.networkKind !== ctx.target.networkKind || lease.context.target.canisterIds.pii_access_control !== authority) throw new Error("Invalid original private profile route.");
         leases.set(authority, lease);
@@ -185,7 +195,7 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
   };
   for (let start = 0; start < jobs.length; start += 2) await Promise.all(jobs.slice(start, start + 2).map(readJob));
   for (const [authority, lease] of leases) {
-    try { active(); await lease.confirm(); active(); } catch { names.delete(authority); }
+    try { active(); await boundedAuthorityCheck(lease.confirm); active(); } catch { names.delete(authority); }
   }
   active();
   return profiles.map((profile, index) => {
