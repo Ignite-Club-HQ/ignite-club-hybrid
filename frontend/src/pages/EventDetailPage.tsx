@@ -318,11 +318,6 @@ export default function EventDetailPage() {
           // are decrypted here (club-scoped read grants let club members
           // read them). Best effort — a name the caller cannot read falls
           // back to the no-enrichment rendering, never an error state.
-          const childIds = [...new Set(
-            (roster.rsvps ?? [])
-              .map(({ rsvp }) => (Array.isArray(rsvp.child_id) && rsvp.child_id.length > 0 ? rsvp.child_id[0] : null))
-              .filter((c): c is string => !!c),
-          )];
           // Publish the authorized RSVP rows first; private names load independently below.
           const childNames = new Map<string, string>();
           const rows = (roster.rsvps ?? []).map(({ rsvp, child }) => {
