@@ -1263,6 +1263,11 @@ persistent actor class Main(governorInit : Principal) = this {
     if (ids.size() > 64 or ids.any(func(p) = p.equal(Principal.anonymous()))) return #Err("Invalid authorities");
     competitionAuthorities := ids; #Ok
   };
+  // Team-scoped endpoints resolve the owning club from the team records
+  // first (save_team only writes there), then the legacy ACL mirror.
+  func liveTeamRef(teamId : Text) : ?{ id : Text; club : Text } {
+    switch (liveTeamClub(teamId)) { case (?club) ?{ id = teamId; club }; case null null }
+  };
   func liveTeamClub(teamId : Text) : ?Text {
     switch (teams.find(func(t) = t.id == teamId and t.deleted_at_ms == null)) {
       case (?t) ?t.club_id;
@@ -4711,7 +4716,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     auth(caller);
-    switch (acl.children.find(func(c) = c.id == child_id), acl.teams.find(func(t) = t.id == team_id)) {
+    switch (acl.children.find(func(c) = c.id == child_id), liveTeamRef(team_id)) {
       case (null, _) { #Err("Child not found") };
       case (_, null) { #Err("Team not found") };
       case (?child, ?team) {
@@ -4781,7 +4786,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     auth(caller);
-    switch (acl.teams.find(func(t) = t.id == to_team)) {
+    switch (liveTeamRef(to_team)) {
       case null { #Err("Target team not found") };
       case (?team) {
         if (not canManageTeam(caller, team.club, ?to_team)) return #Err("Team or club admin required");
@@ -4963,7 +4968,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public query ({ caller }) func get_team_player_positions(team_id : Text) : async { #Ok : [Types.TeamPlayerPosition]; #Err : Text } {
     denyLegacyAccountQuery();
-    switch (acl.teams.find(func(t) = t.id == team_id)) {
+    switch (liveTeamRef(team_id)) {
       case null { #Err("Team not found") };
       case (?team) {
         if (not isMember(caller, team.club)) return #Err("Forbidden");
@@ -4977,7 +4982,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     auth(caller);
-    switch (acl.teams.find(func(t) = t.id == team_id)) {
+    switch (liveTeamRef(team_id)) {
       case null { #Err("Team not found") };
       case (?team) {
         if (not canManageTeam(caller, team.club, ?team_id)) return #Err("Team or club admin required");
@@ -4994,7 +4999,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public query ({ caller }) func get_team_player_positions_v2(team_id : Text) : async { #Ok : [Types.TeamPlayerPositionAssignment]; #Err : Text } {
     denyLegacyAccountQuery();
-    switch (acl.teams.find(func(t) = t.id == team_id)) {
+    switch (liveTeamRef(team_id)) {
       case null { #Err("Team not found") };
       case (?team) {
         if (not isMember(caller, team.club)) return #Err("Forbidden");
@@ -5008,7 +5013,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     auth(caller);
-    switch (acl.teams.find(func(t) = t.id == team_id)) {
+    switch (liveTeamRef(team_id)) {
       case null { #Err("Team not found") };
       case (?team) {
         if (not canManageTeam(caller, team.club, ?team_id)) return #Err("Team or club admin required");
@@ -5053,7 +5058,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
   public query ({ caller }) func list_team_captains(team_id : Text) : async { #Ok : [Types.TeamCaptain]; #Err : Text } {
     denyLegacyAccountQuery();
-    switch (acl.teams.find(func(t) = t.id == team_id)) {
+    switch (liveTeamRef(team_id)) {
       case null { #Err("Team not found") };
       case (?team) {
         if (not isMember(caller, team.club)) return #Err("Forbidden");
@@ -7686,7 +7691,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await admitAccount(caller);
-    switch (acl.teams.find(func(t) = t.id == team_id)) {
+    switch (liveTeamRef(team_id)) {
       case null { #Err("Team not found") };
       case (?team) {
         if (not isMember(caller, team.club)) return #Err("Forbidden");
@@ -7701,7 +7706,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await admitAccount(caller);
-    switch (acl.teams.find(func(t) = t.id == team_id)) {
+    switch (liveTeamRef(team_id)) {
       case null { #Err("Team not found") };
       case (?team) {
         if (not isMember(caller, team.club)) return #Err("Forbidden");
@@ -7716,7 +7721,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await admitAccount(caller);
-    switch (acl.teams.find(func(t) = t.id == team_id)) {
+    switch (liveTeamRef(team_id)) {
       case null { #Err("Team not found") };
       case (?team) {
         if (not isMember(caller, team.club)) return #Err("Forbidden");

@@ -23,3 +23,6 @@ Changing a match captain currently removes old assignments and adds the new assi
 ## Acceptance
 
 Deploy the frontend, open the affected event as Paul, and verify the Captain section and player picker. If it fails, record whether the consolidated inline explanation identifies the match check or season check. Inspect that exact protected API response before making further backend changes; do not increase deadlines again or bypass admission.
+## Follow-up — confirmed season-captain cause
+
+Paul's screenshot showed the season check failing with a not-found category. `list_team_captains` / `read_account_list_team_captains` checked only `acl.teams`, which `save_team` never writes, so every in-app-created team answered "Team not found". These and the team player-position and child-team endpoints now use `liveTeamRef` (team records first, ACL fallback) with unchanged membership/manager checks. Requires the protected all-group club_domain upgrade.
