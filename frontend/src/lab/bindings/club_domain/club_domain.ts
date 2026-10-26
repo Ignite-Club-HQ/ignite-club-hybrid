@@ -2060,6 +2060,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_profile_remote_revision(subjects: Array<Principal>, expected: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_removal_media_registry(): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -6109,6 +6116,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.read_profile_membership_batch(arg0, arg1, arg2, to_candid_opt_n269(arg3));
         return from_candid_variant_n308(result);
+    }
+    async read_profile_remote_revision(arg0: Array<Principal>, arg1: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_profile_remote_revision(arg0, to_candid_opt_n269(arg1));
+        return from_candid_variant_n36(result);
     }
     async read_removal_media_registry(): Promise<{
         __kind__: "Ok";

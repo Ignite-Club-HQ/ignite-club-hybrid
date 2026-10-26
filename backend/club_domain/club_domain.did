@@ -1825,6 +1825,11 @@ type Main =
        Err: text;
        Ok: Batch;
      });
+   read_profile_remote_revision: (subjects: vec principal, expected:
+    opt nat) -> (variant {
+                   Err: text;
+                   Ok: nat;
+                 });
    read_removal_media_registry: () ->
     (variant {
        Err: text;

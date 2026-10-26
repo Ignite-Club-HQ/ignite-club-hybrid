@@ -1653,6 +1653,11 @@ export interface Main {
     { 'Ok' : Batch } |
       { 'Err' : string }
   >,
+  'read_profile_remote_revision' : ActorMethod<
+    [Array<Principal>, [] | [bigint]],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'read_removal_media_registry' : ActorMethod<
     [],
     { 'Ok' : { 'stores' : Array<Principal>, 'active' : boolean } } |
