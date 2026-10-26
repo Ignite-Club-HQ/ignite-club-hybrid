@@ -85,6 +85,82 @@ export function buildClubSnapshot({ club, teams = [], sponsors = [] }) {
   };
 }
 
+const n16 = (v, d = 0) => Math.max(0, Math.min(65535, Math.round(Number(v ?? d)))) ;
+const optN16 = (v) => (v == null ? [] : [n16(v)]);
+const EVENT_TYPES = new Set(['game', 'training', 'social', 'mini_league']);
+const HOUR = 3_600_000n;
+
+/** Supabase events -> events_domain EventsSnapshot (event details only; RSVPs/results wait for the claim). */
+export function buildEventsSnapshot({ clubId, events = [], creator }) {
+  const rows = events.filter((e) => e.club_id === clubId).map((e) => {
+    const start = ms(e.start_time ?? e.event_date) ?? 0n;
+    const end = ms(e.end_time);
+    return {
+      id: e.id, club_id: clubId, team_id: opt(e.team_id), title: e.title ?? 'Event', description: e.description ?? '',
+      event_type: EVENT_TYPES.has(e.type) ? e.type : 'social', location: opt(e.location_name ?? e.location), address: opt(e.address),
+      cancelled: !!e.is_cancelled, creator, starts_at_ms: start, ends_at_ms: end && end > start ? end : start + HOUR,
+      series_id: [], revision: 1n, deleted: false, opponent: opt(e.opponent), mini_league_id: opt(e.mini_league_id),
+      updated_at_ms: ms(e.updated_at) ?? start, rsvp_audience: opt(e.rsvp_audience), adults_only: !!e.adults_only,
+      restricted_to_roles: e.restricted_to_roles?.length ? [e.restricted_to_roles] : [],
+      target_team_ids: e.target_team_ids?.length ? [e.target_team_ids] : [],
+    };
+  });
+  return { events: rows, rsvps: [], series: [], groups: [], group_players: [], group_duties: [], match_links: [], materializations: [],
+    operations: [], player_details: [], results: [], stats: [], summaries: [] };
+}
+
+/** Supabase competitions organised by this club -> competition_domain FenceSnapshot. Hidden scores stay hidden. */
+export function buildCompetitionSnapshot({ clubId, competitions = [], divisions = [], entries = [], matches = [] }) {
+  const comps = competitions.filter((c) => c.organizer_club_id === clubId);
+  const ids = new Set(comps.map((c) => c.id));
+  const divs = divisions.filter((d) => ids.has(d.competition_id));
+  const privacy = [
+    ...comps.filter((c) => c.hide_scores).map((c) => ({ competition_id: c.id, division: [], hide_scores: true })),
+    ...divs.filter((d) => d.hide_scores).map((d) => ({ competition_id: d.competition_id, division: [d.id], hide_scores: true })),
+  ];
+  return {
+    competitions: comps.map((c) => ({ id: c.id, club_id: clubId, name: c.name ?? 'Competition', description: opt(c.description),
+      season: c.season ?? '', status: c.status ?? 'draft', visibility: c.visibility ?? 'private',
+      points_win: n16(c.points_win, 3), points_draw: n16(c.points_draw, 1), points_loss: n16(c.points_loss, 0), revision: 1n })),
+    divisions: divs.map((d) => ({ competition_id: d.competition_id, division: d.id, hide_ladder: !!d.hide_ladder })),
+    entries: entries.filter((e) => ids.has(e.competition_id)).map((e) => ({ competition_id: e.competition_id, team_id: e.team_id,
+      club_id: clubId, division_id: opt(e.division_id), status: e.status ?? 'invited' })),
+    matches: matches.filter((m) => ids.has(m.competition_id)).map((m) => ({ id: m.id, competition_id: m.competition_id,
+      division_id: opt(m.division_id), home_team: m.home_team_id ?? m.home_team_name ?? 'TBC', away_team: m.away_team_id ?? m.away_team_name ?? 'TBC',
+      home_score: n16(m.home_score), away_score: n16(m.away_score), status: m.status ?? 'scheduled', scheduled_at_ms: optMs(m.scheduled_at),
+      venue: opt(m.venue), notes: opt(m.notes), pitch_number: opt(m.pitch_number), round_number: optN16(m.round_number),
+      duration_minutes: optN16(m.duration_minutes), arrival_minutes_before: optN16(m.arrival_minutes_before), revision: 1n })),
+    score_privacy: [privacy],
+    ladders: [],
+    broadcasts: [], chat_settings: [], eoi: [], invites: [], join_links: [], member_welcome_jobs: [], official_chats: [], official_invites: [],
+    owners: [], playhq_links: [], playhq_metadata: [], playhq_stats: [], recovery: [], role_links: [], roles: [], seasons: [], tokens: [],
+    welcome: [], welcome_jobs: [],
+  };
+}
+
+/** Supabase mini-leagues -> mini_league_domain LeagueSnapshot (structure only; players/availability wait for the claim). */
+export function buildLeagueSnapshot({ clubId, leagues = [], sessions = [], groups = [], creator }) {
+  const ls = leagues.filter((l) => l.club_id === clubId);
+  const lid = new Set(ls.map((l) => l.id));
+  const ss = sessions.filter((x) => lid.has(x.mini_league_id));
+  const sid = new Set(ss.map((x) => x.id));
+  const now = (r) => ms(r.created_at) ?? 0n;
+  return {
+    leagues: ls.map((l) => ({ id: l.id, club_id: clubId, name: l.name ?? 'Mini league', description: opt(l.description), logo_url: opt(l.logo_url),
+      bib_colors: l.bib_colors ?? [], team_size: n16(l.team_size, 5), min_players_per_side: n16(l.min_players_per_side, 3),
+      minutes_per_half: n16(l.minutes_per_half, 10), show_matches_to_members: l.show_matches_to_members !== false, status: 'active',
+      created_by: creator, created_at_ms: now(l), updated_at_ms: ms(l.updated_at) ?? now(l) })),
+    sessions: ss.map((x) => ({ id: x.id, mini_league_id: x.mini_league_id, session_date: x.session_date, start_time: String(x.start_time ?? '00:00').slice(0, 5),
+      end_time: opt(x.end_time && String(x.end_time).slice(0, 5)), location_name: opt(x.location_name), address: opt(x.address), postcode: opt(x.postcode),
+      status: x.status ?? 'scheduled', team_size_override: optN16(x.team_size_override), linked_event_id: opt(x.linked_event_id),
+      created_by: creator, created_at_ms: now(x), updated_at_ms: ms(x.updated_at) ?? now(x) })),
+    groups: groups.filter((g) => sid.has(g.session_id)).map((g) => ({ id: g.id, session_id: g.session_id, name: g.name ?? 'Group',
+      ability_band: opt(g.ability_band), target_size: n16(g.target_size, 5), pitch_name: opt(g.pitch_name), display_order: n16(g.display_order),
+      linked_event_id: opt(g.linked_event_id), created_at_ms: now(g), updated_at_ms: ms(g.updated_at) ?? now(g) })),
+    roles: [], players: [], invites: [], admins: [], join_links: [], availability: [], group_players: [], duties: [], children: [], guardians: [],
+  };
+}
+
 /** Candid type of a snapshot, read from the generated schema service's `schema` argument. */
 export async function snapshotType(require, file) {
   const { idlFactory } = await import(file);
@@ -93,29 +169,57 @@ export async function snapshotType(require, file) {
   return svc._fields.find(([n]) => n === 'zz_migrate_schema')[1].argTypes[0];
 }
 
+/** Lock the club on one service, then load its snapshot (idempotent replace). */
+async function loadSnapshot(ctx, domain, snap, lock) {
+  const { IDL } = ctx.require('@dfinity/candid');
+  const { Actor } = ctx.require('@dfinity/agent');
+  const canisterId = ctx.target.canisters[domain];
+  if (!canisterId) throw Error(`Destination ${domain} missing`);
+  const type = await snapshotType(ctx.require, ctx.schemaFile(domain));
+  const blob = new Uint8Array(IDL.encode([type], [snap]));
+  const okRes = domain === 'club_domain' ? IDL.Variant({ Ok: IDL.Null, Err: IDL.Text }) : IDL.Variant({ Ok: IDL.Nat, Err: IDL.Text });
+  const actor = Actor.createActor(({ IDL }) => IDL.Service({
+    freeze_club: IDL.Func([IDL.Text, IDL.Nat64], [IDL.Variant({ Ok: IDL.Nat64, Err: IDL.Text })], []),
+    set_transfer_fence: IDL.Func([IDL.Text, IDL.Bool], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
+    import_club_snapshot: IDL.Func([IDL.Text, IDL.Vec(IDL.Nat8)], [okRes], []),
+  }), { agent: ctx.agent, canisterId });
+  const f = lock === 'freeze' ? await actor.freeze_club(ctx.clubId, 1n) : await actor.set_transfer_fence(ctx.clubId, true);
+  if ('Err' in f) throw Error(`${domain} lock refused: ${f.Err}`);
+  const r = await actor.import_club_snapshot(ctx.clubId, blob);
+  if ('Err' in r) throw Error(`${domain} import refused: ${r.Err}`);
+}
+
 /**
- * Writers keyed by step id. `ctx` = { require, agent, target, clubId, rows(table), schemaFile(domain) }.
+ * Writers keyed by step id. `ctx` = { require, agent, target, clubId, creator, rows(table, col), rowsIn(table, col, ids), schemaFile(domain) }.
+ * `creator` is the deploy identity's principal: Supabase authors have no ICP identity until they claim.
  * Each returns { records } after the canister acknowledged the import.
  */
 export const WRITERS = {
   async club(ctx) {
-    const { IDL } = ctx.require('@dfinity/candid');
-    const { Actor } = ctx.require('@dfinity/agent');
-    const canisterId = ctx.target.canisters.club_domain;
-    if (!canisterId) throw Error('Destination club service missing');
     const [clubs, teams, sponsors] = await Promise.all([ctx.rows('clubs', 'id'), ctx.rows('teams', 'club_id'), ctx.rows('sponsors', 'club_id')]);
     const snap = buildClubSnapshot({ club: clubs[0], teams, sponsors });
-    const type = await snapshotType(ctx.require, ctx.schemaFile('club_domain'));
-    const blob = new Uint8Array(IDL.encode([type], [snap]));
-    const Res = IDL.Variant({ Ok: IDL.Null, Err: IDL.Text });
-    const actor = Actor.createActor(({ IDL }) => IDL.Service({
-      freeze_club: IDL.Func([IDL.Text, IDL.Nat64], [IDL.Variant({ Ok: IDL.Nat64, Err: IDL.Text })], []),
-      import_club_snapshot: IDL.Func([IDL.Text, IDL.Vec(IDL.Nat8)], [Res], []),
-    }), { agent: ctx.agent, canisterId });
-    const f = await actor.freeze_club(ctx.clubId, 1n);
-    if ('Err' in f) throw Error(`Club lock refused: ${f.Err}`);
-    const r = await actor.import_club_snapshot(ctx.clubId, blob);
-    if ('Err' in r) throw Error(`Club import refused: ${r.Err}`);
+    await loadSnapshot(ctx, 'club_domain', snap, 'freeze');
     return { records: 1 + snap.teams.length + snap.sponsors.length };
+  },
+  async events(ctx) {
+    const snap = buildEventsSnapshot({ clubId: ctx.clubId, events: await ctx.rows('events', 'club_id'), creator: ctx.creator });
+    await loadSnapshot(ctx, 'events_domain', snap, 'fence');
+    return { records: snap.events.length };
+  },
+  async competitions(ctx) {
+    const competitions = await ctx.rows('competitions', 'organizer_club_id');
+    const ids = competitions.map((c) => c.id);
+    const [divisions, entries, matches] = await Promise.all(['competition_divisions', 'competition_entries', 'competition_matches'].map((t) => ctx.rowsIn(t, 'competition_id', ids)));
+    const snap = buildCompetitionSnapshot({ clubId: ctx.clubId, competitions, divisions, entries, matches });
+    await loadSnapshot(ctx, 'competition_domain', snap, 'fence');
+    return { records: snap.competitions.length + snap.matches.length + snap.entries.length };
+  },
+  async mini_leagues(ctx) {
+    const leagues = await ctx.rows('mini_leagues', 'club_id');
+    const sessions = await ctx.rowsIn('mini_league_sessions', 'mini_league_id', leagues.map((l) => l.id));
+    const groups = await ctx.rowsIn('mini_league_groups', 'session_id', sessions.map((x) => x.id));
+    const snap = buildLeagueSnapshot({ clubId: ctx.clubId, leagues, sessions, groups, creator: ctx.creator });
+    await loadSnapshot(ctx, 'mini_league_domain', snap, 'fence');
+    return { records: snap.leagues.length + snap.sessions.length + snap.groups.length };
   },
 };
