@@ -30,7 +30,7 @@ try {
     const club=await pic.setupCanister({idlFactory:clubIdl,wasm:wasm('club_domain'),sender:governor,controllers:[governor],arg,environmentVariables:[privacy,{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'}]});
     club.actor.setPrincipal(governor);ok(await club.actor.set_identity_access_canister(identity.canisterId));
     await pic.updateCanisterSettings({canisterId:club.canisterId,sender:governor,environmentVariables:[privacy]});
-    await pic.upgradeCanister({canisterId:club.canisterId,wasm:wasm('club_domain'),sender:governor,arg});
+    await pic.upgradeCanister({canisterId:club.canisterId,wasm:wasm('club_domain'),sender:governor,arg,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
     const env=[privacy,{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()}];
     const competition=await pic.setupCanister({idlFactory:competitionIdl,wasm:wasm('competition_domain'),sender:governor,controllers:[governor],arg,environmentVariables:env});
     const league=await pic.setupCanister({idlFactory:leagueIdl,wasm:wasm('mini_league_domain'),sender:governor,controllers:[governor],arg,environmentVariables:env});
