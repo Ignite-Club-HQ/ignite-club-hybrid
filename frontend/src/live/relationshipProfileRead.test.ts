@@ -11,16 +11,16 @@ import { readRelationshipProfiles } from './relationshipProfileRead';
 const identity = { getPrincipal: () => Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai') };
 function context() {
   return { identity, target: { alias: 'g2', host: 'https://icp-api.io', networkKind: 'public_mainnet', canisterIds: {
-    club_domain: 'ryjl3-tyaaa-aaaaa-aaaba-cai', competition_domain: 'r7inp-6aaaa-aaaaa-aaabq-cai', mini_league_domain: 'renrk-eyaaa-aaaaa-aaada-cai',
+    club_domain: 'ryjl3-tyaaa-aaaaa-aaaba-cai', competition_domain: 'r7inp-6aaaa-aaaaa-aaabq-cai', mini_league_domain: 'renrk-eyaaa-aaaaa-aaada-cai', messaging_domain: 'rkp4c-7iaaa-aaaaa-aaaca-cai',
   } } } as unknown as FeatureBackendContext;
 }
 beforeEach(() => { vi.resetAllMocks(); state.rehearsal = true; state.shared = context(); state.read.mockResolvedValue([]); });
 describe('relationship-scoped private display reads', () => {
-  it.each(['club', 'family', 'competition', 'league'] as const)('threads exact %s authority without creating grants', async kind => {
+  it.each(['club', 'family', 'competition', 'league', 'direct'] as const)('threads exact %s authority without creating grants', async kind => {
     const ctx = context();
     await readRelationshipProfiles(ctx, ['person'], { kind, resource: 'exact-resource' });
     const options = state.read.mock.calls[0][2];
-    const domain = kind === 'competition' ? 'competition_domain' : kind === 'league' ? 'mini_league_domain' : 'club_domain';
+    const domain = kind === 'competition' ? 'competition_domain' : kind === 'league' ? 'mini_league_domain' : kind === 'direct' ? 'messaging_domain' : 'club_domain';
     expect(options.audience).toEqual({ kind, resource: 'exact-resource', authority: Principal.fromText(ctx.target.canisterIds[domain]), profile_revision: 0n });
     expect(state.evidence).not.toHaveBeenCalled();
   });

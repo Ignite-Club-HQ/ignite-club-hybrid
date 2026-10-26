@@ -1,11 +1,39 @@
 import type { FeatureBackendContext } from './featureRouter';
 import { privateProfileSearchRehearsalEnabled } from './privateProfileSearchMode';
 import { readRelationshipProfiles, type ProfileRelationship } from './relationshipProfileRead';
-import { getLiveGroupMetadata, type LiveGroupMetadata } from './features/messaging';
+import { getLiveDirectConversation, getLiveGroupMetadata, type LiveGroupMetadata } from './features/messaging';
 import { getLiveMiniLeague } from './features/miniLeagues';
 import { listLiveCompetitionCards, listLiveOfficialChats } from './features/competitions';
 
 export type ChatProfile = { id: string; display_name: string | null; avatar_url: string | null };
+
+/** Real two-person DMs only; read exact participants before and after names.
+ * The identity service separately delegates to the owning messaging authority. */
+export async function readDirectChatProfiles(owner: FeatureBackendContext, conversationId: string, ids: readonly string[], signal?: AbortSignal): Promise<Map<string, ChatProfile>> {
+  if (!privateProfileSearchRehearsalEnabled()) return (await import('@/lib/profileCache')).fetchProfilesWithCache([...ids]);
+  ids = [...new Set(ids)];
+  if (ids.length > 2) throw new Error('Direct names require at most two participants.');
+  if (!ids.length) return new Map();
+  const identity = owner.identity, principal = identity.getPrincipal().toText(), target = JSON.stringify(owner.target);
+  const active = () => {
+    if (signal?.aborted || identity !== owner.identity || principal !== identity.getPrincipal().toText() || target !== JSON.stringify(owner.target))
+      throw new Error('Direct name audience changed or cancelled.');
+  };
+  active();
+  const opening = await getLiveDirectConversation(owner, conversationId); active();
+  const participants = [opening.participant_1, opening.participant_2];
+  if (opening.id !== conversationId || participants[0] === participants[1] || !participants.includes(principal) || ids.some(id => !participants.includes(id)))
+    throw new Error('Exact direct name participants required.');
+  const rows = await readRelationshipProfiles(owner, ids, { kind: 'direct', resource: conversationId }, signal); active();
+  const closing = await getLiveDirectConversation(owner, conversationId); active();
+  if (JSON.stringify(closing) !== JSON.stringify(opening)) throw new Error('Direct name participants changed.');
+  const out = new Map<string, ChatProfile>();
+  for (const row of rows) {
+    if (!ids.includes(row.account_id) || out.has(row.account_id)) throw new Error('Direct name subject mismatch.');
+    out.set(row.account_id, { id: row.account_id, display_name: row.display_name, avatar_url: row.avatar_ref[0] ?? null });
+  }
+  return out;
+}
 
 /** Metadata only locates a relationship. Name disclosure is independently
  * authorized by identity + original PII + the exact owning relationship. */

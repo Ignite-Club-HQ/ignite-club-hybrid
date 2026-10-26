@@ -9,6 +9,29 @@ and other details must remain viewable in the app.
 
 ## Implemented locally
 
+### 23:08 continuation — exact direct-message names
+
+Added a rehearsal-only direct audience, delegated from the original PII through
+identity to the registered messaging authority. Requests contain at most two
+distinct subjects and must match an existing two-person DM with the requesting
+participant. A caller-created conversation alone cannot disclose a peer name:
+the peer must have authored its own message. Blocking denies fresh reads and
+block/unblock changes invalidate retained authorization revisions.
+
+The DM screen uses mounted private profiles for header/author/reply/reader
+labels, ignores saved labels during rehearsal and omits names from its disk
+message copies; inbox label writes exclude DMs. Opening/closing participant
+checks bind identity/target/cancellation and memoized rows repaint on disclosure
+or removal. Real disposable original-PII SDK acceptance covers successful DM
+decryption, arbitrary-peer enumeration refusal, outsider/service impersonation,
+blocking and healthy retries. Production remains unchanged.
+
+Still unfinished: broadcast/competition-admin contracts, actual held-final
+service audience races, protected executable backfill/release and independently
+approved production evidence/signed-in acceptance. Empty/unanswered DMs retain
+neutral private labels until independently authorized; this is not yet accepted
+as production feature parity or an approved conversion.
+
 ### 22:52 continuation — team, club and club-admin chat displays
 
 Connected team and club author/reply labels, club-admin author/reply/header

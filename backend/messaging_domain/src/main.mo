@@ -28,6 +28,7 @@ import Types "types";
 import Timer "mo:core/Timer";
 import PhotoReminderPolicy "photoReminderPolicy";
 import DefaultChatPolicy "defaultChatPolicy";
+import PrivateDirectNames "privateDirectNames";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Opt-in local rehearsal only; production deploy scripts must never set these.
@@ -3956,6 +3957,39 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   // Private conversation reads: never expose the app-admin global presence list.
+  // Delegated name authorization, not a participant directory. Only the pinned
+  // identity service may ask for <=2 exact DM subjects; club/admin roles never
+  // substitute for conversation participation. No persistent reader grants.
+  public shared ({ caller }) func read_profile_direct_batch(requester : Principal, conversation_id : Text, subjects : [Principal], expected : ?Nat) : async { #Ok : PrivateDirectNames.Batch; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1") return #Err("Private direct names are not released");
+    let authority = accountAdmissionAuthority;
+    if (caller.isAnonymous() or authority != ?caller) return #Err("Configured identity authority required");
+    if (conversation_id == "" or conversation_id.size() > 128 or subjects.size() > 2) return #Err("Exact bounded direct conversation required");
+    let ?opening = conversations.find(func c = c.id == conversation_id) else return #Err("Direct conversation not found");
+    let revision = mediaEvidenceRevision;
+    switch (expected) { case (?r) if (r != revision) return #Err("Direct name revision changed"); case null {} };
+    func permitted(c : Types.Conversation) : Bool {
+      PrivateDirectNames.permitted(requester, subjects, c.club_id, c.participants,
+        c.participants.any(func p = isBlockedPair(requester, p)))
+        // create_conversation/get_or_create_dm can name an arbitrary peer.
+        // Only that peer's own authenticated message establishes disclosure;
+        // a caller-created conversation must never become full-person search.
+        and subjects.all(func p = p == requester or messages.any(func m = m.conversation_id == conversation_id and m.sender == p))
+        and not convFenced(conversation_id) and not removalReceiver.denied(requester)
+        and not subjects.any(func p = removalReceiver.denied(p))
+    };
+    if (not permitted(opening)) return #Err("Direct name audience denied");
+    if (not removalReceiver.enter(requester)) return #Err("Account removal fenced");
+    try {
+      await admitAccount(requester);
+      for (subject in subjects.values()) { await admitAccount(subject) };
+      let ?closing = conversations.find(func c = c.id == conversation_id) else return #Err("Direct conversation removed");
+      if (authority != accountAdmissionAuthority or revision != mediaEvidenceRevision or closing.participants != opening.participants
+        or closing.club_id != opening.club_id or not permitted(closing)) return #Err("Direct name audience changed");
+      #Ok({ revision; requester; club = conversation_id; subjects; members = subjects.map(func _ = true) })
+    } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(requester) }
+  };
+
   public shared ({ caller }) func get_direct_conversation(conversation_id : Text) : async { #Ok : Types.Conversation; #Err : Text } {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
@@ -4182,6 +4216,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (user.equal(Principal.anonymous()) or user.equal(caller)) return #Err("Invalid block target");
     let exists = blockedUsers.any(func(entry) = entry.blocker.equal(caller) and entry.blocked.equal(user));
     if (not exists) {
+      mediaEvidenceRevision += 1;
       blockedUsers := blockedUsers.concat([{ blocker = caller; blocked = user; created_at_ms = nowMs() }]);
     };
     #Ok
@@ -4194,6 +4229,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     auth(caller);
+    if (blockedUsers.any(func entry = entry.blocker == caller and entry.blocked == user)) mediaEvidenceRevision += 1;
     blockedUsers := blockedUsers.filter(func(entry) = not (entry.blocker.equal(caller) and entry.blocked.equal(user)));
     #Ok
   

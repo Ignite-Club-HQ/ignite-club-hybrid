@@ -11,6 +11,7 @@ import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/d
 import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import { idlFactory as competitionIdl } from '../src/lab/bindings/competition_domain/declarations/competition_domain.did.js';
 import { idlFactory as leagueIdl } from '../src/lab/bindings/mini_league_domain/declarations/mini_league_domain.did.js';
+import { idlFactory as messagingIdl } from '../src/lab/bindings/messaging_domain/declarations/messaging_domain.did.js';
 const root=resolve(import.meta.dirname,'../..');
 const p=n=>Principal.fromUint8Array(Uint8Array.from([n,1]));
 const governor=p(1),viewer=p(2),owner=p(3),outsider=p(4);
@@ -34,10 +35,11 @@ try {
     const env=[privacy,{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()}];
     const competition=await pic.setupCanister({idlFactory:competitionIdl,wasm:wasm('competition_domain'),sender:governor,controllers:[governor],arg,environmentVariables:env});
     const league=await pic.setupCanister({idlFactory:leagueIdl,wasm:wasm('mini_league_domain'),sender:governor,controllers:[governor],arg,environmentVariables:env});
+    const messaging=await pic.setupCanister({idlFactory:messagingIdl,wasm:wasm('messaging_domain'),sender:governor,controllers:[governor],arg,environmentVariables:env});
     const pii=await pic.setupCanister({idlFactory:piiIdl,wasm:wasm('pii_access_control'),sender:governor,controllers:[governor],arg,environmentVariables:[privacy,{name:'IGNITE_PRIVATE_PROFILE_IDENTITY',value:identity.canisterId.toText()},{name:'VETKD_KEY_NAME',value:'key_1'}]});
     club.actor.setPrincipal(governor);ok(await club.actor.create_club(`club-${n}`,'Privacy club','privacy',[],[]));
     ok(await club.actor.replace_acl(1n,{clubs:[`club-${n}`],teams:[],children:[{id:`child-${n}`,parent:[viewer],club_id:[`club-${n}`],teams:[]}],guardians:[{child:`child-${n}`,user:owner}],exclusions:[],roles:[viewer,owner].map(user=>({user,role:'member',club:[`club-${n}`],team:[]}))}));
-    groups.push({club,competition,league,pii});
+    groups.push({club,competition,league,messaging,pii});
   }
   const accounts=new Map();
   for(const user of [viewer,owner,outsider]){identity.actor.setPrincipal(user);accounts.set(user.toText(),ok(await identity.actor.register_account()).id);}
@@ -49,7 +51,7 @@ try {
   const subnet=await pic.getCanisterSubnetId(identity.canisterId);assert.ok(subnet);
   router.actor.setPrincipal(governor);let revision=await router.actor.version();
   for(let n=0;n<2;n++){
-    const g=groups[n];const domains=names.map((domain,index)=>({domain,canister:domain==='club_domain'?g.club.canisterId:domain==='pii_access_control'?g.pii.canisterId:domain==='competition_domain'?g.competition.canisterId:domain==='mini_league_domain'?g.league.canisterId:domain==='secret_workload_identity'?p(90):p(10+n*30+index)}));
+    const g=groups[n];const domains=names.map((domain,index)=>({domain,canister:domain==='club_domain'?g.club.canisterId:domain==='pii_access_control'?g.pii.canisterId:domain==='competition_domain'?g.competition.canisterId:domain==='mini_league_domain'?g.league.canisterId:domain==='messaging_domain'?g.messaging.canisterId:domain==='secret_workload_identity'?p(90):p(10+n*30+index)}));
     const group={id:`g${n+1}`,target_alias:'mainnet',domains,photo_store:[],accepting:false,max_clubs:100,assigned_clubs:0,heap_budget_bytes:1_000_000n,heap_bytes:0n,min_cycles:1n,cycles:0n,observed_at_ns:0n};
     revision=ok(await router.actor.register_group(group,revision));
     revision=ok(await router.actor.register_group_placement({group_id:group.id,deployment_id:'mainnet',deployment_revision:1n,host:'https://icp-api.io',network_kind:'public_mainnet',primary_subnet:subnet,approved_subnets:[subnet],additional_subnets_enabled:false,domains:domains.map(d=>({...d,subnet}))},revision));
@@ -74,6 +76,25 @@ try {
   };
   await decrypt(viewer,scope('club',groups[1].club.canisterId,'club-1'));
   await decrypt(viewer,scope('family',groups[1].club.canisterId,'child-1'));
+  const dm=groups[1].messaging;dm.actor.setPrincipal(viewer);
+  const directConversation=ok(await dm.actor.create_conversation('dm',[],[viewer,owner]));
+  const direct=scope('direct',dm.canisterId,directConversation.id);
+  assert.ok('Err' in await read(viewer,direct),'A caller-created DM cannot enumerate an arbitrary peer name');
+  dm.actor.setPrincipal(owner);ok(await dm.actor.send_message(directConversation.id,'Hello','privacy-peer-consent',[],[]));
+  await decrypt(viewer,direct);
+  assert.ok('Err' in await read(outsider,direct),'Unrelated user cannot decrypt direct names');
+  dm.actor.setPrincipal(outsider);
+  assert.ok('Err' in await dm.actor.read_profile_direct_batch(viewer,directConversation.id,[owner],[]),'Browser cannot impersonate identity service');
+  dm.actor.setPrincipal(viewer);ok(await dm.actor.block_user(owner));
+  assert.ok('Err' in await read(viewer,direct),'Blocked participant cannot obtain fresh direct keys');
+  ok(await dm.actor.unblock_user(owner));await decrypt(viewer,direct);
+  dm.actor.setPrincipal(identity.canisterId);
+  const retained=ok(await dm.actor.read_profile_direct_batch(viewer,directConversation.id,[owner],[]));
+  dm.actor.setPrincipal(viewer);ok(await dm.actor.block_user(owner));ok(await dm.actor.unblock_user(owner));
+  dm.actor.setPrincipal(identity.canisterId);
+  assert.ok('Err' in await dm.actor.read_profile_direct_batch(viewer,directConversation.id,[owner],[retained.revision]),'Block/unblock ABA invalidates retained direct authorization');
+  await decrypt(viewer,direct);
+  assert.ok('Err' in await read(viewer,scope('direct',dm.canisterId,'broadcast')),'Broadcast is never a two-person direct audience');
   identity.actor.setPrincipal(viewer);const page=ok(await identity.actor.read_guardian_profile_candidates(groups[1].club.canisterId,'child-1',[]));
   const guardian=scope('guardian_search',groups[1].club.canisterId,'child-1',page.revision);
   await decrypt(viewer,guardian);
@@ -101,5 +122,5 @@ try {
   assert.ok('Err' in await read(viewer,guardian),'Guardian removal withholds fresh keys');
   identity.actor.setPrincipal(governor);ok(await identity.actor.set_account_status(accounts.get(owner.toText()),{Suspended:null}));
   assert.ok('Err' in await read(viewer,scope('club',groups[1].club.canisterId,'club-1')));
-  console.log('PASS: real cross-group original-PII SDK decryption for club, family, guardian, competition and league; outsider/foreign scope/public competition/email/removed subject/suspended subject refusal. No live data or grants changed.');
+  console.log('PASS: real cross-group original-PII SDK decryption for club, family, guardian, competition, league and direct; caller-created peer enumeration, unrelated user, service impersonation, blocked peer, block/unblock ABA and broadcast refusal; healthy direct retries. No live data or grants changed.');
 } finally {await pic?.tearDown();await server.stop();}

@@ -298,6 +298,13 @@ export const idlFactory = ({ IDL }) => {
     'scanned' : IDL.Nat,
     'revision' : IDL.Nat,
   });
+  const Batch = IDL.Record({
+    'requester' : IDL.Principal,
+    'members' : IDL.Vec(IDL.Bool),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'club' : IDL.Text,
+    'revision' : IDL.Nat,
+  });
   const HttpHeader = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
   const HttpRequestResult = IDL.Record({
     'status' : IDL.Nat,
@@ -793,6 +800,7 @@ export const idlFactory = ({ IDL }) => {
             'Ok' : IDL.Record({
               'page' : MessagePage,
               'pins' : IDL.Opt(IDL.Vec(PinnedMessage)),
+              'polls' : IDL.Vec(PollResults),
               'reactions' : IDL.Vec(Reaction),
             }),
             'Err' : IDL.Text,
@@ -1073,6 +1081,11 @@ export const idlFactory = ({ IDL }) => {
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
+    'read_profile_direct_batch' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Batch, 'Err' : IDL.Text })],
         [],
       ),
     'read_vault_chat_access' : IDL.Func(

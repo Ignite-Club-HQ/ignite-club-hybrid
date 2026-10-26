@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Principal } from '@icp-sdk/core/principal';
 import type { FeatureBackendContext } from './featureRouter';
-const mocks = vi.hoisted(() => ({ enabled: true, metadata: vi.fn(), league: vi.fn(), cards: vi.fn(), chats: vi.fn(), profiles: vi.fn(), legacy: vi.fn() }));
+const mocks = vi.hoisted(() => ({ enabled: true, direct: vi.fn(), metadata: vi.fn(), league: vi.fn(), cards: vi.fn(), chats: vi.fn(), profiles: vi.fn(), legacy: vi.fn() }));
 vi.mock('./privateProfileSearchMode', () => ({ privateProfileSearchRehearsalEnabled: () => mocks.enabled }));
-vi.mock('./features/messaging', () => ({ getLiveGroupMetadata: mocks.metadata }));
+vi.mock('./features/messaging', () => ({ getLiveGroupMetadata: mocks.metadata, getLiveDirectConversation: mocks.direct }));
 vi.mock('./features/miniLeagues', () => ({ getLiveMiniLeague: mocks.league }));
 vi.mock('./features/competitions', () => ({ listLiveCompetitionCards: mocks.cards, listLiveOfficialChats: mocks.chats }));
 vi.mock('./relationshipProfileRead', () => ({ readRelationshipProfiles: mocks.profiles }));
 vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: mocks.legacy }));
-import { readChatRelationshipProfiles } from './chatRelationshipProfiles';
+import { readChatRelationshipProfiles, readDirectChatProfiles } from './chatRelationshipProfiles';
 const identity = { getPrincipal: () => Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai') };
 const context = () => ({ identity, target: { alias: 'g2' } }) as unknown as FeatureBackendContext;
 const metadata = () => ({ conversationId: 'chat', kind: 'group', clubId: 'club', teamId: null, members: [identity.getPrincipal()] });
@@ -19,6 +19,30 @@ beforeEach(() => {
   mocks.legacy.mockResolvedValue(new Map());
 });
 describe('rehearsal chat relationship names', () => {
+  it('reads only exact DM participants through messaging authority, never a club', async () => {
+    mocks.direct.mockResolvedValue({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'person' });
+    const owner = context();
+    const out = await readDirectChatProfiles(owner, 'dm', ['person']);
+    expect(out.get('person')?.display_name).toBe('Private name');
+    expect(mocks.profiles).toHaveBeenCalledWith(owner, ['person'], { kind: 'direct', resource: 'dm' }, undefined);
+    expect(mocks.direct).toHaveBeenCalledTimes(2);
+    expect(mocks.metadata).not.toHaveBeenCalled(); expect(mocks.legacy).not.toHaveBeenCalled();
+  });
+  it('refuses foreign DM subjects before decrypting or using a generic profile cache', async () => {
+    mocks.direct.mockResolvedValue({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'person' });
+    await expect(readDirectChatProfiles(context(), 'dm', ['foreign'])).rejects.toThrow('participants required');
+    expect(mocks.profiles).not.toHaveBeenCalled(); expect(mocks.legacy).not.toHaveBeenCalled();
+    await expect(readDirectChatProfiles(context(), 'dm', ['a', 'b', 'c'])).rejects.toThrow('at most two');
+  });
+  it('withholds DM names if a held closing participant reply changes', async () => {
+    let release: ((value: unknown) => void) | undefined;
+    mocks.direct.mockResolvedValueOnce({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'person' })
+      .mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const result = readDirectChatProfiles(context(), 'dm', ['person']);
+    await vi.waitFor(() => expect(release).toBeDefined());
+    release?.({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'foreign' });
+    await expect(result).rejects.toThrow('participants changed');
+  });
   it('reads exact club names without entering the generic cache', async () => {
     const owner = context();
     const result = await readChatRelationshipProfiles(owner, 'chat', ['person']);

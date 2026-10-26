@@ -593,6 +593,7 @@ type Main =
         record {
           page: MessagePage;
           pins: opt vec PinnedMessage;
+          polls: vec PollResults;
           reactions: vec Reaction;
         };
      });
@@ -823,6 +824,12 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_profile_direct_batch: (requester: principal, conversation_id: 
+    text, subjects: vec principal, expected: opt nat) ->
+    (variant {
+       Err: text;
+       Ok: Batch;
+     });
    read_vault_chat_access: (subject: principal, chat_type: text, chat_id:
     text) ->
     (variant {
@@ -1268,6 +1275,14 @@ type BroadcastResult =
  record {
    delivered: nat32;
    skipped: vec text;
+ };
+type Batch = 
+ record {
+   club: text;
+   members: vec bool;
+   requester: principal;
+   revision: nat;
+   subjects: vec principal;
  };
 type AttachmentMetadata = 
  record {

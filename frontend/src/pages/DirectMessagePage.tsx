@@ -64,6 +64,8 @@ import { format, isSameDay } from "date-fns";
 import { ChatDateSeparator } from "@/components/chat/ChatDateSeparator";
 import { fetchProfilesWithCache, selectCachedProfileById } from "@/lib/profileCache";
 import { useProfiles } from "@/hooks/useProfiles";
+import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCachedMessages, cacheMessages, CachedMessage, shouldRefetchMessages } from "@/lib/messageCache";
 import { getChatThreadLabel, rememberChatThreadLabel } from "@/lib/chatThreadLabelCache";
@@ -170,11 +172,11 @@ const toCachedDirectMessages = (messages: DirectMessage[]): CachedMessage[] =>
     created_at: message.created_at,
     image_url: message.image_url,
     reply_to_id: message.reply_to_id,
-    profiles: message.author
+    profiles: !(privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging")) && message.author
       ? { display_name: message.author.display_name, avatar_url: message.author.avatar_url }
       : null,
     reactions: message.reactions || [],
-    reply_to: message.reply_to ? { text: message.reply_to.text, author: message.reply_to.author } : null,
+    reply_to: message.reply_to ? { text: message.reply_to.text, author: privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging") ? undefined : message.reply_to.author } : null,
   }));
 
 const cacheDirectMessages = (conversationId: string, messages: DirectMessage[]) => {
@@ -421,8 +423,11 @@ export default function DirectMessagePage() {
   );
 
   // Fetch other participant's profile
-  const { data: otherUser, isLoading: otherUserLoading } = useQuery({
-    queryKey: ["dm-other-user", otherUserId],
+  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const directNameIds = conversation ? [conversation.participant_1, conversation.participant_2] : [];
+  const getPrivateProfile = usePrivateChatProfiles(conversationId, user?.id, directNameIds, privateChatNames, 'direct');
+  const { data: legacyOtherUser, isLoading: legacyOtherUserLoading } = useQuery({
+    queryKey: ["dm-other-user", otherUserId, user?.id, privateChatNames],
     queryFn: async () => {
       const { data, error } = await selectCachedProfileById(otherUserId!);
       if (error) {
@@ -434,24 +439,26 @@ export default function DirectMessagePage() {
       }
       return data;
     },
-    enabled: !!otherUserId && authReady,
+    enabled: !!otherUserId && authReady && !privateChatNames,
     staleTime: 5 * 60 * 1000,
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
   });
+  const otherUser = privateChatNames ? getPrivateProfile(otherUserId ?? '') : legacyOtherUser;
+  const otherUserLoading = privateChatNames ? !otherUser : legacyOtherUserLoading;
 
   // Once this thread's own read names the other person, remember it (account
   // scoped, label only — no message text) so the next open paints the header
   // instantly instead of showing skeleton bars for the whole cold read.
   useEffect(() => {
-    if (!user?.id || !conversationId) return;
+    if (!user?.id || !conversationId || privateChatNames) return;
     const title = isIgniteSupportConversation ? "Ignite Support" : otherUser?.display_name;
     if (!title) return;
     rememberChatThreadLabel(user.id, "dm", conversationId, {
       title,
       avatarUrl: isIgniteSupportConversation ? null : otherUser?.avatar_url,
     });
-  }, [user?.id, conversationId, isIgniteSupportConversation, otherUser?.display_name, otherUser?.avatar_url]);
+  }, [user?.id, conversationId, isIgniteSupportConversation, otherUser?.display_name, otherUser?.avatar_url, privateChatNames]);
 
   // Find the first club both DM participants share. Used to scope vault picker
   // and event picker actions inside the "+" menu so users can attach files /
@@ -561,7 +568,7 @@ export default function DirectMessagePage() {
   // scroll-back paging so both render identically.
   const mapLiveDmRows = async (ctx: any, rows: any[]): Promise<DirectMessage[]> => {
     const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
-    const profilesMap = await fetchProfilesWithCache(authorIds);
+    const profilesMap = privateChatNames ? new Map() : await fetchProfilesWithCache(authorIds);
     // Reactions persist on the canister; restore them on every refetch.
     // Tolerate older canisters that lack list_reactions.
     const reactionsByMessage = new Map<string, any[]>();
@@ -882,7 +889,8 @@ export default function DirectMessagePage() {
   const authorIds = useMemo(() => {
     return [...new Set((localMessages || []).map(m => m.author_id).filter(Boolean))];
   }, [localMessages]);
-  const { getProfile } = useProfiles(authorIds);
+  const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
+  const getProfile = privateChatNames ? getPrivateProfile : getLegacyProfile;
 
   // Read tracking for DMs
   const messageIds = useMemo(() => (localMessages || []).map(m => m.id).filter(id => !id.startsWith("temp-")), [localMessages]);
@@ -1648,7 +1656,7 @@ export default function DirectMessagePage() {
 
   // The inbox already told us who this thread is with, so the header carries a
   // real name from the first frame even while the conversation read is running.
-  const rememberedThreadLabel = getChatThreadLabel(user?.id, "dm", conversationId);
+  const rememberedThreadLabel = privateChatNames ? null : getChatThreadLabel(user?.id, "dm", conversationId);
 
   if (conversationLoading || checkingCanDM) {
     return (
@@ -1810,6 +1818,7 @@ export default function DirectMessagePage() {
             composerHeight={composerHeight}
             currentUserId={user?.id}
             virtualHandleRef={virtualHandleRef}
+            privateProfileRevision={privateChatNames ? getPrivateProfile : undefined}
             initialBottomPinned={!targetMessageId}
             renderRow={(msg, index, arr) => {
               const prevMessage = index > 0 ? arr[index - 1] : null;
@@ -1834,8 +1843,8 @@ export default function DirectMessagePage() {
                       text={msg.text}
                       imageUrl={msg.image_url}
                       authorId={msg.author_id}
-                      authorName={isIgniteSupportUser(msg.author_id) ? "Ignite Support" : (getProfile(msg.author_id)?.display_name || msg.author?.display_name || null)}
-                      authorAvatar={getProfile(msg.author_id)?.avatar_url || msg.author?.avatar_url || null}
+                      authorName={isIgniteSupportUser(msg.author_id) ? "Ignite Support" : (getProfile(msg.author_id)?.display_name || (privateChatNames ? null : msg.author?.display_name) || null)}
+                      authorAvatar={getProfile(msg.author_id)?.avatar_url || (privateChatNames ? null : msg.author?.avatar_url) || null}
                       timestamp={format(new Date(msg.created_at), "h:mm a")}
                       isOwn={msg.author_id === user?.id}
                       isAdmin={false}
@@ -1852,7 +1861,7 @@ export default function DirectMessagePage() {
                       contextId={conversationId || ""}
                       replyToMessage={
                         msg.reply_to
-                          ? { text: msg.reply_to.text, authorName: msg.reply_to.author?.display_name || null }
+                          ? { text: msg.reply_to.text, authorName: privateChatNames ? getProfile(localMessages?.find(row => row.id === msg.reply_to_id)?.author_id ?? '')?.display_name ?? null : msg.reply_to.author?.display_name || null }
                           : null
                       }
                       hasReply={!!msg.reply_to_id}
@@ -1884,7 +1893,7 @@ export default function DirectMessagePage() {
         typingUsers={typingUsers}
         replyTo={
           replyTo
-            ? { id: replyTo.id, text: replyTo.text, authorName: replyTo.author?.display_name || null }
+            ? { id: replyTo.id, text: replyTo.text, authorName: privateChatNames ? getProfile(replyTo.author_id)?.display_name ?? null : replyTo.author?.display_name || null }
             : null
         }
         onCancelReply={() => setReplyTo(null)}

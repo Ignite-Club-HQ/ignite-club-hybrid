@@ -26,6 +26,7 @@ import { WifiOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { getCachedMessagesPageData, cacheMessagesPageData } from "@/lib/messagesPageCache";
 import { rememberChatThreadLabels } from "@/lib/chatThreadLabelCache";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { filterDeletedTeams } from "@/lib/deletedTeamTombstones";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { fetchUnreadMessageCounts } from "@/lib/unreadMessageCounts";
@@ -1880,7 +1881,9 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
   // name in the header immediately instead of skeleton bars for the whole read.
   // Labels only — preview text on the row is never stored here.
   useEffect(() => {
-    rememberChatThreadLabels(user?.id, unifiedConversations);
+    const privateNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+    if (privateNames) rememberChatThreadLabels(user?.id, unifiedConversations.filter(row => row.type !== 'dm'));
+    else rememberChatThreadLabels(user?.id, unifiedConversations);
   }, [user?.id, unifiedConversations]);
 
   const { eventTitleMap, vaultFolderNameMap, vaultFileNameMap } =

@@ -1,11 +1,20 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ read: vi.fn(), legacy: vi.fn() }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), direct: vi.fn(), legacy: vi.fn() }));
 vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: async (_feature: string, providers: any) => providers.icp({}) }));
-vi.mock('@/live/chatRelationshipProfiles', () => ({ readChatRelationshipProfiles: mocks.read }));
+vi.mock('@/live/chatRelationshipProfiles', () => ({ readChatRelationshipProfiles: mocks.read, readDirectChatProfiles: mocks.direct }));
 import { usePrivateChatProfiles } from './usePrivateChatProfiles';
 beforeEach(() => { vi.resetAllMocks(); });
 describe('mounted private chat name lifetime', () => {
+  it('uses only the direct reader and clears names when switching chat purpose', async () => {
+    mocks.direct.mockResolvedValue(new Map([['person', { id: 'person', display_name: 'Direct name' }]]));
+    mocks.read.mockRejectedValue(new Error('Not a group'));
+    const hook = renderHook(({ kind }) => usePrivateChatProfiles('chat', 'viewer', ['person'], true, kind), { initialProps: { kind: 'direct' as 'direct' | 'group' } });
+    await waitFor(() => expect(hook.result.current('person')?.display_name).toBe('Direct name'));
+    expect(mocks.read).not.toHaveBeenCalled();
+    hook.rerender({ kind: 'group' });
+    expect(hook.result.current('person')).toBeNull();
+  });
   it('retires an old viewport read and withholds its late names', async () => {
     let finish: ((value: unknown) => void) | undefined;
     mocks.read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
