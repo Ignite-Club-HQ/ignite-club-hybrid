@@ -105,9 +105,15 @@ subjects, club-local removal without blocking the other club, opaque-reference
 preservation, source outage/recovery and identity upgrade. Profile reads now
 reuse the existing membership viewer guard for pending deletion/link drift
 before and after each await. The full 135 Rust checks pass after this change.
-Neither suite proves a held in-flight callback or full encrypted name search:
-the attempted same-subnet tick completed before mutation, so interruption is
-explicitly unverified rather than counted as a passed security check. A
-dedicated delayed-response test authority is still needed. No live acceptance.
+The deterministic test-only `profileMembershipBatchRelay.mo` now forwards
+actual real-club replies and holds either first or second reply until explicitly
+released. The transport suite verifies observed pending replies before caller
+suspension at both boundaries, subject suspension during the final reply and
+club removal between batches; all suppress disclosure and authorized retries
+succeed. Relay inventory is explicitly test-only, not deployment evidence.
+The direct two-real-source suite also passes independently without the relay.
+Encrypted name audience/decryption, account-link/configuration drift under a
+held reply, final-club-reply delivery-time revocation, and complete picker
+integration remain unverified. No live acceptance or release authorization.
 All 17 generated Candid contracts pass drift checking. These checks do not
 prove a mainnet guardian search or a completed encrypted-name conversion.
