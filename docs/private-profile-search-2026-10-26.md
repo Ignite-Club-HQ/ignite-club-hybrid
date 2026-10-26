@@ -98,7 +98,16 @@ club rejection, candidate ceiling, family membership, removal/explicit
 re-grant ABA revision rejection, upgrade preservation and closed release gate,
 plus bounded multi-page traversal of 252 real role holders, family candidates,
 malformed/stale cursor refusal and removed requester denial.
-It does not exercise the shared identity transport, in-flight admission
-revocation or full encrypted name search; no live signed-in acceptance.
+The additional `test-private-profile-transport-replica.mjs` passes real
+router-pinned shared identity to both clubs: anonymous/nonmember/unregistered
+authority/foreign-club denial, duplicate and size rules, suspended callers and
+subjects, club-local removal without blocking the other club, opaque-reference
+preservation, source outage/recovery and identity upgrade. Profile reads now
+reuse the existing membership viewer guard for pending deletion/link drift
+before and after each await. The full 135 Rust checks pass after this change.
+Neither suite proves a held in-flight callback or full encrypted name search:
+the attempted same-subnet tick completed before mutation, so interruption is
+explicitly unverified rather than counted as a passed security check. A
+dedicated delayed-response test authority is still needed. No live acceptance.
 All 17 generated Candid contracts pass drift checking. These checks do not
 prove a mainnet guardian search or a completed encrypted-name conversion.

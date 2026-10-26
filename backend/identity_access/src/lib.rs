@@ -1921,7 +1921,7 @@ async fn read_club_profiles(authority: Principal, club: String, subjects: Vec<Pr
         return Err("Private profile candidate reads are not released".into());
     }
     let caller = ic_cdk::api::msg_caller();
-    let account = account_for_write(caller)?;
+    let viewer = membership_lookup_viewer(caller)?;
     let config = directory_config()?;
     let sources: Vec<Principal> = config.sources.iter().map(|(_, p)| *p).collect();
     let subjects = club_profiles::validate(authority, &sources, &club, &subjects)?;
@@ -1935,7 +1935,7 @@ async fn read_club_profiles(authority: Principal, club: String, subjects: Vec<Pr
         }
     };
     let first = check(None).await?;
-    club_profiles::permit(true, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+    club_profiles::permit(true, membership_lookup_viewer(caller)? == viewer, config.same_configuration(&directory_config()?))?;
     club_profiles::verify_batch(&first, caller, &club, &subjects, None)?;
     let candidates: Vec<_> = subjects.iter().zip(&first.members).filter_map(|(subject,member)| {
         if !member { return None; }
@@ -1944,7 +1944,7 @@ async fn read_club_profiles(authority: Principal, club: String, subjects: Vec<Pr
     // Two calls regardless of candidate count; expected revision rejects any
     // role/family/removal change across observations. No boolean-only fallback.
     let final_batch = check(Some(first.revision.clone())).await?;
-    club_profiles::permit(true, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+    club_profiles::permit(true, membership_lookup_viewer(caller)? == viewer, config.same_configuration(&directory_config()?))?;
     club_profiles::verify_batch(&final_batch, caller, &club, &subjects, Some(&first.revision))?;
     if final_batch.members != first.members { return Err("Profile membership changed without revision".into()); }
     // Read profiles after the final await, not from a suspended plaintext copy.
