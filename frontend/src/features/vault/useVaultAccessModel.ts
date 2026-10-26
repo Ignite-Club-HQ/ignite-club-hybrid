@@ -328,6 +328,43 @@ export function useVaultAccessModel({
     if (competitionId) void retryCompetition();
   };
 
+  // Bounded root warmup: the already-returned directory supplies locations,
+  // not file access. Each read still goes to its caller-authorizing canister.
+  useEffect(() => {
+    if (!isIcpVault || !userId || currentView.type !== "root" || activeClubFilter || !canAccessVault || !userRoles) return;
+    const clubs = userClubs?.slice(0, 3) ?? [];
+    for (const club of clubs) {
+      const view: FolderView = { type: "club", clubId: club.id, clubName: club.name };
+      const roles = userRoles.filter(role => role.club_id === club.id);
+      const admin = isVaultClubAdminOrCommittee(isAppAdmin ?? false, view, roles);
+      const coach = isVaultCoachOrTeamAdmin(admin, view, roles);
+      const clubRoles = new Set(roles.flatMap(role => role.role ? [role.role] : []));
+      const signature = [...clubRoles].sort().join(",");
+      if (!admin && !coach && clubRoles.size === 0) continue;
+      void queryClient.prefetchQuery({
+        queryKey: [...vaultKeys.clubHasPro(club.id), userId, true],
+        queryFn: () => withReadDeadline(fetchVaultClubHasPro(club.id), "Vault club subscription", VAULT_OPEN_READ_MS),
+        staleTime: 30_000,
+      });
+      void queryClient.prefetchQuery({
+        queryKey: [...vaultKeys.subfoldersForView(view, admin, coach, isAppAdmin, signature), userId, true],
+        queryFn: async () => {
+          const { fetchVaultSubfolders } = await import("./vaultReadRepository");
+          return fetchVaultSubfolders({ view, isAppAdmin: isAppAdmin ?? false, isClubAdmin: admin, isCoachOrTeamAdmin: coach, clubRoles });
+        },
+        staleTime: 60_000,
+      });
+      void queryClient.prefetchQuery({
+        queryKey: [...vaultKeys.filesForView(view, admin, coach), userId, true],
+        queryFn: async () => {
+          const { fetchVaultItems } = await import("./vaultReadRepository");
+          return fetchVaultItems({ view, isClubAdmin: admin, isCoachOrTeamAdmin: coach });
+        },
+        staleTime: 60_000,
+      });
+    }
+  }, [isIcpVault, userId, currentView.type, activeClubFilter, canAccessVault, userRoles, userClubs, isAppAdmin, queryClient]);
+
   return {
     accessError, retryAccess,
     clubsError: userClubs?.length ? null : clubsError,

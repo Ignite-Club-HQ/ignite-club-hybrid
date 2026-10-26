@@ -462,6 +462,7 @@ function SupabaseVaultPage() {
     displayPhotos,
     displayFiles,
   } = useVaultContentDataModel({
+    userId: user?.id,
     currentView,
     showTrash,
     vaultSearchQuery,
