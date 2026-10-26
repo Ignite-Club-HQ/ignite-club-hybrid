@@ -96,7 +96,7 @@ describe("authority-owned paged club search", () => {
   });
   it("checks the original opaque reference without deriving a matched private-name key twice", async()=>{
     const privateRow={...row,display_name:"pii-display-name:v1:original:subject"};
-    mocks.read.mockResolvedValue(privateRow ? [privateRow] : []);
+    mocks.read.mockResolvedValue([privateRow]);
     mocks.hydrate.mockResolvedValue([row]);
     expect((await searchScopedClubProfiles(ctx,"club-a","Paul"))[0]?.display_name).toBe("Paul Cranwell");
     expect(mocks.hydrate).toHaveBeenCalledOnce();
