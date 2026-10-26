@@ -53,7 +53,7 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
     try {
       const raw = await read(readContentInScope(ctx, 'events', { clubId }, scoped => listLiveEvents(scoped, clubId, scope.selectedTeamId)), 'Schedule events');
       successful++;
-      const visible = raw.flatMap(event => {
+      const visible = raw.flatMap<MemberScheduleEvent>(event => {
         const start = scheduleTimestampDate(event.starts_at_ms);
         const teamId = event.team_id[0] ?? null;
         if (event.deleted || !start || start.getTime() < scope.fromMs || start.getTime() > scope.toMs ||
