@@ -1,3 +1,7 @@
+## Schedule team-name flash — 26 October 2026
+- [ ] Reuse known team names and reveal cold team cards with their names, without waiting for unrelated clubs, profiles or duties; test both modes.
+- [ ] Phone acceptance requires the updated frontend and Paul's session.
+
 ## Vault theme-filter delay — 26 October 2026
 - [x] Retain account/club ICP directory, roles, allowance and explicitly scoped folder/file caches on theme selection; reuse directory labels immediately without granting access, warm up to three authorized club roots, and treat pending reads as pending rather than empty.
 - [x] Focused safeguards: 89 Supabase / 95 ICP passed, guards passed, preview build OK. Frontend-only; no deployment.
