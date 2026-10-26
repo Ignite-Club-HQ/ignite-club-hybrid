@@ -54,7 +54,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 - /admin/group-infrastructure owns utilization; duplicates drift.
 - News uses the listed club, audience checks, cold discovery and retry. Why: rediscovery hides posts.
 - Creation choices filter by theme; absent clubs expose none to retain context.
-- Rewards/Profile share scoped caches; pending Pro stays unknown, history renders independently. Why: avoid waits/false locks.
+- Rewards/Profile bound each read; optional labels never block history; pending Pro stays unknown. Why: avoid false locks.
 - Reciprocal opening requires identity admission-release and exact eligibility-reader evidence for every admission-enabled destination, not deletion wiring alone. Why: destination flags can pass readiness while membership reads are denied.
 - Group 2 admission uses a stable eligibility-only grant from the pinned router; protected identity-only upgrades journal intent/readback and refresh the verified snapshot, never open placements/lifecycle gates. Why: repair access without exposing rehearsal operations.
 
