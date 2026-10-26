@@ -28,10 +28,17 @@ records, destination canisters, account claims, emails or routing were changed.
   notifications import as delivered receipts with stable idempotency keys;
   pending scheduled messages keep send time, recurrence and status variants.
 - Media and Vault loaders (`migrate-club-media.mjs`, `migrate-club-vault.mjs`):
-  photo/folder/file metadata with scoping, captions and attribution. Bytes are
-  NOT copied: storage_path/file_url keep pointing at Supabase and blob_ref
-  stays empty until the separate copy-and-encrypt job moves bytes into the
-  group's blob store.
+  photo/folder/file metadata with scoping, captions and attribution. The
+  `media_bytes` step (`migrate-club-bytes.mjs`) then downloads each file from
+  Supabase storage, IBE-encrypts it offline to the destination group's
+  production PII key (identity `path ++ U+001F ++ "blob"`, deterministic seed
+  so resume reproduces the identical ciphertext/hash), uploads the ciphertext
+  to the group's media_blob_store with the chunked contract, registers the
+  matching pii_access_control record (owner = claimed uploader, else the
+  deploy identity) with a best-effort club read grant, and patches the
+  blob_ref pointers into both snapshots via idempotent re-import. Per-item
+  journal on disk (never plaintext); unknown outcomes are retained and stop
+  the run, never replayed. External links keep pointing at their URL.
 - Children writer (the `children` step): encrypted child names/birth years load
   into pii_access_control under the pinned production key; family, role and
   exclusion arrays re-import into club_domain (idempotent replace of the club
@@ -78,10 +85,10 @@ create membership or grant platform/competition administrator roles.
 ## Not completed or verified live
 Preservation contracts for the refused event/guardian/poll/album data (needs
 new canister snapshot fields and a separately approved service upgrade),
-media/Vault byte copy-and-encrypt, stable source inventory and durable remote
-recovery, destination reconciliation and separately approved sign-in cutover
-remain. All ten plan steps now have writers, so a live run is gated only by
-the owner setting, the exact-club/group data approval, the plan hash and the
-typed confirmation.
+stable source inventory and durable remote recovery, destination
+reconciliation and separately approved sign-in cutover remain. All eleven
+plan steps now have writers (ten metadata/ledger steps plus media_bytes), so
+a live run is gated only by the owner setting, the exact-club/group data
+approval, the plan hash and the typed confirmation.
 The adapter tests exercise encoding, fencing and acknowledgement with fixtures;
 they do not establish live Supabase consistency or Internet Identity acceptance.
