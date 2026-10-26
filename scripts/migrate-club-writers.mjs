@@ -17,7 +17,7 @@ import { buildChatPages } from './migrate-club-messaging.mjs';
 import { buildNotificationSnapshot } from './migrate-club-notifications.mjs';
 import { buildMediaSnapshot } from './migrate-club-media.mjs';
 import { buildVaultSnapshot } from './migrate-club-vault.mjs';
-import { buildGameResults, assertNoUnsupportedEventRows, UNSUPPORTED_EVENT_TABLES } from './migrate-club-event-results.mjs';
+import { buildGameResults, buildEventExtras } from './migrate-club-event-results.mjs';
 import { prepareFamilyCopy, productionPiiPublicKey } from './migrate-club-family.mjs';
 import { planByteCopies, copyClubBytes, applyPhotoBlobRefs, applyVaultBlobRefs } from './migrate-club-bytes.mjs';
 const ms = (iso) => (iso ? BigInt(Date.parse(iso)) : null);
@@ -97,8 +97,8 @@ const optN16 = (v) => (v == null ? [] : [n16(v)]);
 const EVENT_TYPES = new Set(['game', 'training', 'social', 'mini_league']);
 const HOUR = 3_600_000n;
 
-/** Supabase events -> events_domain EventsSnapshot (details, RSVPs and game results; duties/captains/guests refuse earlier). */
-export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], claims, migratedChildren, gameResults = [], gameSummaries = [], gamePlayerStats = [] }) {
+/** Supabase events -> events_domain EventsSnapshot (details, RSVPs, game results and event extras: duties, captains, goalkeepers, player of the match, guests). */
+export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], claims, migratedChildren, gameResults = [], gameSummaries = [], gamePlayerStats = [], duties = [], captains = [], goalkeepers = [], playerOfMatch = [], guests = [] }) {
   const rows = events.filter((e) => e.club_id === clubId).map((e) => {
     const start = ms(e.start_time ?? e.event_date) ?? 0n;
     const end = ms(e.end_time);

@@ -132,16 +132,19 @@ export async function prepareFamilyCopy(input) {
     }
   }
   const byGuardian = new Map();
-  for (const g of mappedGuardians) {
-    const key = g.user.toText(), previous = byGuardian.get(key) ?? { guardian: g.user, children: [] };
-    previous.children.push(g.child); byGuardian.set(key, previous);
+  for (let i = 0; i < mappedGuardians.length; i++) {
+    const g = mappedGuardians[i], src = guardians[i];
+    const key = g.user.toText(), previous = byGuardian.get(key) ?? { guardian: g.user, children: [], label: [], is_primary: [] };
+    previous.children.push(g.child);
+    // Relationship labels/primary flags ride the guardian relationship
+    // contract (display metadata only; never gates access).
+    if (!previous.label.length && src.relationship_type) previous.label = [String(src.relationship_type)];
+    if (!previous.is_primary.length && src.is_primary != null) previous.is_primary = [!!src.is_primary];
+    byGuardian.set(key, previous);
   }
   return {
     domain: { ...membership, children: mappedChildren, guardians: mappedGuardians },
     pii: { records, grants, guardians: [...byGuardian.values()] },
-    // The existing club snapshot cannot carry these; preserve rather than discard.
-    guardianMetadata: guardians.map((g, i) => ({ child_id: g.child_id, user: mappedGuardians[i].user,
-      relationship_type: opt(g.relationship_type), is_primary: opt(g.is_primary), created_at_ms: timestamp(g.created_at) })),
     counts: { children: children.length, guardians: guardians.length, privateFields: records.length, roles: membership.roles.length },
   };
 }
