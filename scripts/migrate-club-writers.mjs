@@ -247,7 +247,7 @@ export const WRITERS = {
     const snap = buildEventsSnapshot({ clubId: ctx.clubId, events, creator: ctx.creator, rsvps, claims: ctx.claims, migratedChildren: ctx.migratedChildren, gameResults, gameSummaries, gamePlayerStats, duties, captains, goalkeepers, playerOfMatch, guests });
     await loadSnapshot(ctx, 'events_domain', snap, 'fence');
     const n = snap.events.length + snap.rsvps.length + gameResults.length + gamePlayerStats.length + gameSummaries.length
-      + snap.duties[0].length + snap.duty_teams[0].length + snap.open_duties[0].length
+      + snap.stat_extras[0].length + snap.duties[0].length + snap.duty_teams[0].length + snap.open_duties[0].length
       + captains.length + goalkeepers.length + playerOfMatch.length + guests.length;
     return { records: n, counts: { events_domain: n } };
   },

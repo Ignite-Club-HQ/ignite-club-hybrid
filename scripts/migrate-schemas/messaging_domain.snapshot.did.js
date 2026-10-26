@@ -373,7 +373,9 @@ export const idlFactory = ({ IDL }) => {
   const ChatPage = IDL.Record({
     'messages' : IDL.Vec(Message),
     'next' : IDL.Opt(IDL.Nat),
+    'poll_votes' : IDL.Opt(IDL.Vec(PollVote)),
     'conversations' : IDL.Vec(Conversation),
+    'polls' : IDL.Opt(IDL.Vec(Poll)),
   });
   const Main = IDL.Service({
     'addBulkAccessPrincipal' : IDL.Func(

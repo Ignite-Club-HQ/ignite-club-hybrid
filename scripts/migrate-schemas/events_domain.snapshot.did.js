@@ -517,10 +517,30 @@ export const idlFactory = ({ IDL }) => {
     'api_key' : IDL.Text,
     'updated_at_ms' : IDL.Nat64,
   });
+  const GamePlayerStatExtra = IDL.Record({
+    'position_minutes' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat16))),
+    'assists' : IDL.Opt(IDL.Nat16),
+    'team_id' : IDL.Text,
+    'user_id' : IDL.Opt(IDL.Text),
+    'child_id' : IDL.Opt(IDL.Text),
+    'event_id' : IDL.Text,
+  });
   const MaterializationReceipt = IDL.Record({
     'event_ids' : IDL.Vec(IDL.Text),
     'input' : MatchEventInput,
     'revision' : IDL.Nat64,
+  });
+  const EventGoalkeeper = IDL.Record({
+    'team_id' : IDL.Text,
+    'user_id' : IDL.Opt(IDL.Text),
+    'child_id' : IDL.Opt(IDL.Text),
+    'event_id' : IDL.Text,
+  });
+  const EventCaptain = IDL.Record({
+    'team_id' : IDL.Text,
+    'user_id' : IDL.Opt(IDL.Text),
+    'child_id' : IDL.Opt(IDL.Text),
+    'event_id' : IDL.Text,
   });
   const CompetitionEventLink = IDL.Record({
     'team_id' : IDL.Text,
@@ -528,7 +548,14 @@ export const idlFactory = ({ IDL }) => {
     'match_id' : IDL.Text,
     'competition_id' : IDL.Text,
   });
+  const EventPotm = IDL.Record({
+    'team_id' : IDL.Opt(IDL.Text),
+    'user_id' : IDL.Opt(IDL.Text),
+    'child_id' : IDL.Opt(IDL.Text),
+    'event_id' : IDL.Text,
+  });
   const EventsSnapshot = IDL.Record({
+    'stat_extras' : IDL.Opt(IDL.Vec(GamePlayerStatExtra)),
     'materializations' : IDL.Opt(
       IDL.Vec(IDL.Tuple(IDL.Text, MaterializationReceipt))
     ),
@@ -536,15 +563,22 @@ export const idlFactory = ({ IDL }) => {
     'player_details' : IDL.Opt(
       IDL.Vec(IDL.Tuple(IDL.Text, IDL.Vec(GamePlayerDetail)))
     ),
+    'duty_teams' : IDL.Opt(IDL.Vec(EventDutyTeam)),
     'group_players' : IDL.Opt(IDL.Vec(EventGroupPlayer)),
     'summaries' : IDL.Opt(IDL.Vec(GameSummary)),
     'results' : IDL.Opt(IDL.Vec(GameResult)),
     'series' : IDL.Vec(EventSeries),
+    'goalkeepers' : IDL.Opt(IDL.Vec(EventGoalkeeper)),
     'stats' : IDL.Opt(IDL.Vec(GamePlayerStat)),
     'events' : IDL.Vec(Event),
     'operations' : IDL.Opt(IDL.Vec(CompetitionEventOperation)),
+    'duties' : IDL.Opt(IDL.Vec(Duty)),
+    'captains' : IDL.Opt(IDL.Vec(EventCaptain)),
     'group_duties' : IDL.Opt(IDL.Vec(EventGroupDuty)),
     'match_links' : IDL.Opt(IDL.Vec(CompetitionEventLink)),
+    'guests' : IDL.Opt(IDL.Vec(EventGuest)),
+    'open_duties' : IDL.Opt(IDL.Vec(OpenDuty)),
+    'player_of_match' : IDL.Opt(IDL.Vec(EventPotm)),
     'rsvps' : IDL.Vec(Rsvp),
   });
   const Main = IDL.Service({

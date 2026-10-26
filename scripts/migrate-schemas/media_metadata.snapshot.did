@@ -1,5 +1,6 @@
 type State = 
  record {
+   albums: vec Album;
    assets: vec Asset;
    capabilities: vec Capability;
    comments: vec Comment;
@@ -294,6 +295,7 @@ type GalleryChatCard =
  };
 type FenceSnapshot = 
  record {
+   albums: opt vec Album;
    assets: vec Asset;
    capabilities: vec Capability;
    cards: vec GalleryChatCard;
@@ -356,5 +358,14 @@ type Asset =
    storage_path: text;
    team_id: opt text;
    visibility: text;
+ };
+type Album = 
+ record {
+   club_id: text;
+   cover_asset_id: opt text;
+   created_at_ms: nat64;
+   created_by: principal;
+   id: text;
+   title: text;
  };
 service : (governorInit: principal) -> Main
