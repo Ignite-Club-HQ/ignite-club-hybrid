@@ -84,6 +84,25 @@ test('rewards writer refuses missing claims before touching the destination', as
   await assert.rejects(WRITERS.rewards({ clubId: 'c1', claims: new Map(), rows: async t => data[t], require: () => { calls++; throw Error('unexpected destination'); } }), /claim/);
   assert.equal(calls, 0);
 });
+test('rewards writer reads every ledger, fences exact club and submits a decodable snapshot before acknowledgement', async () => {
+  const data = { clubs: [input.club], club_subscriptions: [], club_rewards: input.rewards, user_club_points: input.users,
+    child_club_points: [], points_history: input.history, reward_redemptions: input.redemptions, points_cooldowns: input.cooldowns };
+  const reads = [], calls = [];
+  const type = await snapshotType(require, new URL('./migrate-schemas/club_points_domain.snapshot.did.js', import.meta.url).href);
+  const { IDL } = require('@icp-sdk/core/candid');
+  const result = await WRITERS.rewards({ clubId: 'c1', claims, target: { canisters: { club_points_domain: 'destination' } },
+    rows: async t => { reads.push(t); return data[t]; }, schemaFile: () => new URL('./migrate-schemas/club_points_domain.snapshot.did.js', import.meta.url).href,
+    require: name => name === '@icp-sdk/core/agent' ? { Actor: { createActor: (_, options) => {
+      assert.equal(options.canisterId, 'destination');
+      return { set_transfer_fence: async (club, on) => { calls.push('fence'); assert.equal(club, 'c1'); assert.equal(on, true); return { Ok: null }; },
+        import_club_snapshot: async (club, bytes) => { calls.push('import'); assert.equal(club, 'c1');
+          const [back] = IDL.decode([type], bytes); assert.equal(back.users[0].points, 75);
+          assert.equal(back.redemptions[0].status, 'fulfilled'); return { Ok: 1n }; } };
+    } } } : require(name) });
+  assert.deepEqual(reads.sort(), Object.keys(data).sort());
+  assert.deepEqual(calls, ['fence', 'import']);
+  assert.equal(result.records, 6);
+});
 test('points inventory includes child balances, cooldowns and module settings in the checked plan', () => {
   const tables = STEPS.find(s => s.id === 'rewards').tables.map(t => t[0]);
   for (const t of ['child_club_points', 'points_cooldowns', 'club_subscriptions']) assert.ok(tables.includes(t));
