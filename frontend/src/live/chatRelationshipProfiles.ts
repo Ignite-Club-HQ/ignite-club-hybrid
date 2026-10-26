@@ -80,8 +80,14 @@ export async function readChatRelationshipProfiles(
     // contracts. Do not guess a resource from deterministic conversation IDs.
     throw new Error('Verified chat profile relationship is unavailable.');
   }
-  const profiles = await readRelationshipProfiles(owner, ids, relationship, signal);
-  active();
+  // Identity/PII authorize at most 25 names per call. Keep one opening/closing
+  // chat lease around the bounded batches rather than repeat discovery per name.
+  const profiles: Awaited<ReturnType<typeof readRelationshipProfiles>> = [];
+  for (let index = 0; index < ids.length; index += 25) {
+    active();
+    profiles.push(...await readRelationshipProfiles(owner, ids.slice(index, index + 25), relationship, signal));
+    active();
+  }
   await confirmResource();
   const closing = await getLiveGroupMetadata(owner, conversationId);
   active();

@@ -11,14 +11,16 @@ import {
 } from "@/live/features/messaging";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getCachedTeam } from "@/lib/clubTeamCache";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 
 export const ICP_TEAM_MESSAGES_PER_PAGE = 30;
 
 /** Maps canister rows into the shared team chat message shape (newest first). */
 export async function mapLiveTeamRows(ctx: any, teamId: string, rows: any[], onReady?: (rows: any[]) => void): Promise<any[]> {
+  const privateNames = privateProfileSearchRehearsalEnabled();
   const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
   if (onReady) {
-    const profiles = getProfilesFromCache(authorIds).cached;
+    const profiles = privateNames ? new Map() : getProfilesFromCache(authorIds).cached;
     const byId = new Map(rows.map(row => [row.id, row]));
     onReady(rows.slice().sort((a, b) => Number(b.sequence - a.sequence)).map(row => {
       const attachment = row.attachment?.[0];
@@ -35,7 +37,7 @@ export async function mapLiveTeamRows(ctx: any, teamId: string, rows: any[], onR
         is_system_message: false, forwarded_from_user_id: null, forwarded_at: null, forwarded_source_label: null };
     }));
   }
-  const profilesRead = withReadDeadline(fetchProfilesWithCache(authorIds), "Chat profiles", 1500)
+  const profilesRead = privateNames ? Promise.resolve(new Map()) : withReadDeadline(fetchProfilesWithCache(authorIds), "Chat profiles", 1500)
     .catch(() => getProfilesFromCache(authorIds).cached);
   const reactionsRead = withReadDeadline(listLiveReactions(ctx, teamId), "Chat reactions", 1500).catch(() => []);
   const [profilesMap, liveReactions] = await Promise.all([profilesRead, reactionsRead]);

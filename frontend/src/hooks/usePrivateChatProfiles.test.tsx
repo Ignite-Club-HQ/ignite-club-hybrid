@@ -31,4 +31,11 @@ describe('mounted private chat name lifetime', () => {
     await waitFor(() => expect(mocks.read).toHaveBeenCalledTimes(1));
     expect(hook.result.current('person')).toBeNull();
   });
+  it('prioritizes the first 100 current authors instead of failing a long chat history', async () => {
+    const ids = Array.from({ length: 130 }, (_, i) => `person-${i}`);
+    mocks.read.mockResolvedValue(new Map());
+    renderHook(() => usePrivateChatProfiles('chat', 'viewer', ids, true));
+    await waitFor(() => expect(mocks.read).toHaveBeenCalledTimes(1));
+    expect(mocks.read.mock.calls[0][2]).toEqual(ids.slice(0, 100).sort());
+  });
 });

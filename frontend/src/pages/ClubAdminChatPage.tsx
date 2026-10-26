@@ -73,6 +73,9 @@ import {
   NOTIFICATION_PRELOAD_FLAG,
 } from "@/lib/chatThreadLoadState";
 import { useProfiles } from "@/hooks/useProfiles";
+import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useMessageReads } from "@/hooks/useMessageReads";
 import {
   CHAT_READ_EXCLUDED_WITH_QUEUED_ID_PREFIXES,
@@ -184,6 +187,7 @@ function SupabaseClubAdminChatPage() {
   const { user, profile, initialized } = useAuth();
   const queryClient = useQueryClient();
   const authReady = !!user && initialized;
+  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
   const openedFromNotificationRef = useRef<number | null>(
     conversationId ? consumeFromNotificationFlag("club_admin", conversationId) : null,
   );
@@ -332,12 +336,14 @@ function SupabaseClubAdminChatPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!conversation?.member_user_id && authReady,
+    enabled: !privateChatNames && !!conversation?.member_user_id && authReady,
     staleTime: 5 * 60 * 1000,
   });
 
   // Determine if current user is the member or an admin
   const isMember = conversation?.member_user_id === user?.id;
+  const getPrivateMemberProfile = usePrivateChatProfiles(conversationId, user?.id,
+    conversation?.member_user_id ? [conversation.member_user_id] : [], privateChatNames);
 
   // Seed the header (name + avatar) from the already-loaded admin inbox cache
   // or the shared profile cache, so the chat opens with the member's actual
@@ -367,11 +373,11 @@ function SupabaseClubAdminChatPage() {
   }, [conversation?.member_user_id]);
 
   const resolvedMemberName =
-    memberProfile?.display_name ||
+    privateChatNames ? getPrivateMemberProfile(conversation?.member_user_id ?? "")?.display_name ?? null : memberProfile?.display_name ||
     cachedMemberProfile?.display_name ||
     (inboxFallback?.name && inboxFallback.name !== "Member" ? inboxFallback.name : null);
   const resolvedMemberAvatar =
-    memberProfile?.avatar_url ||
+    privateChatNames ? getPrivateMemberProfile(conversation?.member_user_id ?? "")?.avatar_url ?? null : memberProfile?.avatar_url ||
     cachedMemberProfile?.avatar_url ||
     inboxFallback?.avatar ||
     null;
@@ -764,9 +770,11 @@ function SupabaseClubAdminChatPage() {
 
 
   const authorIds = useMemo(() => {
-    return [...new Set((localMessages || []).map(m => m.author_id).filter(Boolean))];
+    return [...new Set((localMessages || []).flatMap(m => [m.author_id, ...(m.reactions ?? []).map(r => r.user_id)]).filter(Boolean))];
   }, [localMessages]);
-  const { getProfile } = useProfiles(authorIds);
+  const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
+  const getPrivateProfile = usePrivateChatProfiles(conversationId, user?.id, authorIds, privateChatNames);
+  const getProfile = privateChatNames ? getPrivateProfile : getLegacyProfile;
 
   // Reset local cache view when conversation changes
   useEffect(() => {
@@ -1509,7 +1517,7 @@ function SupabaseClubAdminChatPage() {
         ) : (!!searchQuery.trim() && !filteredMessages?.length && (isSearchFetching || !searchCanShowEmpty)) ? (
           <ChatSearchLoadingState />
         ) : filteredMessages?.length === 0 ? (
-          <ChatEmptyState title={isMember ? `Send a message to ${club?.name || "club"} admins` : `Start a conversation with ${memberProfile?.display_name || "this member"}`} />
+          <ChatEmptyState title={isMember ? `Send a message to ${club?.name || "club"} admins` : `Start a conversation with ${resolvedMemberName || "this member"}`} />
         ) : (
           <ChatMessagesScroller
             messages={filteredMessages || []}
@@ -1546,8 +1554,8 @@ function SupabaseClubAdminChatPage() {
                       text={msg.text}
                       imageUrl={msg.image_url}
                       authorId={msg.author_id}
-                      authorName={getProfile(msg.author_id)?.display_name || msg.author?.display_name || null}
-                      authorAvatar={getProfile(msg.author_id)?.avatar_url || msg.author?.avatar_url || null}
+                      authorName={getProfile(msg.author_id)?.display_name || (privateChatNames ? null : msg.author?.display_name) || null}
+                      authorAvatar={getProfile(msg.author_id)?.avatar_url || (privateChatNames ? null : msg.author?.avatar_url) || null}
                       timestamp={format(new Date(msg.created_at), "h:mm a")}
                       isOwn={msg.author_id === user?.id}
                       isAdmin={false}
@@ -1559,7 +1567,9 @@ function SupabaseClubAdminChatPage() {
                       contextId={conversationId || ""}
                       replyToMessage={
                         msg.reply_to
-                          ? { text: msg.reply_to.text, authorName: msg.reply_to.author?.display_name || null }
+                          ? { text: msg.reply_to.text, authorName: privateChatNames
+                            ? getProfile(localMessages?.find(row => row.id === msg.reply_to_id)?.author_id ?? "")?.display_name ?? null
+                            : msg.reply_to.author?.display_name || null }
                           : null
                       }
                       hasReply={!!msg.reply_to_id}

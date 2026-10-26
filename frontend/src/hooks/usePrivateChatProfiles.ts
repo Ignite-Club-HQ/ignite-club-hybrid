@@ -5,7 +5,10 @@ import { readChatRelationshipProfiles, type ChatProfile } from '@/live/chatRelat
 /** Decrypted chat names live only in this mounted audience, never the global
  * profile/message cache or persisted QueryClient snapshots. */
 export function usePrivateChatProfiles(conversationId: string | undefined, viewerId: string | undefined, ids: readonly string[], enabled: boolean) {
-  const idsKey = JSON.stringify([...new Set(ids)].sort());
+  // Bound the mounted working set, preserving visible/newest author priority.
+  // Sorting after truncation stabilizes equivalent sets without requesting
+  // every author in a growing history window.
+  const idsKey = JSON.stringify([...new Set(ids)].slice(0, 100).sort());
   const scopeKey = JSON.stringify([conversationId, viewerId, idsKey, enabled]);
   const [snapshot, setSnapshot] = useState<{ key: string; profiles: Map<string, ChatProfile> }>();
   useEffect(() => {

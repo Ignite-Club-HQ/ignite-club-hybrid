@@ -9,6 +9,31 @@ and other details must remain viewable in the app.
 
 ## Implemented locally
 
+### 22:52 continuation — team, club and club-admin chat displays
+
+Connected team and club author/reply labels, club-admin author/reply/header
+and empty-state labels, nested reaction lists and read-receipt displays to
+mounted exact-chat private-name reads during rehearsal. Existing hosted mode
+is unchanged. Rehearsal team/club message mapping no longer reads or embeds
+generic cached profile labels, including first-body/older-page results; read
+receipts also ignore cached prop labels. Club-admin's reported enrichment
+branch is Supabase-only; its actual ICP mapping carries no profiles already.
+
+The mounted author working set takes the first 100 current IDs, then sorts for
+stability; the shared reader splits that set into 25-person authorization
+batches under one opening/closing chat lease. A failed later batch discards
+earlier names, and account/audience switches discard late replies. Mounted
+read-receipt regression confirms stale supplied names never render. 104 focused
+tests pass in each sign-in mode, 17 Candid contracts and ICP guards pass,
+and preview build is clean. No real signed-in encrypted chat was exercised.
+
+Still unfinished: direct-message/broadcast and competition-admin relationship
+contracts, viewport-level long-history author paging, actual final-service
+audience race acceptance, executable protected release/backfill and production
+evidence. Reply targets outside loaded pages retain neutral private labels.
+These are implementation/acceptance gaps, not merely an approval wait. No
+live deployment, conversion, grant or activation occurred.
+
 ### 22:47 continuation — mounted group-chat names
 
 Rehearsal group chats now resolve names independently of message retrieval.

@@ -96,6 +96,8 @@ import { useMarkVisibleChatMessagesRead } from "@/hooks/useMarkVisibleChatMessag
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchProfilesWithCache, fetchSingleProfileWithCache, getProfilesFromCache } from "@/lib/profileCache";
 import { useProfiles } from "@/hooks/useProfiles";
+import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { getCachedMessages, cacheMessages, shouldRefetchMessages } from "@/lib/messageCache";
 import { consumeFromNotificationFlag } from "@/lib/notificationPreload";
 import { logChatOpenLatency } from "@/lib/chatOpenLatency";
@@ -512,8 +514,9 @@ export default function ClubChatPage() {
   const mapLiveClubRows = async (ctx: any, rows: any[], onReady?: (messages: Message[]) => void, signal?: AbortSignal): Promise<Message[]> => {
     assertReadNotAborted(signal);
     const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
-    let profilesMap = getProfilesFromCache(authorIds).cached;
-    const profilesRead = withReadDeadline(fetchProfilesWithCache(authorIds), "Chat profiles", 8_000, signal).catch(() => profilesMap);
+    const privateNames = privateProfileSearchRehearsalEnabled();
+    let profilesMap = privateNames ? new Map() : getProfilesFromCache(authorIds).cached;
+    const profilesRead = privateNames ? Promise.resolve(new Map()) : withReadDeadline(fetchProfilesWithCache(authorIds), "Chat profiles", 8_000, signal).catch(() => profilesMap);
     // Reactions persist on the canister; restore them on every refetch.
     // Tolerate older canisters that lack list_reactions.
     const reactionsByMessage = new Map<string, any[]>();
@@ -828,9 +831,12 @@ export default function ClubChatPage() {
   
   // Use fresh profile data that refreshes on visibility change (fixes names vanishing after phone lock)
   const authorIds = useMemo(() => {
-    return [...new Set((localMessages || []).map(m => m.author_id).filter(Boolean))];
+    return [...new Set((localMessages || []).flatMap(m => [m.author_id, ...(m.reactions ?? []).map(r => r.user_id)]).filter(Boolean))];
   }, [localMessages]);
-  const { getProfile } = useProfiles(authorIds);
+  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
+  const getPrivateProfile = usePrivateChatProfiles(clubId, user?.id, authorIds, privateChatNames);
+  const getProfile = privateChatNames ? getPrivateProfile : getLegacyProfile;
   
   // Reset scroll state when clubId changes
   useEffect(() => {
@@ -978,6 +984,7 @@ export default function ClubChatPage() {
 
   // Always ensure profiles are loaded for messages with missing profile data
   useEffect(() => {
+    if (privateChatNames) return;
     if (!localMessages?.length) return;
     
     // Find messages with missing profile data
@@ -1006,7 +1013,7 @@ export default function ClubChatPage() {
         return updated ? newMessages : prev;
       });
     });
-  }, [localMessages]);
+  }, [localMessages, privateChatNames]);
 
   useEffect(() => {
     if (messagesData && !Array.isArray(messagesData)) {
@@ -2055,8 +2062,8 @@ export default function ClubChatPage() {
                       text={msg.text}
                       imageUrl={msg.image_url}
                       authorId={msg.author_id}
-                      authorName={getProfile(msg.author_id)?.display_name || msg.profiles?.display_name || null}
-                      authorAvatar={getProfile(msg.author_id)?.avatar_url || msg.profiles?.avatar_url || null}
+                      authorName={getProfile(msg.author_id)?.display_name || (privateChatNames ? null : msg.profiles?.display_name) || null}
+                      authorAvatar={getProfile(msg.author_id)?.avatar_url || (privateChatNames ? null : msg.profiles?.avatar_url) || null}
                       timestamp={formatTimestamp(msg.created_at)}
                       isOwn={msg.author_id === user?.id}
                       isAdmin={isClubAdmin || isAppAdmin || false}
@@ -2066,7 +2073,9 @@ export default function ClubChatPage() {
                       queryKey={queryKeyMemo}
                       replyToMessage={
                         msg.reply_to
-                          ? { text: msg.reply_to.text, authorName: msg.reply_to.profiles?.display_name || null }
+                          ? { text: msg.reply_to.text, authorName: privateChatNames
+                            ? getProfile(localMessages?.find(row => row.id === msg.reply_to_id)?.author_id ?? "")?.display_name ?? null
+                            : msg.reply_to.profiles?.display_name || null }
                           : null
                       }
                       hasReply={!!msg.reply_to_id}
