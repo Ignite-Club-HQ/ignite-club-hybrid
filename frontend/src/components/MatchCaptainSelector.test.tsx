@@ -93,4 +93,12 @@ describe('ICP event captain loading', () => {
     expect(m.match).toHaveBeenCalledTimes(2);
     expect(m.season).toHaveBeenCalledTimes(1);
   });
+  it('still lets an admin assign a match captain when only the season lookup fails', async () => {
+    m.season.mockRejectedValue(new Error('List team captains: Team not found'));
+    const view = mount();
+    fireEvent.click(await view.findByRole('button', { name: 'Assign Captain' }));
+    expect(await view.findByRole('button', { name: /Paul/ })).toBeTruthy();
+    expect(view.getByText(/season captain couldn’t be shown/)).toBeTruthy();
+    expect(m.match).toHaveBeenCalledTimes(1);
+  });
 });
