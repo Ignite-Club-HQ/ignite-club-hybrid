@@ -56,18 +56,18 @@ describe("authorized name display", () => {
     const audience = { kind, authority: Principal.fromText(authority), resource: 'exact-resource', profile_revision: 7n };
     mocks.scopedRead.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9] }] });
     let release: (() => void) | undefined;
-    let revoked = false;
+    let drifted = false;
     const confirm = vi.fn(async () => {
       await new Promise<void>(resolve => { release = resolve; });
-      if (revoked) throw new Error('Relationship changed');
+      if (drifted) throw new Error('Original authority inventory changed');
     });
     const pending = hydratePrivateProfileNames(ctx, [{ display_name: reference }], {
       audience, resolveAuthority: async () => ({ context: ctx, confirm }),
     });
-    const rejected = expect(pending).rejects.toThrow('Relationship changed');
+    const rejected = expect(pending).rejects.toThrow('Original authority inventory changed');
     await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
     expect(mocks.decrypt).toHaveBeenCalled();
-    revoked = true;
+    drifted = true;
     release?.();
     await rejected;
     expect(mocks.read).not.toHaveBeenCalled();

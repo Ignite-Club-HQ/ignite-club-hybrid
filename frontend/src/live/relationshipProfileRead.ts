@@ -34,7 +34,11 @@ export async function readRelationshipProfiles(
     icp: async shared => {
       active();
       if (shared.identity !== identity) throw new Error('Profile reader identity changed.');
-      if (!privateProfileSearchRehearsalEnabled()) return listLiveProfilesByIds(shared, ids);
+      if (!privateProfileSearchRehearsalEnabled()) {
+        const rows = await listLiveProfilesByIds(shared, ids);
+        active();
+        return rows;
+      }
       if (!authorityId) throw new Error('Profile relationship authority is missing.');
       const authority = Principal.fromText(authorityId);
       if (authority.isAnonymous() || authority.toText() === 'aaaaa-aa') throw new Error('Invalid profile relationship authority.');

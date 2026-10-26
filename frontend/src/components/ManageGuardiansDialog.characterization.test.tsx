@@ -239,7 +239,7 @@ describe.runIf(mocks.mode === "icp")("ManageGuardiansDialog ICP boundary", () =>
     expect(screen.getByRole("status")).toHaveTextContent(/not available in ICP yet/i);
     expect(guardianRow("Guardian One").queryByRole("button")).not.toBeInTheDocument();
     expect(mocks.guardiansLive).toHaveBeenCalledWith(mocks.context, "child-1");
-    expect(mocks.profilesLive).toHaveBeenCalledWith(mocks.context, ["guardian-principal"]);
+    expect(mocks.profilesLive).toHaveBeenCalledWith(mocks.context, ["guardian-principal"], { kind: 'family', resource: 'child-1' });
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.rolesLive).not.toHaveBeenCalled();
   });
