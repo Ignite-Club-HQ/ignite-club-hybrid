@@ -128,6 +128,7 @@ import { TeamDetailAccordionSections } from "@/components/team/TeamDetailAccordi
 import { getCachedTeam, getCachedClub, cacheTeam, cacheClub } from "@/lib/clubTeamCache";
 import { loadTeamClubDetails } from "@/lib/teamClubDetails";
 import { readIcpTeamPendingInvites } from "@/features/membership/teamPendingInvites";
+import { readTeamChildRows, teamRoleRows } from '@/lib/teamRosterReads';
 
 
 type TeamRole = TeamJoinRole;
@@ -685,13 +686,15 @@ export default function TeamDetailPage() {
   // without clearing the cache (which would cause a flash of empty state)
 
   // Fetch children assigned to the team
-  const { data: teamChildren = [], isLoading: isChildrenLoading, isFetching: isChildrenFetching, refetch: refetchChildren } = useQuery({
+  const { data: teamChildrenData = [], isLoading: isChildrenLoading, isFetching: isChildrenFetching, refetch: refetchChildren } = useQuery({
     queryKey: membershipKeys.teamChildren(id),
     queryFn: async () => {
       if (isIcpAccount) {
-        if (!id) return [];
-        const roster = await withRosterDeadline(readIcpPitchRoster(id), 30_000, "team player list");
-        return roster.children.map(child => ({ id: child.child_id, child_id: child.child_id, children: { id: child.child_id, name: child.child_name, year_of_birth: null, parent_id: null, profiles: null, allParentNames: [] } }));
+        if (!id || !team?.club_id) return [];
+        return withFeatureBackend('membership', {
+          supabase: () => { throw new Error('ICP roster required'); },
+          icp: ctx => withRosterDeadline(readTeamChildRows(ctx, team.club_id, id), 30_000, 'team player list'),
+        }, { clubId: team.club_id });
       }
       const { data: rpcChildren, error: rpcError } = await supabase.rpc("get_team_children_for_pitch_board", {
         p_team_id: id!,
@@ -763,7 +766,7 @@ export default function TeamDetailPage() {
         };
       });
     },
-    enabled: !!id && !useIcpLab,
+    enabled: !!id && !useIcpLab && (!isIcpAccount || !!team?.club_id),
     staleTime: 0,
     gcTime: 5 * 60 * 1000,
     refetchOnMount: 'always',
@@ -794,29 +797,7 @@ export default function TeamDetailPage() {
                 .filter((g) => (g.team?.[0] ?? null) === id!)
                 .map((g) => ({ account_id: g.user.toText(), role: g.role }));
             }
-            const accountIds = [...new Set(grants.map((g) => g.account_id))];
-            const profiles = accountIds.length > 0
-              ? await withRosterDeadline(listLiveProfilesByIds(ctx, accountIds), 8_000, "member names").catch(() => [])
-              : [];
-            const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
-            // The signed-in member's own name is always known locally — use it
-            // when identity_access has no (named) profile row for their id.
-            const selfIds = new Set<string>([user?.id, user?.id ? `principal:${user.id}` : null, (myProfile as any)?.id].filter(Boolean) as string[]);
-            if (user?.id) { const a = await withRosterDeadline(accountIdForPrincipal(user.id), 4_000, "account").catch(() => null); if (a) selfIds.add(a); }
-            return grants.map((g) => {
-              let p: any = profileMap.get(g.account_id);
-              if ((!p || !p.display_name) && selfIds.has(g.account_id) && myProfile?.display_name) {
-                p = { ...(p ?? {}), display_name: myProfile.display_name, avatar_ref: p?.avatar_ref ?? [(myProfile as any).avatar_url].filter(Boolean) };
-              }
-              return {
-                id: `${g.account_id}:${g.role}`,
-                user_id: g.account_id,
-                role: g.role,
-                profiles: p
-                  ? { id: g.account_id, display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null }
-                  : null,
-              };
-            });
+            return teamRoleRows(grants);
           },
         }, team?.club_id ? { clubId: team.club_id } : { teamId: id! });
       }
@@ -852,18 +833,49 @@ export default function TeamDetailPage() {
     refetchOnWindowFocus: false,
   });
 
+  const adultNameIds = useMemo(() => [...new Set(rawMembersData.map(row => row.user_id))].sort(), [rawMembersData]);
+  const childNameIds = useMemo(() => teamChildrenData.map(row => row.child_id).sort(), [teamChildrenData]);
+  const { data: adultNames = [] } = useQuery({
+    queryKey: ['team-roster-adult-names', user?.id, id, adultNameIds],
+    enabled: isIcpAccount && adultNameIds.length > 0,
+    queryFn: () => withFeatureBackend('membership', {
+      supabase: () => { throw new Error('ICP names required'); },
+      icp: ctx => withRosterDeadline(listLiveProfilesByIds(ctx, adultNameIds), 8_000, 'member names'),
+    }, { shared: 'person' }),
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const { data: childNames } = useQuery({
+    queryKey: ['team-roster-child-names', user?.id, id, team?.club_id, childNameIds],
+    enabled: isIcpAccount && !!team?.club_id && childNameIds.length > 0,
+    queryFn: () => withFeatureBackend('membership', {
+      supabase: () => { throw new Error('ICP names required'); },
+      icp: async ctx => {
+        const { resolveLivePiiTextBatch } = await import('@/live/features/vault');
+        return withRosterDeadline(resolveLivePiiTextBatch(ctx, childNameIds, 'name', 'Read team roster', 'Team player names'), 20_000, 'player names');
+      },
+    }, { clubId: team?.club_id ?? '' }),
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const teamChildren = useMemo(() => !isIcpAccount || !childNames ? teamChildrenData : teamChildrenData.map(row => ({
+    ...row, children: { ...row.children, name: childNames.get(row.child_id) ?? row.children.name },
+  })), [isIcpAccount, teamChildrenData, childNames]);
+
   // Fill in the signed-in member's own name at render time too — the cached
   // member list may have been fetched before their profile finished loading.
   const rawMembers = useMemo(() => {
     const myName = myProfile?.display_name;
-    if (!myName || !user?.id) return rawMembersData;
-    const selfIds = new Set<string>([user.id, `principal:${user.id}`, (myProfile as any)?.id].filter(Boolean) as string[]);
-    return (rawMembersData as any[]).map((m) =>
-      selfIds.has(m.user_id) && !m.profiles?.display_name
-        ? { ...m, profiles: { id: m.user_id, display_name: myName, avatar_url: m.profiles?.avatar_url ?? (myProfile as any)?.avatar_url ?? null } }
-        : m,
-    );
-  }, [rawMembersData, myProfile, user?.id]);
+    const selfIds = new Set<string>([user?.id, user?.id ? `principal:${user.id}` : null, (myProfile as any)?.id].filter(Boolean) as string[]);
+    const nameMap = new Map(adultNames.map(profile => [profile.account_id, profile]));
+    return (rawMembersData as any[]).map(m => {
+      const profile = nameMap.get(m.user_id);
+      const enriched = profile ? { ...m, profiles: { id: m.user_id, display_name: profile.display_name, avatar_url: profile.avatar_ref?.[0] ?? null } } : m;
+      return selfIds.has(m.user_id) && !enriched.profiles?.display_name && myName
+        ? { ...enriched, profiles: { id: m.user_id, display_name: myName, avatar_url: enriched.profiles?.avatar_url ?? (myProfile as any)?.avatar_url ?? null } }
+        : enriched;
+    });
+  }, [rawMembersData, adultNames, myProfile, user?.id]);
 
   // Group roles by user - use user_id directly since it's always present
   // Memoize to prevent recalculation on every render
@@ -1543,7 +1555,7 @@ export default function TeamDetailPage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-bold truncate leading-tight">{team.name}</h1>
           <p className="text-xs text-muted-foreground leading-tight">
-            {Object.keys(members).length + teamChildren.length} member{Object.keys(members).length + teamChildren.length !== 1 ? 's' : ''}
+            {isMembersLoading || isChildrenLoading ? 'Loading members…' : <>{Object.keys(members).length + teamChildren.length} member{Object.keys(members).length + teamChildren.length !== 1 ? 's' : ''}</>}
           </p>
         </div>
         {showInvite && (

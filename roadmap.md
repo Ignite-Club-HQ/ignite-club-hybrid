@@ -1,3 +1,6 @@
+## Team page information delays — 26 October 2026
+- [ ] Remove duplicate whole-pitch roster reads and separate membership from name unlocking; route next event by known club; verify focused regressions. Signed-in phone timing unavailable locally.
+
 ## Gallery team-chat announcement failure — 26 October 2026
 - [x] Upload announcement omitted existing missing-only conversation preparation. Added exact authorized absence check, one owning-club membership repair only when absent, closing presence check and single-attempt messaging write; existing threads skip provisioning, denied/unknown reads stop and sends never replay. 30 gallery/messaging/thread regressions and ICP guards pass; preview build OK. Screenshot does not reveal the actual failed stage; signed-in phone announcement and deployed wiring remain unverified. No deployment.
 

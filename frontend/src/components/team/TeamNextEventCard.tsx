@@ -72,7 +72,7 @@ export function TeamNextEventCard({ teamId, clubId }: TeamNextEventCardProps) {
             .sort((a, b) => a.event_date.localeCompare(b.event_date));
           return upcoming[0] ?? null;
         },
-      }, { teamId });
+      }, { clubId });
     },
     enabled: !!teamId,
     staleTime: 2 * 60 * 1000,
