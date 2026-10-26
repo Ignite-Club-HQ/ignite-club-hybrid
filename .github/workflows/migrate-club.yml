@@ -22,9 +22,15 @@ on:
         required: false
         default: ''
       confirmation:
-        description: "MIGRATE CLUB TO CANISTERS (migrate) or RECOVER CLUB MIGRATION (recover)"
+        description: "Data: MIGRATE CLUB TO CANISTERS / RECOVER CLUB MIGRATION. Auth: SEND CLAIM EMAILS. Approves only this club/group and selected scope."
         required: false
         default: ''
+      approval_scope:
+        description: "Owner approval: data copying and member sign-in migration are separate. Building/checking approves neither."
+        type: choice
+        required: true
+        default: none
+        options: [none, data, auth]
 permissions:
   contents: read
 concurrency:
@@ -51,6 +57,8 @@ jobs:
           GROUP_ID: ${{ inputs.group_id }}
           PLAN: ${{ inputs.plan }}
           CONFIRMATION: ${{ inputs.confirmation }}
+          APPROVAL_SCOPE: ${{ inputs.approval_scope }}
+          MIGRATION_OWNER_GITHUB_LOGIN: ${{ vars.MIGRATION_OWNER_GITHUB_LOGIN }}
           SUPABASE_URL: ${{ vars.IGNITE_LIVE_SUPABASE_URL || 'https://cdrxmelhysdqrccttsjg.supabase.co' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}

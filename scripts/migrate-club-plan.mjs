@@ -44,15 +44,36 @@ const UUIDish = /^[0-9a-zA-Z][0-9a-zA-Z_-]{0,127}$/;
 export const normalizeConfirmation = v => String(v ?? '').replace(/[\u200b-\u200d\u2060\ufeff"'`\u2018\u2019\u201c\u201d]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
 export const normalizePlan = v => String(v ?? '').replace(/[^0-9a-fA-F]/g, '').toLowerCase();
 
-export function validateRequest({ action, clubId, groupId, plan, confirmation }) {
+export function validateRequest({ action, clubId, groupId, plan, confirmation, approvalScope }) {
   if (!['check', 'migrate', 'recover', 'invite'].includes(action)) throw Error('Action must be check, migrate, recover or invite');
   if (!UUIDish.test(String(clubId ?? ''))) throw Error('Club ID is missing or invalid');
   if (!/^g\d+$/.test(String(groupId ?? ''))) throw Error('Target group must look like g1, g2, ...');
   if (action === 'check') return;
+  const scope = action === 'invite' ? 'auth' : 'data';
+  if (approvalScope !== scope) throw Error(`Separate ${scope} migration approval is required for this club and group`);
   if (action === 'invite') { if (normalizeConfirmation(confirmation) !== 'SEND CLAIM EMAILS') throw Error('Type SEND CLAIM EMAILS'); return; }
   if (normalizePlan(plan).length !== 64) throw Error('Paste the 64-character plan hash from the check run');
   const want = action === 'migrate' ? CONFIRM_MIGRATE : CONFIRM_RECOVER;
   if (normalizeConfirmation(confirmation) !== want) throw Error(`Type ${want}`);
+}
+
+/** A build, read-only check, or approval of the other scope grants no writes. */
+export function assertMigrationOwner(action, env) {
+  if (action === 'check') return;
+  const owner = String(env.MIGRATION_OWNER_GITHUB_LOGIN ?? '').trim().toLowerCase();
+  if (env.GITHUB_ACTIONS !== 'true' || !owner || String(env.GITHUB_ACTOR ?? '').toLowerCase() !== owner ||
+      (env.GITHUB_TRIGGERING_ACTOR && String(env.GITHUB_TRIGGERING_ACTOR).toLowerCase() !== owner)) {
+    throw Error('Live migration is disabled until the configured owner personally starts this approved workflow');
+  }
+}
+
+export function assertMigrationApproval(approval, scope, clubId, groupId, planHash) {
+  validateRequest(approval ?? {});
+  if (approval.action === 'check' || approval.approvalScope !== scope ||
+      approval.clubId !== clubId || approval.groupId !== groupId ||
+      (scope === 'data' && normalizePlan(approval.plan) !== planHash)) {
+    throw Error(`Separate ${scope} migration approval must match this club, group and plan`);
+  }
 }
 
 /** Decide whether the club may move into the group. Returns blocking reasons. */
