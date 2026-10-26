@@ -55,6 +55,31 @@ and other details must remain viewable in the app.
 
 ## Not complete / do not enable a privacy cutover
 
+### Original-authority transport connection — 21:56 continuation
+
+Added `readLiveAccountAuthoritySnapshot`, returning the complete validated
+consensus registry instead of dropping placement/PII rows. It copies approved
+bindings and pins identity object, principal and full target before/after actor
+connection, module loading and every registry page. The live resolver composes
+this transport with opening/closing inventory checks. Runtime target alias and
+on-chain deployment alias are independently bound rather than rewritten.
+
+Scoped hydration now accepts the resolver across every candidate page; both
+member and exact-child guardian gateways can create it from explicitly supplied
+approved evidence. Tests exercise real composition with the router transport
+mocked: foreign-group routing, closing readback, revision refusal, omitted
+placement refusal, same-principal identity replacement, target substitution and
+different aliases; gateway tests verify evidence/cancellation propagation and
+no readable fallback. 103 checks pass in each backend mode, all 17 contracts
+match, ICP guards pass and preview build is clean.
+
+This removes the missing transport/gateway connection, not release prerequisites:
+screens do not yet receive independently approved deployment/legacy-inventory
+evidence; guardian/family/competition/league name-key audiences remain unfinished.
+No registry approval is inferred from its own reply, private reference or cache.
+No live flags, grants, ciphertext, readable names or sign-ins were changed.
+Real signed-in cross-group encrypted search is not verified.
+
 ### Final checks requested at 21:48 UTC
 
 Both-mode focused acceptance passed (145 email-mode / 129 ICP), along with
