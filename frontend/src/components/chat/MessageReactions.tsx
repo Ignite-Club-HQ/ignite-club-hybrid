@@ -10,6 +10,11 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { armReactionInteractionGuard } from "@/lib/reactionInteractionGuard";
 import { hapticSelectionTick } from "@/lib/haptics";
+import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { useAuth } from "@/hooks/useAuth";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { currentChatScope } from "@/live/chatScope";
 
 const REACTION_EMOJIS = [
   { type: "thumbsup", emoji: "👍" },
@@ -444,10 +449,17 @@ const AllReactionsContent = memo(function AllReactionsContent({
   onClose,
   isOpen,
 }: AllReactionsContentProps) {
+  const { user } = useAuth();
+  const privateNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const chatScope = currentChatScope();
+  const conversationId = chatScope && ('conversationId' in chatScope ? chatScope.conversationId
+    : 'teamId' in chatScope ? chatScope.teamId : 'clubId' in chatScope ? chatScope.clubId : undefined);
+  const getPrivateProfile = usePrivateChatProfiles(conversationId, user?.id, allUserIds, privateNames && isOpen);
   // Seed from in-memory profile cache so names render instantly when available;
   // avoids the brief "Unknown" flash before the async fetch resolves.
   const initialUsers = (() => {
     const seeded: Array<{ id: string; display_name: string | null }> = [];
+    if (privateNames) return seeded;
     for (const id of allUserIds) {
       const p = getProfileFromCache(id);
       const displayName = normalizeDisplayName(p?.display_name);
@@ -495,9 +507,9 @@ const AllReactionsContent = memo(function AllReactionsContent({
         display_name: normalizeDisplayName(map.get(id)?.display_name),
       }));
     },
-    enabled: isOpen && allUserIds.length > 0,
+    enabled: !privateNames && isOpen && allUserIds.length > 0,
     staleTime: 60_000,
-    initialData: initialUsers.length === allUserIds.length && allUserIds.length > 0 ? initialUsers : undefined,
+    initialData: !privateNames && initialUsers.length === allUserIds.length && allUserIds.length > 0 ? initialUsers : undefined,
   });
 
   const reactionsByType = reactions.reduce((acc, r) => {
@@ -517,6 +529,7 @@ const AllReactionsContent = memo(function AllReactionsContent({
   }, [isOpen]);
 
   const getUserName = (userId: string) => {
+    if (privateNames) return normalizeDisplayName(getPrivateProfile(userId)?.display_name) || "";
     return normalizeDisplayName(users.find(u => u.id === userId)?.display_name)
       || normalizeDisplayName(getProfileFromCache(userId)?.display_name)
       || "";
