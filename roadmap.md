@@ -1,3 +1,8 @@
+## Manage Children opening delay — 26 October 2026
+- [x] Separate authorized child rows from private-name hydration; scope caches to the account, defer team discovery until needed and replace global club inventory with exact membership-owned club reads. Disable repeated automatic retries; failed list reads never claim no children.
+- [x] Two mounted ICP regressions passed: authorized child controls reveal before stalled PII/teams, account keys isolate rows, and denied reads show retry rather than an empty list. Preview build OK.
+- [ ] Signed-in phone timing needs Paul's updated frontend/Internet Identity session; no deployment or cold-load timing guarantee.
+
 ## Profile rewards and points history — 26 October 2026
 - [x] Bound individual ICP discovery/club/history reads rather than racing the whole waterfall against 20 seconds; optional settings/names no longer block required reads. Authorized existing history renders independently of pending directory/Pro lookup; purchase/entitlement checks remain unchanged.
 - [x] 11 focused ICP regressions passed for stalled settings, failed names, healthy history beside stalled clubs and scoped reads; preview build OK.
