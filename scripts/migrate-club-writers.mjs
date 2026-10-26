@@ -227,7 +227,7 @@ export const WRITERS = {
     const [clubs, teams, sponsors] = await Promise.all([ctx.rows('clubs', 'id'), ctx.rows('teams', 'club_id'), ctx.rows('sponsors', 'club_id')]);
     const snap = buildClubSnapshot({ club: clubs[0], teams, sponsors });
     await loadSnapshot(ctx, 'club_domain', snap, 'freeze');
-    return { records: 1 + snap.teams.length + snap.sponsors.length };
+    return { records: 1 + snap.teams.length + snap.sponsors.length, counts: { club_domain: 1 + snap.teams.length + snap.sponsors.length } };
   },
   async events(ctx) {
     const events = await ctx.rows('events', 'club_id');
@@ -242,7 +242,8 @@ export const WRITERS = {
     assertNoUnsupportedEventRows(Object.fromEntries(UNSUPPORTED_EVENT_TABLES.map((t, i) => [t, unsupported[i]])));
     const snap = buildEventsSnapshot({ clubId: ctx.clubId, events, creator: ctx.creator, rsvps, claims: ctx.claims, migratedChildren: ctx.migratedChildren, gameResults, gameSummaries, gamePlayerStats });
     await loadSnapshot(ctx, 'events_domain', snap, 'fence');
-    return { records: snap.events.length + snap.rsvps.length + gameResults.length + gamePlayerStats.length + gameSummaries.length };
+    const n = snap.events.length + snap.rsvps.length + gameResults.length + gamePlayerStats.length + gameSummaries.length;
+    return { records: n, counts: { events_domain: n } };
   },
   async children(ctx) {
     const teams = (await ctx.rows('teams', 'club_id')).filter((t) => !t.deleted_at);
@@ -276,7 +277,9 @@ export const WRITERS = {
     Object.assign(snap, { roles: prepared.domain.roles, account_roles: prepared.domain.account_roles,
       exclusions: prepared.domain.exclusions, children: prepared.domain.children, guardians: prepared.domain.guardians });
     await loadSnapshot(ctx, 'club_domain', snap, 'freeze');
-    return { records: prepared.counts.children + prepared.counts.privateFields + prepared.counts.guardians + prepared.counts.roles };
+    const domainN = prepared.domain.roles.length + prepared.domain.account_roles.length + prepared.domain.exclusions.length + prepared.domain.children.length + prepared.domain.guardians.length;
+    return { records: prepared.counts.children + prepared.counts.privateFields + prepared.counts.guardians + prepared.counts.roles,
+      counts: { club_domain: domainN, pii_access_control: prepared.counts.privateFields } };
   },
   async rewards(ctx) {
     const tables = ['clubs', 'club_subscriptions', 'club_rewards', 'user_club_points', 'child_club_points', 'points_history', 'reward_redemptions', 'points_cooldowns'];
@@ -284,7 +287,8 @@ export const WRITERS = {
     const snap = buildPointsSnapshot({ clubId: ctx.clubId, claims: ctx.claims, migratedChildren: ctx.migratedChildren,
       mediaReferences: ctx.mediaReferences, club: clubs[0], subscriptions, rewards, users, children, history, redemptions, cooldowns });
     await loadSnapshot(ctx, 'club_points_domain', snap, 'fence');
-    return { records: snap.users.length + snap.children.length + snap.history.length + snap.rewards.length + snap.redemptions.length + snap.cooldowns.length + snap.settings.length };
+    const n = snap.users.length + snap.children.length + snap.history.length + snap.rewards.length + snap.redemptions.length + snap.cooldowns.length + snap.settings.length;
+    return { records: n, counts: { club_points_domain: n } };
   },
   async competitions(ctx) {
     const competitions = await ctx.rows('competitions', 'organizer_club_id');
@@ -292,7 +296,8 @@ export const WRITERS = {
     const [divisions, entries, matches] = await Promise.all(['competition_divisions', 'competition_entries', 'competition_matches'].map((t) => ctx.rowsIn(t, 'competition_id', ids)));
     const snap = buildCompetitionSnapshot({ clubId: ctx.clubId, competitions, divisions, entries, matches });
     await loadSnapshot(ctx, 'competition_domain', snap, 'fence');
-    return { records: snap.competitions.length + snap.matches.length + snap.entries.length };
+    const n = snap.competitions.length + snap.matches.length + snap.entries.length + snap.divisions.length;
+    return { records: n, counts: { competition_domain: n } };
   },
   async mini_leagues(ctx) {
     const leagues = await ctx.rows('mini_leagues', 'club_id');
@@ -300,7 +305,8 @@ export const WRITERS = {
     const groups = await ctx.rowsIn('mini_league_groups', 'session_id', sessions.map((x) => x.id));
     const snap = buildLeagueSnapshot({ clubId: ctx.clubId, leagues, sessions, groups, creator: ctx.creator });
     await loadSnapshot(ctx, 'mini_league_domain', snap, 'fence');
-    return { records: snap.leagues.length + snap.sessions.length + snap.groups.length };
+    const n = snap.leagues.length + snap.sessions.length + snap.groups.length;
+    return { records: n, counts: { mini_league_domain: n } };
   },
   async messaging(ctx) {
     const [teams, clubMessages, chatGroups, clubAdminConversations] = await Promise.all([
@@ -316,25 +322,28 @@ export const WRITERS = {
     const pages = buildChatPages({ clubId: ctx.clubId, teams: teams.filter((t) => !t.deleted_at), teamMessages, clubMessages,
       chatGroups, groupMessages, clubAdminConversations, clubAdminMessages, polls, claims: ctx.claims, creator: ctx.creator });
     await loadChatPages(ctx, pages);
-    return { records: pages.reduce((s, p) => s + p.conversations.length + p.messages.length, 0) };
+    const n = pages.reduce((s, p) => s + p.conversations.length + p.messages.length, 0);
+    return { records: n, counts: { messaging_domain: n } };
   },
   async notifications(ctx) {
     const [notifications, scheduledMessages] = await Promise.all([ctx.rows('notifications', 'club_id'), ctx.rows('scheduled_messages', 'club_id')]);
     const snap = buildNotificationSnapshot({ clubId: ctx.clubId, notifications, scheduledMessages, claims: ctx.claims });
     await loadSnapshot(ctx, 'notification_queue', snap, 'fence');
-    return { records: snap.items.length + snap.scheduled.length };
+    const n = snap.items.length + snap.scheduled.length;
+    return { records: n, counts: { notification_queue: n } };
   },
   async media(ctx) {
     const [photos, albums] = await Promise.all([ctx.rows('photos', 'club_id'), ctx.rows('photo_albums', 'club_id')]);
     const snap = buildMediaSnapshot({ clubId: ctx.clubId, photos, albums, claims: ctx.claims });
     await loadSnapshot(ctx, 'media_metadata', snap, 'fence');
-    return { records: snap.assets.length };
+    return { records: snap.assets.length, counts: { media_metadata: snap.assets.length } };
   },
   async vault(ctx) {
     const [folders, files] = await Promise.all([ctx.rows('team_folders', 'club_id'), ctx.rows('vault_files', 'club_id')]);
     const snap = buildVaultSnapshot({ clubId: ctx.clubId, folders, files, claims: ctx.claims, creator: ctx.creator });
     await loadSnapshot(ctx, 'vault_domain', snap, 'fence');
-    return { records: snap.folders.length + snap.files.length };
+    const n = snap.folders.length + snap.files.length;
+    return { records: n, counts: { vault_domain: n } };
   },
   async media_bytes(ctx) {
     const [photos, vaultFiles] = await Promise.all([ctx.rows('photos', 'club_id'), ctx.rows('vault_files', 'club_id')]);

@@ -84,11 +84,24 @@ create membership or grant platform/competition administrator roles.
 
 ## Not completed or verified live
 Preservation contracts for the refused event/guardian/poll/album data (needs
-new canister snapshot fields and a separately approved service upgrade),
-stable source inventory and durable remote recovery, destination
-reconciliation and separately approved sign-in cutover remain. All eleven
-plan steps now have writers (ten metadata/ledger steps plus media_bytes), so
-a live run is gated only by the owner setting, the exact-club/group data
-approval, the plan hash and the typed confirmation.
+new canister snapshot fields and a separately approved service upgrade) and
+the separately approved sign-in cutover remain. All eleven plan steps have
+writers, and the run now includes:
+
+- **Stable source inventory** — `check` records the plan hash (which binds
+  every table count, media totals, canister IDs and revision); `migrate` and
+  `recover` refuse if the source changed since that check.
+- **Durable remote recovery** (`migrate-club-remote.mjs`) — every acknowledged
+  journal state is mirrored to the repository's `migration-journals` branch
+  and hash-verified on readback; a lost runner restores from the remote copy.
+  A failed push stops the run as an unknown outcome.
+- **Final reconciliation** (`migrate-club-reconcile.mjs`) — the `verify` step
+  reads every destination canister's own export back, counts records per
+  domain and proves they match what the writers acknowledged; after
+  media_bytes it also proves every photo/Vault record points at on-chain
+  bytes. Any mismatch stops the run; routing stays blocked regardless.
+
+A live run is gated by the owner setting, the exact-club/group data approval,
+the plan hash and the typed confirmation.
 The adapter tests exercise encoding, fencing and acknowledgement with fixtures;
 they do not establish live Supabase consistency or Internet Identity acceptance.

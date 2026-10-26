@@ -139,11 +139,11 @@ export function recordIntent(j, step, page) {
   if (cur && (cur.state === 'intent' || cur.state === 'unknown')) throw Error(`Refusing to resend ${step}: previous outcome unresolved`);
   return { ...j, steps: { ...j.steps, [step]: { state: 'intent', page } } };
 }
-export function recordReply(j, step, page, { ok, last, unknown }) {
+export function recordReply(j, step, page, { ok, last, unknown, counts }) {
   const cur = j.steps[step];
   if (!cur || cur.state !== 'intent' || cur.page !== page) throw Error(`No matching intent for ${step} page ${page}`);
   const state = unknown ? 'unknown' : !ok ? 'failed' : last ? 'done' : 'paging';
-  return { ...j, steps: { ...j.steps, [step]: { state, page } }, ...(step === ROUTE_STEP && state === 'done' ? { routed: true } : {}) };
+  return { ...j, steps: { ...j.steps, [step]: { state, page, ...(counts ? { counts } : {}) } }, ...(step === ROUTE_STEP && state === 'done' ? { routed: true } : {}) };
 }
 /** Routing may only switch after every data step and verify are done. */
 export function mayRoute(j) {
