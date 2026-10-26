@@ -30,24 +30,26 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
   const failed = new Set<string>();
   const names = new Map<string, Promise<string | null>>();
   const pendingTeamNames = new Set<string>();
+  const teamKey = (clubId: string, teamId: string) => JSON.stringify([clubId, teamId]);
   let pending = ids.length;
   let successful = 0;
   let firstError: unknown;
   const snapshot = (): MemberScheduleSnapshot => ({ events: [...new Map([...rows.values()].flat()
-    .filter(row => !row.team_id || !pendingTeamNames.has(row.team_id))
+    .filter(row => !row.team_id || !pendingTeamNames.has(teamKey(row.club_id, row.team_id)))
     .map(row => [row.id, row])).values()]
     .sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id)),
     incomplete: pending > 0 || failed.size > 0, pending, failed: [...failed] });
   const publish = () => { assertReadNotAborted(signal); onUpdate?.(snapshot()); };
   const teamName = (id: string, clubId: string) => {
-    const hit = names.get(id); if (hit) return hit;
+    const key = teamKey(clubId, id);
+    const hit = names.get(key); if (hit) return hit;
     const promise = read(readMembershipInScope(ctx, { clubId }, scoped => getLiveTeam(scoped, id)), 'Schedule team name')
       .then(value => {
         const name = value[0]?.name?.trim();
         if (!name) failed.add(`team:${id}`);
         return name || null;
       }).catch(() => { failed.add(`team:${id}`); return null; });
-    names.set(id, promise); return promise;
+    names.set(key, promise); return promise;
   };
   await Promise.all(ids.map(async clubId => {
     try {
@@ -78,7 +80,7 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
         if (cached?.club_id === clubId && cached.name?.trim() && cached.name !== 'Team') {
           row.teams = { name: cached.name };
         } else {
-          pendingTeamNames.add(row.team_id);
+          pendingTeamNames.add(teamKey(clubId, row.team_id));
         }
       }
       rows.set(clubId, visible); publish();
@@ -98,7 +100,7 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
         }).catch(() => { failed.add(`duties:${clubId}`); }),
         ...[...new Set(visible.flatMap(row => row.team_id ? [row.team_id] : []))].map(async teamId => {
           const name = await teamName(teamId, clubId);
-          pendingTeamNames.delete(teamId);
+          pendingTeamNames.delete(teamKey(clubId, teamId));
           rows.set(clubId, (rows.get(clubId) ?? []).map(row => row.team_id === teamId ? { ...row, teams: name ? { name } : row.teams } : row)); publish();
         }),
       ]);

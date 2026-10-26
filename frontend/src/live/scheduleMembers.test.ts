@@ -22,6 +22,23 @@ beforeEach(() => {
   mocks.profile.mockResolvedValue([{ name: 'Cats', sport: [] }]); mocks.team.mockResolvedValue([{ name: 'U9' }]); mocks.duties.mockResolvedValue([]);
 });
 describe('progressive member schedule', () => {
+  it('reveals a named team without waiting for another team in the same club', async () => {
+    let finishSlow: ((value: unknown[]) => void) | undefined;
+    mocks.events.mockResolvedValue([
+      { ...event, id: 'ready', team_id: ['ready-team'] },
+      { ...event, id: 'slow', team_id: ['slow-team'] },
+    ]);
+    mocks.team.mockImplementation(id => id === 'ready-team' ? Promise.resolve([{ name: 'U9 Hawks' }])
+      : new Promise(resolve => { finishSlow = resolve; }));
+    const updates: MemberScheduleSnapshot[] = [];
+    const pending = loadMemberSchedule(ctx, { ...scope, clubIds: ['g1'], teamIds: ['ready-team', 'slow-team'] }, value => updates.push(value));
+    await vi.waitFor(() => expect(updates.some(value => value.events.some(row => row.id === 'ready'))).toBe(true));
+    expect(updates.flatMap(value => value.events).find(row => row.id === 'ready')?.teams?.name).toBe('U9 Hawks');
+    expect(updates.some(value => value.events.some(row => row.id === 'slow'))).toBe(false);
+    finishSlow?.([{ name: 'U10 Hawks' }]);
+    const result = await pending;
+    expect(result.events.find(row => row.id === 'slow')?.teams?.name).toBe('U10 Hawks');
+  });
   it('first publishes a cold team card with its actual name while club-wide events reveal independently', async () => {
     let finishName: ((value: unknown[]) => void) | undefined;
     mocks.events.mockImplementation(async id => id === 'g1' ? [event, { ...event, id: 'u9-training', team_id: ['my-team'] }] : []);
