@@ -177,6 +177,34 @@ try {
   const competition=ok(await comp.actor.create_competition('club-1','Competition','2026'));
   ok(await comp.actor.grant_role(viewer,'committee',competition.id,[]));ok(await comp.actor.grant_role(owner,'committee',competition.id,[]));
   await decrypt(viewer,scope('competition',comp.canisterId,competition.id));
+  // Use G1 messaging without the disposable DM relay: the original G1 PII
+  // decrypts an admin relationship owned by G2 competition through exact
+  // stored messaging bindings, never conversation-ID parsing.
+  const adminMessaging=groups[0].messaging;
+  await pic.updateCanisterSettings({canisterId:comp.canisterId,sender:governor,environmentVariables:[privacy,{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:identity.canisterId.toText()},{name:'IGNITE_PRIVATE_PROFILE_MESSAGING',value:adminMessaging.canisterId.toText()}]});
+  await pic.upgradeCanister({canisterId:comp.canisterId,wasm:wasm('competition_domain'),sender:governor,arg,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+  comp.actor.setPrincipal(governor);ok(await comp.actor.grant_role(owner,'competition_admin',competition.id,[]));
+  adminMessaging.actor.setPrincipal(governor);ok(await adminMessaging.actor.set_competition_domain_canister(comp.canisterId));
+  adminMessaging.actor.setPrincipal(viewer);const adminThread=ok(await adminMessaging.actor.ensure_competition_admin_thread(competition.id,viewer));
+  const adminScope=scope('competition_admin',adminMessaging.canisterId,adminThread.id);
+  await decrypt(viewer,adminScope);
+  assert.ok('Err' in await read(outsider,adminScope),'Unrelated competition audience cannot read a private admin thread');
+  assert.ok('Err' in await read(viewer,scope('competition_admin',adminMessaging.canisterId,`competition-admin-${competition.id}-${owner.toText()}`)),'Guessed admin thread ID has no verified mapping');
+  adminMessaging.actor.setPrincipal(identity.canisterId);
+  const retainedAdmin=ok(await adminMessaging.actor.read_profile_competition_admin_batch(viewer,adminThread.id,[owner],[]));
+  comp.actor.setPrincipal(governor);ok(await comp.actor.remove_competition_role(competition.id,owner,'competition_admin'));
+  assert.ok('Err' in await read(viewer,adminScope),'Removed admin remains in cached chat participants but cannot disclose a name');
+  ok(await comp.actor.grant_role(owner,'competition_admin',competition.id,[]));
+  await decrypt(viewer,adminScope);
+  adminMessaging.actor.setPrincipal(viewer);ok(await adminMessaging.actor.block_user(owner));
+  assert.ok('Err' in await read(viewer,adminScope),'Blocked admin name cannot disclose fresh keys');
+  ok(await adminMessaging.actor.unblock_user(owner));
+  adminMessaging.actor.setPrincipal(identity.canisterId);
+  assert.ok('Err' in await adminMessaging.actor.read_profile_competition_admin_batch(viewer,adminThread.id,[owner],[retainedAdmin.revision]),'Block ABA invalidates admin thread retained revision');
+  await decrypt(viewer,adminScope);
+  await pic.upgradeCanister({canisterId:adminMessaging.canisterId,wasm:wasm('messaging_domain'),sender:governor,arg,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+  await decrypt(viewer,adminScope);
+  console.log('PASS: real exact mapped admin thread SDK decryption; guessed threads, outsiders, stale removed admins, blocks and ABA refused; mapping and original-key decryption survive messaging upgrade. No live changes.');
   ok(await comp.actor.update_competition_settings(competition.id,'Competition',[],'open','public',3,1,0));
   assert.ok('Err' in await read(outsider,scope('competition',comp.canisterId,competition.id)),'Public competition never authorizes private names');
   comp.actor.setPrincipal(governor);ok(await comp.actor.grant_role(outsider,'club_admin','club-1',[]));
