@@ -26,6 +26,7 @@ export async function searchScopedClubProfiles(
   if (query.trim().length < 2) return [];
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   const matches: Awaited<ReturnType<typeof searchScopedProfileCandidates>> = [];
+  const matchedSubjects: string[] = [];
   const seen = new Set<string>();
   let cursor: [] | [CandidateCursor] = [];
   let revision: bigint | undefined;
@@ -45,13 +46,27 @@ export async function searchScopedClubProfiles(
     const rows = await searchScopedProfileCandidates(ctx, clubId, ids, query, limit, signal);
     assertActive(signal);
     matches.push(...rows);
+    matchedSubjects.push(...rows.map(row => row.id));
     if (matches.length >= limit || !next) {
+      // A later page's unlock may suspend/relink an earlier match without
+      // changing this club's membership revision. Reauthorize the WHOLE
+      // retained result, including original-reference identity, before return.
+      const finalMatches: typeof matches = [];
+      for (let start = 0; start < matchedSubjects.length; start += 25) {
+        const confirmedRows = await searchScopedProfileCandidates(ctx, clubId, matchedSubjects.slice(start, start + 25), query, 25, signal);
+        for (const confirmedRow of confirmedRows) {
+          const priorRow = matches.find(row => row.id === confirmedRow.id);
+          if (!priorRow || priorRow.account_id !== confirmedRow.account_id || priorRow.display_name !== confirmedRow.display_name) throw new Error("Person search authority changed; please try again.");
+        }
+        finalMatches.push(...confirmedRows);
+      }
+      if (finalMatches.length !== matches.length) throw new Error("Person search authority changed; please try again.");
       // Re-read the opening page at its revision after all name/decryption
       // awaits; a removed membership cannot return retained partial matches.
       const confirmed = await unwrapCandid(actor.read_profile_candidates(clubId, [{ revision, phase: 0n, offset: 0n }]), "Confirm club person search");
       if (confirmed.revision !== revision) throw new Error("Club person search changed; please try again.");
       assertActive(signal);
-      return matches.slice(0, limit);
+      return finalMatches.slice(0, limit);
     }
     cursor = [next];
   }

@@ -7,7 +7,7 @@ vi.mock("./domains", () => ({ connectLivePiiAccessControl: vi.fn(async () => ({ 
 vi.mock("./piiVetKeys", () => ({ encryptPiiText: mocks.encrypt, fetchPiiVetKeys: mocks.keys }));
 vi.mock("@icp-sdk/vetkeys", () => ({ IbeCiphertext: { deserialize: () => ({ decrypt: mocks.decrypt }) } }));
 
-import { hydratePrivateProfileNames, preparePrivateOwnProfileName, privateProfileNameReference } from "./privateProfileNames";
+import { hydratePrivateProfileNames, preparePrivateOwnProfileName, preparePrivateOwnProfileEmail, privateProfileNameReference } from "./privateProfileNames";
 
 const subject = "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe";
 const authority = "rrkah-fqaaa-aaaaa-aaaaq-cai";
@@ -46,6 +46,19 @@ describe("private profile name preparation", () => {
 });
 
 describe("authorized name display", () => {
+  it("does not display a private reference belonging to a different returned principal", async () => {
+    expect(await hydratePrivateProfileNames(ctx, [{ principal: Principal.fromText(authority), display_name: reference }])).toEqual([{principal:Principal.fromText(authority),display_name:null}]);
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it.each([
+    [{pii_id:authority,field_id:"display_name",ciphertext:[9]}],
+    [{pii_id:subject,field_id:"email",ciphertext:[9]}],
+    [{pii_id:subject,field_id:"display_name",ciphertext:[9]},{pii_id:subject,field_id:"display_name",ciphertext:[9]}],
+  ])("refuses foreign, wrong-field and duplicated encrypted records", async rows => {
+    mocks.read.mockResolvedValue({Ok:rows});
+    expect(await hydratePrivateProfileNames(ctx,[{display_name:reference}])).toEqual([{display_name:null}]);
+    expect(mocks.keys).not.toHaveBeenCalled();
+  });
   it("leaves legacy names and avatars intact without network work", async () => {
     const row = { display_name: "Paul Cranwell", avatar_ref: ["avatar"] };
     expect(await hydratePrivateProfileNames(ctx, [row])).toEqual([row]);
@@ -88,5 +101,25 @@ describe("authorized name display", () => {
   it("never renders a malformed or future-version private reference", async () => {
     expect(await hydratePrivateProfileNames(ctx, [{ display_name: "pii-display-name:v2:secret" }])).toEqual([{ display_name: null }]);
     expect(mocks.read).not.toHaveBeenCalled();
+  });
+});
+
+describe("private own email preparation", () => {
+  it("registers a validated email only for its authenticated owner and verifies private readback", async () => {
+    mocks.read.mockResolvedValue({Ok:[{pii_id:subject,field_id:"email",ciphertext:[9,8]}]});
+    mocks.decrypt.mockReturnValue(new TextEncoder().encode("paul@example.test"));
+    expect(await preparePrivateOwnProfileEmail(ctx," paul@example.test ")).toBe(`pii-email:v1:${authority}:${subject}`);
+    expect(mocks.encrypt).toHaveBeenCalledWith(ctx,subject,"email","paul@example.test");
+    expect(mocks.keys).toHaveBeenCalledWith(ctx,[subject],"email");
+  });
+  it("refuses invalid email before any encryption or write",async()=>{
+    await expect(preparePrivateOwnProfileEmail(ctx,"not-an-email")).rejects.toThrow();
+    expect(mocks.encrypt).not.toHaveBeenCalled();
+    expect(mocks.register).not.toHaveBeenCalled();
+  });
+  it("does not report success or replay an unknown email write",async()=>{
+    mocks.register.mockRejectedValue(new Error("Unknown reply"));
+    await expect(preparePrivateOwnProfileEmail(ctx,"paul@example.test")).rejects.toThrow("Unknown reply");
+    expect(mocks.register).toHaveBeenCalledOnce();
   });
 });

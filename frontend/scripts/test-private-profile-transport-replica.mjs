@@ -99,6 +99,27 @@ try {
       i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(requester.toText()),{Active:null}));
       assert.equal(ok(await read(0)).length,1,'Exact authorized retry succeeds');
     }
+    for (const at of [1,2]) {
+      const finishConfig = await hold(at);
+      i.setPrincipal(governor);
+      ok(await i.configure_membership_directory(binding,sources,BigInt(at+1)));
+      assert.ok('Err' in await finishConfig(), `Configuration replacement at held reply ${at} must disclose no names`);
+      assert.equal(ok(await read(0)).length,1,'Retry verifies replacement configuration');
+    }
+    for (const at of [1,2]) {
+      const alias=p(110+at);
+      const finishLink=await hold(at);
+      i.setPrincipal(requester);const challenge=ok(await i.begin_link(alias));
+      i.setPrincipal(alias);ok(await i.accept_link(challenge.id));
+      assert.ok('Err' in await finishLink(), `Caller account link change at reply ${at} must disclose no names`);
+      assert.equal(ok(await read(0)).length,1,'Retry binds the new account version');
+    }
+    const finishSubjectLink=await hold(2);
+    const memberAlias=p(120);
+    i.setPrincipal(member);const challenge=ok(await i.begin_link(memberAlias));
+    i.setPrincipal(memberAlias);ok(await i.accept_link(challenge.id));
+    assert.deepEqual(ok(await finishSubjectLink()),[],'Subject account link change must discard held names');
+    assert.equal(ok(await read(0)).length,1,'Subject retry binds updated identity');
     const finishSubject=await hold(2);i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(member.toText()),{Suspended:null}));
     assert.deepEqual(ok(await finishSubject()),[],'Subject suspended during final reply cannot appear');
     i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(member.toText()),{Active:null}));
