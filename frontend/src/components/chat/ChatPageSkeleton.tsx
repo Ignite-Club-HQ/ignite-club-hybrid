@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { ConversationAvatar } from "@/components/chat/ConversationAvatar";
 import { ChevronLeft } from "lucide-react";
 
 interface ChatPageSkeletonProps {
@@ -10,6 +11,13 @@ interface ChatPageSkeletonProps {
   title?: string;
   /** Optional secondary line under the title. */
   subtitle?: string;
+  /**
+   * Avatar for the thread. Rendered only when `title` is known, so the header
+   * settles in one step instead of swapping a grey circle for a real face.
+   */
+  avatarUrl?: string | null;
+  /** Shape/iconography to use for the avatar (defaults to a plain circle). */
+  avatarType?: "club" | "team" | "group" | "league" | "dm" | "broadcast" | "support";
   /** How many placeholder bubbles to render. Defaults to 6. */
   bubbleCount?: number;
 }
