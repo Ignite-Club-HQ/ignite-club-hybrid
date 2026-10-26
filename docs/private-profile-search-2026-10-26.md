@@ -20,10 +20,15 @@ certified as delivery-time revocation: final remote block/deletion fencing
 remains a release blocker. Previously obtained keys cannot be recalled.
 
 Broadcast keeps the fixed Announcements author label. Only server-recorded
-readers/reactors qualify for personal names in its drawers, using the canonical
-broadcast audience through the registered messaging authority. Arbitrary
+readers/reactors of the exact displayed message qualify for personal names in
+its drawers, through the registered messaging authority. Message IDs are
+forwarded by reaction/read drawers and included in mounted state isolation.
+Arbitrary
 principals, fake resources, removed reactions, blocks and stale revisions are
-denied. Reaction/read changes advance the retained audience revision; foreground
+denied. Reading a different announcement cannot authorize this drawer; newer
+conversation receipts do not prove an older message's exact name audience.
+This conservative restriction leaves older-reader name parity unresolved.
+Reaction/read changes advance the retained audience revision; foreground
 and private-name reads retain mounted-only state. DM reaction/read drawers now
 select the direct reader instead of the group reader. All remains rehearsal-only.
 

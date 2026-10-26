@@ -8,9 +8,12 @@ beforeEach(() => { vi.resetAllMocks(); });
 describe('mounted private chat name lifetime', () => {
   it('routes broadcast names to the app service rather than conversation discovery', async () => {
     mocks.read.mockResolvedValue(new Map([['person', { id: 'person', display_name: 'Reader' }]]));
-    const hook=renderHook(() => usePrivateChatProfiles('broadcast', 'viewer', ['person'], true));
+    const hook=renderHook(({ message }) => usePrivateChatProfiles('broadcast', 'viewer', ['person'], true, 'group', message), { initialProps: { message: 'msg-broadcast-1' } });
     await waitFor(() => expect(hook.result.current('person')?.display_name).toBe('Reader'));
     expect(mocks.routing).toHaveBeenCalledWith({ shared: 'app' });
+    expect(mocks.read.mock.calls[0][4]).toBe('msg-broadcast-1');
+    hook.rerender({ message: 'msg-broadcast-2' });
+    expect(hook.result.current('person')).toBeNull();
   });
   it('uses only the direct reader and clears names when switching chat purpose', async () => {
     mocks.direct.mockResolvedValue(new Map([['person', { id: 'person', display_name: 'Direct name' }]]));
