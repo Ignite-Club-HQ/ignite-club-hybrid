@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 
 const scopes: unknown[] = [];
+const profileMode = vi.hoisted(() => ({ rehearsal: false, fetch: vi.fn(async () => new Map()), cache: vi.fn(() => ({ cached: new Map() })) }));
+vi.mock("@/live/privateProfileSearchMode", () => ({ privateProfileSearchRehearsalEnabled: () => profileMode.rehearsal }));
 vi.mock("@/live/featureRouter", () => ({
   withFeatureBackend: (_f: string, impl: any, scope: unknown) => { scopes.push(scope); return impl.icp({}); },
 }));
@@ -12,13 +14,22 @@ vi.mock("@/live/features/messaging", () => ({
   isLiveConversationAbsent: vi.fn(async () => false),
 }));
 vi.mock("@/lib/pollReadRepository", () => ({ prefetchMessagePolls: vi.fn() }));
-vi.mock("@/lib/profileCache", () => ({ fetchProfilesWithCache: async () => new Map(), getProfilesFromCache: () => ({ cached: new Map() }) }));
+vi.mock("@/lib/profileCache", () => ({ fetchProfilesWithCache: profileMode.fetch, getProfilesFromCache: profileMode.cache }));
 vi.mock("@/lib/clubTeamCache", () => ({ getCachedTeam: (id: string) => (id === "t-cached" ? { club_id: "c-cached" } : null) }));
 
-import { fetchIcpTeamLatestPage, prefetchIcpTeamThreads, teamThreadScope } from "./icpTeamThreadPage";
+import { fetchIcpTeamLatestPage, mapLiveTeamRows, prefetchIcpTeamThreads, teamThreadScope } from "./icpTeamThreadPage";
 import { listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
 
 describe("cold team chat opening", () => {
+  it("does not read or persist generic author names in private-name rehearsal", async () => {
+    profileMode.rehearsal = true; profileMode.fetch.mockClear(); profileMode.cache.mockClear();
+    const ready = vi.fn();
+    try {
+      const rows = await mapLiveTeamRows({}, 'team', [{ id: 'm', body: 'Hello', sender: { toText: () => 'person' }, sequence: 1n, created_at_ms: 1n }], ready);
+      expect(rows[0].profiles).toBeNull(); expect(ready.mock.calls[0][0][0].profiles).toBeNull();
+      expect(profileMode.fetch).not.toHaveBeenCalled(); expect(profileMode.cache).not.toHaveBeenCalled();
+    } finally { profileMode.rehearsal = false; }
+  });
   it("publishes authorized message bodies before slow reactions finish", async () => {
     let finishReactions: (rows: any[]) => void = () => {};
     vi.mocked(listLiveReactions).mockReturnValueOnce(new Promise(resolve => { finishReactions = resolve; }));

@@ -97,4 +97,17 @@ describe('rehearsal chat relationship names', () => {
     await expect(readChatRelationshipProfiles(context(), 'chat', ['person'], controller.signal)).rejects.toThrow('cancelled');
     expect(mocks.metadata).not.toHaveBeenCalled();
   });
+  it('splits 100 authors into four exact 25-person reads under one chat lease', async () => {
+    const ids = Array.from({ length: 100 }, (_, i) => `person-${i}`);
+    mocks.profiles.mockImplementation(async (_owner, batch) => batch.map((id: string) => ({ account_id: id, display_name: 'Allowed', avatar_ref: [] })));
+    const out = await readChatRelationshipProfiles(context(), 'chat', ids);
+    expect(out.size).toBe(100);
+    expect(mocks.profiles.mock.calls.map(call => call[1])).toEqual([ids.slice(0, 25), ids.slice(25, 50), ids.slice(50, 75), ids.slice(75)]);
+    expect(mocks.metadata).toHaveBeenCalledTimes(2);
+  });
+  it('discards earlier decrypted batches after a later relationship refusal', async () => {
+    mocks.profiles.mockResolvedValueOnce([{ account_id: 'person-0', display_name: 'Private', avatar_ref: [] }]).mockRejectedValueOnce(new Error('Audience removed'));
+    await expect(readChatRelationshipProfiles(context(), 'chat', Array.from({ length: 26 }, (_, i) => `person-${i}`))).rejects.toThrow('Audience removed');
+    expect(mocks.metadata).toHaveBeenCalledTimes(1); expect(mocks.legacy).not.toHaveBeenCalled();
+  });
 });
