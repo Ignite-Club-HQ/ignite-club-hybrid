@@ -1,0 +1,15 @@
+import Policy "privateDirectNames";
+import Principal "mo:core/Principal";
+let a = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
+let b = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+let outsider = Principal.fromText("r7inp-6aaaa-aaaaa-aaabq-cai");
+assert Policy.permitted(a, [b], "dm", [a, b], false);
+assert Policy.permitted(a, [a, b], "dm", [a, b], false);
+assert not Policy.permitted(outsider, [b], "dm", [a, b], false);
+assert not Policy.permitted(a, [outsider], "dm", [a, b], false);
+assert not Policy.permitted(a, [b], "club", [a, b], false);
+assert not Policy.permitted(a, [b], "broadcast", [a, b], false);
+assert not Policy.permitted(a, [b], "dm", [a, b], true);
+assert not Policy.permitted(a, [b, b], "dm", [a, b], false);
+assert not Policy.permitted(a, [b], "dm", [a, b, outsider], false);
+assert not Policy.permitted(Principal.anonymous(), [b], "dm", [a, b], false);
