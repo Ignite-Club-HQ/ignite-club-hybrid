@@ -11,6 +11,15 @@ type ProfileBinding = { principal: Principal; account_id: string; display_name: 
 function assertActive(signal?: AbortSignal) {
   if (signal?.aborted) throw new DOMException("Person search cancelled", "AbortError");
 }
+function pinnedSearchGuard(ctx: FeatureBackendContext, signal?: AbortSignal) {
+  const identity = ctx.identity;
+  const caller = identity.getPrincipal().toText();
+  const target = JSON.stringify(ctx.target);
+  return () => {
+    assertActive(signal);
+    if (ctx.identity !== identity || identity.getPrincipal().toText() !== caller || JSON.stringify(ctx.target) !== target) throw new Error("Person search identity or authority changed.");
+  };
+}
 
 /** Bounded cold club traversal, never a full-directory request or persistent
  * private-name download. It remains unconnected until the coordinated release.
@@ -22,10 +31,12 @@ export async function searchScopedClubProfiles(
   limit = 10,
   signal?: AbortSignal,
 ) {
-  assertActive(signal);
+  const active = pinnedSearchGuard(ctx, signal);
+  active();
   if (!clubId.trim() || clubId !== clubId.trim() || query.trim().length > 80 || !Number.isInteger(limit) || limit < 1 || limit > 25) throw new Error("Invalid club person search.");
   if (query.trim().length < 2) return [];
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  active();
   const matches: Awaited<ReturnType<typeof searchScopedProfileCandidates>> = [];
   const matchedSubjects: string[] = [];
   const originalBindings = new Map<string, ProfileBinding>();
@@ -35,9 +46,9 @@ export async function searchScopedClubProfiles(
   // Hard work budget; incomplete traversal is never presented as a complete
   // empty search. A caller can narrow its search or use a scoped picker later.
   for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
-    assertActive(signal);
+    active();
     const page = await unwrapCandid(actor.read_profile_candidates(clubId, cursor), "Read club person candidates");
-    assertActive(signal);
+    active();
     if (page.scanned > 100n || page.subjects.length > 25 || (revision !== undefined && revision !== page.revision)) throw new Error("Club person search changed; please try again.");
     revision = page.revision;
     const next = page.next[0];
@@ -48,7 +59,7 @@ export async function searchScopedClubProfiles(
     const rows = await searchScopedProfileCandidates(ctx, clubId, ids, query, limit, signal, profiles => {
       for (const profile of profiles) originalBindings.set(profile.principal.toText(), profile);
     });
-    assertActive(signal);
+    active();
     matches.push(...rows);
     matchedSubjects.push(...rows.map(row => row.id));
     if (matches.length >= limit || !next) {
@@ -59,12 +70,13 @@ export async function searchScopedClubProfiles(
       if (!authorityId) throw new Error("The club's connection is not configured.");
       const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
       try {
+        active();
         for (let start = 0; start < matchedSubjects.length; start += 25) {
           const slice = matchedSubjects.slice(start, start + 25);
           // Revalidate original opaque references without paying to derive
           // every matched name key a second time.
           const confirmedRows = await client.readClubProfiles(Principal.fromText(authorityId), clubId, slice.map(id => Principal.fromText(id)));
-          assertActive(signal);
+          active();
           if (confirmedRows.length !== slice.length || new Set(confirmedRows.map(row => row.principal.toText())).size !== slice.length) throw new Error("Person search authority changed; please try again.");
           for (const confirmedRow of confirmedRows) {
             const id = confirmedRow.principal.toText();
@@ -77,7 +89,7 @@ export async function searchScopedClubProfiles(
       // awaits; a removed membership cannot return retained partial matches.
       const confirmed = await unwrapCandid(actor.read_profile_candidates(clubId, [{ revision, phase: 0n, offset: 0n }]), "Confirm club person search");
       if (confirmed.revision !== revision) throw new Error("Club person search changed; please try again.");
-      assertActive(signal);
+      active();
       return matches.slice(0, limit);
     }
     cursor = [next];
@@ -97,7 +109,8 @@ export async function searchScopedProfileCandidates(
   signal?: AbortSignal,
   observed?: (profiles: readonly ProfileBinding[]) => void,
 ) {
-  assertActive(signal);
+  const active = pinnedSearchGuard(ctx, signal);
+  active();
   if (!clubId.trim() || clubId !== clubId.trim()) throw new Error("A specific club is required for person search.");
   const authorityId = ctx.target.canisterIds.club_domain;
   if (!authorityId) throw new Error("The club's connection is not configured.");
@@ -117,19 +130,20 @@ export async function searchScopedProfileCandidates(
   if (authority.isAnonymous()) throw new Error("The club's connection is invalid.");
   const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
   try {
+    active();
     const rows = await client.readClubProfiles(authority, clubId, subjects);
-    assertActive(signal);
+    active();
     // Refuse foreign server rows rather than letting a response extend scope.
     const requested = new Set(subjects.map(p => p.toText()));
     if (rows.some(row => !requested.has(row.principal.toText()))) throw new Error("Person search returned an unexpected identity.");
     const hydrated = await hydratePrivateProfileNames(ctx, rows, signal ? { signal } : undefined);
-    assertActive(signal);
+    active();
     // Decryption adds asynchronous authorization boundaries. Verify identity
     // admission and both memberships again, not just the club page revision:
     // account links and profile references can change without that revision.
     if (rows.length) {
       const confirmed = await client.readClubProfiles(authority, clubId, subjects);
-      assertActive(signal);
+      active();
       const original = new Map(rows.map(row => [row.principal.toText(), row]));
       const final = new Map(confirmed.map(row => [row.principal.toText(), row]));
       if (original.size !== rows.length || final.size !== confirmed.length || final.size !== original.size

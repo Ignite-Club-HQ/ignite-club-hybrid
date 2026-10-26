@@ -1993,6 +1993,7 @@ async fn search_guardian_profiles(authority: Principal, child: String, query: St
     let guardian: bool = reply.candid().map_err(|_| "Invalid guardian verification")?;
     guardian_search::permit_disclosure(guardian, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
     // Retain active principals only; a UUID is never used as a role principal.
+    let retained_revision = profile_search_revision();
     let mut results = Vec::new();
     for profile in all_profiles() {
         if !profile.display_name.to_lowercase().contains(&needle) { continue; }
@@ -2009,6 +2010,7 @@ async fn search_guardian_profiles(authority: Principal, child: String, query: St
         .with_args(&(caller, child)).await.map_err(|_| "Guardian verification unavailable")?;
     let guardian: bool = reply.candid().map_err(|_| "Invalid guardian verification")?;
     guardian_search::permit_disclosure(guardian, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+    guardian_search::permit_profile_revision(retained_revision, profile_search_revision())?;
     results.retain(|result| account_for_write(result.principal).is_ok());
     Ok(results)
 }

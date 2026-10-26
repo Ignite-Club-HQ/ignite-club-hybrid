@@ -87,6 +87,21 @@ describe("scoped decrypted person matching", () => {
 });
 
 describe("authority-owned paged club search", () => {
+  it("retires the whole traversal when the identity changes during a candidate page", async () => {
+    const changing = { ...ctx };
+    mocks.page.mockImplementationOnce(async () => {
+      changing.identity = { getPrincipal: () => Principal.fromText(authority) } as FeatureBackendContext["identity"];
+      return { Ok: { revision: 7n, subjects: [row.principal], next: [], scanned: 1n } };
+    });
+    await expect(searchScopedClubProfiles(changing,"club-a","Paul")).rejects.toThrow("identity or authority changed");
+    expect(mocks.hydrate).not.toHaveBeenCalled();
+  });
+  it("retires decrypted results when a pinned target changes during unlock", async () => {
+    const changing = { ...ctx, target: { ...ctx.target, canisterIds: { ...ctx.target.canisterIds } } };
+    mocks.hydrate.mockImplementationOnce(async () => { changing.target.canisterIds.club_domain = subject; return [row]; });
+    await expect(searchScopedClubProfiles(changing,"club-a","Paul")).rejects.toThrow("identity or authority changed");
+    expect(mocks.read).toHaveBeenCalledTimes(1);
+  });
   it("uses authorized candidates and confirms the opening revision after names", async () => {
     expect((await searchScopedClubProfiles(ctx,"club-a","Paul"))[0]?.id).toBe(subject);
     expect(mocks.page).toHaveBeenNthCalledWith(1,"club-a",[]);

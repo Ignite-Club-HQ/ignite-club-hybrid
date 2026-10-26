@@ -55,6 +55,29 @@ and other details must remain viewable in the app.
 
 ## Not complete / do not enable a privacy cutover
 
+### Final checks requested at 21:48 UTC
+
+Both-mode focused acceptance passed (145 email-mode / 129 ICP), along with
+140 identity regression tests, all 17 contracts, ICP boundary guards and real
+disposable transport and SDK-encryption replicas. Independent review identified
+two additional gaps: scoped traversal did not pin the caller/target across every
+page, and legacy guardian search retained profile bindings across its final
+relationship await. The traversal now refuses identity/principal/target drift
+after every await; legacy disclosure rejects any account/profile revision
+change. Two concrete frontend drift tests and one Rust revision test were added;
+28 focused tests passed in each mode, all 141 Rust tests passed and the rebuilt
+transport/held-reply replica passed. Preview build is clean.
+
+This is NOT production encrypted-search acceptance. Exact-child permission
+does not yet authorize unrelated adults' name keys; ordinary/family/competition/
+league audiences and verified original-PII resolver callers remain incomplete.
+Hosted search still deliberately uses its transitional readable-name path;
+providing a club parameter there is not server-enforced club filtering. No
+production encrypted switch, conversion or grants were activated. Real signed-in
+encrypted search and final-delivery freshness remain unverified. Previously
+acquired decryption keys cannot be recalled; revocation tests prove only fresh
+authorized requests.
+
 ### Coordinated search connections — 26 October, 21:33 request
 
 - Connected team member (single/bulk/second-parent), club-admin,
