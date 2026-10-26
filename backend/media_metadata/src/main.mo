@@ -124,7 +124,7 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok
   };
   func assetFenced(id : Text) : Bool = transferFences.size() > 0 and assets.any(func(x) = x.id == id and isFenced(x.club_id));
-  type FenceSnapshot = { assets : [Types.Asset]; capabilities : [Types.Capability]; reactions : [Types.Reaction]; comments : [Types.Comment]; roles : [Types.RoleGrant]; cards : [Types.GalleryChatCard] };
+  type FenceSnapshot = { assets : [Types.Asset]; capabilities : [Types.Capability]; reactions : [Types.Reaction]; comments : [Types.Comment]; roles : [Types.RoleGrant]; cards : [Types.GalleryChatCard]; albums : ?[Types.Album] };
   func fenceSnapshot(c : Text) : FenceSnapshot {
     let rootA = assets.filter(func(x) = x.club_id == c);
     let inA = func(k : Text) : Bool = rootA.any(func(x) = x.id == k);
@@ -133,7 +133,8 @@ persistent actor class Main(governorInit : Principal) = this {
       reactions = reactions.filter(func(x) = inA(x.asset_id));
       comments = comments.filter(func(x) = inA(x.asset_id));
       roles = roles.filter(func(x) = x.club_id == ?c);
-      cards = galleryChatCards.filter(func(x) = x.club_id == c) }
+      cards = galleryChatCards.filter(func(x) = x.club_id == c);
+      albums = ?albums.filter(func(x) = x.club_id == c) }
   };
   func fenceDrop(c : Text) {
     let rootA = assets.filter(func(x) = x.club_id == c);
@@ -149,6 +150,7 @@ persistent actor class Main(governorInit : Principal) = this {
     roles := roles.filter(func(x) = not (x.club_id == ?c));
     mediaEvidenceRevision += 1;
     galleryChatCards := galleryChatCards.filter(func(x) = not (x.club_id == c));
+    albums := albums.filter(func(x) = not (x.club_id == c));
   };
   public query ({ caller }) func export_club_snapshot(club : Text) : async { #Ok : Blob; #Err : Text } {
     if (not fenceGov(caller)) return #Err("Governor required");
@@ -170,7 +172,11 @@ persistent actor class Main(governorInit : Principal) = this {
         or s.comments.any(func(x) = not (inA(x.asset_id)))
         or s.roles.any(func(x) = not (x.club_id == ?c))
         or s.cards.any(func(x) = not (x.club_id == c))) return #Err("Snapshot contains foreign records");
-    if (s.assets.any(func(e) = assets.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
+    let incomingAlbums = s.albums ?? [];
+    if (incomingAlbums.any(func(x) = x.club_id != c)) return #Err("Snapshot contains foreign records");
+    if (incomingAlbums.any(func(x) = switch (x.cover_asset_id) { case (?cover) { not inA(cover) }; case null { false } })) return #Err("Album cover references a foreign asset");
+    if (s.assets.any(func(a) = switch (a.album_id) { case (?al) { not incomingAlbums.any(func(x) = x.id == al) }; case null { false } })) return #Err("Asset references an unknown album");
+    if (s.assets.any(func(e) = assets.any(func(x) = x.id == e.id and x.club_id != club)) or incomingAlbums.any(func(e) = albums.any(func(x) = x.id == e.id and x.club_id != club))) return #Err("Snapshot id collides with another club");
     fenceDrop(club); // idempotent replace
     mediaEvidenceRevision += 1;
     assets := assets.concat(s.assets);
@@ -180,6 +186,7 @@ persistent actor class Main(governorInit : Principal) = this {
     roles := roles.concat(s.roles);
     mediaEvidenceRevision += 1;
     galleryChatCards := galleryChatCards.concat(s.cards);
+    albums := albums.concat(incomingAlbums);
     #Ok(s.assets.size())
   };
   public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {

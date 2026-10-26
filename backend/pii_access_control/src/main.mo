@@ -309,6 +309,8 @@ persistent actor class Main(governorInit : Principal) = this {
       let kids = g.children.filter(inG);
       mediaAuthEpoch += 1;
       guardian_relationships := switch (guardian_relationships.find(func(y) = y.guardian.equal(g.guardian))) {
+        // Existing destination entry stays authoritative for label/primary;
+        // only the child set merges.
         case (?cur) guardian_relationships.map(func(y) = if (y.guardian.equal(g.guardian)) { { y with children = y.children.concat(kids.filter(func(k) = not y.children.any(func(z) = z == k))) } } else y);
         case null guardian_relationships.concat([{ g with children = kids }]);
       };
