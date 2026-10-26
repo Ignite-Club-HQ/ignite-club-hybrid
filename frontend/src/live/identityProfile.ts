@@ -83,6 +83,11 @@ export async function fetchIcpIdentityProfile(
     } else if (!/profile not set/i.test(String(profileResult.reason?.message ?? profileResult.reason))) {
       throw profileResult.reason;
     }
+    if (canisterProfile?.display_name?.startsWith("pii-display-name:")) {
+      const { hydratePrivateProfileNames } = await import("./privateProfileNames");
+      const [hydrated] = await hydratePrivateProfileNames({ identity, target }, [canisterProfile]);
+      if (hydrated) canisterProfile = hydrated;
+    }
     const resolved: IcpIdentityProfile = {
       accountId: principal,
       displayName: canisterProfile?.display_name ?? null,

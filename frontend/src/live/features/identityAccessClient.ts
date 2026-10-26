@@ -83,6 +83,10 @@ export async function listLiveProfilesByIds(
         // A new account may not have completed its profile yet.
       }
     }
+    if (out.some(profile => profile.display_name?.startsWith("pii-display-name:"))) {
+      const { hydratePrivateProfileNames } = await import("../privateProfileNames");
+      return hydratePrivateProfileNames(ctx, out);
+    }
     return out;
   } finally {
     client.dispose();
