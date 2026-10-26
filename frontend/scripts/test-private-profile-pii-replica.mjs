@@ -94,5 +94,52 @@ try {
   await pic.upgradeCanister({ canisterId: pii.canisterId, wasm: piiWasm, sender: governor, arg,
     upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
   await decrypt(owner); await denied(reader); await denied(staff); await denied(outsider);
+  if (process.env.PRIVATE_PROFILE_CLUB_RELAY_WASM) {
+    const relayIdl = ({ IDL }) => IDL.Service({
+      read_has_club_staff_role: IDL.Func([IDL.Principal, IDL.Text], [IDL.Bool], []),
+      hold_on: IDL.Func([IDL.Nat], [], []), release: IDL.Func([], [], []),
+      progress: IDL.Func([], [IDL.Nat, IDL.Nat, IDL.Bool], ['query']),
+    });
+    const relay = await pic.setupCanister({ idlFactory: relayIdl,
+      wasm: process.env.PRIVATE_PROFILE_CLUB_RELAY_WASM, sender: governor, controllers: [governor],
+      arg: IDL.encode([IDL.Principal, IDL.Principal, IDL.Principal], [governor, club.canisterId, pii.canisterId]) });
+    ok(await as(governor).set_club_domain_canister(relay.canisterId));
+    const signature = piiIdl({ IDL })._fields.find(([method]) => method === 'get_encrypted_pii_vetkeys_batch')?.[1];
+    assert.ok(signature);
+    const hold = async (at, caller) => {
+      relay.actor.setPrincipal(governor); await relay.actor.hold_on(BigInt(at));
+      const pending = await pic.client.submitCall({ canisterId: pii.canisterId, sender: caller,
+        method: 'get_encrypted_pii_vetkeys_batch',
+        payload: new Uint8Array(IDL.encode(signature.argTypes, [[subject], field, TransportSecretKey.random().publicKeyBytes()])) });
+      let observed = false;
+      for (let step = 0; step < 80; step++) {
+        await pic.tick(1); const progress = await relay.actor.progress();
+        if (progress[1] === BigInt(at) && !progress[2]) { observed = true; break; }
+      }
+      assert.ok(observed, `Real PII authorization reply ${at} must be held`);
+      return async () => { await relay.actor.release(); return IDL.decode(signature.retTypes, (await pic.client.awaitCall(pending)).body)[0]; };
+    };
+    for (const at of [1, 2]) {
+      ok(await as(owner).grant_pii_read_club(subject, field, clubId));
+      const finish = await hold(at, staff);
+      ok(await as(owner).revoke_pii_read_club(subject, field, clubId));
+      assert.ok('Err' in await finish(), `Revoked club grant at reply ${at} must withhold the derived key`);
+      await denied(staff);
+      ok(await as(owner).grant_pii_read_club(subject, field, clubId));
+      await decrypt(staff);
+      ok(await as(owner).revoke_pii_read_club(subject, field, clubId));
+    }
+    // Keep a club grant only to create a real held authorization await; the
+    // unrelated explicit reader never gets membership through this fixture.
+    ok(await as(owner).grant_pii_read_club(subject, field, clubId));
+    ok(await as(owner).grant_pii_read(subject, field, reader));
+    const finishReader = await hold(2, reader);
+    ok(await as(owner).revoke_pii_read(subject, field, reader));
+    assert.ok('Err' in await finishReader(), 'Explicit reader revocation while final reply is held withholds its key');
+    await denied(reader);
+    ok(await as(owner).revoke_pii_read_club(subject, field, clubId));
+    ok(await as(governor).set_club_domain_canister(club.canisterId));
+    console.log('PASS: actual first/final PII authorization replies held; club and explicit grant revocation withholds encrypted keys; authorized retry decrypts with the original SDK key authority.');
+  }
   console.log('PASS: live club removal/re-grant, club grant revocation and original-key ciphertext/denial persistence across PII upgrade. Previously acquired keys cannot be recalled; these checks assert fresh requests only. No live changes or privacy cutover.');
 } finally { await pic?.tearDown(); await server.stop(); }
