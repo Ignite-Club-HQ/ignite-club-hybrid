@@ -606,7 +606,10 @@ export function IcpMediaFeedPage() {
       const previousDetails = queryClient.getQueryData<LivePostDetails>(detailsKey);
       const previousMine = post.reactions.filter(r => r.user_id === principal);
       const mine: LiveReactionView[] = remove || !principal ? [] : [{ user_id: principal, reaction_type: emoji, profiles: { display_name: 'You', avatar_url: null } }];
-      if (principal) queryClient.setQueryData<LivePostDetails>(detailsKey, old => old && ({ ...old, reactions: updateMemberReaction(old.reactions, principal, mine) }));
+      if (principal) queryClient.setQueryData<LivePostDetails>(detailsKey, old => ({
+        ...(old ?? { ownerName: post.ownerName, ownerAvatarUrl: post.ownerAvatarUrl, comments: post.comments, reactions: post.reactions }),
+        reactions: updateMemberReaction(old?.reactions ?? post.reactions, principal, mine),
+      }));
       if (previous && principal) {
         queryClient.setQueryData<LiveMediaFeed>(key, {
           ...previous,
@@ -947,7 +950,7 @@ export function IcpMediaFeedPage() {
                 : <img src={pending.src} alt="" className="aspect-square w-full object-cover" />}
               <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-background/85 px-2.5 py-1">
                 {!pending.settled && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
-                <p className="text-xs font-medium text-foreground">{pending.settled ? 'Published' : 'Uploading…'}</p>
+                <p className="text-xs font-medium text-foreground">{pending.settled ? 'Publication not confirmed' : pending.assetId ? 'Finishing publication…' : 'Uploading…'}</p>
               </div>
             </div>
           ))}
