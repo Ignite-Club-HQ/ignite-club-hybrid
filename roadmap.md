@@ -1,3 +1,8 @@
+## Thread search and result-jump responsiveness — 26 October 2026
+- [ ] Remove duplicated search waiting and reveal already-loaded matches during historical retrieval.
+- [ ] Make selected-result jumps reuse authorized loaded context and settle without fighting user scrolling; preserve cold-link recovery and thread authorization.
+- [ ] Run focused dual-mode regressions and browser result-to-thread verification; no new persistent private-message copies or deployment.
+
 ## Scheduled-message panel formatting — 26 October 2026
 - [x] Use the existing keyboard-safe drawer, remove competing mobile outer sizing/scrolling and place the attachment label above its control; scheduling and access rules unchanged.
 - [x] Browser verified the actual panel at 411×770 with a 410px keyboard-free viewport: heading/message visible, actions reachable by scrolling, attachment label separated, no page errors. 55 existing scheduling/keyboard checks passed (13 mode skips); preview build OK. Real Android keyboard/signed-in scheduling remains unverified; no deployment.
