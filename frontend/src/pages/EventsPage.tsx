@@ -957,9 +957,10 @@ export default function EventsPage() {
       }
       const withName = (event: Event): Event => {
         const tid = (event as any).team_id as string | undefined;
-        if ((event as any).teams?.name || !tid) return event;
+        if (((event as any).teams?.name && (event as any).teams.name !== 'Team') || !tid) return event;
         const nm = knownTeamNames.get(tid);
-        return nm ? ({ ...event, teams: { ...((event as any).teams ?? {}), name: nm } } as Event) : event;
+        return nm && nm !== 'Team' ? ({ ...event, teams: { ...((event as any).teams ?? {}), name: nm } } as Event)
+          : (isIcpAuthBackend && (event as any).teams?.name === 'Team' ? { ...event, teams: null } as Event : event);
       };
       return [...new Map([...(memberEvents ?? []), ...(fixtures ?? [])].map(event => [event.id, withName(event)])).values()]
         .filter(hasValidScheduleDate)

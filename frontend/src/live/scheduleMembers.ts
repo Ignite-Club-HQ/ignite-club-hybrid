@@ -6,6 +6,7 @@ import { getLiveClubProfile, getLiveTeam } from './features/club';
 import { listLiveEvents, listLiveEventDutyTeams } from './features/events';
 import { assertReadNotAborted, withReadDeadline } from './readDeadline';
 import { scheduleTimestampDate } from '@/lib/scheduleDates';
+import { getCachedTeam } from '@/lib/clubTeamCache';
 
 export type MemberScheduleEvent = {
   id: string; title: string; type: 'game' | 'training' | 'social'; event_date: string;
@@ -27,25 +28,34 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
   const ids = [...new Set(scope.clubIds)];
   const rows = new Map<string, MemberScheduleEvent[]>();
   const failed = new Set<string>();
-  const names = new Map<string, Promise<string>>();
+  const names = new Map<string, Promise<string | null>>();
+  const pendingTeamNames = new Set<string>();
+  const teamKey = (clubId: string, teamId: string) => JSON.stringify([clubId, teamId]);
   let pending = ids.length;
   let successful = 0;
   let firstError: unknown;
-  const snapshot = (): MemberScheduleSnapshot => ({ events: [...new Map([...rows.values()].flat().map(row => [row.id, row])).values()]
+  const snapshot = (): MemberScheduleSnapshot => ({ events: [...new Map([...rows.values()].flat()
+    .filter(row => !row.team_id || !pendingTeamNames.has(teamKey(row.club_id, row.team_id)))
+    .map(row => [row.id, row])).values()]
     .sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id)),
     incomplete: pending > 0 || failed.size > 0, pending, failed: [...failed] });
   const publish = () => { assertReadNotAborted(signal); onUpdate?.(snapshot()); };
-  const teamName = (id: string) => {
-    const hit = names.get(id); if (hit) return hit;
-    const promise = read(readMembershipInScope(ctx, { teamId: id }, scoped => getLiveTeam(scoped, id)), 'Schedule team name')
-      .then(value => value[0]?.name ?? 'Team').catch(() => { failed.add(`team:${id}`); return 'Team'; });
-    names.set(id, promise); return promise;
+  const teamName = (id: string, clubId: string) => {
+    const key = teamKey(clubId, id);
+    const hit = names.get(key); if (hit) return hit;
+    const promise = read(readMembershipInScope(ctx, { clubId }, scoped => getLiveTeam(scoped, id)), 'Schedule team name')
+      .then(value => {
+        const name = value[0]?.name?.trim();
+        if (!name) failed.add(`team:${id}`);
+        return name || null;
+      }).catch(() => { failed.add(`team:${id}`); return null; });
+    names.set(key, promise); return promise;
   };
   await Promise.all(ids.map(async clubId => {
     try {
       const raw = await read(readContentInScope(ctx, 'events', { clubId }, scoped => listLiveEvents(scoped, clubId, scope.selectedTeamId)), 'Schedule events');
       successful++;
-      const visible = raw.flatMap(event => {
+      const visible = raw.flatMap<MemberScheduleEvent>(event => {
         const start = scheduleTimestampDate(event.starts_at_ms);
         const teamId = event.team_id[0] ?? null;
         if (event.deleted || !start || start.getTime() < scope.fromMs || start.getTime() > scope.toMs ||
@@ -56,11 +66,23 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
           address: event.address[0] ?? null, suburb: null, location_name: event.location[0] ?? null,
           club_id: event.club_id, team_id: teamId, duty_team_id: null, mini_league_id: event.mini_league_id[0] ?? null,
           is_cancelled: event.cancelled, is_bye: false, is_recurring: event.series_id.length > 0, parent_event_id: null,
-          opponent: event.opponent[0] ?? null, teams: teamId ? { name: 'Team' } : null, clubs: { name: 'Club', sport: null },
+          opponent: event.opponent[0] ?? null, teams: null, clubs: { name: 'Club', sport: null },
           start_time: format(start, 'HH:mm'), end_time: format(end, 'HH:mm'), description: event.description,
           updated_at: (scheduleTimestampDate(event.updated_at_ms) ?? start).toISOString(),
         } satisfies MemberScheduleEvent];
       });
+      // Metadata is display-only and only applied after the authorized event
+      // has supplied its exact team/club. A cold team card waits for its own
+      // name, not every team's name or the slower profiles/duties.
+      for (const row of visible) {
+        if (!row.team_id) continue;
+        const cached = getCachedTeam(row.team_id);
+        if (cached?.club_id === clubId && cached.name?.trim() && cached.name !== 'Team') {
+          row.teams = { name: cached.name };
+        } else {
+          pendingTeamNames.add(teamKey(clubId, row.team_id));
+        }
+      }
       rows.set(clubId, visible); publish();
       if (!visible.length) return;
       // Each ancillary reply updates only this club; slow names cannot delay
@@ -77,8 +99,9 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
           publish();
         }).catch(() => { failed.add(`duties:${clubId}`); }),
         ...[...new Set(visible.flatMap(row => row.team_id ? [row.team_id] : []))].map(async teamId => {
-          const name = await teamName(teamId);
-          rows.set(clubId, (rows.get(clubId) ?? []).map(row => row.team_id === teamId ? { ...row, teams: { name } } : row)); publish();
+          const name = await teamName(teamId, clubId);
+          pendingTeamNames.delete(teamKey(clubId, teamId));
+          rows.set(clubId, (rows.get(clubId) ?? []).map(row => row.team_id === teamId ? { ...row, teams: name ? { name } : row.teams } : row)); publish();
         }),
       ]);
     } catch (error) { assertReadNotAborted(signal); failed.add(`club:${clubId}`); firstError ??= error; }

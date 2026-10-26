@@ -1,3 +1,7 @@
+## Schedule team-name flash — 26 October 2026
+- [x] Reuse exact-club cached team labels; cold cards reveal with their own resolved name while other teams/club-wide events remain independent. Route name reads by event club, suppress generic Team including old snapshots, and retain retry evidence on failures. 25 checks passed in each mode; guards and preview build OK. Frontend only, no deployment.
+- [ ] Phone acceptance requires the updated frontend and Paul's session.
+
 ## Vault theme-filter delay — 26 October 2026
 - [x] Retain account/club ICP directory, roles, allowance and explicitly scoped folder/file caches on theme selection; reuse directory labels immediately without granting access, warm up to three authorized club roots, and treat pending reads as pending rather than empty.
 - [x] Focused safeguards: 89 Supabase / 95 ICP passed, guards passed, preview build OK. Frontend-only; no deployment.
