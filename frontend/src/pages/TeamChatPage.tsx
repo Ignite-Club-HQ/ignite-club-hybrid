@@ -526,7 +526,7 @@ export default function TeamChatPage() {
   const { data: messagesData, isLoading: loadingMessages, isFetching } = useQuery({
 
     queryKey: ["team-messages", teamId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       markChatFetch();
       if (useIcpLab && teamId && user?.id) {
         return {
@@ -540,7 +540,7 @@ export default function TeamChatPage() {
       // canister (deterministic ids; club_domain provisions via
       // ensure_club_conversations). Forwarded metadata is Supabase-only.
       if (isFeatureRoutedToIcp("messaging") && teamId && user?.id) {
-        const page = await fetchIcpTeamLatestPage(queryClient, user.id, teamId, team?.club_id);
+        const page = await fetchIcpTeamLatestPage(queryClient, user.id, teamId, team?.club_id, signal);
         icpOlderCursorRef.current = page.icpOlderCursor;
         return { ...page, messages: page.messages as unknown as Message[] };
       }

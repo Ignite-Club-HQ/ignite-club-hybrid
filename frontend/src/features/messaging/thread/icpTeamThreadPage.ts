@@ -15,8 +15,26 @@ import { getCachedTeam } from "@/lib/clubTeamCache";
 export const ICP_TEAM_MESSAGES_PER_PAGE = 30;
 
 /** Maps canister rows into the shared team chat message shape (newest first). */
-export async function mapLiveTeamRows(ctx: any, teamId: string, rows: any[]): Promise<any[]> {
+export async function mapLiveTeamRows(ctx: any, teamId: string, rows: any[], onReady?: (rows: any[]) => void): Promise<any[]> {
   const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
+  if (onReady) {
+    const profiles = getProfilesFromCache(authorIds).cached;
+    const byId = new Map(rows.map(row => [row.id, row]));
+    onReady(rows.slice().sort((a, b) => Number(b.sequence - a.sequence)).map(row => {
+      const attachment = row.attachment?.[0];
+      const profile = profiles.get(row.sender.toText());
+      const replyId = row.reply_to_id?.[0] ?? null;
+      const reply = byId.get(replyId);
+      return { id: row.id, text: row.body, team_id: teamId, author_id: row.sender.toText(),
+        image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+        created_at: new Date(Number(row.created_at_ms)).toISOString(),
+        edited_at: row.edited_at_ms?.[0] ? new Date(Number(row.edited_at_ms[0])).toISOString() : null,
+        reply_to_id: replyId, reply_to: reply ? { text: reply.body, profiles: null } : null,
+        profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
+        reactions: [], deleted_at: null, is_club_announcement: false, club_announcement_name: null,
+        is_system_message: false, forwarded_from_user_id: null, forwarded_at: null, forwarded_source_label: null };
+    }));
+  }
   const profilesRead = withReadDeadline(fetchProfilesWithCache(authorIds), "Chat profiles", 1500)
     .catch(() => getProfilesFromCache(authorIds).cached);
   const reactionsRead = withReadDeadline(listLiveReactions(ctx, teamId), "Chat reactions", 1500).catch(() => []);
@@ -72,7 +90,7 @@ export function teamThreadScope(teamId: string, clubId?: string | null) {
 }
 
 /** Newest page of an ICP team chat, in the exact shape the team chat query stores. */
-export async function fetchIcpTeamLatestPage(queryClient: QueryClient, userId: string, teamId: string, clubId?: string | null) {
+export async function fetchIcpTeamLatestPage(queryClient: QueryClient, userId: string, teamId: string, clubId?: string | null, signal?: AbortSignal) {
   return withFeatureBackend("messaging", {
     supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
     icp: async (ctx) => {
@@ -83,9 +101,16 @@ export async function fetchIcpTeamLatestPage(queryClient: QueryClient, userId: s
         () => isLiveConversationAbsent(ctx, teamId),
       );
       prefetchMessagePolls(queryClient, page.messages, userId, { teamId }, true, ctx);
-      const messages = await mapLiveTeamRows(ctx, teamId, page.messages);
       const icpOlderCursor = Array.isArray(page.next_sequence) && page.next_sequence.length > 0
         ? Number(page.next_sequence[0]) : null;
+      if (signal?.aborted) throw new Error("Chat read cancelled");
+      const messages = await mapLiveTeamRows(ctx, teamId, page.messages, readyMessages => {
+        if (signal?.aborted) return;
+        queryClient.setQueryData(["team-messages", teamId], (previous: any) => previous?.messages?.length ? previous : {
+          messages: readyMessages, hasOlderMessages: icpOlderCursor !== null, fromCache: false, icpOlderCursor,
+        });
+      });
+      if (signal?.aborted) throw new Error("Chat read cancelled");
       return { messages, hasOlderMessages: icpOlderCursor !== null, fromCache: false, icpOlderCursor };
     },
   }, teamThreadScope(teamId, clubId));
