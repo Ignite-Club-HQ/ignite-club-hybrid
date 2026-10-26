@@ -65,6 +65,14 @@ afterEach(() => {
 });
 
 describe("evaluateChatJumpRevealGate", () => {
+  it("does not block the selected text message on a neighbouring pending photo", () => {
+    const scroller = makeScroller();
+    addRow(scroller, "target", 300, 420);
+    const neighbour = addRow(scroller, "photo", 100, 250);
+    neighbour.appendChild(document.createElement("img"));
+    expect(evaluateChatJumpRevealGate(scroller, { targetMessageId: "target" })).toBe("");
+  });
+
   it("blocks while the exact target row is not mounted", () => {
     const scroller = makeScroller();
     addRow(scroller, "other", 100, 200);
