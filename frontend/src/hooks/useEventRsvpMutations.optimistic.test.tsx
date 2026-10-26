@@ -13,7 +13,9 @@ vi.mock("@/live/clubScope", () => ({ writeOnce: (s: unknown) => s }));
 vi.mock("@/live/features/insights", () => ({ recordLiveRsvpCompleted: () => new Promise(() => {}) }));
 vi.mock("@/live/features/events", () => ({
   setLiveEventRsvp: () => new Promise<void>((res, rej) => { write.resolve = res; write.reject = rej; }),
-  setLiveChildRsvp: vi.fn(), adminUpsertLiveRsvp: vi.fn(), adminUpdateLiveRsvpStatus: vi.fn(), setLiveRsvpNote: vi.fn(),
+  setLiveChildRsvp: () => new Promise<void>((res, rej) => { write.resolve = res; write.reject = rej; }),
+  adminUpsertLiveRsvp: () => new Promise<void>((res, rej) => { write.resolve = res; write.reject = rej; }),
+  adminUpdateLiveRsvpStatus: () => new Promise<void>((res, rej) => { write.resolve = res; write.reject = rej; }), setLiveRsvpNote: vi.fn(),
 }));
 vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (_f: string, b: any) => b.icp({}) }));
 
@@ -30,10 +32,28 @@ function setup() {
     setShowPostRsvpNudge: () => {}, showPaymentStatus: false, userHasPaid: false, isProcessingPayment: false, handlePayNow: () => {},
   }), { wrapper });
   const status = () => (qc.getQueryData(eventKeys.rsvps("e1")) as any[])[0].status;
-  return { result, status };
+  return { result, status, qc };
 }
 
 describe("RSVP responds instantly", () => {
+  it("shows an admin status change before acknowledgement and restores it on refusal", async () => {
+    const { result, qc, status } = setup();
+    qc.setQueryData(eventKeys.rsvps("e1"), [{ id: "e1:me:self", user_id: "principal:me", child_id: null, status: "not_going" }]);
+    act(() => result.current.adminUpdateRsvpMutation.mutate({ rsvpId: "e1:me:self", status: "maybe", playerName: "Me" }));
+    await waitFor(() => expect(status()).toBe("maybe"));
+    expect(result.current.adminUpdateRsvpMutation.isPending).toBe(true);
+    await act(async () => { write.reject?.(new Error("denied")); });
+    await waitFor(() => expect(status()).toBe("not_going"));
+  });
+  it("does not roll back another child's response when one save fails", async () => {
+    const { result, qc } = setup();
+    act(() => result.current.childRsvpMutation.mutate({ childId: "child1", childName: "Alex", status: "going" }));
+    await waitFor(() => expect((qc.getQueryData(eventKeys.rsvps("e1")) as any[]).find(r => r.child_id === "child1")?.status).toBe("going"));
+    qc.setQueryData(eventKeys.rsvps("e1"), (rows: any) => [...rows, { id: "r2", child_id: "child2", status: "maybe" }]);
+    await act(async () => { write.reject?.(new Error("denied")); });
+    await waitFor(() => expect((qc.getQueryData(eventKeys.rsvps("e1")) as any[]).some(r => r.child_id === "child1")).toBe(false));
+    expect((qc.getQueryData(eventKeys.rsvps("e1")) as any[]).find(r => r.child_id === "child2")?.status).toBe("maybe");
+  });
   it("shows Going before the save finishes", async () => {
     const { result, status } = setup();
     act(() => { result.current.rsvpMutation.mutate("going"); });
