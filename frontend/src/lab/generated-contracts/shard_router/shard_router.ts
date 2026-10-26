@@ -96,6 +96,12 @@ export type Result_17 = {
     __kind__: "Err";
     Err: string;
 };
+export interface HttpRequest {
+    url: string;
+    method: string;
+    body: Uint8Array;
+    headers: Array<[string, string]>;
+}
 export interface Init {
     governor: Principal;
 }
@@ -158,6 +164,11 @@ export interface Page {
     next?: string;
     routes: Array<Route>;
     revision: bigint;
+}
+export interface HttpResponse {
+    body: Uint8Array;
+    headers: Array<[string, string]>;
+    status_code: number;
 }
 export interface OwnerOpeningApproval {
     club_ids: Array<string>;
@@ -404,6 +415,7 @@ export interface shard_routerInterface {
     get_group_assignment(arg0: string): Promise<Result_10>;
     get_migration(arg0: string): Promise<Result_11>;
     get_route(arg0: string): Promise<Result_12>;
+    http_request(arg0: HttpRequest): Promise<HttpResponse>;
     list_groups(): Promise<Result_13>;
     list_routes(arg0: string | null, arg1: number): Promise<Result_14>;
     memory_stats(): Promise<MemoryStats>;
@@ -427,6 +439,7 @@ export interface shard_routerInterface {
     release_deletion_lock(arg0: string, arg1: bigint): Promise<Result_7>;
     reserve_group_media_growth(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<Result>;
     set_deletion_authority(arg0: Principal): Promise<Result_7>;
+    set_website_default_club_domain(arg0: Principal): Promise<Result_7>;
     stop_group_new_placements(arg0: string, arg1: string, arg2: bigint): Promise<Result>;
     stop_owner_test_group(arg0: string, arg1: bigint): Promise<Result_15>;
     version(): Promise<bigint>;
@@ -505,6 +518,10 @@ export class Shard_router implements shard_routerInterface {
     async get_route(arg0: string): Promise<Result_12> {
         const result = await this.actor.get_route(arg0);
         return from_candid_Result_12_n29(result);
+    }
+    async http_request(arg0: HttpRequest): Promise<HttpResponse> {
+        const result = await this.actor.http_request(arg0);
+        return result;
     }
     async list_groups(): Promise<Result_13> {
         const result = await this.actor.list_groups();
@@ -596,6 +613,10 @@ export class Shard_router implements shard_routerInterface {
     }
     async set_deletion_authority(arg0: Principal): Promise<Result_7> {
         const result = await this.actor.set_deletion_authority(arg0);
+        return from_candid_Result_7_n15(result);
+    }
+    async set_website_default_club_domain(arg0: Principal): Promise<Result_7> {
+        const result = await this.actor.set_website_default_club_domain(arg0);
         return from_candid_Result_7_n15(result);
     }
     async stop_group_new_placements(arg0: string, arg1: string, arg2: bigint): Promise<Result> {

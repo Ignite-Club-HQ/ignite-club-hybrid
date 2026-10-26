@@ -75,6 +75,17 @@ export interface GroupRegistrySnapshot {
   'placements' : Array<GroupPlacement>,
   'revision' : bigint,
 }
+export interface HttpRequest {
+  'url' : string,
+  'method' : string,
+  'body' : Uint8Array,
+  'headers' : Array<[string, string]>,
+}
+export interface HttpResponse {
+  'body' : Uint8Array,
+  'headers' : Array<[string, string]>,
+  'status_code' : number,
+}
 export interface Init { 'governor' : Principal }
 export interface MemoryStats {
   'memory_bytes' : bigint,
@@ -247,6 +258,10 @@ export interface _SERVICE {
   'get_group_assignment' : ActorMethod<[string], Result_10>,
   'get_migration' : ActorMethod<[string], Result_11>,
   'get_route' : ActorMethod<[string], Result_12>,
+  /**
+   * Public club-website resolver: 307 to the owning group's club_domain /club.
+   */
+  'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'list_groups' : ActorMethod<[], Result_13>,
   'list_routes' : ActorMethod<[[] | [string], number], Result_14>,
   /**
@@ -327,6 +342,10 @@ export interface _SERVICE {
     Result
   >,
   'set_deletion_authority' : ActorMethod<[Principal], Result_7>,
+  /**
+   * Governor-only fallback club_domain for clubs without a group assignment.
+   */
+  'set_website_default_club_domain' : ActorMethod<[Principal], Result_7>,
   /**
    * Governor-only stop for general and trial admission. Never removes assignments
    * or changes membership, service endpoints, media, or opening authorization.

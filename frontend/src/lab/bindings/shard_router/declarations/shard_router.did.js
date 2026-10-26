@@ -86,6 +86,17 @@ export const idlFactory = ({ IDL }) => {
     'Err' : IDL.Text,
   });
   const Result_12 = IDL.Variant({ 'Ok' : IDL.Opt(Route), 'Err' : IDL.Text });
+  const HttpRequest = IDL.Record({
+    'url' : IDL.Text,
+    'method' : IDL.Text,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+  });
+  const HttpResponse = IDL.Record({
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+    'status_code' : IDL.Nat16,
+  });
   const DomainCanister = IDL.Record({
     'domain' : IDL.Text,
     'canister' : IDL.Principal,
@@ -269,6 +280,7 @@ export const idlFactory = ({ IDL }) => {
     'get_group_assignment' : IDL.Func([IDL.Text], [Result_10], ['query']),
     'get_migration' : IDL.Func([IDL.Text], [Result_11], ['query']),
     'get_route' : IDL.Func([IDL.Text], [Result_12], ['query']),
+    'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
     'list_groups' : IDL.Func([], [Result_13], ['query']),
     'list_routes' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Nat16],
@@ -336,6 +348,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_deletion_authority' : IDL.Func([IDL.Principal], [Result_7], []),
+    'set_website_default_club_domain' : IDL.Func(
+        [IDL.Principal],
+        [Result_7],
+        [],
+      ),
     'stop_group_new_placements' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
         [Result],

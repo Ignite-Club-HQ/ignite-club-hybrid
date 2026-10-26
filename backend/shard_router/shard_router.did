@@ -147,6 +147,8 @@ type ShardGroup = record {
   min_cycles : nat64;
   heap_bytes : nat64;
 };
+type HttpRequest = record { method : text; url : text; headers : vec record { text; text }; body : blob };
+type HttpResponse = record { status_code : nat16; headers : vec record { text; text }; body : blob };
 service : (Init) -> {
   abort_domain_migration : (text, text, nat64) -> (Result);
   abort_migration : (text, nat64) -> (Result);
@@ -227,5 +229,9 @@ service : (Init) -> {
   // or changes membership, service endpoints, media, or opening authorization.
   stop_group_new_placements : (text, text, nat64) -> (Result);
   stop_owner_test_group : (text, nat64) -> (Result_15);
+  // Public club-website resolver: 307 to the owning group's club_domain /club.
+  http_request : (HttpRequest) -> (HttpResponse) query;
+  // Governor-only fallback club_domain for clubs without a group assignment.
+  set_website_default_club_domain : (principal) -> (Result_7);
   version : () -> (nat64) query;
 }
