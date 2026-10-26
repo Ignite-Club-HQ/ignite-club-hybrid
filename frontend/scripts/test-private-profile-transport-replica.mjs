@@ -39,31 +39,74 @@ try {
     clubs.push(c);
   }
   const subnet=await pic.getCanisterSubnetId(identity.canisterId);assert.ok(subnet);
+  const sources=clubs.map(c=>c.canisterId);
+  let relay;
+  if (process.env.PROFILE_MEMBERSHIP_RELAY_WASM) {
+    const batchType=clubIdl({IDL})._fields.find(([name])=>name==='read_profile_membership_batch')?.[1];assert.ok(batchType);
+    const relayIdl=({IDL})=>IDL.Service({
+      read_profile_membership_batch:batchType,
+      hold_on:IDL.Func([IDL.Nat],[],[]),release:IDL.Func([],[],[]),
+      progress:IDL.Func([],[IDL.Nat,IDL.Nat,IDL.Bool],['query']),
+    });
+    relay=await pic.setupCanister({idlFactory:relayIdl,wasm:process.env.PROFILE_MEMBERSHIP_RELAY_WASM,sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal,IDL.Principal,IDL.Principal],[governor,clubs[0].canisterId,identity.canisterId])});
+    await pic.updateCanisterSettings({canisterId:clubs[0].canisterId,sender:governor,environmentVariables:[...privacy,{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'}]});
+    // Setter reads current runtime environment; no admission-enabled upgrade
+    // is performed, so only the intended test delegation changes.
+    clubs[0].actor.setPrincipal(governor);ok(await clubs[0].actor.set_identity_access_canister(relay.canisterId));
+    await pic.updateCanisterSettings({canisterId:clubs[0].canisterId,sender:governor,environmentVariables:privacy});
+    sources[0]=relay.canisterId;
+  }
   router.actor.setPrincipal(governor);let revision=await router.actor.version();
   for(let n=0;n<2;n++) {
-    const domains=names.map((domain,index)=>({domain,canister:domain==='club_domain'?clubs[n].canisterId:domain==='secret_workload_identity'?p(90):p(10+n*30+index)}));
+    const domains=names.map((domain,index)=>({domain,canister:domain==='club_domain'?sources[n]:domain==='secret_workload_identity'?p(90):p(10+n*30+index)}));
     const group={id:`g${n+1}`,target_alias:'mainnet',domains,photo_store:[],accepting:false,max_clubs:100,assigned_clubs:0,heap_budget_bytes:1_000_000n,heap_bytes:0n,min_cycles:1n,cycles:0n,observed_at_ns:0n};
     revision=ok(await router.actor.register_group(group,revision));
     revision=ok(await router.actor.register_group_placement({group_id:group.id,deployment_id:'mainnet',deployment_revision:1n,host:'https://icp-api.io',network_kind:'public_mainnet',primary_subnet:subnet,approved_subnets:[subnet],additional_subnets_enabled:false,domains:domains.map(d=>({...d,subnet}))},revision));
   }
   const binding={registry:router.canisterId,registry_revision:revision,target_alias:'mainnet',deployment_id:'mainnet',deployment_revision:1n,host:'https://icp-api.io',network_kind:'public_mainnet'};
   i.setPrincipal(governor);ok(await i.pin_owner_test_deletion_registry(binding));
-  const grants=ok(await i.configure_membership_directory(binding,clubs.map(c=>c.canisterId),1n));
+  const grants=ok(await i.configure_membership_directory(binding,sources,1n));
   for(let n=0;n<2;n++) {
     const grant=grants.find(g=>g.group===`g${n+1}`);assert.ok(grant);
+    if (n===0 && relay) continue; // Test relay does not implement directory pages.
     clubs[n].actor.setPrincipal(governor);ok(await clubs[n].actor.configure_membership_directory_source(grant));
   }
-  const read=async(n,subjects=[member,stranger])=>{i.setPrincipal(requester);return i.read_club_profiles(clubs[n].canisterId,`club-${n}`,subjects);};
+  const read=async(n,subjects=[member,stranger])=>{i.setPrincipal(requester);return i.read_club_profiles(sources[n],`club-${n}`,subjects);};
   // In-flight callback tests require a dedicated held-response authority.
   // A tick alone completes this same-subnet flow and cannot prove interruption.
   for(let n=0;n<2;n++) {
     const rows=ok(await read(n));assert.equal(rows.length,1);assert.equal(rows[0].display_name,'Paul Cranwell');assert.equal(rows[0].principal.toText(),member.toText());
     assert.equal(ok(await read(n,[member,member])).length,1,'Duplicates cannot widen disclosure');
-    i.setPrincipal(stranger);assert.ok('Err'in await i.read_club_profiles(clubs[n].canisterId,`club-${n}`,[member]));
-    i.setPrincipal(Principal.anonymous());assert.ok('Err'in await i.read_club_profiles(clubs[n].canisterId,`club-${n}`,[member]));
+    i.setPrincipal(stranger);assert.ok('Err'in await i.read_club_profiles(sources[n],`club-${n}`,[member]));
+    i.setPrincipal(Principal.anonymous());assert.ok('Err'in await i.read_club_profiles(sources[n],`club-${n}`,[member]));
     i.setPrincipal(requester);assert.ok('Err'in await i.read_club_profiles(foreign,`club-${n}`,[member]));
-    assert.ok('Err'in await i.read_club_profiles(clubs[n].canisterId,'foreign-club',[member]));
-    assert.ok('Err'in await i.read_club_profiles(clubs[n].canisterId,`club-${n}`,Array(26).fill(member)));
+    assert.ok('Err'in await i.read_club_profiles(sources[n],'foreign-club',[member]));
+    assert.ok('Err'in await i.read_club_profiles(sources[n],`club-${n}`,Array(26).fill(member)));
+  }
+  if (relay) {
+    const signature=identityIdl({IDL})._fields.find(([name])=>name==='read_club_profiles')?.[1];assert.ok(signature);
+    const hold=async(at)=>{
+      relay.actor.setPrincipal(governor);await relay.actor.hold_on(BigInt(at));
+      const pending=await pic.client.submitCall({canisterId:identity.canisterId,sender:requester,method:'read_club_profiles',payload:new Uint8Array(IDL.encode(signature.argTypes,[sources[0],'club-0',[member]]))});
+      let observed=false;
+      for(let n=0;n<60;n++) {await pic.tick(1);const progress=await relay.actor.progress();if(progress[1]===BigInt(at)&&!progress[2]){observed=true;break;}}
+      assert.ok(observed,`Actual membership reply ${at} must be held before mutation`);
+      return async()=>{await relay.actor.release();return IDL.decode(signature.retTypes,(await pic.client.awaitCall(pending)).body)[0];};
+    };
+    for(const at of [1,2]) {
+      const finish=await hold(at);i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(requester.toText()),{Suspended:null}));
+      assert.ok('Err'in await finish(),`Caller suspension at reply ${at} must suppress all names`);
+      i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(requester.toText()),{Active:null}));
+      assert.equal(ok(await read(0)).length,1,'Exact authorized retry succeeds');
+    }
+    const finishSubject=await hold(2);i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(member.toText()),{Suspended:null}));
+    assert.deepEqual(ok(await finishSubject()),[],'Subject suspended during final reply cannot appear');
+    i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(member.toText()),{Active:null}));
+    const finishRole=await hold(1);clubs[0].actor.setPrincipal(governor);ok(await clubs[0].actor.remove_member('club-0',member));
+    assert.ok('Err'in await finishRole(),'Membership mutation between batches invalidates exact revision');
+    clubs[0].actor.setPrincipal(governor);ok(await clubs[0].actor.restore_member('club-0',member));ok(await clubs[0].actor.add_role_grant(member,'club-0','member',[]));
+    assert.equal(ok(await read(0)).length,1);
+    console.log('PASS: observed actual first/second held replies; caller suspension at both boundaries, final subject suspension and between-batch club removal reject disclosure, with healthy retry controls.');
   }
   i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(member.toText()),{Suspended:null}));
   assert.deepEqual(ok(await read(0)),[],'Suspended subjects must not appear');
