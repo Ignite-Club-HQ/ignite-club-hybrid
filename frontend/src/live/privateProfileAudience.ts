@@ -1,0 +1,9 @@
+import type { Principal } from '@icp-sdk/core/principal';
+
+/** Untrusted selectors: owning services verify every subject. Never a grant. */
+export type PrivateProfileAudience = {
+  kind: 'club' | 'family' | 'competition' | 'league' | 'guardian_search';
+  authority: Principal;
+  resource: string;
+  profile_revision: bigint;
+};
