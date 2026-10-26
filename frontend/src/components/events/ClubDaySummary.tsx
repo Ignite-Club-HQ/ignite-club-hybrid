@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { MapPin, Clock, Dumbbell, Users, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,6 +49,24 @@ interface ClubDayEvent {
 }
 
 const dayKey = (d: Date) => format(d, "yyyy-MM-dd");
+
+/**
+ * Format a time-only string ("HH:mm" or "HH:mm:ss") as e.g. "6:30pm".
+ * `new Date("18:30")` is an Invalid Date and date-fns format() throws on it,
+ * so time-only values must be parsed by hand. Returns null instead of
+ * throwing for missing or unparseable values.
+ */
+function formatTimeOnly(value: string | null): string | null {
+  if (!value) return null;
+  const m = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value.trim());
+  if (m) {
+    const d = new Date();
+    d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+    return format(d, "h:mma").toLowerCase();
+  }
+  const d = new Date(value);
+  return isValid(d) ? format(d, "h:mma").toLowerCase() : null;
+}
 
 function venueLabel(e: ClubDayEvent): string {
   return (
@@ -129,7 +147,11 @@ export function ClubDaySummary({
             readContentInScope(ctx, "events", { clubId }, (scoped) => listLiveEvents(scoped, clubId, null))));
           if (settled.length && settled.every((r) => r.status === "rejected")) throw (settled[0] as PromiseRejectedResult).reason;
           const dayEvents = settled.flatMap((r) => (r.status === "fulfilled" ? (r.value as any[]) : []))
-            .filter((ev) => !ev.deleted && format(new Date(Number(ev.starts_at_ms)), "yyyy-MM-dd") === dKey);
+            .filter((ev) => {
+              if (ev.deleted) return false;
+              const start = new Date(Number(ev.starts_at_ms));
+              return isValid(start) && format(start, "yyyy-MM-dd") === dKey;
+            });
           const teamIds = [...new Set(dayEvents.map((ev) => (ev.team_id?.[0] ?? null) as string | null).filter(Boolean))] as string[];
           const names = new Map<string, string | null>(await Promise.all(teamIds.map(async (teamId) => {
             try {
@@ -147,9 +169,9 @@ export function ClubDaySummary({
               id: ev.id,
               title: ev.title,
               type: ev.event_type,
-              event_date: format(start, "yyyy-MM-dd"),
-              start_time: format(start, "HH:mm"),
-              end_time: format(end, "HH:mm"),
+              event_date: isValid(start) ? format(start, "yyyy-MM-dd") : dKey,
+              start_time: isValid(start) ? format(start, "HH:mm") : null,
+              end_time: isValid(end) ? format(end, "HH:mm") : null,
               location_name: (ev.location?.[0] ?? null) as string | null,
               address: (ev.address?.[0] ?? null) as string | null,
               suburb: null,
@@ -328,9 +350,7 @@ export function ClubDaySummary({
 
 function DayEventRow({ event, hideVenue = false }: { event: ClubDayEvent; hideVenue?: boolean }) {
   const navigate = useNavigate();
-  const time = event.start_time
-    ? format(new Date(event.start_time), "h:mma").toLowerCase()
-    : null;
+  const time = formatTimeOnly(event.start_time);
   const venue = hideVenue ? null : venueLabel(event);
   const isTraining = event.type === "training";
 
