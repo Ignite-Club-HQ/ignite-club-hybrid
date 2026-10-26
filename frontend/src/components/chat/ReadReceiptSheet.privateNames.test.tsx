@@ -15,7 +15,7 @@ describe('private read receipt names', () => {
     expect(screen.queryByText('Stale cached name')).toBeNull();
     expect(state.ids).toContain('person');
     state.profile = { display_name: 'Authorized name', avatar_url: null };
-    view.rerender(<ReadReceiptSheet {...props} />);
+    view.rerender(<ReadReceiptSheet {...props} readers={[...props.readers]} />);
     expect(screen.getByText('Authorized name')).toBeTruthy();
     expect(screen.queryByText('Stale cached name')).toBeNull();
   });
