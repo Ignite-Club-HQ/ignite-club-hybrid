@@ -211,6 +211,11 @@ export interface Config {
 }
 export interface Cursor {
   'offset' : bigint,
+  'phase' : bigint,
+  'revision' : bigint,
+}
+export interface Cursor__1 {
+  'offset' : bigint,
   'nested' : bigint,
   'phase' : bigint,
   'revision' : bigint,
@@ -1511,7 +1516,7 @@ export interface Main {
   >,
   'read_club_media_references' : ActorMethod<
     [string, bigint, [] | [bigint]],
-    { 'Ok' : Page__1 } |
+    { 'Ok' : Page__2 } |
       { 'Err' : string }
   >,
   'read_club_retained_media_bytes' : ActorMethod<
@@ -1524,8 +1529,8 @@ export interface Main {
     { 'can_manage' : boolean, 'is_member' : boolean, 'club_id' : [] | [string] }
   >,
   'read_directory_membership_source_page' : ActorMethod<
-    [Binding, [] | [Cursor]],
-    { 'Ok' : Page } |
+    [Binding, [] | [Cursor__1]],
+    { 'Ok' : Page__1 } |
       { 'Err' : string }
   >,
   'read_directory_membership_status' : ActorMethod<
@@ -1607,8 +1612,8 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_membership_source_page' : ActorMethod<
-    [[] | [Cursor]],
-    { 'Ok' : Page } |
+    [[] | [Cursor__1]],
+    { 'Ok' : Page__1 } |
       { 'Err' : string }
   >,
   'read_my_club_memberships' : ActorMethod<
@@ -1631,6 +1636,11 @@ export interface Main {
           'acl_revision' : bigint,
         }
       } |
+      { 'Err' : string }
+  >,
+  'read_profile_candidates' : ActorMethod<
+    [string, [] | [Cursor]],
+    { 'Ok' : Page } |
       { 'Err' : string }
   >,
   'read_profile_membership_batch' : ActorMethod<
@@ -2350,12 +2360,18 @@ export type Operation__1 = {
   { 'Remove' : { 'id' : string } } |
   { 'Reorder' : { 'first' : string, 'second' : string } };
 export interface Page {
+  'subjects' : Array<Principal>,
   'next' : [] | [Cursor],
+  'scanned' : bigint,
+  'revision' : bigint,
+}
+export interface Page__1 {
+  'next' : [] | [Cursor__1],
   'scanned' : bigint,
   'edges' : Array<Edge>,
   'revision' : bigint,
 }
-export interface Page__1 {
+export interface Page__2 {
   'references' : Array<Reference>,
   'next' : [] | [bigint],
   'scanned' : bigint,

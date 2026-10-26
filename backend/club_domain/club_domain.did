@@ -361,19 +361,26 @@ type ParentInvite =
    invited_by: principal;
    team_id: opt text;
  };
-type Page__1 = 
+type Page__2 = 
  record {
    next: opt nat;
    references: vec Reference;
    revision: nat;
    scanned: nat;
  };
-type Page = 
+type Page__1 = 
  record {
    edges: vec Edge;
+   next: opt Cursor__1;
+   revision: nat;
+   scanned: nat;
+ };
+type Page = 
+ record {
    next: opt Cursor;
    revision: nat;
    scanned: nat;
+   subjects: vec principal;
  };
 type Operation__1 = 
  variant {
@@ -1676,7 +1683,7 @@ type Main =
    read_club_media_references: (club: text, offset: nat, expected:
     opt nat) -> (variant {
                    Err: text;
-                   Ok: Page__1;
+                   Ok: Page__2;
                  });
    read_club_retained_media_bytes: (club_id: text) ->
     (variant {
@@ -1693,10 +1700,10 @@ type Main =
        is_member: bool;
      }) query;
    read_directory_membership_source_page: (binding: Binding, cursor:
-    opt Cursor) -> (variant {
-                      Err: text;
-                      Ok: Page;
-                    });
+    opt Cursor__1) -> (variant {
+                         Err: text;
+                         Ok: Page__1;
+                       });
    read_directory_membership_status: (binding: Binding) ->
     (variant {
        Err: text;
@@ -1778,10 +1785,10 @@ type Main =
              revision: nat;
            };
      });
-   read_membership_source_page: (cursor: opt Cursor) ->
+   read_membership_source_page: (cursor: opt Cursor__1) ->
     (variant {
        Err: text;
-       Ok: Page;
+       Ok: Page__1;
      });
    read_my_club_memberships: (offset: nat, limit: nat16) ->
     (variant {
@@ -1800,6 +1807,11 @@ type Main =
              clubs: vec text;
              next: opt text;
            };
+     });
+   read_profile_candidates: (club_id: text, cursor: opt Cursor) ->
+    (variant {
+       Err: text;
+       Ok: Page;
      });
    read_profile_membership_batch: (requester: principal, club_id: text,
     subjects: vec principal, expected: opt nat) ->
@@ -2514,9 +2526,15 @@ type Draft =
    title: text;
    url: text;
  };
-type Cursor = 
+type Cursor__1 = 
  record {
    nested: nat;
+   offset: nat;
+   phase: nat;
+   revision: nat;
+ };
+type Cursor = 
+ record {
    offset: nat;
    phase: nat;
    revision: nat;

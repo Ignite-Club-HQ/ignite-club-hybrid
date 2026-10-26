@@ -634,13 +634,13 @@ export const idlFactory = ({ IDL }) => {
     'store' : IDL.Opt(IDL.Text),
     'resource_id' : IDL.Text,
   });
-  const Page__1 = IDL.Record({
+  const Page__2 = IDL.Record({
     'references' : IDL.Vec(Reference),
     'next' : IDL.Opt(IDL.Nat),
     'scanned' : IDL.Nat,
     'revision' : IDL.Nat,
   });
-  const Cursor = IDL.Record({
+  const Cursor__1 = IDL.Record({
     'offset' : IDL.Nat,
     'nested' : IDL.Nat,
     'phase' : IDL.Nat,
@@ -662,10 +662,21 @@ export const idlFactory = ({ IDL }) => {
     'Guardian' : IDL.Record({ 'subject' : IDL.Principal, 'child' : IDL.Text }),
     'Excluded' : IDL.Record({ 'subject' : IDL.Principal, 'club' : IDL.Text }),
   });
-  const Page = IDL.Record({
-    'next' : IDL.Opt(Cursor),
+  const Page__1 = IDL.Record({
+    'next' : IDL.Opt(Cursor__1),
     'scanned' : IDL.Nat,
     'edges' : IDL.Vec(Edge),
+    'revision' : IDL.Nat,
+  });
+  const Cursor = IDL.Record({
+    'offset' : IDL.Nat,
+    'phase' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
+  const Page = IDL.Record({
+    'subjects' : IDL.Vec(IDL.Principal),
+    'next' : IDL.Opt(Cursor),
+    'scanned' : IDL.Nat,
     'revision' : IDL.Nat,
   });
   const Batch = IDL.Record({
@@ -2162,7 +2173,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_club_media_references' : IDL.Func(
         [IDL.Text, IDL.Nat, IDL.Opt(IDL.Nat)],
-        [IDL.Variant({ 'Ok' : Page__1, 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : Page__2, 'Err' : IDL.Text })],
         [],
       ),
     'read_club_retained_media_bytes' : IDL.Func(
@@ -2187,8 +2198,8 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'read_directory_membership_source_page' : IDL.Func(
-        [Binding, IDL.Opt(Cursor)],
-        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
+        [Binding, IDL.Opt(Cursor__1)],
+        [IDL.Variant({ 'Ok' : Page__1, 'Err' : IDL.Text })],
         [],
       ),
     'read_directory_membership_status' : IDL.Func(
@@ -2313,8 +2324,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_membership_source_page' : IDL.Func(
-        [IDL.Opt(Cursor)],
-        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
+        [IDL.Opt(Cursor__1)],
+        [IDL.Variant({ 'Ok' : Page__1, 'Err' : IDL.Text })],
         [],
       ),
     'read_my_club_memberships' : IDL.Func(
@@ -2343,6 +2354,11 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        [],
+      ),
+    'read_profile_candidates' : IDL.Func(
+        [IDL.Text, IDL.Opt(Cursor)],
+        [IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text })],
         [],
       ),
     'read_profile_membership_batch' : IDL.Func(
