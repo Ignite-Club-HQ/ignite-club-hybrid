@@ -18,6 +18,7 @@ import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
+import PrivateProfileAudience "../../shared/PrivateProfileAudience";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
