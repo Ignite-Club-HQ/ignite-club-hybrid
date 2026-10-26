@@ -257,13 +257,16 @@ export const WRITERS = {
     return { records: snap.leagues.length + snap.sessions.length + snap.groups.length };
   },
   async messaging(ctx) {
-    const [teams, teamMessages, clubMessages, chatGroups, clubAdminConversations, polls] = await Promise.all([
-      ctx.rows('teams', 'club_id'), ctx.rows('team_messages', 'club_id'), ctx.rows('club_messages', 'club_id'),
+    const [teams, clubMessages, chatGroups, clubAdminConversations] = await Promise.all([
+      ctx.rows('teams', 'club_id'), ctx.rows('club_messages', 'club_id'),
       ctx.rows('chat_groups', 'club_id'), ctx.rows('club_admin_conversations', 'club_id'),
-      ctx.rowsIn('polls', 'chat_id', (await ctx.rows('teams', 'club_id')).map((t) => t.id)),
     ]);
-    const groupMessages = await ctx.rowsIn('group_messages', 'group_id', chatGroups.map((g) => g.id));
-    const clubAdminMessages = await ctx.rowsIn('club_admin_messages', 'conversation_id', clubAdminConversations.map((c) => c.id));
+    const teamIds = teams.map((t) => t.id);
+    const [teamMessages, polls, groupMessages, clubAdminMessages] = await Promise.all([
+      ctx.rowsIn('team_messages', 'team_id', teamIds), ctx.rowsIn('polls', 'chat_id', teamIds),
+      ctx.rowsIn('group_messages', 'group_id', chatGroups.map((g) => g.id)),
+      ctx.rowsIn('club_admin_messages', 'conversation_id', clubAdminConversations.map((c) => c.id)),
+    ]);
     const pages = buildChatPages({ clubId: ctx.clubId, teams: teams.filter((t) => !t.deleted_at), teamMessages, clubMessages,
       chatGroups, groupMessages, clubAdminConversations, clubAdminMessages, polls, claims: ctx.claims, creator: ctx.creator });
     await loadChatPages(ctx, pages);
