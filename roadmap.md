@@ -1,6 +1,7 @@
 ## Private names and guardian-only full search — 26 October 2026
 - [ ] Implement private personal names with existing in-app display preserved and authorized, bounded reads.
-- [ ] Restrict full-app search to verified guardian linking for a specific child; preserve authorized scoped searches elsewhere.
+- [x] Build purpose-bound guardian search with registered owning authority, repeated live exact-child checks, principal results and account/child-isolated sheet queries; four Rust and both-mode frontend checks pass locally.
+- [ ] Replace remaining unrestricted general searches with authorized scoped readers before privacy cutover; encrypted-name full-search design must not retain readable search sidecars. See docs/private-profile-search-2026-10-26.md.
 - [ ] Test privacy/authorization rules and document separately approved release/conversion prerequisites; no live data or sign-ins changed.
 
 ## Continue migration-tool loaders — 26 October 2026
