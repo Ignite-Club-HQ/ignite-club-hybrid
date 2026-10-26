@@ -193,6 +193,26 @@ async function loadSnapshot(ctx, domain, snap, lock) {
   if ('Err' in r) throw Error(`${domain} import refused: ${r.Err}`);
 }
 
+/** Fence the club on messaging_domain, then load ChatPage pages in order (idempotent per message id). */
+async function loadChatPages(ctx, pages) {
+  const { IDL } = ctx.require('@icp-sdk/core/candid');
+  const { Actor } = ctx.require('@icp-sdk/core/agent');
+  const canisterId = ctx.target.canisters.messaging_domain;
+  if (!canisterId) throw Error('Destination messaging_domain missing');
+  const type = await snapshotType(ctx.require, ctx.schemaFile('messaging_domain'));
+  const actor = Actor.createActor(({ IDL }) => IDL.Service({
+    set_transfer_fence: IDL.Func([IDL.Text, IDL.Bool], [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })], []),
+    import_club_snapshot_page: IDL.Func([IDL.Text, IDL.Vec(IDL.Nat8)], [IDL.Variant({ Ok: IDL.Nat, Err: IDL.Text })], []),
+  }), { agent: ctx.agent, canisterId });
+  const f = await actor.set_transfer_fence(ctx.clubId, true);
+  if ('Err' in f) throw Error(`messaging_domain lock refused: ${f.Err}`);
+  for (const page of pages) {
+    const blob = new Uint8Array(IDL.encode([type], [page]));
+    const r = await actor.import_club_snapshot_page(ctx.clubId, blob);
+    if ('Err' in r) throw Error(`messaging_domain import refused: ${r.Err}`);
+  }
+}
+
 /**
  * Writers keyed by step id. `ctx` = { require, agent, target, clubId, creator, rows(table, col), rowsIn(table, col, ids), schemaFile(domain) }.
  * `creator` is the deploy identity's principal: Supabase authors have no ICP identity until they claim.
