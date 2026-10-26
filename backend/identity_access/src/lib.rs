@@ -1465,6 +1465,14 @@ fn profile_search_revision() -> u64 { PROFILE_SEARCH_REVISION.with(|cell| *cell.
 fn bump_profile_search_revision() {
     PROFILE_SEARCH_REVISION.with(|cell| { let mut value=cell.borrow_mut(); let next=value.get().checked_add(1).expect("Profile revision exhausted"); value.set(next); });
 }
+fn bounded_guardian_profile_rows(after: Option<String>) -> Vec<Profile> {
+    PROFILES.with(|store| {
+        let store=store.borrow();
+        let bounds=after.map(|key|(std::ops::Bound::Excluded(key),std::ops::Bound::Unbounded))
+            .unwrap_or((std::ops::Bound::Unbounded,std::ops::Bound::Unbounded));
+        store.range(bounds).take(guardian_search::SCAN_LIMIT).map(|entry|decode(&entry.value())).collect()
+    })
+}
 fn guardian_search_binding(caller: Principal, viewer: &membership_private_lookup::Viewer, authority: Principal, child: &str, config: &membership_runtime::Config) -> Vec<u8> {
     // Encode configuration fields only (worker progress is not a repin).
     Sha256::digest(encode(&(caller, &viewer.account, viewer.version, &viewer.aliases, authority, child,
@@ -1492,12 +1500,7 @@ async fn read_guardian_profile_candidates(authority: Principal, child: String, c
     verify_guardian_search(caller,authority,&child,&viewer,&config).await?;
     if profile_search_revision()!=revision { return Err("Guardian directory changed".into()); }
     let after=cursor.as_ref().map(|c|c.after.clone());
-    let profiles: Vec<Profile> = PROFILES.with(|store| {
-        let store=store.borrow();
-        let bounds=after.map(|key|(std::ops::Bound::Excluded(key),std::ops::Bound::Unbounded))
-            .unwrap_or((std::ops::Bound::Unbounded,std::ops::Bound::Unbounded));
-        store.range(bounds).take(guardian_search::SCAN_LIMIT).map(|entry|decode(&entry.value())).collect()
-    });
+    let profiles=bounded_guardian_profile_rows(after);
     let mut scanned=0u16; let mut rows=Vec::new(); let mut last=None;
     for profile in profiles {
         scanned+=1; last=Some(profile.account_id.clone());
@@ -3129,6 +3132,29 @@ fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn guardian_storage_traversal_is_bounded_ordered_and_preserves_private_references() {
+        for n in 0..130 {
+            put_profile_entry(&Profile{account_id:format!("guardian-storage-{n:03}"),display_name:"pii-display-name:v1:opaque".into(),avatar_ref:None,updated_at_ns:1,theme_preference:None,club_switcher_hint_seen_at:None});
+        }
+        let first=bounded_guardian_profile_rows(Some("guardian-storage-".into()));
+        assert_eq!(first.len(),100);
+        assert_eq!(first[0].account_id,"guardian-storage-000");
+        assert_eq!(first[99].account_id,"guardian-storage-099");
+        let second=bounded_guardian_profile_rows(Some(first[99].account_id.clone()));
+        assert_eq!(second.len(),30);
+        assert_eq!(second[0].account_id,"guardian-storage-100");
+        assert!(second.iter().all(|row|row.display_name=="pii-display-name:v1:opaque"));
+    }
+    #[test]
+    fn guardian_profile_revision_invalidates_on_profile_and_account_mutations() {
+        let opening=profile_search_revision();
+        let account=Account{id:"guardian-revision-account".into(),principals:vec![Principal::from_slice(&[230,1])],version:1,status:AccountStatus::Active};
+        put_account(&account);assert!(profile_search_revision()>opening);
+        let prior=profile_search_revision();remove_account(&account.id);assert!(profile_search_revision()>prior);
+        let prior=profile_search_revision();put_profile_entry(&Profile{account_id:account.id.clone(),display_name:"Name".into(),avatar_ref:None,updated_at_ns:1,theme_preference:None,club_switcher_hint_seen_at:None});assert!(profile_search_revision()>prior);
+        let prior=profile_search_revision();remove_profile_entry(&account.id);assert!(profile_search_revision()>prior);
+    }
     #[test]
     fn private_lookup_resolves_verified_aliases_and_fails_on_lifecycle_changes(){
         let caller=Principal::from_slice(&[51,1]);let alias=Principal::from_slice(&[52,1]);
