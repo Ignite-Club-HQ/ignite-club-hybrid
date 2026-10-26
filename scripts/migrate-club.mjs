@@ -125,7 +125,9 @@ async function readUsage(target) {
 // Destination writers live in migrate-club-writers.mjs; steps without one make
 // `migrate` refuse BEFORE any write.
 export { WRITERS } from './migrate-club-writers.mjs';
-import { WRITERS } from './migrate-club-writers.mjs';
+import { WRITERS, snapshotType } from './migrate-club-writers.mjs';
+import { reconcileClub } from './migrate-club-reconcile.mjs';
+import { pullJournal, pushJournal } from './migrate-club-remote.mjs';
 
 function summary(md) { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md + '\n'); console.log(md); }
 
@@ -149,21 +151,47 @@ export async function main(env = process.env) {
   summary(`Files to copy: ${inventory.mediaFiles} (${(inventory.mediaBytes / 1e6).toFixed(1)} MB). Supabase copy stays untouched.`);
   if (reasons.length) { summary(`### Blocked\n${reasons.map(r => `- ${r}`).join('\n')}`); process.exitCode = 1; return; }
   summary(`### Plan hash\n\`${hash}\``);
-  if (req.action === 'check') return;
+
+  const dir = join(root, '.migration-journal'); mkdirSync(dir, { recursive: true });
+  const invPath = join(dir, `${req.clubId}.inventory.json`);
+  if (req.action === 'check') {
+    // Stable source inventory: the recorded plan hash binds every table count,
+    // so a later migrate/recover on changed source data fails the hash check.
+    writeFileSync(invPath, JSON.stringify({ clubId: req.clubId, groupId: req.groupId, revision, planHash: hash, capturedAt: new Date().toISOString() }, null, 2));
+    return;
+  }
 
   if (normalizePlan(req.plan) !== hash) throw Error('Plan changed since the check; run check again on this revision');
+  if (!existsSync(invPath)) throw Error('No recorded check inventory for this club; run check first on this revision');
+  const recorded = JSON.parse(readFileSync(invPath, 'utf8'));
+  if (recorded.planHash !== hash) throw Error('Source data changed since the recorded check; run check again and use the new plan hash');
   const missing = STEPS.filter(s => !WRITERS[s.id]).map(s => s.id);
   if (missing.length) throw Error(`Refusing before any write: destination writers not ready for ${missing.join(', ')}`);
 
-  const dir = join(root, '.migration-journal'); mkdirSync(dir, { recursive: true });
   const path = join(dir, `${req.clubId}.json`);
-  let journal = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : newJournal(hash);
+  let journal;
+  if (existsSync(path)) {
+    journal = JSON.parse(readFileSync(path, 'utf8'));
+  } else if (req.action === 'recover') {
+    // Runner lost its disk: restore the durable remote copy, hash-verified.
+    const remote = await pullJournal(env, req.clubId);
+    if (!remote) throw Error('No local or remote journal to recover');
+    journal = remote.journal;
+    writeFileSync(path, JSON.stringify(journal, null, 2));
+  } else {
+    journal = newJournal(hash);
+  }
   if (journal.planHash !== hash) throw Error('Journal belongs to a different plan');
   if (req.action === 'migrate' && Object.keys(journal.steps).length) throw Error('A journal exists; use recover');
   const next = nextAction(journal);
   if (next.blocked) throw Error(next.blocked);
   writeFileSync(path, JSON.stringify(journal, null, 2));
-  await runSteps({ journal, path, ctx: writerContext(req.clubId, target), approval: req });
+  await runSteps({
+    journal, path, ctx: writerContext(req.clubId, target), approval: req,
+    // Durable remote recovery: every acknowledged state is mirrored to the
+    // journal branch and read back; a failed push stops the run (unknown).
+    onSave: async (j) => { await pushJournal(env, req.clubId, j); },
+  });
 }
 
 /** Claimed Supabase user -> principal pairs on the destination club service. */
