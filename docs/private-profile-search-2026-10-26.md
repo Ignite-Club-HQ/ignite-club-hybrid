@@ -9,6 +9,17 @@ and other details must remain viewable in the app.
 
 ## Implemented locally
 
+- Added rehearsal-gated `read_club_profiles`: exact registered source/club,
+  at most 25 deduplicated active principals, repeated consensus membership
+  checks for caller and subjects, and account/configuration rechecks after
+  awaits. No new stored state, grants, name index or decryption path.
+- Added `searchScopedProfileCandidates`, which matches authorized returned
+  names on the device after private-reference hydration, with no global
+  fallback. Ordinary pickers are intentionally unchanged: sequential boolean
+  checks cannot establish atomic multi-member freshness or acceptable cold
+  search performance. A revision-bound authoritative batch and candidate
+  paging plus disposable-canister revocation tests remain required. Never set
+  `IGNITE_PRIVATE_PROFILE_READS_REHEARSAL=1` in a production release.
 - Added dormant, original-authority-bound adult-name reference hydration to the
   shared ID-based profile reader and own-profile reader. Legacy names incur no
   additional requests. Private references decrypt in bounded deduplicated
@@ -66,7 +77,8 @@ it must not fall back to the old unrestricted endpoint. Do not release the
 changed sheet alone before its matching service is ready. Live signed-in
 Internet Identity acceptance is not available in the local browser session.
 
-Local verification: four Rust request/disclosure rules and focused frontend
-profile/invitation checks pass in both modes (27 Supabase, 11 ICP; mode skips).
+Local verification: 134 identity Rust tests pass, including four new club
+candidate rules; focused profile/search/invitation checks pass in both modes
+(45 Supabase, 29 ICP; mode skips).
 All 17 generated Candid contracts pass drift checking. These checks do not
 prove a mainnet guardian search or a completed encrypted-name conversion.

@@ -1913,11 +1913,13 @@ async fn search_guardian_profiles(authority: Principal, child: String, query: St
     Ok(results)
 }
 
-/// Every role grant held by the caller, across all clubs/teams.
 /// Additive candidate reader for scoped client-side name matching. It does not
 /// enable a privacy cutover or use the unreleased membership directory index.
 #[ic_cdk::update]
 async fn read_club_profiles(authority: Principal, club: String, subjects: Vec<Principal>) -> Outcome<Vec<ProfileSearchResult>> {
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1") {
+        return Err("Private profile candidate reads are not released".into());
+    }
     let caller = ic_cdk::api::msg_caller();
     let account = account_for_write(caller)?;
     let config = directory_config()?;
