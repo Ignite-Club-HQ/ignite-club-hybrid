@@ -45,10 +45,11 @@ export const normalizeConfirmation = v => String(v ?? '').replace(/[\u200b-\u200
 export const normalizePlan = v => String(v ?? '').replace(/[^0-9a-fA-F]/g, '').toLowerCase();
 
 export function validateRequest({ action, clubId, groupId, plan, confirmation }) {
-  if (!['check', 'migrate', 'recover'].includes(action)) throw Error('Action must be check, migrate or recover');
+  if (!['check', 'migrate', 'recover', 'invite'].includes(action)) throw Error('Action must be check, migrate, recover or invite');
   if (!UUIDish.test(String(clubId ?? ''))) throw Error('Club ID is missing or invalid');
   if (!/^g\d+$/.test(String(groupId ?? ''))) throw Error('Target group must look like g1, g2, ...');
   if (action === 'check') return;
+  if (action === 'invite') { if (normalizeConfirmation(confirmation) !== 'SEND CLAIM EMAILS') throw Error('Type SEND CLAIM EMAILS'); return; }
   if (normalizePlan(plan).length !== 64) throw Error('Paste the 64-character plan hash from the check run');
   const want = action === 'migrate' ? CONFIRM_MIGRATE : CONFIRM_RECOVER;
   if (normalizeConfirmation(confirmation) !== want) throw Error(`Type ${want}`);
