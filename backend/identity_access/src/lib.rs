@@ -1925,34 +1925,31 @@ async fn read_club_profiles(authority: Principal, club: String, subjects: Vec<Pr
     let config = directory_config()?;
     let sources: Vec<Principal> = config.sources.iter().map(|(_, p)| *p).collect();
     let subjects = club_profiles::validate(authority, &sources, &club, &subjects)?;
-    let check = |subject: Principal| {
+    let check = |expected: Option<candid::Nat>| {
         let club = club.clone();
+        let subjects = subjects.clone();
         async move {
-            let reply = ic_cdk::call::Call::bounded_wait(authority, "read_has_club_membership")
-                .with_args(&(subject, club)).await.map_err(|_| "Club membership verification unavailable")?;
-            reply.candid::<bool>().map_err(|_| "Invalid club membership verification")
+            let reply = ic_cdk::call::Call::bounded_wait(authority, "read_profile_membership_batch")
+                .with_args(&(caller, club, subjects, expected)).await.map_err(|_| "Club membership verification unavailable")?;
+            reply.candid::<Outcome<club_profiles::MembershipBatch>>().map_err(|_| "Invalid club membership verification")?
         }
     };
-    club_profiles::permit(check(caller).await?, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
-    let mut candidates = Vec::new();
-    for subject in subjects {
-        let subject_account = match account_for_write(subject) { Ok(value) => value, Err(_) => continue };
-        let member = check(subject).await?;
-        club_profiles::permit(true, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
-        if !member || account_for_write(subject).ok().as_ref() != Some(&subject_account) { continue; }
-        candidates.push((subject, subject_account));
-    }
-    // A stale first membership reply never suffices for disclosure.
-    let mut verified = Vec::new();
-    for (subject, subject_account) in candidates {
-        let member = check(subject).await?;
-        club_profiles::permit(true, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
-        if member && account_for_write(subject).ok().as_ref() == Some(&subject_account) { verified.push((subject,subject_account)); }
-    }
-    club_profiles::permit(check(caller).await?, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+    let first = check(None).await?;
+    club_profiles::permit(true, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+    club_profiles::verify_batch(&first, caller, &club, &subjects, None)?;
+    let candidates: Vec<_> = subjects.iter().zip(&first.members).filter_map(|(subject,member)| {
+        if !member { return None; }
+        account_for_write(*subject).ok().map(|account| (*subject,account))
+    }).collect();
+    // Two calls regardless of candidate count; expected revision rejects any
+    // role/family/removal change across observations. No boolean-only fallback.
+    let final_batch = check(Some(first.revision.clone())).await?;
+    club_profiles::permit(true, account_for_write(caller)? == account, config.same_configuration(&directory_config()?))?;
+    club_profiles::verify_batch(&final_batch, caller, &club, &subjects, Some(&first.revision))?;
+    if final_batch.members != first.members { return Err("Profile membership changed without revision".into()); }
     // Read profiles after the final await, not from a suspended plaintext copy.
     let mut results = Vec::new();
-    for (subject, subject_account) in verified {
+    for (subject, subject_account) in candidates {
         if account_for_write(subject).ok().as_ref() != Some(&subject_account) { continue; }
         if let Some(profile) = get_profile_entry(&subject_account.id) {
             results.push(ProfileSearchResult { account_id: profile.account_id, principal: subject, display_name: profile.display_name, avatar_ref: profile.avatar_ref });

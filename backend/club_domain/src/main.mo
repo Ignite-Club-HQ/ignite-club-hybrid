@@ -45,6 +45,7 @@ import MembershipSource "membershipSource";
 import MembershipDirectorySource "membershipDirectorySource";
 import MembershipSourceRetention "membershipSourceRetention";
 import SubscriptionPolicy "subscriptionPolicy";
+import ProfileMembership "profileMembership";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -3264,6 +3265,37 @@ persistent actor class Main(governorInit : Principal) = this {
     principals.any(func(p) = isMember(p, club_id))
   
     } finally { removalReceiver.leave(user) };
+  };
+
+  // Consensus booleans only: no child names, guardian lists or stored grants.
+  // Rehearsal-only identity-service delegation. This is an atomic bounded
+  // membership observation, not a public roster or a new readable name index.
+  public shared ({ caller }) func read_profile_membership_batch(requester : Principal, club_id : Text, subjects : [Principal], expected : ?Nat) : async { #Ok : ProfileMembership.Batch; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1") return #Err("Private profile membership reads are not released");
+    let authority = identityAccessCanister;
+    if (authority != ?caller or caller.isAnonymous()) return #Err("Configured identity authority required");
+    switch (ProfileMembership.validate(requester, club_id, subjects)) { case (?message) return #Err(message); case null {} };
+    if (not removalReceiver.enter(requester)) return #Err("Account removal fenced or operation capacity reached");
+    try {
+      let revision = membershipEpoch();
+      switch (expected) { case (?value) { if (value != revision) return #Err("Profile membership revision changed") }; case null {} };
+      await admitAccount(requester);
+      // Admit subjects once, before the local atomic membership observation.
+      var eligible : [Bool] = [];
+      for (subject in subjects.values()) {
+        let allowed = try { await admitAccount(subject); true } catch (_) { false };
+        eligible := eligible.concat([allowed]);
+      };
+      if (not ProfileMembership.unchanged(revision, membershipEpoch(), identityAccessCanister == authority, removalReceiver.denied(requester) or isTransferFenced(club_id))) return #Err("Profile membership authority changed");
+      func currentMember(subject : Principal) : Bool {
+        if (subject.isAnonymous() or removalReceiver.denied(subject) or isExcluded(subject, club_id)) return false;
+        let aliases = switch (accountFor(subject)) { case (?account) account.principals; case null [subject] };
+        aliases.any(func p = not removalReceiver.denied(p) and isMember(p, club_id))
+      };
+      if (not currentMember(requester)) return #Err("Club membership required");
+      let members = Array.tabulate<Bool>(subjects.size(), func i = eligible[i] and currentMember(subjects[i]));
+      #Ok({ revision; requester; club = club_id; subjects; members })
+    } finally { removalReceiver.leave(requester) };
   };
 
   // Consensus booleans only: no child names, guardian lists or stored grants.
