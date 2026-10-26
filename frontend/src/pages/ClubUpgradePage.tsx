@@ -54,6 +54,8 @@ import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors, listLive
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 import { useInAppPurchase } from "@/hooks/useInAppPurchase";
+import { readUpgradeClubSubscription } from "@/lib/upgradeSubscriptionReader";
+import { isIcpProviderMounted, hasInternetIdentitySessionStored, readAuthChoice } from "@/live/authBackendMode";
 
 
 const PRO_FEATURES = [
@@ -111,7 +113,7 @@ export default function ClubUpgradePage() {
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   // Real ICP routing (live build): resolveLocalAuthMode is always false there,
   // so canister reads key off the placement routing instead.
-  const isIcpRouted = isFeatureRoutedToIcp("membership");
+  const isIcpRouted = isFeatureRoutedToIcp("membership") || isIcpProviderMounted() || hasInternetIdentitySessionStored() || readAuthChoice() === "icp";
   const providerKey = useIcpLab || isIcpRouted ? "icp" : "supabase";
   const [promoCode, setPromoCode] = useState("");
   const [promoCodeFootball, setPromoCodeFootball] = useState("");
@@ -284,35 +286,11 @@ export default function ClubUpgradePage() {
   });
 
   const { data: subscription } = useQuery({
-    queryKey: ["club-subscription", clubId, providerKey],
+    queryKey: ["club-subscription", clubId, providerKey, user?.id],
     queryFn: async () => {
       if (useIcpLab) return null;
-      if (isIcpRouted) {
-        return withFeatureBackend("membership", {
-          supabase: async () => { throw new Error("unreachable"); },
-          icp: async (ctx) => {
-            const row = await getLiveClubSubscription(ctx, clubId!);
-            if (!row) return null;
-            // Map the canister subscription onto the club_subscriptions row
-            // shape this page renders (millisecond timestamps → ISO strings).
-            return {
-              is_pro: row.is_pro || row.admin_pro_override,
-              is_pro_football: row.is_pro_football || row.admin_pro_football_override,
-              expires_at: row.expires_at_ms.length ? new Date(Number(row.expires_at_ms[0])).toISOString() : null,
-              plan: row.plan || null,
-              team_limit: row.team_limit.length ? Number(row.team_limit[0]) : null,
-              is_trial: row.is_trial,
-              trial_ends_at: row.trial_ends_at_ms.length ? new Date(Number(row.trial_ends_at_ms[0])).toISOString() : null,
-            };
-          },
-        }, { clubId: clubId! });
-      }
-      const { data } = await supabase
-        .from("club_subscriptions")
-        .select("*")
-        .eq("club_id", clubId!)
-        .maybeSingle();
-      return data;
+      if (!clubId) return null;
+      return readUpgradeClubSubscription(clubId);
     },
     enabled: !!clubId,
   });
@@ -414,7 +392,7 @@ export default function ClubUpgradePage() {
       isAnnual: boolean;
     }) => {
       // NEEDS-CANISTER: promo codes not yet on canister
-      if (useIcpLab || isFeatureRoutedToIcp("membership")) throw new Error("Promo codes are not yet available for Internet Identity accounts.");
+      if (useIcpLab || isIcpRouted) throw new Error("Promo codes are not yet available for Internet Identity accounts.");
       // Validate promo code
       const { data: promoData, error: promoError } = await supabase
         .from("promo_codes")
@@ -517,7 +495,7 @@ export default function ClubUpgradePage() {
   const cancelTrialMutation = useMutation({
     mutationFn: async () => {
       // NEEDS-CANISTER: cancel-subscription not yet available on canister
-      if (useIcpLab || isFeatureRoutedToIcp("membership")) throw new Error("Subscription management is not yet available for Internet Identity accounts.");
+      if (useIcpLab || isIcpRouted) throw new Error("Manage this subscription through the service where it was purchased.");
       const { data, error } = await supabase.functions.invoke('cancel-subscription', {
         body: { subscription_type: 'club', entity_id: clubId },
       });
@@ -537,6 +515,9 @@ export default function ClubUpgradePage() {
 
   const downgradeMutation = useMutation({
     mutationFn: async (targetTier: "free" | "pro") => {
+      // Club subscription writes require verified provider fulfillment; never
+      // turn an ICP club-admin click into a Supabase write or self-paid grant.
+      if (useIcpLab || isIcpRouted) throw new Error("Manage this subscription through the service where it was purchased.");
       if (targetTier === "free") {
         // Check if there's a paid-up subscription still in effect.
         const { data: currentSub } = await supabase
@@ -937,7 +918,7 @@ export default function ClubUpgradePage() {
           <Icon className={`h-12 w-12 ${isPro ? "text-yellow-500" : "text-emerald-500"} mx-auto`} />
           <div>
             <h2 className="text-xl font-bold">{title}</h2>
-            {isOnTrial && (
+            {isOnTrial && !isIcpRouted && !useIcpLab && (
               <Badge className="mt-2 bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30">
                 Free Trial
               </Badge>
@@ -1047,7 +1028,7 @@ export default function ClubUpgradePage() {
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {!isOnTrial && tier === "pro_football" && (
+            {!isOnTrial && tier === "pro_football" && !isIcpRouted && !useIcpLab && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" className="text-muted-foreground">
@@ -1075,7 +1056,7 @@ export default function ClubUpgradePage() {
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {!isOnTrial && (
+            {!isOnTrial && !isIcpRouted && !useIcpLab && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" className="text-destructive border-destructive hover:bg-destructive/10">
@@ -1217,7 +1198,7 @@ export default function ClubUpgradePage() {
       {renderTeamCountBanner()}
 
       {/* Trial Banner */}
-      {isOnTrial && trialEndsAt && (
+      {isOnTrial && trialEndsAt && !isIcpRouted && !useIcpLab && (
         <UpgradeTrialBanner
           trialEndsAt={trialEndsAt}
           cancelDescription="Your trial will remain active until the expiry date. After that, Pro features will be removed from all teams and no payment will be taken."
