@@ -1,3 +1,4 @@
+import { writeBoundedReadCache } from "./deviceCacheBudget";
 // Cache for messages page list data - enables instant loading for returning users.
 //
 // IMPORTANT (Android WebView freeze fix):
@@ -140,10 +141,10 @@ function writeToDiskNow(): void {
     if (typeof localStorage === 'undefined') return;
     const jsonData = JSON.stringify(memCache);
     try {
-      localStorage.setItem(CACHE_KEY, jsonData);
+      writeBoundedReadCache(CACHE_KEY, jsonData);
     } catch {
       clearOldCaches();
-      try { localStorage.setItem(CACHE_KEY, jsonData); } catch { /* skip */ }
+      try { writeBoundedReadCache(CACHE_KEY, jsonData); } catch { /* skip */ }
     }
   } catch {
     /* caching is best-effort */

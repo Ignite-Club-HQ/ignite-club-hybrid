@@ -1,3 +1,4 @@
+import { writeBoundedReadCache } from "./deviceCacheBudget";
 // Local message cache for offline reading
 //
 // IMPORTANT (Android WebView freeze fix — companion to messagesPageCache):
@@ -92,10 +93,10 @@ function flushKeyNow(key: string): void {
       return;
     }
     try {
-      localStorage.setItem(key, JSON.stringify(entry));
+      writeBoundedReadCache(key, JSON.stringify(entry));
     } catch {
       clearOldCaches();
-      try { localStorage.setItem(key, JSON.stringify(entry)); } catch { /* drop */ }
+      try { writeBoundedReadCache(key, JSON.stringify(entry)); } catch { /* drop */ }
     }
   } catch { /* best-effort */ }
 }
@@ -215,6 +216,22 @@ export function shouldRefetchMessages(type: ChatType, targetId: string, fetchedC
   if (fetchedCount > 0) return false;
   const cachedCount = getCachedMessages(type, targetId).length;
   return cachedCount > 0;
+}
+
+export function clearAllMessageCaches(): void {
+  for (const timer of pendingFlushTimers.values()) clearTimeout(timer);
+  pendingFlushTimers.clear();
+  for (const handle of pendingIdleHandles.values()) {
+    try { window.cancelIdleCallback?.(handle); } catch { /* unavailable */ }
+  }
+  pendingIdleHandles.clear();
+  memCache.clear();
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(CACHE_KEY_PREFIX)) localStorage.removeItem(key);
+    }
+  } catch { /* unavailable */ }
 }
 
 // Clear cache for a specific chat

@@ -34,6 +34,7 @@
 // non-user-scoped, and destroying them would break the very sign-in flow
 // that triggers this sweep.
 
+import { clearAllMessageCaches } from "./messageCache";
 import { clearMediaCache } from "./mediaCache";
 import { clearProfileCache } from "./profileCache";
 import { clearRolesCache } from "./rolesCache";
@@ -133,6 +134,7 @@ export function clearUserScopedCaches(): void {
   //    wrapped so a single throw doesn't abort the rest of the sweep —
   //    that's important because this runs during sign-out and a partial
   //    cleanup is worse than a slightly-slower complete cleanup.
+  runSafe(clearAllMessageCaches);
   runSafe(clearMediaCache);
   runSafe(clearProfileCache);
   runSafe(clearRolesCache);

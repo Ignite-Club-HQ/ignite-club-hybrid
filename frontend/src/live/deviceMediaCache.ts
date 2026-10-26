@@ -9,10 +9,16 @@
  * photo access on that device until their cached key expires.
  */
 
+import { VIEWED_PHOTO_CACHE_BYTES } from '@/lib/deviceCacheBudget';
+
 const CLUB_KEY_PREFIX = "ignite.clubkey.v1:";
 export const CLUB_KEY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PHOTO_CACHE_PREFIX = "ignite-media-v1:";
 const PHOTO_CACHE_MAX_BYTES = 8 * 1024 * 1024;
+const PHOTO_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_PHOTOS = 100;
+let photoEpoch = 0;
+let photoWork: Promise<void> = Promise.resolve();
 
 function toB64(bytes: Uint8Array): string {
   let s = "";
@@ -73,20 +79,76 @@ export async function readCachedPhoto(principal: string, canisterId: string, pat
   try {
     const cache = await caches.open(photoCacheName(principal));
     const hit = await cache.match(photoRequest(canisterId, path));
+    if (hit && Date.now() - Number(hit.headers.get('x-ignite-saved-at') ?? 0) > PHOTO_TTL_MS) {
+      await cache.delete(photoRequest(canisterId, path));
+      return null;
+    }
     return hit ? await hit.blob() : null;
   } catch {
     return null;
   }
 }
 
-export async function writeCachedPhoto(principal: string, canisterId: string, path: string, bytes: ArrayBuffer): Promise<void> {
-  if (typeof caches === "undefined" || bytes.byteLength > PHOTO_CACHE_MAX_BYTES) return;
-  try {
-    const cache = await caches.open(photoCacheName(principal));
-    await cache.put(photoRequest(canisterId, path), new Response(bytes));
-  } catch {
-    /* quota — skip */
+async function trimPhotos(incomingBytes: number, incomingCount: number): Promise<void> {
+  const rows: Array<{ cache: Cache; request: Request; bytes: number; savedAt: number }> = [];
+  for (const name of await caches.keys()) {
+    if (!name.startsWith(PHOTO_CACHE_PREFIX)) continue;
+    const cache = await caches.open(name);
+    for (const request of await cache.keys()) {
+      const response = await cache.match(request);
+      if (!response) continue;
+      const savedAt = Number(response.headers.get('x-ignite-saved-at') ?? 0);
+      const size = Number(response.headers.get('x-ignite-bytes') ?? 0);
+      // Legacy unmeasured entries are disposable, not guessed into the budget.
+      if (!size || !savedAt || !Number.isFinite(size) || Date.now() - savedAt > PHOTO_TTL_MS) {
+        await cache.delete(request); continue;
+      }
+      rows.push({ cache, request, bytes: size, savedAt });
+    }
   }
+  let total = rows.reduce((sum, row) => sum + row.bytes, incomingBytes);
+  let count = rows.length + incomingCount;
+  for (const row of rows.sort((a, b) => a.savedAt - b.savedAt)) {
+    if (total <= VIEWED_PHOTO_CACHE_BYTES && count <= MAX_PHOTOS) break;
+    await row.cache.delete(row.request);
+    total -= row.bytes; count--;
+  }
+}
+
+export function writeCachedPhoto(principal: string, canisterId: string, path: string, bytes: ArrayBuffer): Promise<void> {
+  if (typeof caches === 'undefined' || bytes.byteLength > PHOTO_CACHE_MAX_BYTES) return Promise.resolve();
+  const epoch = photoEpoch;
+  photoWork = photoWork.then(async () => {
+    if (epoch !== photoEpoch) return;
+    const cache = await caches.open(photoCacheName(principal));
+    const request = photoRequest(canisterId, path);
+    await cache.delete(request);
+    await trimPhotos(bytes.byteLength, 1);
+    if (epoch !== photoEpoch) return;
+    await cache.put(request, new Response(bytes, { headers: {
+      'x-ignite-bytes': String(bytes.byteLength), 'x-ignite-saved-at': String(Date.now()),
+    } }));
+  }).catch(() => { /* unavailable or full: live photo is unaffected */ });
+  return photoWork;
+}
+
+/** Content-only cleanup preserves the intentionally retained club keys. */
+export function clearDeviceCachedPhotos(): Promise<void> {
+  photoEpoch++;
+  photoWork = photoWork.then(async () => {
+    if (typeof caches === 'undefined') return;
+    for (const name of await caches.keys()) {
+      if (name.startsWith(PHOTO_CACHE_PREFIX)) await caches.delete(name);
+    }
+  });
+  return photoWork;
+}
+
+export function pruneDeviceCachedPhotos(): Promise<void> {
+  photoWork = photoWork.then(async () => {
+    if (typeof caches !== 'undefined') await trimPhotos(0, 0);
+  }).catch(() => { /* best effort */ });
+  return photoWork;
 }
 
 /** Wipes every cached club key and decrypted photo — call on sign-out. */
@@ -99,11 +161,8 @@ export async function clearDeviceMediaCaches(): Promise<void> {
   } catch {
     /* ignore */
   }
-  if (typeof caches === "undefined") return;
   try {
-    for (const name of await caches.keys()) {
-      if (name.startsWith(PHOTO_CACHE_PREFIX)) await caches.delete(name);
-    }
+    await clearDeviceCachedPhotos();
   } catch {
     /* ignore */
   }

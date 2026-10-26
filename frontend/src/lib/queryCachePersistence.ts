@@ -1,3 +1,4 @@
+import { writeBoundedReadCache, pruneDeviceReadCaches } from "./deviceCacheBudget";
 // Saves successful React Query results to localStorage so pages open instantly
 // on the next app launch (then refresh in the background). Key uses the
 // `ignite_` prefix so clearUserScopedCaches() wipes it on sign-out / account
@@ -9,7 +10,12 @@ import { dehydrate, hydrate, type QueryClient } from "@tanstack/react-query";
 export const QUERY_CACHE_KEY = "ignite_query_cache_v1";
 const MAX_AGE_MS = 24 * 60 * 60_000;
 const MAX_ENTRY_CHARS = 150_000;
-const MAX_TOTAL_CHARS = 2_500_000;
+const MAX_TOTAL_CHARS = 700_000;
+let clearedAt = 0;
+export function forgetSavedQueryCopies(): void {
+  clearedAt = Date.now();
+  try { localStorage.removeItem(QUERY_CACHE_KEY); } catch { /* unavailable */ }
+}
 
 function safeStringify(value: unknown): string | null {
   let ok = true;
@@ -37,6 +43,7 @@ function isIcpSession(): boolean {
 }
 
 export function restoreQueryCache(client: QueryClient) {
+  pruneDeviceReadCaches();
   if (isIcpSession()) return;
   try {
     const raw = localStorage.getItem(QUERY_CACHE_KEY);
@@ -59,7 +66,7 @@ export function startQueryCachePersistence(client: QueryClient) {
     if (isIcpSession()) return;
     try {
       const state = dehydrate(client, {
-        shouldDehydrateQuery: (q) => q.state.status === "success" && q.meta?.persist !== false,
+        shouldDehydrateQuery: (q) => q.state.status === "success" && q.meta?.persist !== false && q.state.dataUpdatedAt > clearedAt,
       });
       let total = 0;
       const queries = state.queries
@@ -74,7 +81,7 @@ export function startQueryCachePersistence(client: QueryClient) {
         localStorage.removeItem(QUERY_CACHE_KEY);
         return;
       }
-      localStorage.setItem(
+      writeBoundedReadCache(
         QUERY_CACHE_KEY,
         JSON.stringify({ savedAt: Date.now(), state: { mutations: [], queries } }),
       );

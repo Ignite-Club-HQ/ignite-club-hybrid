@@ -1,4 +1,5 @@
 /** Bounded, per-query ICP snapshots. No whole-cache clone on a navigation tap. */
+import { ICP_READ_CACHE_BYTES } from './deviceCacheBudget';
 import { hydrate, type DehydratedState, type QueryClient, type Query } from '@tanstack/react-query';
 
 const DB = 'ignite-icp-query-cache';
@@ -6,7 +7,7 @@ const STORE = 'queries-v3';
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_QUERIES = 100;
 const MAX_QUERY_BYTES = 128 * 1024;
-const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
+const MAX_TOTAL_BYTES = ICP_READ_CACHE_BYTES;
 const SKIP_KEY = /media-feed|photos|signed|photo-url|blob|media-url|vetkey|secret|token|decrypt/i;
 type Snapshot = DehydratedState['queries'][number];
 interface Stored { scope: string; savedAt: number; bytes: number; snapshot: Snapshot }
@@ -98,7 +99,7 @@ export async function restoreIcpQueryCache(client: QueryClient, isIcp: boolean, 
         const records = await transaction<Stored[]>('readonly', s => s.getAll(), valid);
         if (!records || !valid()) return;
         let total = 0; let count = 0;
-        for (const row of records) {
+        for (const row of records.sort((a, b) => b.savedAt - a.savedAt)) {
           if (!valid()) return;
           if (row.scope !== owner || Date.now() - row.savedAt > MAX_AGE_MS || row.bytes > MAX_QUERY_BYTES + 512) continue;
           if (++count > MAX_QUERIES || (total += row.bytes) > MAX_TOTAL_BYTES) break;
@@ -116,6 +117,7 @@ export async function restoreIcpQueryCache(client: QueryClient, isIcp: boolean, 
 export function startIcpQueryCachePersist(client: QueryClient, isIcp: boolean, scope: ScopeReader = currentPrincipal): () => void {
   active.get(client)?.();
   if (!isIcp || typeof indexedDB === 'undefined') return () => {};
+  void import('@/live/deviceMediaCache').then(m => m.pruneDeviceCachedPhotos()).catch(() => {});
   let stopped = false; let timer: ReturnType<typeof setTimeout> | undefined;
   let idleHandle: number | undefined; let working = false;
   let owner = scope(); let epoch = generation;

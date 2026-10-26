@@ -1,3 +1,4 @@
+import { writeBoundedReadCache } from "./deviceCacheBudget";
 // Local media cache for faster loading and offline support with stale-while-revalidate
 
 import { supabase } from "@/integrations/supabase/client";
@@ -77,7 +78,7 @@ function savePhotosCache() {
         // Limit photos per context
         obj[key] = photos.slice(0, MAX_CACHED_PHOTOS);
       });
-      localStorage.setItem(PHOTOS_CACHE_KEY, JSON.stringify(obj));
+      writeBoundedReadCache(PHOTOS_CACHE_KEY, JSON.stringify(obj));
     } catch {
       try {
         localStorage.removeItem(PHOTOS_CACHE_KEY);
@@ -94,7 +95,7 @@ function saveFoldersCache() {
       foldersMemoryCache.forEach((folders, key) => {
         obj[key] = folders.slice(0, MAX_CACHED_FOLDERS);
       });
-      localStorage.setItem(FOLDERS_CACHE_KEY, JSON.stringify(obj));
+      writeBoundedReadCache(FOLDERS_CACHE_KEY, JSON.stringify(obj));
     } catch {
       try {
         localStorage.removeItem(FOLDERS_CACHE_KEY);
@@ -281,6 +282,11 @@ export function cacheFolders(
 
 // Clear all media cache
 export function clearMediaCache() {
+  if (savePhotosTimeout) window.clearTimeout(savePhotosTimeout);
+  savePhotosTimeout = null;
+  if (saveFoldersTimeout) window.clearTimeout(saveFoldersTimeout);
+  saveFoldersTimeout = null;
+
   photosMemoryCache.clear();
   foldersMemoryCache.clear();
   memoryCacheLoaded = false;
