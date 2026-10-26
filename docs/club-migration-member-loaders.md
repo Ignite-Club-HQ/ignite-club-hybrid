@@ -55,12 +55,18 @@ create membership or grant platform/competition administrator roles.
 - Mini-league RSVP subjects and existing RSVP award flags: the current snapshot
   does not preserve their complete semantics, so the converter refuses rather
   than enabling duplicate awards or silently omitting records.
+- Polls and photo albums: votes and album names/covers have no field in the
+  destination snapshots, so clubs carrying them refuse rather than lose data.
+- Direct messages: account-to-account, not club-owned; excluded from the club
+  migration entirely.
 - Missing overall writers still refuse execution before any live data write.
   Claim emails remain a separately approved auth action; routing remains blocked.
 
 ## Not completed or verified live
-Live child PII/membership loading, full event duties/results/award receipts, chats,
-notifications, media/Vault, stable source inventory and durable remote recovery,
-destination reconciliation and separately approved sign-in cutover remain.
+Live child PII/membership loading, full event duties/results/award receipts,
+poll/album preservation contracts, media/Vault byte copy-and-encrypt, stable
+source inventory and durable remote recovery, destination reconciliation and
+separately approved sign-in cutover remain. The children step has no writer,
+so the missing-writer gate still refuses every live data write.
 The adapter tests exercise encoding, fencing and acknowledgement with fixtures;
 they do not establish live Supabase consistency or Internet Identity acceptance.
