@@ -1627,7 +1627,13 @@ export default function GroupChatPage() {
   }
 
   if (!group) {
-    return <ChatPageSkeleton />;
+    return (
+      <ChatPageSkeleton
+        title={rememberedThreadLabel?.title}
+        subtitle={rememberedThreadLabel?.subtitle}
+        avatarType="group"
+      />
+    );
   }
 
 
