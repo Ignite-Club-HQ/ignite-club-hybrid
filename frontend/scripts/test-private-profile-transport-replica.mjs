@@ -54,6 +54,17 @@ try {
     clubs[n].actor.setPrincipal(governor);ok(await clubs[n].actor.configure_membership_directory_source(grant));
   }
   const read=async(n,subjects=[member,stranger])=>{i.setPrincipal(requester);return i.read_club_profiles(clubs[n].canisterId,`club-${n}`,subjects);};
+  // Submit without awaiting completion, execute one round, then change the
+  // authoritative caller while the inter-canister request is still pending.
+  const signature=identityIdl({IDL})._fields.find(([name])=>name==='read_club_profiles')?.[1];assert.ok(signature);
+  const pending=await pic.client.submitCall({canisterId:identity.canisterId,sender:requester,method:'read_club_profiles',payload:new Uint8Array(IDL.encode(signature.argTypes,[clubs[0].canisterId,'club-0',[member]]))});
+  await pic.tick(1);
+  const status=await pic.client.ingressStatus({messageId:{effective_principal:{CanisterId:identity.canisterId.toUint8Array()},message_id:pending.messageId},caller:requester});
+  assert.equal(status,null,'Profile request must still be pending before the caller is suspended');
+  i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(requester.toText()),{Suspended:null}));
+  const pendingReply=IDL.decode(signature.retTypes,(await pic.client.awaitCall(pending)).body)[0];
+  assert.ok('Err'in pendingReply,'A suspended caller must not receive profiles from an earlier permitted batch');
+  i.setPrincipal(governor);ok(await i.set_account_status(accounts.get(requester.toText()),{Active:null}));
   for(let n=0;n<2;n++) {
     const rows=ok(await read(n));assert.equal(rows.length,1);assert.equal(rows[0].display_name,'Paul Cranwell');assert.equal(rows[0].principal.toText(),member.toText());
     assert.equal(ok(await read(n,[member,member])).length,1,'Duplicates cannot widen disclosure');
