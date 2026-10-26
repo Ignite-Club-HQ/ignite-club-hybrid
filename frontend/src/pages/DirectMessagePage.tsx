@@ -66,6 +66,7 @@ import { fetchProfilesWithCache, selectCachedProfileById } from "@/lib/profileCa
 import { useProfiles } from "@/hooks/useProfiles";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCachedMessages, cacheMessages, CachedMessage, shouldRefetchMessages } from "@/lib/messageCache";
+import { getChatThreadLabel, rememberChatThreadLabel } from "@/lib/chatThreadLabelCache";
 import { consumeFromNotificationFlag } from "@/lib/notificationPreload";
 import { logChatOpenLatency } from "@/lib/chatOpenLatency";
 import { useChatPerfMarks, markChatFetch } from "@/hooks/useChatPerfMarks";
@@ -438,6 +439,19 @@ export default function DirectMessagePage() {
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
   });
+
+  // Once this thread's own read names the other person, remember it (account
+  // scoped, label only — no message text) so the next open paints the header
+  // instantly instead of showing skeleton bars for the whole cold read.
+  useEffect(() => {
+    if (!user?.id || !conversationId) return;
+    const title = isIgniteSupportConversation ? "Ignite Support" : otherUser?.display_name;
+    if (!title) return;
+    rememberChatThreadLabel(user.id, "dm", conversationId, {
+      title,
+      avatarUrl: isIgniteSupportConversation ? null : otherUser?.avatar_url,
+    });
+  }, [user?.id, conversationId, isIgniteSupportConversation, otherUser?.display_name, otherUser?.avatar_url]);
 
   // Find the first club both DM participants share. Used to scope vault picker
   // and event picker actions inside the "+" menu so users can attach files /
@@ -1632,8 +1646,19 @@ export default function DirectMessagePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstMatchId, isSearchFetching, searchQuery]);
 
+  // The inbox already told us who this thread is with, so the header carries a
+  // real name from the first frame even while the conversation read is running.
+  const rememberedThreadLabel = getChatThreadLabel(user?.id, "dm", conversationId);
+
   if (conversationLoading || checkingCanDM) {
-    return <ChatPageSkeleton />;
+    return (
+      <ChatPageSkeleton
+        title={rememberedThreadLabel?.title}
+        subtitle={rememberedThreadLabel?.subtitle}
+        avatarUrl={rememberedThreadLabel?.avatarUrl}
+        avatarType="dm"
+      />
+    );
   }
 
   if (!conversation) {
@@ -1694,7 +1719,11 @@ export default function DirectMessagePage() {
       {/* Header */}
       <ChatHeaderShell
         type={isIgniteSupportConversation ? "support" : "dm"}
-        name={isIgniteSupportConversation ? "Ignite Support" : (otherUser?.display_name || (otherUserLoading ? "…" : "Unknown User"))}
+        name={
+          isIgniteSupportConversation
+            ? "Ignite Support"
+            : otherUser?.display_name || rememberedThreadLabel?.title || (otherUserLoading ? "…" : "Unknown User")
+        }
         sublabel={isIgniteSupportConversation ? "Welcome & tips" : undefined}
         avatarUrl={isIgniteSupportConversation ? undefined : otherUser?.avatar_url}
         showOnlineDot={!isIgniteSupportConversation && isOtherUserOnline}
