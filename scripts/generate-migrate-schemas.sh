@@ -22,3 +22,7 @@ gen events_domain EventsSnapshot
 gen competition_domain FenceSnapshot
 gen mini_league_domain LeagueSnapshot
 gen club_points_domain PointsSnapshot
+gen messaging_domain ChatPage
+gen notification_queue FenceSnapshot
+gen media_metadata FenceSnapshot
+gen vault_domain VaultSnapshot
