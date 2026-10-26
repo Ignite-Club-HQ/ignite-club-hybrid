@@ -1,3 +1,7 @@
+## Media retrieval placeholders — 26 October 2026
+- [x] Pass explicit per-slide retrieval state to albums so pending photos render skeletons without mounting an empty image; retain resolved slides. Keep initial feed skeletons during progressive source reads even when the provisional query is marked successful.
+- [ ] Run focused checks; phone acceptance needs updated app and Paul's signed-in session.
+
 ## U9 gallery card still blank — 26 October 2026
 - [x] Reproduced local sign-in boundary; screenshot is a whole-card pending slot, not proof of a missing photo. Bound metadata/unlock reads, add independent photo retry, and key image load/error state by resolved source without raw ciphertext fallback.
 - [x] 34 focused gallery/scoped-read/photo tests pass with the configured runner; ICP isolation guard and preview build OK. Initial unconfigured runner failure was test setup, not an application failure.
