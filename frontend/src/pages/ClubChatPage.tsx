@@ -38,6 +38,7 @@ import { useChatHistorySearch } from "@/hooks/useChatHistorySearch";
 import { createChatHistorySearchFetcher } from "@/features/messaging/thread/chatHistorySearchFetcher";
 import { CLUB_CHAT_SCOPE } from "@/features/messaging/scopes/chatScopeAdapters";
 import { getCachedClub } from "@/lib/clubTeamCache";
+import { getChatThreadLabel } from "@/lib/chatThreadLabelCache";
 import { fetchMessagesAround } from "@/lib/fetchMessagesAround";
 
 import { PageLoading } from "@/components/ui/page-loading";
@@ -1838,7 +1839,13 @@ export default function ClubChatPage() {
     : "Club chat";
 
   if (isLoadingClubSubscription && !club) {
-    return <ChatPageSkeleton title={clubDisplayName || undefined} />;
+    return (
+      <ChatPageSkeleton
+        title={clubDisplayName || getChatThreadLabel(user?.id, "club", clubId)?.title}
+        subtitle={clubHeaderSublabel}
+        avatarType="club"
+      />
+    );
   }
 
   // Block access for non-Pro users - show full page blocker

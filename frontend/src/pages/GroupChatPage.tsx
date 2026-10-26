@@ -148,6 +148,7 @@ import { noteChatMount, noteChatUnmount } from "@/lib/chatPerfDiagnostics";
 import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { resolveChatMetadataState } from "@/lib/chatMetadataGate";
+import { getChatThreadLabel, rememberChatThreadLabel } from "@/lib/chatThreadLabelCache";
 import { ChatUnreachable } from "@/components/chat/ChatUnreachable";
 import { groupChatReadScope } from '@/features/messaging/thread/groupChatScope';
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
@@ -1572,6 +1573,19 @@ export default function GroupChatPage() {
     ? `${groupBaseSublabel} · ${groupOnlineCount} online`
     : groupBaseSublabel;
 
+  // The inbox already named this thread, so the header can carry a real title
+  // from the first frame instead of skeleton bars for the whole cold read.
+  // League chats open on this same route, so both label kinds are accepted.
+  const rememberedThreadLabel = getChatThreadLabel(user?.id, ["group", "league"], groupId);
+
+  useEffect(() => {
+    if (!user?.id || !groupId || !group?.name) return;
+    rememberChatThreadLabel(user.id, "group", groupId, {
+      title: group.name,
+      subtitle: groupBaseSublabel,
+    });
+  }, [user?.id, groupId, group?.name, groupBaseSublabel]);
+
   const groupMetadataState = resolveChatMetadataState({
     data: group,
     isLoading: groupLoading,
@@ -1582,7 +1596,13 @@ export default function GroupChatPage() {
   });
 
   if (groupMetadataState === "loading") {
-    return <ChatPageSkeleton />;
+    return (
+      <ChatPageSkeleton
+        title={rememberedThreadLabel?.title}
+        subtitle={rememberedThreadLabel?.subtitle}
+        avatarType="group"
+      />
+    );
   }
 
   if (groupMetadataState === "unreachable") {
@@ -1607,7 +1627,13 @@ export default function GroupChatPage() {
   }
 
   if (!group) {
-    return <ChatPageSkeleton />;
+    return (
+      <ChatPageSkeleton
+        title={rememberedThreadLabel?.title}
+        subtitle={rememberedThreadLabel?.subtitle}
+        avatarType="group"
+      />
+    );
   }
 
 

@@ -38,6 +38,7 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatStuckWatchdog, createChatFetchBudget } from "@/lib/chatStuckWatchdog";
 import { resolveChatMetadataState } from "@/lib/chatMetadataGate";
+import { getChatThreadLabel, rememberChatThreadLabel } from "@/lib/chatThreadLabelCache";
 import { ChatUnreachable } from "@/components/chat/ChatUnreachable";
 import { toast } from "sonner";
 import { ClubAdminChatComposerFooter } from "@/components/chat/ClubAdminChatComposerFooter";
@@ -1347,6 +1348,34 @@ function SupabaseClubAdminChatPage() {
   // a full-page loader would replace the chat tree mid-mount and force Virtuoso
   // to re-pin against a fresh layout, causing a visible jolt. Render the shell
   // immediately when we have cached content; only show the skeleton on true cold load.
+  // The inbox already named this thread, so the header can carry a real title
+  // from the first frame instead of skeleton bars for the whole cold read.
+  const rememberedThreadLabel = getChatThreadLabel(user?.id, "admin_group", conversationId);
+
+  useEffect(() => {
+    if (!user?.id || !conversationId || !conversation?.id) return;
+    // Only store a title that is actually authoritative for this account — a
+    // placeholder ("Club Admin" / "Member") must not become the remembered name.
+    const authoritative = isMember ? !!club?.name : !!resolvedMemberName;
+    if (!authoritative) return;
+    rememberChatThreadLabel(user.id, "admin_group", conversationId, {
+      title: chatTitle,
+      subtitle: chatSubtitle,
+      avatarUrl: isMember ? club?.logo_url : resolvedMemberAvatar,
+    });
+  }, [
+    user?.id,
+    conversationId,
+    conversation?.id,
+    isMember,
+    chatTitle,
+    chatSubtitle,
+    club?.name,
+    club?.logo_url,
+    resolvedMemberName,
+    resolvedMemberAvatar,
+  ]);
+
   const conversationMetadataState = resolveChatMetadataState({
     data: conversation,
     isLoading: conversationLoading,
@@ -1360,7 +1389,14 @@ function SupabaseClubAdminChatPage() {
     conversationMetadataState === "loading" &&
     !(localMessages && localMessages.length > 0)
   ) {
-    return <ChatPageSkeleton />;
+    return (
+      <ChatPageSkeleton
+        title={rememberedThreadLabel?.title}
+        subtitle={rememberedThreadLabel?.subtitle}
+        avatarUrl={rememberedThreadLabel?.avatarUrl}
+        avatarType={isMember ? "club" : "dm"}
+      />
+    );
   }
 
   if (conversationMetadataState === "unreachable" && !conversation) {
@@ -1385,7 +1421,15 @@ function SupabaseClubAdminChatPage() {
   // Same escape hatch as the metadata gate above: if we already have messages in
   // hand, a transient `undefined` conversation (refetch / cache eviction) must
   // not swap the painted thread back to a full-page skeleton.
-  if (!conversation && !(localMessages && localMessages.length > 0)) return <ChatPageSkeleton />;
+  if (!conversation && !(localMessages && localMessages.length > 0))
+    return (
+      <ChatPageSkeleton
+        title={rememberedThreadLabel?.title}
+        subtitle={rememberedThreadLabel?.subtitle}
+        avatarUrl={rememberedThreadLabel?.avatarUrl}
+        avatarType={isMember ? "club" : "dm"}
+      />
+    );
 
 
 

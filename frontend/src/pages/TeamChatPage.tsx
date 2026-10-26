@@ -25,6 +25,7 @@ import { useSyncActiveClubToChat } from "@/hooks/useSyncActiveClubToChat";
 import { useTeamChatAdminStatus } from "@/features/messaging/thread/useTeamChatAdminStatus";
 import { useTeamChatTeamData } from "@/features/messaging/thread/useTeamChatTeamData";
 import { getCachedTeam } from "@/lib/clubTeamCache";
+import { getChatThreadLabel } from "@/lib/chatThreadLabelCache";
 import { useChatViewportHeight } from "@/hooks/useChatViewportHeight";
 import { useMeasuredElementHeight } from "@/hooks/useMeasuredElementHeight";
 import { keepComposerFocusedThroughSend } from "@/lib/chatComposerFocus";
@@ -1981,7 +1982,15 @@ export default function TeamChatPage() {
   if (teamMetadataState === "loading") {
     // Show the saved team name while the live metadata fetch resolves; if even the
     // device cache is cold, render a neutral skeleton block instead of a generic label.
-    return <ChatPageSkeleton title={teamId ? getCachedTeam(teamId)?.name || undefined : undefined} />;
+    return (
+      <ChatPageSkeleton
+        title={
+          (teamId ? getCachedTeam(teamId)?.name || undefined : undefined) ||
+          getChatThreadLabel(user?.id, "team", teamId)?.title
+        }
+        avatarType="team"
+      />
+    );
   }
 
   if (teamMetadataState === "unreachable") {
