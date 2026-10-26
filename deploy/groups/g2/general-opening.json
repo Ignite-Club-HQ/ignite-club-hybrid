@@ -23,13 +23,13 @@
       "name": "events_domain",
       "canisterId": "ymvtj-3qaaa-aaaal-qxpza-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "224227082e9d62840d19eb0ad55e8eb82e2c7479618e4ecac299ad9d85bdfd9e"
+      "moduleHash": "ee0bdcc39c1af96cc8c745d9b8493951495f94d3b6e37ff4caee7a9ff0d36e7a"
     },
     {
       "name": "messaging_domain",
       "canisterId": "yluv5-wiaaa-aaaal-qxpzq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "b7124f81275a3a5fe5d9131d4081a2b2c8210cbefeefaeb51f438cf4876053e7"
+      "moduleHash": "e8d7a960832c270f91dfe2f579326a74261f3e3ddbed0facd644381ec7876e17"
     },
     {
       "name": "vault_domain",
@@ -59,7 +59,7 @@
       "name": "media_metadata",
       "canisterId": "z26lc-oaaaa-aaaal-qxp4a-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "51d2750174b52069161d23ab7c1f5cc286643d85a4a0913fe5a79d097b9ca9d2"
+      "moduleHash": "0296231d1a16023693d52feb2e3990acb4830e438390765933b1a74eaf0eb334"
     },
     {
       "name": "insights_domain",
@@ -77,7 +77,7 @@
       "name": "pii_access_control",
       "canisterId": "zt5a6-yiaaa-aaaal-qxp5q-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "d854d33e26b859dba9e8d7b16db06a772190e2b72b64e1f4f7f2652b6eaed0f1"
+      "moduleHash": "f822943d725542f6301dc1dbe903ba4fa66750cea1b4c2428f1c4da11310cd02"
     },
     {
       "name": "timer_jobs",
