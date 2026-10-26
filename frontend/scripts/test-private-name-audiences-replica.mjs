@@ -76,13 +76,13 @@ try {
   };
   await decrypt(viewer,scope('club',groups[1].club.canisterId,'club-1'));
   await decrypt(viewer,scope('family',groups[1].club.canisterId,'child-1'));
-  const dm=groups[1].messaging;dm.actor.setPrincipal(governor);
-  ok(await dm.actor.create_conversation('private-dm','dm',[],[viewer,owner]));
-  const direct=scope('direct',dm.canisterId,'private-dm');
+  const dm=groups[1].messaging;dm.actor.setPrincipal(viewer);
+  const directConversation=ok(await dm.actor.create_conversation('dm',[],[viewer,owner]));
+  const direct=scope('direct',dm.canisterId,directConversation.id);
   await decrypt(viewer,direct);
   assert.ok('Err' in await read(outsider,direct),'Unrelated user cannot decrypt direct names');
   dm.actor.setPrincipal(outsider);
-  assert.ok('Err' in await dm.actor.read_profile_direct_batch(viewer,'private-dm',[owner],[]),'Browser cannot impersonate identity service');
+  assert.ok('Err' in await dm.actor.read_profile_direct_batch(viewer,directConversation.id,[owner],[]),'Browser cannot impersonate identity service');
   dm.actor.setPrincipal(viewer);ok(await dm.actor.block_user(owner));
   assert.ok('Err' in await read(viewer,direct),'Blocked participant cannot obtain fresh direct keys');
   ok(await dm.actor.unblock_user(owner));await decrypt(viewer,direct);

@@ -4212,6 +4212,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (user.equal(Principal.anonymous()) or user.equal(caller)) return #Err("Invalid block target");
     let exists = blockedUsers.any(func(entry) = entry.blocker.equal(caller) and entry.blocked.equal(user));
     if (not exists) {
+      mediaEvidenceRevision += 1;
       blockedUsers := blockedUsers.concat([{ blocker = caller; blocked = user; created_at_ms = nowMs() }]);
     };
     #Ok
@@ -4224,6 +4225,7 @@ persistent actor class Main(governorInit : Principal) = this {
     try {
     await admitAccount(caller);
     auth(caller);
+    if (blockedUsers.any(func entry = entry.blocker == caller and entry.blocked == user)) mediaEvidenceRevision += 1;
     blockedUsers := blockedUsers.filter(func(entry) = not (entry.blocker.equal(caller) and entry.blocked.equal(user)));
     #Ok
   
