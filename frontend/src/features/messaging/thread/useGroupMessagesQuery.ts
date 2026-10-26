@@ -6,6 +6,7 @@ import { splitPageWindow } from "@/lib/chatPageWindow";
 import { getCachedMessages, cacheMessages } from "@/lib/messageCache";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { readChatRelationshipProfiles } from "@/live/chatRelationshipProfiles";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { isUsableCachedThread } from "@/lib/chatThreadLoadState";
 import { assertReadNotAborted } from "@/live/readDeadline";
 import { groupChatReadScope } from './groupChatScope';
@@ -74,7 +75,10 @@ export const mapLiveGroupRows = async (
     }));
   }
   const [profilesMap, liveReactions] = await Promise.all([
-    readChatRelationshipProfiles(ctx, groupId, authorIds, signal),
+    // Rehearsal names are mounted-audience-only; never embed decrypted labels
+    // in message snapshots. GroupChatPage hydrates them independently.
+    privateProfileSearchRehearsalEnabled() ? Promise.resolve(new Map())
+      : readChatRelationshipProfiles(ctx, groupId, authorIds, signal),
     listLiveReactions(ctx, groupId).catch(() => []),
   ]);
   assertReadNotAborted(signal);
