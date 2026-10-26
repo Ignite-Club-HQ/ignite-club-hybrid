@@ -1,6 +1,6 @@
 ## Scheduled-message panel formatting — 26 October 2026
 - [x] Use the existing keyboard-safe drawer, remove competing mobile outer sizing/scrolling and place the attachment label above its control; scheduling and access rules unchanged.
-- [ ] Verify the phone-sized panel with a simulated keyboard and run the existing scheduling checks.
+- [x] Browser verified the actual panel at 411×770 with a 410px keyboard-free viewport: heading/message visible, actions reachable by scrolling, attachment label separated, no page errors. 55 existing scheduling/keyboard checks passed (13 mode skips); preview build OK. Real Android keyboard/signed-in scheduling remains unverified; no deployment.
 
 ## Chat thread header name while loading — 26 October 2026
 - [x] Keep a bounded, account-scoped copy of the thread names the inbox already shows and read it the moment a thread mounts, so DM, group/league, club-admin, team and club headers carry their real name and avatar instead of skeleton bars; a resolved thread re-records its own authoritative label for the next open.
