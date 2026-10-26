@@ -1,3 +1,6 @@
+## Team carousel on session resume — 26 October 2026
+- [ ] Recover only interrupted/failed/empty carousel reads on foreground return; keep healthy cards and membership checks intact. Verify suspended-request and duplicate-resume regressions.
+
 ## Team page information delays — 26 October 2026
 - [x] Verified team core now reveals before club settings/subscription reads; removed duplicate club subscription and whole-pitch roster loading, published adult roles/child assignments before independently authorized name unlocks, routed next event by known club and paged latest photos until six matches rather than retrieving every club asset. Child failures remain retryable, pending counts no longer claim zero. 18 focused tests/ICP guards pass; preview build OK. Browser has no signed-in ICP session and redirects to /auth with no runtime errors; real phone timing remains unverified. No deployment.
 
