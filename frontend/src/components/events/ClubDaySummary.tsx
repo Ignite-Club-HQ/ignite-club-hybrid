@@ -350,9 +350,7 @@ export function ClubDaySummary({
 
 function DayEventRow({ event, hideVenue = false }: { event: ClubDayEvent; hideVenue?: boolean }) {
   const navigate = useNavigate();
-  const time = event.start_time
-    ? format(new Date(event.start_time), "h:mma").toLowerCase()
-    : null;
+  const time = formatTimeOnly(event.start_time);
   const venue = hideVenue ? null : venueLabel(event);
   const isTraining = event.type === "training";
 
