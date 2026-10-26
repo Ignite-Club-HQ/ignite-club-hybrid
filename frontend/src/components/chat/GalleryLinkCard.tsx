@@ -9,7 +9,8 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveGalleryChatCard } from "@/live/features/media";
 import { getLiveTeam } from "@/live/features/club";
-import { useSignedPhotoUrl } from "@/hooks/useSignedPhotoUrl";
+import { resolveSignedUrl } from "@/hooks/useSignedPhotoUrl";
+import { withReadDeadline } from "@/live/readDeadline";
 import { Skeleton } from "@/components/ui/skeleton";
 import { chatVaultLocation, readChatVaultCard } from "@/features/messaging/thread/chatVaultCardRead";
 import { isIcpBlobUrl } from "@/hooks/useResolvedIcpBlobSrc";
@@ -22,8 +23,8 @@ interface GalleryLinkCardProps {
 
 export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptHint = false }: GalleryLinkCardProps) {
   const navigate = useNavigate();
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const [imgError, setImgError] = useState(false);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const isIcp = isFeatureRoutedToIcp('media');
   const { user, sessionRestoration } = useAuth();
   const queryClient = useQueryClient();
@@ -32,9 +33,9 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
 
   const { data: card, isLoading, isError, refetch } = useQuery({
     queryKey: ["gallery-chat-card", cardId, user?.id, isIcp],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (isIcp) {
-        return readChatVaultCard(location, { galleryCardId: cardId }, scope => withFeatureBackend("media", {
+        return withReadDeadline(readChatVaultCard(location, { galleryCardId: cardId }, scope => withFeatureBackend("media", {
           icp: async (ctx) => {
             const row = await getLiveGalleryChatCard(ctx, cardId);
             if (!row) return null;
@@ -58,7 +59,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
             };
           },
           supabase: async () => null,
-        }, scope));
+        }, scope)), "Photo update read", 20_000, signal);
       }
       const { data } = await supabase
         .from("gallery_chat_cards")
@@ -98,9 +99,20 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
     staleTime: 5 * 60_000,
   });
 
-  const { signedUrl } = useSignedPhotoUrl(card?.hero_image_url ?? null);
   const originalHero = card?.hero_image_url ?? null;
-  const heroSrc = signedUrl || (originalHero && !isIcpBlobUrl(originalHero) ? originalHero : null);
+  const imageQuery = useQuery({
+    queryKey: ["gallery-card-image", user?.id, isIcp, originalHero],
+    enabled: !!originalHero && !!user && sessionRestoration === "authenticated",
+    queryFn: ({ signal }) => originalHero
+      ? withReadDeadline(resolveSignedUrl(originalHero), "Photo unlock", 20_000, signal)
+      : Promise.resolve(null),
+    staleTime: 5 * 60_000,
+    gcTime: 5 * 60_000,
+    retry: false,
+  });
+  const heroSrc = imageQuery.data || (originalHero && !isIcpBlobUrl(originalHero) ? originalHero : null);
+  const imgLoaded = !!heroSrc && loadedSrc === heroSrc;
+  const imgError = !!heroSrc && failedSrc === heroSrc;
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -161,9 +173,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
   const ctaLabel = isPrompt ? "Open uploader" : "View Gallery";
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
+    <div
       className={`group block w-full max-w-[320px] overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-[0_1px_2px_hsl(var(--foreground)/0.04)] transition-colors hover:border-primary/30 hover:shadow-[0_2px_8px_hsl(var(--foreground)/0.06)] active:bg-primary/[0.04] touch-manipulation dark:border-border/40 dark:bg-card/80 dark:hover:border-primary/40 ${isPrompt ? "h-[76px]" : "h-[240px]"}`}
     >
       {/* Fixed hero slot for all non-prompt cards so image URL/signing/error
@@ -178,14 +188,23 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
                 alt=""
                 loading="eager"
                 decoding="async"
-                onLoad={() => setImgLoaded(true)}
-                onError={() => setImgError(true)}
+                onLoad={() => setLoadedSrc(heroSrc)}
+                onError={() => setFailedSrc(heroSrc)}
                 className={`h-full w-full object-cover ${imgLoaded ? "opacity-100" : "opacity-0"}`}
               />
             </>
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-primary/10">
-              <ImageIcon className="h-7 w-7 text-primary/70" />
+              {imageQuery.isError || imgError ? (
+                <div className="text-center text-xs text-muted-foreground">
+                  <p>Couldn’t load this photo.</p>
+                  <Button variant="ghost" size="sm" onClick={() => {
+                    setFailedSrc(null);
+                    setLoadedSrc(null);
+                    void imageQuery.refetch();
+                  }}>Try photo again</Button>
+                </div>
+              ) : <ImageIcon className="h-7 w-7 text-primary/70" />}
             </div>
           )}
           {count > 1 && heroSrc && !imgError && (
@@ -197,6 +216,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
         </div>
       )}
 
+      <Button variant="ghost" onClick={handleClick} className="h-auto w-full justify-start rounded-none p-0 text-left whitespace-normal">
       {isPrompt ? (
         <div className="flex items-center gap-3 px-3.5 py-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/15">
@@ -236,6 +256,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
           </div>
         </div>
       )}
-    </button>
+      </Button>
+    </div>
   );
 });
