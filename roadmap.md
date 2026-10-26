@@ -1,3 +1,7 @@
+## Club upgrade subscription warning — 26 October 2026
+- [ ] Bind subscription display to actual feature dispatch and prevent ICP plan-management actions from reaching Supabase.
+- [ ] Verify scoped ICP/Supabase reads and failure behavior; keep provider fulfillment and paid-term rules unchanged.
+
 ## Thread search and result-jump responsiveness — 26 October 2026
 - [x] Remove bar-level debounce; retain one historical-search debounce and display loaded matches during retrieval across all six chat pages. Closing/changing search aborts and discards old requests immediately.
 - [x] Team/group/club result jumps start before optional context reads, with latest-selection/account/thread-bound continuation guards; loaded targets focus without a polling wait and unrelated neighbouring photos no longer block reveal. Cold-link recovery, exact-target alignment, scrolling protections and authorization retained.
