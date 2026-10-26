@@ -73,6 +73,7 @@ import { loadScheduleFixtures, type FixtureSnapshot } from "@/live/scheduleFixtu
 import { withReadDeadline } from "@/live/readDeadline";
 import { loadMemberSchedule, type MemberScheduleSnapshot } from "@/live/scheduleMembers";
 import { scheduleRefreshIssue } from "@/features/events/scheduleRefreshIssue";
+import { retryScheduleRefresh } from "@/features/events/retryScheduleRefresh";
 
 /** Derive the memberships shape the schedule filters need from the caller's
  * club_domain role grants + events_domain roster scope (live ICP path).
@@ -1331,8 +1332,7 @@ export default function EventsPage() {
         onRetry={async () => {
           // Refresh access first. Parallel membership/event retries can change
           // the event query key mid-read and cancel the retry the user requested.
-          await refetchMemberships();
-          await queryClient.refetchQueries({ queryKey: isIcpAuthBackend ? ['events', 'icp-member-schedule', user?.id] : ['events'], type: 'active' });
+          await retryScheduleRefresh(refetchMemberships, () => queryClient.refetchQueries({ queryKey: isIcpAuthBackend ? ['events', 'icp-member-schedule', user?.id] : ['events'], type: 'active' }));
         }}
         tone="neutral"
         message={refreshIssue ?? "Couldn't load schedule. Tap to retry."}
