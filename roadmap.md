@@ -792,3 +792,11 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [x] Root cause: club_domain list_team_captains (and team player-position / child-team endpoints) only looked in the legacy ACL team list, so in-app-created teams answered "Team not found". Now resolve teams from the team records first (liveTeamRef); moc type-check passed.
 - [x] Event Captain: a failed season lookup no longer hides Assign Captain; admins can still pick a match captain, with a quiet retry for the season name.
 - [ ] Club service fix needs the all-groups backend upgrade (Upgrade backend workflow, full_backend) run by the owner; then Paul's signed-in acceptance.
+
+## Club migration tool (Supabase → chosen canister group) — 26 October 2026
+- [x] Safety rules + tests (scripts/migrate-club-plan.mjs): request validation, gates (club already on-chain, unreadable checks, 80% fill incl. photo bytes), plan hash, resumable journal, route-after-verify.
+- [x] Operator script check action: read-only Supabase inventory for 43 club tables + photo/Vault file bytes, on-chain presence check across all groups, live capacity read.
+- [x] Workflow migrate-club.yml (check/migrate/recover, protected environment) and admin page /admin/club-migration.
+- [ ] Destination writers per step (club, children, events, messaging, rewards, competitions, mini-leagues, notifications, media, vault) — encode each domain's import snapshot; migrate refuses until all exist.
+- [ ] Member-account placeholders + verified email claim (club_domain/identity change, protected all-group upgrade).
+- [ ] Owner: add SUPABASE_SERVICE_ROLE_KEY secret to the group-2-admin-controls GitHub environment.
