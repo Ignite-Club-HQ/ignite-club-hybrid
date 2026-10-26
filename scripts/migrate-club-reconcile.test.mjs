@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { countSnapshot, expectedCounts, reconcileClub } from './migrate-club-reconcile.mjs';
 
 test('countSnapshot counts each domain record set', () => {
-  assert.equal(countSnapshot('club_domain', { teams: [{}], sponsors: [{}, {}], children: [{}], guardians: [], roles: [{}], account_roles: [], exclusions: [] }), 5);
+  assert.equal(countSnapshot('club_domain', { teams: [{}], sponsors: [{}, {}], children: [{}], guardians: [], roles: [{}], account_roles: [], exclusions: [] }), 6);
   assert.equal(countSnapshot('events_domain', { events: [{}], rsvps: [{}, {}], game_results: [], game_summaries: [{}], game_player_stats: [] }), 4);
   assert.equal(countSnapshot('competition_domain', { competitions: [{}], matches: [{}], entries: [{}], divisions: [{}] }), 4);
   assert.equal(countSnapshot('messaging_domain', { conversations: [{}], messages: [{}, {}] }), 3);
