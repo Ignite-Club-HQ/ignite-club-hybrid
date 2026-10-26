@@ -82,8 +82,7 @@ authority resolver. A central optional independently supplied evidence reader
 is used by both search gateways; it has no automatic production source and
 never derives approval from a reply, localStorage or membership.
 
-Validation: 109 frontend checks in email mode; 88 core checks in ICP mode
-(the expanded final ICP sweep is recorded in the roadmap), 143 identity Rust
+Validation: 109 frontend checks in each sign-in mode, 143 identity Rust
 checks, four Motoko service compilations, 17 matching Candid contracts and ICP
 guards. New disposable fiduciary-subnet suite actually encrypts and decrypts
 through an original Group 1 PII service while all five audiences belong to
