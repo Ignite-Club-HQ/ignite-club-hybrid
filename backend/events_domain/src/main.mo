@@ -321,6 +321,7 @@ persistent actor class Main(governorInit : Principal) = this {
     eventCaptains:=eventCaptains.filter(func(c)=not evs.any(func(e)=e.id==c.event_id));
     eventGoalkeepers:=eventGoalkeepers.filter(func(g)=not evs.any(func(e)=e.id==g.event_id));
     eventPotm:=eventPotm.filter(func(p)=not evs.any(func(e)=e.id==p.event_id));
+    gamePlayerStatExtras:=gamePlayerStatExtras.filter(func(x)=not evs.any(func(e)=e.id==x.event_id));
     competitionEventOperations:=competitionEventOperations.map(func(o)={o with event_ids=o.event_ids.filter(func(id)=not evs.any(func(e)=e.id==id))});
     #Ok(evs.size())
   };
@@ -365,6 +366,9 @@ persistent actor class Main(governorInit : Principal) = this {
     if(incomingDutyRows.any(func(d)=not inSnap(d.event_id)) or incomingDutyTeams.any(func(d)=not inSnap(d.event_id)) or incomingOpenDuties.any(func(d)=not inSnap(d.event_id)) or incomingGuests.any(func(g)=not inSnap(g.event_id)) or incomingCaptains.any(func(c)=not inSnap(c.event_id)) or incomingGoalkeepers.any(func(g)=not inSnap(g.event_id)) or incomingPotm.any(func(p)=not inSnap(p.event_id))) return #Err("Foreign event extra records");
     if(incomingCaptains.any(func(c)=c.user_id==null and c.child_id==null) or incomingGoalkeepers.any(func(g)=g.user_id==null and g.child_id==null) or incomingPotm.any(func(p)=p.user_id==null and p.child_id==null)) return #Err("Official assignment without a subject");
     if(incomingOpenDuties.any(func(d)=openDuties.any(func(x)=x.id==d.id and not events.any(func(e)=e.id==x.event_id and e.club_id==club))) or incomingGuests.any(func(g)=eventGuests.any(func(x)=x.id==g.id and not events.any(func(e)=e.id==x.event_id and e.club_id==club)))) return #Err("Event extra id collides with another club");
+    let incomingStatExtras=snap.stat_extras??[];
+    // Every sidecar row must correlate to a stat row in the same snapshot.
+    if(incomingStatExtras.any(func(x)=not inSnap(x.event_id) or not incomingStats.any(func(s)=s.event_id==x.event_id and s.team_id==x.team_id and s.user_id==x.user_id))) return #Err("Stat extra without a matching stat row");
     if(incomingLinks.any(func(l)=not snap.events.any(func(e)=e.id==l.event_id and e.team_id==?l.team_id)) or incomingResults.any(func(r)=not snap.events.any(func(e)=r.event_id==?e.id and e.team_id==?r.team_id)) or incomingStats.any(func(r)=not snap.events.any(func(e)=r.event_id==e.id and e.team_id==?r.team_id)) or incomingSummaries.any(func(r)=not snap.events.any(func(e)=r.event_id==e.id and e.team_id==?r.team_id)) or incomingOperations.any(func(o)=o.event_ids.any(func(id)=not snap.events.any(func(e)=e.id==id)))) return #Err("Foreign History snapshot records");
     if(incomingOperations.any(func(op)=competitionEventOperations.any(func(old)=old.operation_id==op.operation_id and old.competition_id!=op.competition_id))) return #Err("Competition operation collision");
     if (incomingGroups.any(func(g) = not snap.events.any(func(e) = e.id == g.event_id)) or incomingPlayers.any(func(p) = not incomingGroups.any(func(g) = g.id == p.group_id)) or incomingDuties.any(func(d) = not incomingGroups.any(func(g) = g.id == d.group_id))) return #Err("Snapshot contains foreign group records");
@@ -396,6 +400,7 @@ persistent actor class Main(governorInit : Principal) = this {
     eventCaptains := eventCaptains.filter(func(c) = not ids.any(func(i) = i == c.event_id)).concat(incomingCaptains);
     eventGoalkeepers := eventGoalkeepers.filter(func(g) = not ids.any(func(i) = i == g.event_id)).concat(incomingGoalkeepers);
     eventPotm := eventPotm.filter(func(p) = not ids.any(func(i) = i == p.event_id)).concat(incomingPotm);
+    gamePlayerStatExtras := gamePlayerStatExtras.filter(func(x) = not ids.any(func(i) = i == x.event_id)).concat(incomingStatExtras);
     rsvps := rsvps.filter(func(r) = not ids.any(func(i) = i == r.event_id)).concat(snap.rsvps);
     series := series.filter(func(x) = not snap.series.any(func(y) = y.id == x.id)).concat(snap.series);
     events := events.filter(func(e) = e.club_id != club).concat(snap.events);
@@ -1001,6 +1006,7 @@ persistent actor class Main(governorInit : Principal) = this {
         eventCaptains := eventCaptains.filter(func(item) = not isDoomed(item.event_id));
         eventGoalkeepers := eventGoalkeepers.filter(func(item) = not isDoomed(item.event_id));
         eventPotm := eventPotm.filter(func(item) = not isDoomed(item.event_id));
+        gamePlayerStatExtras := gamePlayerStatExtras.filter(func(item) = not isDoomed(item.event_id));
         roster := roster.filter(func(item) = not isDoomed(item.event_id));
         recurrences := recurrences.filter(func(item) = not isDoomed(item.event_id));
         if (not events.any(func(item) = item.series_id == ?id)) {
@@ -4185,6 +4191,7 @@ persistent actor class Main(governorInit : Principal) = this {
     eventCaptains := eventCaptains.filter(func(c) = not inDoomed(c.event_id) and not inDoomedTeam(c.team_id));
     eventGoalkeepers := eventGoalkeepers.filter(func(g) = not inDoomed(g.event_id) and not inDoomedTeam(g.team_id));
     eventPotm := eventPotm.filter(func(p) = not inDoomed(p.event_id) and (switch (p.team_id) { case (?t) { not inDoomedTeam(t) }; case null { true } }));
+    gamePlayerStatExtras := gamePlayerStatExtras.filter(func(x) = not inDoomed(x.event_id) and not inDoomedTeam(x.team_id));
     dutyTeamReminderSent := dutyTeamReminderSent.filter(func(id) = not inDoomed(id));
     pointsReminderSent := pointsReminderSent.filter(func(id) = not inDoomed(id));
     individualDutyReminderSent := individualDutyReminderSent.filter(func(id) = not inDoomed(id));
