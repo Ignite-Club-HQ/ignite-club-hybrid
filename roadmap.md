@@ -1,3 +1,7 @@
+## Event detail loading speed — 26 October 2026
+- [x] Authorized RSVP and duty rows now publish before private/adult display names; adult/child enrichment starts concurrently with account/event/subject-bound queries. Reads use the known event club where available; Supabase behavior and service authorization unchanged. Focused event/attendance checks pass (15 Supabase and 17 ICP); preview build OK.
+- [ ] Verify actual cold event opening and all-section timings with Paul's Internet Identity session; unavailable locally. This removes confirmed display-name waterfalls but does not establish instant cold on-chain retrieval. No deployment.
+
 ## Event-associated duty teams — 26 October 2026
 - [x] Scope create/edit/detail duty-team choices to primary team or selected audience; unrestricted club events retain club teams. Supabase filters requested IDs; ICP intersects its authorized club list. 18 focused tests pass; actual picker browser fixture offers U9 only, excludes U10 and emits U9 selection. Preview build OK; signed-in service assignment remains unverified locally. No backend/deployment changes.
 

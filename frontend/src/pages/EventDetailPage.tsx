@@ -12,6 +12,7 @@ import { useParentLeaguePlayerRsvpMutation } from "@/hooks/useParentLeaguePlayer
 import { useEventAttendanceViewModel } from "@/hooks/useEventAttendanceViewModel";
 import { resolveEventCapabilities } from "@/features/events/eventCapabilities";
 import { fetchEventDetail, listedEventDetailPreview } from "@/features/events/eventDetailRepository";
+import { readEventDisplayNames } from "@/features/events/eventDisplayEnrichment";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 import { Share } from "@capacitor/share";
@@ -284,7 +285,7 @@ export default function EventDetailPage() {
 
 
   const {
-    data: rsvps,
+    data: baseRsvps,
     error: rsvpsError,
     isLoading: rsvpsLoading,
     isFetching: rsvpsFetching,
@@ -317,12 +318,8 @@ export default function EventDetailPage() {
           // are decrypted here (club-scoped read grants let club members
           // read them). Best effort — a name the caller cannot read falls
           // back to the no-enrichment rendering, never an error state.
-          const childIds = [...new Set(
-            (roster.rsvps ?? [])
-              .map(({ rsvp }) => (Array.isArray(rsvp.child_id) && rsvp.child_id.length > 0 ? rsvp.child_id[0] : null))
-              .filter((c): c is string => !!c),
-          )];
-          const childNames = await resolveLivePiiTextBatch(ctx, childIds, "name", "event_roster", "Event roster child names");
+          // Publish the authorized RSVP rows first; private names load independently below.
+          const childNames = new Map<string, string>();
           const rows = (roster.rsvps ?? []).map(({ rsvp, child }) => {
             const childId = Array.isArray(rsvp.child_id) && rsvp.child_id.length > 0 ? rsvp.child_id[0] : null;
             const childRow = Array.isArray(child) && child.length > 0 ? child[0] : null;
@@ -341,13 +338,9 @@ export default function EventDetailPage() {
             };
           });
           const { hydrateRsvpDisplayProfiles } = await import("@/features/events/rsvpDisplayProfiles");
-          const profileIds = [...new Set(rows.filter(row => !row.child_id).map(row => row.user_id))];
-          const profiles = await listLiveProfilesByIds(ctx, profileIds).catch(() => []);
-          return hydrateRsvpDisplayProfiles(rows, profiles.map(p => ({
-            id: p.account_id, display_name: p.display_name, avatar_url: p.avatar_ref[0] ?? null,
-          })), user?.id ? { id: user.id, profile } : undefined);
+          return hydrateRsvpDisplayProfiles(rows, [], user?.id ? { id: user.id, profile } : undefined);
         },
-      }, { eventId: id! });
+      }, event?.club_id ? { clubId: event.club_id } : { eventId: id ?? "" });
       if (icpRsvps) return icpRsvps;
 
       const provider: EventRsvpProvider = {
@@ -392,6 +385,38 @@ export default function EventDetailPage() {
     },
     enabled: !!id,
   });
+
+  const rsvpDisplaySubjects = (baseRsvps ?? []).map(row => `${row.user_id}:${row.child_id ?? "self"}`).sort().join("|");
+  const { data: rsvpDisplayNames } = useQuery({
+    queryKey: ["event-rsvp-display-names", user?.id, isIcpAuthBackend, id, rsvpDisplaySubjects],
+    enabled: !!id && isIcpAuthBackend && !useIcpLab && !!baseRsvps?.length,
+    staleTime: 60_000,
+    queryFn: ({ signal }) => withFeatureBackend("events", {
+      supabase: async () => ({ children: new Map<string, string>(), profiles: [] }),
+      icp: async ctx => {
+        const children = [...new Set((baseRsvps ?? []).map(row => row.child_id).filter((value): value is string => !!value))];
+        const adults = [...new Set((baseRsvps ?? []).filter(row => !row.child_id).map(row => row.user_id))];
+        const result = await readEventDisplayNames(
+          () => resolveLivePiiTextBatch(ctx, children, "name", "event_roster", "Event roster child names"),
+          () => listLiveProfilesByIds(ctx, adults),
+        );
+        if (signal.aborted) throw new DOMException("Read cancelled", "AbortError");
+        return result;
+      },
+    }, event?.club_id ? { clubId: event.club_id } : { eventId: id ?? "" }),
+  });
+  const rsvps = useMemo(() => {
+    if (!baseRsvps || !rsvpDisplayNames) return baseRsvps;
+    const adultProfiles = new Map(rsvpDisplayNames.profiles.map(p => [p.account_id, p]));
+    return baseRsvps.map(row => {
+      const childName = row.child_id ? rsvpDisplayNames.children.get(row.child_id) : undefined;
+      const person = adultProfiles.get(row.user_id.replace(/^principal:/, "")) ?? adultProfiles.get(row.user_id);
+      return { ...row,
+        children: childName && row.child_id ? { ...row.children, id: row.child_id, name: childName } : row.children,
+        profiles: person ? { display_name: person.display_name, avatar_url: person.avatar_ref?.[0] ?? null } : row.profiles,
+      };
+    });
+  }, [baseRsvps, rsvpDisplayNames]);
 
   // Attendance read health. A failed RSVP read must never be presented as a
   // valid empty roster: we surface an alert + retry and disable every
@@ -542,7 +567,7 @@ export default function EventDetailPage() {
     }
   }, [myRsvp?.id]);
 
-  const { data: duties, isLoading: isDutiesLoading } = useQuery({
+  const { data: baseDuties, isLoading: isDutiesLoading } = useQuery({
     queryKey: eventKeys.duties(id),
     queryFn: async () => {
       if (useIcpLab) return [];
@@ -573,9 +598,8 @@ export default function EventDetailPage() {
             listLiveDuties(ctx, id!),
             listLiveOpenDuties(ctx, id!).catch(() => [] as any[]),
           ]);
-          const assigneeIds = Array.from(new Set(rows.map((d) => d.account_id).filter(Boolean)));
-          const profiles = assigneeIds.length > 0 ? await listLiveProfilesByIds(ctx, assigneeIds) : [];
-          const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
+          // Duty status/assignments are authoritative; display names must not hold them.
+          const profileMap = new Map<string, any>();
           return rows.map((d) => {
             const p = d.account_id ? profileMap.get(d.account_id) : null;
             return {
@@ -600,13 +624,32 @@ export default function EventDetailPage() {
               })),
           );
         },
-      }, { eventId: id! });
+      }, event?.club_id ? { clubId: event.club_id } : { eventId: id ?? "" });
     },
     enabled: !!id,
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
+
+  const dutyAssigneeIds = [...new Set((baseDuties ?? []).map(row => row.assigned_to).filter((value): value is string => !!value))].sort();
+  const { data: dutyDisplayProfiles } = useQuery({
+    queryKey: ["event-duty-display-names", user?.id, isIcpAuthBackend, id, dutyAssigneeIds],
+    enabled: !!id && isIcpAuthBackend && !useIcpLab && dutyAssigneeIds.length > 0,
+    staleTime: 60_000,
+    queryFn: () => withFeatureBackend("events", {
+      supabase: async () => [],
+      icp: ctx => listLiveProfilesByIds(ctx, dutyAssigneeIds),
+    }, event?.club_id ? { clubId: event.club_id } : { eventId: id ?? "" }),
+  });
+  const duties = useMemo(() => {
+    if (!baseDuties || !dutyDisplayProfiles) return baseDuties;
+    const profiles = new Map(dutyDisplayProfiles.map(person => [person.account_id, person]));
+    return baseDuties.map(row => {
+      const person = row.assigned_to ? profiles.get(row.assigned_to.replace(/^principal:/, "")) ?? profiles.get(row.assigned_to) : undefined;
+      return { ...row, profiles: person ? { display_name: person.display_name, avatar_url: person.avatar_ref?.[0] ?? null } : row.profiles };
+    });
+  }, [baseDuties, dutyDisplayProfiles]);
 
   // Check if user is app admin (global override)
   const { isAppAdmin } = useIsAppAdmin();
