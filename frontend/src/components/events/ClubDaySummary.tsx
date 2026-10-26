@@ -147,7 +147,11 @@ export function ClubDaySummary({
             readContentInScope(ctx, "events", { clubId }, (scoped) => listLiveEvents(scoped, clubId, null))));
           if (settled.length && settled.every((r) => r.status === "rejected")) throw (settled[0] as PromiseRejectedResult).reason;
           const dayEvents = settled.flatMap((r) => (r.status === "fulfilled" ? (r.value as any[]) : []))
-            .filter((ev) => !ev.deleted && format(new Date(Number(ev.starts_at_ms)), "yyyy-MM-dd") === dKey);
+            .filter((ev) => {
+              if (ev.deleted) return false;
+              const start = new Date(Number(ev.starts_at_ms));
+              return isValid(start) && format(start, "yyyy-MM-dd") === dKey;
+            });
           const teamIds = [...new Set(dayEvents.map((ev) => (ev.team_id?.[0] ?? null) as string | null).filter(Boolean))] as string[];
           const names = new Map<string, string | null>(await Promise.all(teamIds.map(async (teamId) => {
             try {
@@ -165,9 +169,9 @@ export function ClubDaySummary({
               id: ev.id,
               title: ev.title,
               type: ev.event_type,
-              event_date: format(start, "yyyy-MM-dd"),
-              start_time: format(start, "HH:mm"),
-              end_time: format(end, "HH:mm"),
+              event_date: isValid(start) ? format(start, "yyyy-MM-dd") : dKey,
+              start_time: isValid(start) ? format(start, "HH:mm") : null,
+              end_time: isValid(end) ? format(end, "HH:mm") : null,
               location_name: (ev.location?.[0] ?? null) as string | null,
               address: (ev.address?.[0] ?? null) as string | null,
               suburb: null,
