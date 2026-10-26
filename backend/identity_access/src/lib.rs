@@ -1547,7 +1547,8 @@ async fn read_private_profile_name_authorization(viewer_principal: Principal, su
     };
     let inventory = read_registry_pages(&config.binding, active).await?;
     active()?;
-    group_inventory::validate(&inventory, &config.binding, &[], &[])?;
+    let registry_clubs = inventory.groups.iter().flat_map(|g| g.domains.iter().filter(|d| d.domain == "club_domain").map(|d| d.canister)).collect::<Vec<_>>();
+    group_inventory::validate(&inventory, &config.binding, &registry_clubs, &[])?;
     if !inventory.groups.iter().any(|g| g.domains.iter().any(|d| d.domain == "pii_access_control" && d.canister == service)) {
         return Err("Original private-name service is not registered".into());
     }

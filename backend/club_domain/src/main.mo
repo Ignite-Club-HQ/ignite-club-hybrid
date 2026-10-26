@@ -3345,6 +3345,27 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(requester) };
   };
 
+  // Adult family names: BOTH viewer and each subject are current guardians of
+  // this exact child. Shared club membership alone never authorizes this path.
+  public shared ({ caller }) func read_profile_family_batch(requester : Principal, child_id : Text, subjects : [Principal], expected : ?Nat) : async { #Ok : ProfileMembership.Batch; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1") return #Err("Private family reads are not released");
+    let authority = identityAccessCanister;
+    if (authority != ?caller or caller.isAnonymous()) return #Err("Configured identity authority required");
+    switch (ProfileMembership.validate(requester, child_id, subjects)) { case (?e) return #Err(e); case null {} };
+    if (not removalReceiver.enter(requester)) return #Err("Account removal fenced");
+    try {
+      let revision = membershipEpoch();
+      switch (expected) { case (?r) if (r != revision) return #Err("Family revision changed"); case null {} };
+      await admitAccount(requester);
+      for (subject in subjects.values()) { await admitAccount(subject) };
+      if (revision != membershipEpoch() or authority != identityAccessCanister or removalReceiver.denied(requester)) return #Err("Family authority changed");
+      let child = acl.children.find(func c = c.id == child_id) ?? return #Err("Child not found");
+      switch (child.club_id) { case (?club) if (isTransferFenced(club) or not profiles.any(func p = p.id == club and p.deleted_at_ms == null)) return #Err("Family scope unavailable"); case null {} };
+      if (not currentChildGuardian(requester, child_id)) return #Err("Verified guardian required");
+      #Ok({ revision; requester; club = child_id; subjects; members = subjects.map(func p = not removalReceiver.denied(p) and currentChildGuardian(p, child_id)) })
+    } finally { removalReceiver.leave(requester) }
+  };
+
   // Consensus booleans only: no child names, guardian lists or stored grants.
   public shared func read_has_club_staff_role(user : Principal, club_id : Text) : async Bool {
     if (not removalReceiver.enter(user)) throw Error.reject("Account removal fenced or operation capacity reached");
