@@ -1,6 +1,6 @@
 import { getCachedTeam } from "@/lib/clubTeamCache";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ImageIcon, ChevronRight } from "lucide-react";
 import { memo, useCallback, useState } from "react";
@@ -34,7 +34,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
   const teamId = chatScope && "teamId" in chatScope ? chatScope.teamId : undefined;
   // Subscribe without fetching: React.memo otherwise hides the header's
   // newly resolved owning club from a card already showing its skeleton.
-  useQuery({ queryKey: ["team", teamId], enabled: false });
+  useQuery({ queryKey: ["team", teamId], queryFn: skipToken, notifyOnChangeProps: ["data"] });
   const location = isIcp ? chatVaultLocation(queryClient, user?.id, pathname) : undefined;
   const locationKey = location && "clubId" in location ? `club:${location.clubId}`
     : location && "teamId" in location ? `team:${location.teamId}` : "resource";
