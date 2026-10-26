@@ -78,7 +78,7 @@ describe("scoped decrypted person matching", () => {
   });
   it("confirms the same principal/account/reference after unlocking a private name", async () => {
     const privateRow = { ...row, display_name: "pii-display-name:v1:original:subject" };
-    mocks.read.mockResolvedValue(privateRow ? [privateRow] : []);
+    mocks.read.mockResolvedValue([privateRow]);
     mocks.hydrate.mockResolvedValue([row]);
     expect((await searchScopedProfileCandidates(ctx,"club-a",[subject],"Paul"))[0]?.account_id).toBe("account-id");
     expect(mocks.read).toHaveBeenCalledTimes(2);

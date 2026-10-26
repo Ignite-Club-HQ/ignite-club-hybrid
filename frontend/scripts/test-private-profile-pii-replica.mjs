@@ -129,6 +129,22 @@ try {
       await decrypt(staff);
       ok(await as(owner).revoke_pii_read_club(subject, field, clubId));
     }
+    ok(await as(owner).grant_pii_read_club(subject, field, clubId));
+    const finishMembership = await hold(1, staff);
+    club.actor.setPrincipal(governor); ok(await club.actor.remove_member(clubId, staff));
+    assert.ok('Err' in await finishMembership(), 'Removal after the opening reply invalidates the final audience');
+    await denied(staff);
+    ok(await club.actor.restore_member(clubId, staff));
+    ok(await club.actor.add_role_grant(staff, clubId, 'club_admin', []));
+    await decrypt(staff);
+    for (const at of [1, 2]) {
+      const finishAuthority = await hold(at, staff);
+      ok(await as(governor).set_club_domain_canister(club.canisterId));
+      assert.ok('Err' in await finishAuthority(), `Changed PII club authority at reply ${at} must withhold keys`);
+      ok(await as(governor).set_club_domain_canister(relay.canisterId));
+      await decrypt(staff);
+    }
+    ok(await as(owner).revoke_pii_read_club(subject, field, clubId));
     // Keep a club grant only to create a real held authorization await; the
     // unrelated explicit reader never gets membership through this fixture.
     ok(await as(owner).grant_pii_read_club(subject, field, clubId));
@@ -139,7 +155,7 @@ try {
     await denied(reader);
     ok(await as(owner).revoke_pii_read_club(subject, field, clubId));
     ok(await as(governor).set_club_domain_canister(club.canisterId));
-    console.log('PASS: actual first/final PII authorization replies held; club and explicit grant revocation withholds encrypted keys; authorized retry decrypts with the original SDK key authority.');
+    console.log('PASS: actual first/final PII authorization replies held; club/explicit grant revocation and authority drift withhold keys; membership removal between audience checks denies; authorized retries decrypt with original SDK authority.');
   }
   console.log('PASS: live club removal/re-grant, club grant revocation and original-key ciphertext/denial persistence across PII upgrade. Previously acquired keys cannot be recalled; these checks assert fresh requests only. No live changes or privacy cutover.');
 } finally { await pic?.tearDown(); await server.stop(); }
