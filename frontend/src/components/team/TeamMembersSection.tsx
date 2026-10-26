@@ -79,6 +79,8 @@ interface TeamMembersSectionProps {
   isChildrenFetching: boolean;
   isMembersError: boolean;
   membersError: unknown;
+  isChildrenError?: boolean;
+  childrenError?: unknown;
   refetchMembers: () => unknown;
   refetchChildren: () => unknown;
   isSoccerClub: boolean;
@@ -120,6 +122,8 @@ export function TeamMembersSection({
   isChildrenFetching,
   isMembersError,
   membersError,
+  isChildrenError,
+  childrenError,
   refetchMembers,
   refetchChildren,
   isSoccerClub,
@@ -198,6 +202,10 @@ export function TeamMembersSection({
       </div>
       <AccordionContent>
         <div className="space-y-4 pt-2">
+          {isChildrenError && <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">{friendlyQueryErrorMessage(childrenError, 'the team player list')}</p>
+            <Button variant="outline" size="sm" onClick={() => refetchChildren()}><RefreshCw className="h-4 w-4 mr-1.5" />Retry players</Button>
+          </div>}
           {isMembersError && Object.keys(members).length === 0 ? (
             <div className="flex flex-col items-center py-6 text-center gap-3">
               <p className="text-sm text-muted-foreground max-w-xs">
@@ -220,6 +228,7 @@ export function TeamMembersSection({
             pendingInvites.length === 0 &&
             !isMembersLoading &&
             !isChildrenLoading &&
+            !isChildrenError &&
             !isMembersFetching &&
             !isChildrenFetching ? (
             <div className="flex flex-col items-center py-6 text-center gap-3">

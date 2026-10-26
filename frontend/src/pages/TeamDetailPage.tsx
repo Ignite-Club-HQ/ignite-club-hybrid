@@ -693,7 +693,7 @@ export default function TeamDetailPage() {
   // without clearing the cache (which would cause a flash of empty state)
 
   // Fetch children assigned to the team
-  const { data: teamChildrenData = [], isLoading: isChildrenLoading, isFetching: isChildrenFetching, refetch: refetchChildren } = useQuery({
+  const { data: teamChildrenData = [], isLoading: isChildrenLoading, isFetching: isChildrenFetching, isError: isChildrenError, error: childrenError, refetch: refetchChildren } = useQuery({
     queryKey: membershipKeys.teamChildren(id),
     queryFn: async () => {
       if (isIcpAccount) {
@@ -1562,7 +1562,7 @@ export default function TeamDetailPage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-bold truncate leading-tight">{team.name}</h1>
           <p className="text-xs text-muted-foreground leading-tight">
-            {isMembersLoading || isChildrenLoading ? 'Loading members…' : <>{Object.keys(members).length + teamChildren.length} member{Object.keys(members).length + teamChildren.length !== 1 ? 's' : ''}</>}
+            {isMembersLoading || isChildrenLoading ? 'Loading members…' : isMembersError || isChildrenError ? 'Members unavailable' : <>{Object.keys(members).length + teamChildren.length} member{Object.keys(members).length + teamChildren.length !== 1 ? 's' : ''}</>}
           </p>
         </div>
         {showInvite && (
@@ -2005,7 +2005,7 @@ export default function TeamDetailPage() {
           canManageCaptains={canManageCaptains}
           membersSectionProps={{
             members, teamChildren, pendingInvites, memberRoleFilter, adultPlayerCount, isAdmin, isClubAdmin, currentUserId: user?.id,
-            isMembersLoading, isMembersFetching, isChildrenLoading, isChildrenFetching, isMembersError, membersError, refetchMembers, refetchChildren,
+            isMembersLoading, isMembersFetching, isChildrenLoading, isChildrenFetching, isMembersError, membersError, isChildrenError, childrenError, refetchMembers, refetchChildren,
             isSoccerClub: !!isSoccerClub, onOpenHeaderInvite: () => setHeaderInviteOpen(true), onOpenAddPlayer: () => setAddPlayerOpen(true),
             onSelectChild: setSelectedChild, onLinkChildToParent: setLinkChildToParent, onMoveToTeam: setMoveToTeam, onAddRoleMember: setAddRoleMember,
             onSelectMember: setSelectedMember, onInviteParentChild: setInviteParentChild, onOpenPositionSheet: setPositionSheetPlayer, onRemoveMember: setRemoveMember,
