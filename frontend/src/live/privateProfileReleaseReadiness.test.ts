@@ -9,7 +9,7 @@ function fixture() {
   const snapshot = { revision: 8n, groups, placements: groups.map(g => ({ group_id: g.id, deployment_id: 'ignite', deployment_revision: 3n, host: 'https://icp-api.io', network_kind: 'public_mainnet', primary_subnet: subnet, approved_subnets: [subnet], additional_subnets_enabled: false, domains: g.domains.map(d => ({ ...d, subnet })) })) };
   const originalClubAuthority = groups[0].domains.find(d => d.domain === 'club_domain')?.canister.toText() ?? '';
   const keys = groups.map(g => ({ groupId: g.id, authority: g.domains.find(d => d.domain === 'pii_access_control')?.canister.toText() ?? '', originalPublicKeyHex: 'ab12', observedPublicKeyHex: 'ab12' }));
-  return { snapshot, binding: { targetAlias: 'mainnet', deploymentId: 'ignite', deploymentRevision: 3n, host: 'https://icp-api.io', networkKind: 'public_mainnet', registryRevision: 8n, requiredClubAuthorities: [originalClubAuthority] }, originalClubAuthority, expectedGroupIds: ['g1', 'g2'], keys, subjects: ['person'], receipts: [{ subject: 'person', authority: keys[0].authority, outcome: 'confirmed' as 'confirmed' | 'unknown', encryptedReadbackVerified: true }] };
+  return { snapshot, binding: { targetAlias: 'mainnet', deploymentId: 'ignite', deploymentRevision: 3n, host: 'https://icp-api.io', networkKind: 'public_mainnet', registryRevision: 8n, requiredClubAuthorities: [originalClubAuthority] }, originalClubAuthority, expectedGroupIds: ['g1', 'g2'], keys, subjects: [{ subject: 'person', originalAuthority: keys[0].authority }], receipts: [{ subject: 'person', authority: keys[0].authority, outcome: 'confirmed' as 'confirmed' | 'unknown', encryptedReadbackVerified: true }] };
 }
 describe('offline privacy release readiness', () => {
   it('checks complete evidence without authorizing any activation', () => {
@@ -31,6 +31,10 @@ describe('offline privacy release readiness', () => {
   });
   it('retains unknown conversion locks even with an encrypted readback claim', () => {
     const input = fixture(); input.receipts[0].outcome = 'unknown';
+    expect(() => checkPrivateProfileReleaseReadiness(input)).toThrow('remains locked');
+  });
+  it('refuses a receipt under another valid group’s key authority', () => {
+    const input = fixture(); input.receipts[0].authority = input.keys[1].authority;
     expect(() => checkPrivateProfileReleaseReadiness(input)).toThrow('remains locked');
   });
   it('refuses missing and mismatched subject receipts', () => {

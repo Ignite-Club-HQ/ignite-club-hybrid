@@ -14,7 +14,7 @@ export function checkPrivateProfileReleaseReadiness(input: {
   snapshot: AccountRegistrySnapshot; binding: AccountRegistryBinding;
   expectedGroupIds: readonly string[]; originalClubAuthority: string;
   keys: readonly PrivateNameKeyEvidence[];
-  subjects: readonly string[]; receipts: readonly PrivateNameConversionReceipt[];
+  subjects: readonly { subject: string; originalAuthority: string }[]; receipts: readonly PrivateNameConversionReceipt[];
 }) {
   const groups = accountAuthoritiesFromRegistry(input.snapshot, input.binding);
   const expected = [...input.expectedGroupIds].sort();
@@ -29,12 +29,12 @@ export function checkPrivateProfileReleaseReadiness(input: {
     if (!key || key.authority !== pii || !/^(?:[0-9a-f]{2})+$/.test(key.originalPublicKeyHex)
       || key.originalPublicKeyHex !== key.observedPublicKeyHex) throw new Error('Original PII key preservation is unverified.');
   }
-  const subjects = new Set(input.subjects);
-  if (subjects.size !== input.subjects.length || input.subjects.some(id => !id.trim())
+  const subjects = new Map(input.subjects.map(row => [row.subject, row.originalAuthority]));
+  if (subjects.size !== input.subjects.length || input.subjects.some(row => !row.subject.trim() || !row.originalAuthority)
     || input.receipts.length !== subjects.size || new Set(input.receipts.map(row => row.subject)).size !== subjects.size) throw new Error('Exact conversion inventory and readback are required.');
   const authorities = new Set(input.keys.map(key => key.authority));
   for (const receipt of input.receipts) {
-    if (!subjects.has(receipt.subject) || !authorities.has(receipt.authority)
+    if (subjects.get(receipt.subject) !== receipt.authority || !authorities.has(receipt.authority)
       || receipt.outcome !== 'confirmed' || !receipt.encryptedReadbackVerified) throw new Error('Unconfirmed conversion remains locked.');
   }
   return { groupCount: groups.length, verifiedSubjectCount: subjects.size, activationAuthorized: false as const };
