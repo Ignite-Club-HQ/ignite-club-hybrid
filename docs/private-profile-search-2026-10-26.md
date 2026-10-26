@@ -9,6 +9,29 @@ and other details must remain viewable in the app.
 
 ## Implemented locally
 
+### 23:17 continuation — actual delayed delivery and announcement drawers
+
+The disposable messaging relay now holds each of the four real service replies
+used by original-PII key derivation. Viewer suspension, subject suspension and
+original-name-reference drift at every position withhold all keys; each restored
+exact DM decrypts using the real SDK. Blocks after opening replies invalidate
+retained revisions. A block after the final remote decision is retained is NOT
+certified as delivery-time revocation: final remote block/deletion fencing
+remains a release blocker. Previously obtained keys cannot be recalled.
+
+Broadcast keeps the fixed Announcements author label. Only server-recorded
+readers/reactors qualify for personal names in its drawers, using the canonical
+broadcast audience through the registered messaging authority. Arbitrary
+principals, fake resources, removed reactions, blocks and stale revisions are
+denied. Reaction/read changes advance the retained audience revision; foreground
+and private-name reads retain mounted-only state. DM reaction/read drawers now
+select the direct reader instead of the group reader. All remains rehearsal-only.
+
+Production cross-group signed-in behavior is unverified. Competition-admin
+contracts, unanswered-DM parity, final remote fencing, protected executable
+backfill/release and approved production evidence remain unfinished. Local
+success does not approve deployment, conversion or persistent reader grants.
+
 ### 23:08 continuation — exact direct-message names
 
 Added a rehearsal-only direct audience, delegated from the original PII through
