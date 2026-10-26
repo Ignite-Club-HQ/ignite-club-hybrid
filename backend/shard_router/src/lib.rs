@@ -13,6 +13,7 @@ mod self_health;
 mod group_index;
 #[cfg(feature = "scale-probe")]
 mod scale_probe;
+mod website;
 #[cfg(feature = "scale-probe")]
 use scale_probe::Probe;
 mod discovery;
@@ -186,6 +187,37 @@ thread_local! {
     static OWNER_OPENINGS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(15)));
     // Governor-recorded routing approvals keyed by target alias (memory 17).
     static ROUTING_APPROVALS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> = RefCell::new(StableBTreeMap::init(memory(17)));
+    // Website fallback club_domain for clubs predating group assignment (memory 25;
+    // 18-24 stay reserved).
+    static WEBSITE_DEFAULT: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(25), Vec::new()));
+}
+
+/// Owning club_domain for a club: explicit domain route, then group
+/// assignment, then the governor-set legacy default.
+fn website_club_domain(club_id: &str) -> Option<Principal> {
+    if let Some(r) = domain_route_for(club_id, "club_domain") { return Some(r.shard); }
+    if let Some(a) = group_assignment_for(club_id) {
+        return group_for(&a.group_id).and_then(|g| g.domains.iter().find(|d| d.domain == "club_domain").map(|d| d.canister));
+    }
+    let raw = WEBSITE_DEFAULT.with(|c| c.borrow().get().clone());
+    (!raw.is_empty()).then(|| Principal::from_slice(&raw))
+}
+
+/// Governor-only: club_domain serving clubs that have no group assignment.
+#[ic_cdk::update]
+fn set_website_default_club_domain(canister: Principal) -> Outcome<()> {
+    require_governor()?; validate_shard(canister)?;
+    WEBSITE_DEFAULT.with(|c| c.borrow_mut().set(canister.as_slice().to_vec()));
+    Ok(())
+}
+
+/// Public club-website resolver: redirects /club?id=..&scope=.. to the owning group.
+#[ic_cdk::query]
+fn http_request(req: website::HttpRequest) -> website::HttpResponse {
+    match website::parse(&req) {
+        Err(resp) => resp,
+        Ok((id, scope)) => website::redirect(website_club_domain(&id), &id, &scope),
+    }
 }
 
 fn owner_opening(target: &str) -> Option<OwnerOpening> {
