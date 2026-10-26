@@ -55,12 +55,19 @@ export function useChatHistorySearch<TMsg extends { id: string }>({
 
   useEffect(() => {
     const trimmed = debouncedTrimmedQuery;
-    if (!enabled || trimmed.length < minChars) {
+    if (!enabled || rawQuery.length < minChars) {
       lastQueryRef.current = "";
       setIsFetching(false);
       // Below-threshold queries don't need server settlement — treat as
       // "settled" so callers fall back to local-only filtering immediately.
-      setSettledKey(`${cacheKey}|${trimmed}|noop`);
+      setSettledKey(`${cacheKey}|${rawQuery}|noop`);
+      return;
+    }
+
+    // Cancel immediately when typing/closing, not after the next debounce.
+    if (rawQuery !== trimmed) {
+      lastQueryRef.current = "";
+      setIsFetching(false);
       return;
     }
 
@@ -98,21 +105,24 @@ export function useChatHistorySearch<TMsg extends { id: string }>({
       }
     })();
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (lastQueryRef.current === memoKey) lastQueryRef.current = "";
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedTrimmedQuery, enabled, cacheKey]);
+  }, [rawQuery, debouncedTrimmedQuery, enabled, cacheKey]);
 
   const isWaitingForDebounce =
     enabled && rawQuery.length >= minChars && rawQuery !== debouncedTrimmedQuery;
-  const isSearching = isWaitingForDebounce || isFetching;
+  const isSearching = enabled && rawQuery.length >= minChars && (isWaitingForDebounce || isFetching);
 
   // The latest user-intended request for this cacheKey. Empty state may only
   // render once this exact key has settled and we are not mid-flight.
   const currentKey = `${cacheKey}|${debouncedTrimmedQuery}`;
   const isBelowThreshold =
-    !enabled || debouncedTrimmedQuery.length < minChars;
+    !enabled || rawQuery.length < minChars;
   const latestSettled = isBelowThreshold
-    ? settledKey === `${cacheKey}|${debouncedTrimmedQuery}|noop`
+    ? settledKey === `${cacheKey}|${rawQuery}|noop`
     : settledKey === currentKey;
 
   const canShowEmpty = !isSearching && latestSettled;

@@ -20,14 +20,14 @@ export function ChatSearchTrigger({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function ChatSearchBar({ onSearch, debounceMs = 300, isOpen, onOpenChange, isSearching = false }: ChatSearchProps) {
+export function ChatSearchBar({ onSearch, debounceMs = 0, isOpen, onOpenChange, isSearching = false }: ChatSearchProps) {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query, debounceMs);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    onSearch(debouncedQuery);
-  }, [debouncedQuery, onSearch]);
+    onSearch(debounceMs > 0 ? debouncedQuery : query);
+  }, [debouncedQuery, query, debounceMs, onSearch]);
 
   useEffect(() => {
     if (isOpen) {
@@ -148,7 +148,7 @@ export function ChatSearchLoadingState() {
 
 
 // Keep legacy component for backward compat if needed
-export function ChatSearch({ onSearch, debounceMs = 300 }: { onSearch: (query: string) => void; debounceMs?: number }) {
+export function ChatSearch({ onSearch, debounceMs = 0 }: { onSearch: (query: string) => void; debounceMs?: number }) {
   const [isOpen, setIsOpen] = useState(false);
   
   return (
