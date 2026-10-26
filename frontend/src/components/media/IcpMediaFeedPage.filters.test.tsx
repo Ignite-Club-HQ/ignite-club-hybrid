@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ club: 'winter-cats' as string | null, reads: vi.fn() }));
 vi.mock('@/hooks/useClubTheme', () => ({ useClubTheme: () => ({ activeClubFilter: state.club }) }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'member' }, profile: null }) }));
-vi.mock('react-router-dom', () => ({ useSearchParams: () => [new URLSearchParams(), vi.fn()] }));
+vi.mock('react-router-dom', () => ({ useSearchParams: () => [new URLSearchParams(), vi.fn()], useLocation: () => ({ key: 'gallery-test' }) }));
 vi.mock('@/live/mediaDecrypt', () => ({ storedIcpPrincipal: () => 'member' }));
 vi.mock('@tanstack/react-query', async (importOriginal) => ({
   ...await importOriginal<typeof import('@tanstack/react-query')>(),

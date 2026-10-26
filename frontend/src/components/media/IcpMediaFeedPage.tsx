@@ -34,6 +34,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ClubTeamFilter } from "@/components/ClubTeamFilter";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { useAuth } from "@/hooks/useAuth";
+import { useStableVisibleList } from "@/hooks/useStableVisibleList";
+import { useReadingPosition } from "@/hooks/useReadingPosition";
 import { AlbumCarousel } from "@/components/AlbumCarousel";
 import { EmojiReactions } from "@/components/EmojiReactions";
 import { MediaCommentSheet } from "@/components/MediaCommentSheet";
@@ -487,6 +489,7 @@ export function IcpMediaFeedPage() {
   // the feed must not show other clubs' media.
   const { activeClubFilter } = useClubTheme();
   const effectiveClubId = activeClubFilter ?? selectedClubId;
+  const readingPosition = useReadingPosition(true, JSON.stringify([principal, effectiveClubId, selectedTeamId, competitionId, link.photoId, link.eventId, link.cardId]));
   useEffect(() => {
     setSelectedClubId(activeClubFilter ?? "all");
     setSelectedTeamId(link.teamId ?? "all");
@@ -752,7 +755,7 @@ export function IcpMediaFeedPage() {
     && (selectedTeamId === 'all' || row.teamId === selectedTeamId)
     && (!competitionId || row.competitionId === competitionId));
   const resolvedUrls = useResolvedAssetUrls(allFeedPosts);
-  const posts = useMemo(() => {
+  const freshPosts = useMemo(() => {
     const all = allFeedPosts;
     return all
       .filter((post) => {
@@ -776,6 +779,11 @@ export function IcpMediaFeedPage() {
         ),
       }));
   }, [allFeedPosts, link.photoId, effectiveClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url, isBlocked, link.eventId, link.cardId, galleryCardQuery.data]);
+  const posts = useStableVisibleList(freshPosts, {
+    enabled: true,
+    scope: JSON.stringify([principal, effectiveClubId, selectedTeamId, competitionId, link.photoId, link.eventId, link.cardId]),
+    key: post => `${post.clubId}:${post.id}`,
+  });
 
   // Read comments from the freshest feed copy, not the snapshot taken when
   // the sheet opened, and keep just-sent comments until the canister has them.
@@ -851,7 +859,7 @@ export function IcpMediaFeedPage() {
   // shell (AppHeader/BottomNav own the chrome) — no min-h-screen, no sticky
   // page header, title row sits inline like every other page.
   return (
-    <div className="py-6 pb-32 space-y-6 soft-reveal">
+    <div ref={readingPosition} className="py-6 pb-32 space-y-6 soft-reveal">
       <div className="flex items-center justify-between gap-2 min-h-10">
         <h1 className="text-2xl font-bold">Media</h1>
         <div className="flex items-center gap-2">
@@ -935,7 +943,7 @@ export function IcpMediaFeedPage() {
             </div>
           ))}
           {posts.map((post, index) => (
-            <div key={post.id}>
+            <div key={`${post.clubId}:${post.id}`} data-reading-row={`${post.clubId}:${post.id}`}>
               <MediaPostArticle post={post} principal={principal} userId={user?.id} profile={profile} index={index}
                 onReact={(item, emoji) => reactionMutation.mutate({ post: item, emoji })}
                 onRemove={(item, emoji) => reactionMutation.mutate({ post: item, emoji, remove: true })}

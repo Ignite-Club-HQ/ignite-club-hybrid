@@ -1,3 +1,8 @@
+## Stable background refresh — 26 October 2026
+- [x] ICP inbox sections, gallery and schedule lists retain active placement, update content/badges and append additions; missing rows disappear and hidden-page/filter/account changes reset order. Targeted card anchoring compensates size changes without smooth scroll. Calendar membership stays live and Supabase ordering is unchanged.
+- [x] 40 focused checks passed per mode plus 36 ICP page/cache checks; isolation guard and preview build OK. Browser fixture verified fresh text, stable ordering, compensation for an 80px resize above the reader and latest order on page return, with no page errors. Fixture does not establish signed-in production timing.
+- [ ] Signed-in phone acceptance requires Paul's Internet Identity session and the updated frontend; no deployment requested.
+
 ## Immediate bottom-tab response — 26 October 2026
 - [x] Commit navigation without deferred lazy transitions, show destination placeholders, centralize earlier sequential code warmup, and reveal existing scoped ICP inbox rows during quiet refresh. Keep tab state, auth gates, cache scopes and Supabase ordering intact.
 - [x] 33 focused checks passed in each mode plus 27 ICP offline/native safeguards; ICP isolation guard passed and preview build OK. Browser delayed-chunk fixture verified immediate destination, a second tap during download, return and Back, with no page errors. Fixture is not signed-in production acceptance.
