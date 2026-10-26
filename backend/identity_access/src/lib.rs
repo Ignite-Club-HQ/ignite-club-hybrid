@@ -27,6 +27,7 @@ mod membership_locations;
 mod membership_wire;
 mod membership_acceptance;
 mod admin_accounts;
+mod guardian_search;
 use deletion_timing::Ticket;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -1878,6 +1879,44 @@ fn search_profiles(query: String, limit: u16) -> Outcome<Vec<ProfileSearchResult
 }
 
 /// Every role grant held by the caller, across all clubs/teams.
+/// Purpose-bound full search. Browser-supplied authority IDs are locations,
+/// never permissions: only pinned membership sources may verify this child.
+#[ic_cdk::update]
+async fn search_guardian_profiles(authority: Principal, child: String, query: String, limit: u16) -> Outcome<Vec<ProfileSearchResult>> {
+    let caller = ic_cdk::api::msg_caller();
+    let account = account_for_write(caller)?;
+    let config = directory_config()?;
+    let sources: Vec<Principal> = config.sources.iter().map(|(_, p)| *p).collect();
+    let (needle, cap) = guardian_search::validate_request(authority, &sources, &child, &query, limit)?;
+    let reply = ic_cdk::call::Call::bounded_wait(authority, "read_has_child_guardian")
+        .with_args(&(caller, child.clone())).await.map_err(|_| "Guardian verification unavailable")?;
+    let guardian: bool = reply.candid().map_err(|_| "Invalid guardian verification")?;
+    if !guardian { return Err("Verified guardian relationship required".into()); }
+    if account_for_write(caller)? != account || !config.same_configuration(&directory_config()?) {
+        return Err("Account or child authority changed".into());
+    }
+    // Retain active principals only; a UUID is never used as a role principal.
+    let mut results = Vec::new();
+    for profile in all_profiles() {
+        if !profile.display_name.to_lowercase().contains(&needle) { continue; }
+        let principal = match get_account(&profile.account_id).and_then(|a| a.principals.into_iter().find(|p| account_for_write(*p).is_ok())) {
+            Some(p) if p != caller => p,
+            _ => continue,
+        };
+        results.push(ProfileSearchResult { account_id: profile.account_id, principal, display_name: profile.display_name, avatar_ref: profile.avatar_ref });
+        if results.len() >= cap { break; }
+    }
+    // Last consensus relationship check precedes disclosure, so a removal
+    // processed while searching cannot use the original successful reply.
+    let reply = ic_cdk::call::Call::bounded_wait(authority, "read_has_child_guardian")
+        .with_args(&(caller, child)).await.map_err(|_| "Guardian verification unavailable")?;
+    let guardian: bool = reply.candid().map_err(|_| "Invalid guardian verification")?;
+    if !guardian || account_for_write(caller)? != account || !config.same_configuration(&directory_config()?) {
+        return Err("Guardian relationship or account changed".into());
+    }
+    Ok(results)
+}
+
 #[ic_cdk::query]
 fn my_roles() -> Outcome<Vec<RoleGrant>> {
     let state = state();

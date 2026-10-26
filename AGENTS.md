@@ -78,4 +78,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - ICP events atomically commit dates, duties and reminders under caller receipts; consensus supplies audiences, unknown relays stay locked.
 - Vault recovery reads owner-wide intents and exact decrypted hash markers before strict grants/store acknowledgement; unknown outcomes retain locks/cursors. Erasure scrubs shared ancestors without orphaning others. Cleanup needs age/allowance or erasure receipts; backups commit validated pages to writable sinks, retaining Blob fallback where unsupported. Why: prevent guessed recovery, data loss and partial exports.
+- Guardian full-search uses a purpose-bound shared identity update with pinned owning-group authority and repeated live exact-child checks; results return active principal IDs, not account UUIDs. Privacy cutover must remain separate until encrypted display hydration and scoped replacement searches pass. Why: a visible guardian sheet, cached role or UUID cannot authorize disclosure or a family link.
 

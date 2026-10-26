@@ -113,6 +113,34 @@ export async function searchLiveProfiles(
   }
 }
 
+/** Full-directory lookup exclusively for linking another guardian. The
+ * canister validates this group's authority and the caller's exact child
+ * relationship; no client boolean or cached guardian list grants access. */
+export async function searchLiveGuardianProfiles(
+  ctx: FeatureBackendContext,
+  childId: string,
+  query: string,
+  limit: number,
+): Promise<Array<{ id: string; display_name: string | null; avatar_url: string | null }>> {
+  if (!childId.trim()) throw new Error("A specific child is required for guardian search.");
+  if (query.trim().length < 2) return [];
+  const authorityId = ctx.target.canisterIds.club_domain;
+  if (!authorityId) throw new Error("The child's club connection is not configured.");
+  const { Principal } = await import("@icp-sdk/core/principal");
+  const authority = Principal.fromText(authorityId);
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
+  try {
+    const rows = await client.searchGuardianProfiles(authority, childId, query.trim(), Math.min(25, Math.max(1, limit)));
+    return rows.map((row) => ({
+      id: row.principal.toText(),
+      display_name: row.display_name,
+      avatar_url: row.avatar_ref[0] ?? null,
+    }));
+  } finally {
+    client.dispose();
+  }
+}
+
 /**
  * Same search as `searchLiveProfiles` but keeps the principal — needed by
  * admin tools that key restrictions/roles on principals rather than account

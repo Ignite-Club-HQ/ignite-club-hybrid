@@ -514,6 +514,8 @@ service : (Init) -> {
   // can grant roles without a second lookup. Profiles without an account or
   // with a blank name are skipped.
   search_profiles : (text, nat16) -> (Result_33) query;
+  // Full directory access only after live verification of this exact child.
+  search_guardian_profiles : (principal, text, text, nat16) -> (Result_33);
   // Admin-gated (governor or an account holding the `app_admin` role):
   // suspends or reactivates an account. `Suspended` accounts are rejected by
   // `account_for_write`-gated self-service writes (see its doc comment);
