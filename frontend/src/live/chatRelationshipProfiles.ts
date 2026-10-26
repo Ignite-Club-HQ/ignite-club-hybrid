@@ -64,7 +64,9 @@ export async function readChatRelationshipProfiles(
   const opening = metadataKey(metadata);
   let relationship: ProfileRelationship;
   let confirmResource: () => Promise<void> = async () => {};
-  if (metadata.kind.startsWith('mini_league:')) {
+  if (metadata.kind === 'broadcast' && conversationId === 'broadcast' && !metadata.clubId && !metadata.teamId) {
+    relationship = { kind: 'broadcast', resource: 'broadcast' };
+  } else if (metadata.kind.startsWith('mini_league:')) {
     const resource = metadata.kind.slice('mini_league:'.length);
     const league = await getLiveMiniLeague(owner, resource);
     active();

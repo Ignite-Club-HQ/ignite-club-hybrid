@@ -453,7 +453,7 @@ const AllReactionsContent = memo(function AllReactionsContent({
   const privateNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
   const chatScope = currentChatScope();
   const conversationId = chatScope && ('conversationId' in chatScope ? chatScope.conversationId
-    : 'teamId' in chatScope ? chatScope.teamId : 'clubId' in chatScope ? chatScope.clubId : undefined);
+    : 'teamId' in chatScope ? chatScope.teamId : 'clubId' in chatScope ? chatScope.clubId : 'shared' in chatScope && chatScope.shared === 'app' ? 'broadcast' : undefined);
   const getPrivateProfile = usePrivateChatProfiles(conversationId, user?.id, allUserIds, privateNames && isOpen);
   // Seed from in-memory profile cache so names render instantly when available;
   // avoids the brief "Unknown" flash before the async fetch resolves.

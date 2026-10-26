@@ -25,7 +25,7 @@ export function usePrivateChatProfiles(conversationId: string | undefined, viewe
         const profiles = await withFeatureBackend('messaging', {
           supabase: async () => { throw new Error('Private chat profiles require Internet Identity.'); },
           icp: owner => (kind === 'direct' ? readDirectChatProfiles : readChatRelationshipProfiles)(owner, conversationId, JSON.parse(idsKey), current.signal),
-        }, kind === 'direct' ? { shared: 'person' } : { conversationId });
+        }, kind === 'direct' ? { shared: 'person' } : conversationId === 'broadcast' ? { shared: 'app' } : { conversationId });
         if (!disposed && !current.signal.aborted) setSnapshot({ key: scopeKey, profiles });
       } catch {
         // Messages stay usable with neutral author labels; denial never falls
