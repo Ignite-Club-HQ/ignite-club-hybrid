@@ -36,6 +36,10 @@ pub fn permit_disclosure(guardian: bool, account_unchanged: bool, authority_unch
     }
     Ok(())
 }
+pub fn permit_profile_revision(retained: u64, current: u64) -> Result<(), String> {
+    if retained != current { return Err("Guardian search profiles changed; please try again".into()); }
+    Ok(())
+}
 
 pub fn validate_request(authority: Principal, sources: &[Principal], child: &str, query: &str, limit: u16) -> Result<(String, usize), String> {
     validate_scope(authority, sources, child)?;
@@ -74,6 +78,12 @@ mod tests {
     fn account_or_authority_drift_refuses_disclosure() {
         assert!(permit_disclosure(true, false, true).is_err());
         assert!(permit_disclosure(true, true, false).is_err());
+    }
+    #[test]
+    fn retained_legacy_names_refuse_profile_or_subject_link_mutation_during_final_await() {
+        assert!(permit_profile_revision(7,7).is_ok());
+        assert!(permit_profile_revision(7,8).is_err());
+        assert!(permit_profile_revision(8,7).is_err());
     }
     #[test]
     fn cursors_bind_exact_revision_viewer_child_authority_and_expiry() {
