@@ -6,6 +6,18 @@ vi.mock('@/live/chatRelationshipProfiles', () => ({ readChatRelationshipProfiles
 import { usePrivateChatProfiles } from './usePrivateChatProfiles';
 beforeEach(() => { vi.resetAllMocks(); });
 describe('mounted private chat name lifetime', () => {
+  it('retires an old viewport read and withholds its late names', async () => {
+    let finish: ((value: unknown) => void) | undefined;
+    mocks.read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce(new Map([['new', { id: 'new', display_name: 'Current', avatar_url: null }]]));
+    const hook = renderHook(({ ids }) => usePrivateChatProfiles('chat', 'viewer', ids, true), { initialProps: { ids: ['old'] } });
+    hook.rerender({ ids: ['new'] });
+    await waitFor(() => expect(hook.result.current('new')?.display_name).toBe('Current'));
+    await act(async () => finish?.(new Map([['old', { display_name: 'Retired' }]])));
+    expect(hook.result.current('old')).toBeNull();
+    expect(hook.result.current('new')?.display_name).toBe('Current');
+    expect(mocks.read.mock.calls[0][3].aborted).toBe(true);
+  });
   it('reveals names after its own read and clears them immediately on audience change', async () => {
     mocks.read.mockResolvedValueOnce(new Map([['person', { id: 'person', display_name: 'Allowed name', avatar_url: null }]]))
       .mockImplementationOnce(() => new Promise(() => {}));
