@@ -432,16 +432,16 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
       // EventDetailPage's roster mapping) — decode it back into the
       // (event, account, child) key the canister's admin_update_rsvp_status
       // call expects, since it has no row-id lookup.
-      const parts = rsvpId.split(":");
+      const parts = parseIcpRsvpRef(rsvpId, id);
       const routedToIcp = await withFeatureBackend("events", {
         supabase: () => false,
         icp: async (ctx) => {
-          if (parts.length !== 3) throw new Error("Unrecognised RSVP reference for this backend.");
+          if (!parts) throw new Error("Unrecognised RSVP reference for this backend.");
           const [eventId, accountId, childPart] = parts;
           await adminUpdateLiveRsvpStatus(ctx, eventId, accountId, status, childPart === "self" ? null : childPart);
           return true;
         },
-      }, writeOnce({ eventId: parts[0] ?? "" }));
+      }, writeOnce({ eventId: parts?.[0] ?? id ?? "" }));
       if (routedToIcp) return;
 
       const { error } = await supabase.rpc('admin_update_rsvp_status', {
@@ -617,4 +617,18 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
     rsvpForChildMutation,
     togglePaymentMutation,
   };
+}
+
+/** Decodes `${eventId}:${accountId}:${childId|"self"}`. Event and child IDs
+ * may themselves contain ":" (and accounts may carry a "principal:" prefix),
+ * so anchor on the known event ID instead of a fixed segment count. */
+export function parseIcpRsvpRef(ref: string, knownEventId?: string | null): [string, string, string] | null {
+  let eventId: string; let rest: string;
+  if (knownEventId && ref.startsWith(`${knownEventId}:`)) { eventId = knownEventId; rest = ref.slice(knownEventId.length + 1); }
+  else { const i = ref.indexOf(":"); if (i <= 0) return null; eventId = ref.slice(0, i); rest = ref.slice(i + 1); }
+  rest = rest.replace(/^principal:/, "");
+  const j = rest.indexOf(":");
+  if (j <= 0) return null;
+  const accountId = rest.slice(0, j); const childPart = rest.slice(j + 1) || "self";
+  return [eventId, accountId, childPart];
 }
