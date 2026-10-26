@@ -162,6 +162,12 @@ persistent actor class Main(governorInit : Principal) = this {
   // Scheduled RSVP reminders (hours before start); swept by _reminderTimer.
   var autoReminders : [{ event_id : Text; hours_before : Nat16; sent : Bool }];
   var eventDutyTeams : [Types.EventDutyTeam];
+  // Match officials preservation (migration 20261116_000000): captain,
+  // goalkeeper and player-of-the-match assignments per event. References
+  // only (claimed principal text or migrated child id) — never names.
+  var eventCaptains : [Types.EventCaptain];
+  var eventGoalkeepers : [Types.EventGoalkeeper];
+  var eventPotm : [Types.EventPotm];
   var dutyTeamReminderSent : [Text];
   var pointsReminderSent : [Text];
   var individualDutyReminderSent : [Text];
