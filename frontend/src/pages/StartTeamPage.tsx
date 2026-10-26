@@ -12,6 +12,8 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabClubList } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveRoleGrants, getLiveClubProfile } from "@/live/features/club";
 
 
 /**
@@ -33,7 +35,7 @@ export default function StartTeamPage() {
   const autoRoutedRef = useRef(false);
 
   const { data: clubs = [], isLoading } = useQuery({
-    queryKey: ["my-admin-clubs-for-team", user?.id, providerKey],
+    queryKey: ["my-admin-clubs-for-team", user?.id, providerKey, isIcp],
     enabled: !!user,
     queryFn: async () => {
       if (useIcpLab) {
@@ -42,6 +44,26 @@ export default function StartTeamPage() {
           name: club.name,
           kind: "club",
         }));
+      }
+      if (isIcp) {
+        // Internet Identity: admin clubs come from the canister role grants,
+        // never from the Supabase user_roles table.
+        return withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const grants = await myLiveRoleGrants(ctx);
+            const one = (v: any): string | null => (Array.isArray(v) ? v[0] : v) || null;
+            const ids = [...new Set(grants
+              .filter((g: any) => one(g.club) && !one(g.team) && (g.role === "club_admin" || g.role === "app_admin"))
+              .map((g: any) => one(g.club) as string))];
+            const rows = await Promise.all(ids.map(async (id) => {
+              const p = await getLiveClubProfile(ctx, id).catch(() => [] as const);
+              const prof: any = p[0];
+              return { id, name: prof?.name || "Club", kind: "club" };
+            }));
+            return rows;
+          },
+        }, { shared: "person" });
       }
       const { data } = await supabase
         .from("user_roles")
