@@ -26,7 +26,7 @@ describe("scoped decrypted person matching", () => {
     mocks.read.mockResolvedValue([{ ...row, display_name: "pii-display-name:v1:authority:subject" }]);
     mocks.hydrate.mockResolvedValue([row]);
     expect((await searchScopedProfileCandidates(ctx, "club-a", [subject], "CRANWELL"))[0]?.id).toBe(subject);
-    expect(mocks.hydrate).toHaveBeenCalledWith(ctx, expect.any(Array), undefined);
+    expect(mocks.hydrate).toHaveBeenCalledWith(ctx, expect.any(Array), {signal:undefined,resolveAuthority:undefined,audience:{kind:'club',authority:Principal.fromText(authority),resource:'club-a',profile_revision:0n}});
   });
   it("cannot disclose candidates after a membership refusal", async () => {
     mocks.read.mockRejectedValue(new Error("Club membership changed"));
@@ -90,7 +90,7 @@ describe("authority-owned paged club search", () => {
   it("carries the original-authority resolver through paging into private hydration", async () => {
     const resolve = vi.fn();
     expect((await searchScopedClubProfiles(ctx,"club-a","Paul",10,undefined,resolve))[0]?.id).toBe(subject);
-    expect(mocks.hydrate).toHaveBeenCalledWith(ctx,[row],{signal:undefined,resolveAuthority:resolve});
+    expect(mocks.hydrate).toHaveBeenCalledWith(ctx,[row],{signal:undefined,resolveAuthority:resolve,audience:{kind:'club',authority:Principal.fromText(authority),resource:'club-a',profile_revision:0n}});
   });
   it("retires the whole traversal when the identity changes during a candidate page", async () => {
     const changing = { ...ctx };

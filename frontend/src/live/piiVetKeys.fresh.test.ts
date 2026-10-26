@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "./featureRouter";
-const mocks = vi.hoisted(() => ({ keys: vi.fn(), load: vi.fn(), store: vi.fn(), decrypt: vi.fn(), publicKey: vi.fn() }));
-vi.mock("./domains", () => ({ connectLivePiiAccessControl: async () => ({ canisterId: Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai"), actor: { get_encrypted_pii_vetkeys_batch: mocks.keys, pii_vetkey_verification_key: mocks.publicKey } }) }));
+const mocks = vi.hoisted(() => ({ keys: vi.fn(), scopedKeys:vi.fn(), load: vi.fn(), store: vi.fn(), decrypt: vi.fn(), publicKey: vi.fn() }));
+vi.mock("./domains", () => ({ connectLivePiiAccessControl: async () => ({ canisterId: Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai"), actor: { get_encrypted_pii_vetkeys_batch: mocks.keys, get_private_profile_name_vetkeys_batch:mocks.scopedKeys, pii_vetkey_verification_key: mocks.publicKey } }) }));
 vi.mock("./deviceMediaCache", () => ({ loadStoredClubKey: mocks.load, storeClubKey: mocks.store, forgetStoredClubKey: vi.fn(), clearDeviceMediaCaches: vi.fn() }));
 vi.mock("@icp-sdk/vetkeys", () => ({ DerivedPublicKey: { deserialize: () => "public" }, EncryptedVetKey: { deserialize: () => ({ decryptAndVerify: mocks.decrypt }) }, TransportSecretKey: { random: () => ({ publicKeyBytes: () => new Uint8Array([1]) }) }, VetKey: { deserialize: () => "stored" }, IbeCiphertext: {}, IbeIdentity: {}, IbeSeed: {} }));
 import { fetchPiiVetKeys } from "./piiVetKeys";
@@ -15,6 +15,17 @@ beforeEach(() => {
   mocks.decrypt.mockReturnValue("fresh-key");
 });
 describe("fresh private profile keys", () => {
+  it('forces fresh scoped name keys without loading/storing media keys',async()=>{
+    const audience={kind:'guardian_search' as const,authority:Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai'),resource:'child-1',profile_revision:7n};
+    mocks.scopedKeys.mockResolvedValue({Ok:[[[1]]]});
+    expect(await fetchPiiVetKeys(ctx,['private-subject'],'display_name',{audience})).toEqual(new Map([['private-subject','fresh-key']]));
+    expect(mocks.scopedKeys).toHaveBeenCalledWith(['private-subject'],audience,new Uint8Array([1]));
+    expect(mocks.keys).not.toHaveBeenCalled();expect(mocks.load).not.toHaveBeenCalled();expect(mocks.store).not.toHaveBeenCalled();
+  });
+  it('does not permit a guardian name audience to unlock contact email',async()=>{
+    await expect(fetchPiiVetKeys(ctx,['private-subject'],'contact_email',{audience:{kind:'guardian_search',authority:Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai'),resource:'child-1',profile_revision:7n}})).rejects.toThrow('another field');
+    expect(mocks.scopedKeys).not.toHaveBeenCalled(); expect(mocks.keys).not.toHaveBeenCalled();
+  });
   it("ignores retained device keys and never stores newly delivered keys", async () => {
     expect(await fetchPiiVetKeys(ctx, ["fresh-one"], "display_name", { fresh: true })).toEqual(new Map([["fresh-one", "fresh-key"]]));
     expect(mocks.load).not.toHaveBeenCalled();

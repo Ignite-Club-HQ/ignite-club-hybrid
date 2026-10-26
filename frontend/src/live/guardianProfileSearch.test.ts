@@ -17,6 +17,7 @@ describe("encrypted guardian search integration",()=>{
     expect(await searchEncryptedGuardianProfiles(ctx,"child-1","Paul",6)).toEqual([{id:principal.toText(),display_name:"Paul Cranwell",avatar_url:null}]);
     expect(mocks.page).toHaveBeenCalledWith(Principal.fromText(authority),"child-1",[]);
     expect(mocks.confirm).toHaveBeenCalledWith(Principal.fromText(authority),"child-1",[principal],7n);
+    expect(mocks.hydrate).toHaveBeenCalledWith(ctx,[row],{audience:{kind:'guardian_search',authority:Principal.fromText(authority),resource:'child-1',profile_revision:7n}});
     expect(mocks.global).not.toHaveBeenCalled();expect(mocks.dispose).toHaveBeenCalledOnce();
   });
   it("matches only decrypted names and never displays opaque references",async()=>{
