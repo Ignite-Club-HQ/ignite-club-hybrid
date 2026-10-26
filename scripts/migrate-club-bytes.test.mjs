@@ -113,7 +113,7 @@ async function fakePublicKey() {
 
 test('copyByteItem refuses to replay an unknown outcome', async () => {
   const journal = makeJournal();
-  journal.put('p1', { phase: 'begun', uploadId: 'up-1' });
+  journal.put('p1', { phase: 'finalizing', uploadId: 'up-1' });
   const item = { kind: 'photo', id: 'p1', clubId: CLUB, sourcePath: 's', path: 'd', mime: 'm', owner: 'o' };
   await assert.rejects(
     copyByteItem({ canisters: {} }, new Uint8Array(96), item, { download: async () => new Uint8Array(1), blobStore: fakeBlobStore(), pii: fakePii(), journal }),
