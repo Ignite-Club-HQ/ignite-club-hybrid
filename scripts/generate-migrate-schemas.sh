@@ -26,3 +26,4 @@ gen messaging_domain ChatPage
 gen notification_queue FenceSnapshot
 gen media_metadata FenceSnapshot
 gen vault_domain VaultSnapshot
+gen pii_access_control FenceSnapshot
