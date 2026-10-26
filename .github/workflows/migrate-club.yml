@@ -53,5 +53,6 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
           SUPABASE_URL: ${{ vars.IGNITE_LIVE_SUPABASE_URL || 'https://cdrxmelhysdqrccttsjg.supabase.co' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
           NODE_PATH: ${{ github.workspace }}/frontend/node_modules
         run: node scripts/migrate-club.mjs
