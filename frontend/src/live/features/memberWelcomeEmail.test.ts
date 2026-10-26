@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeatureBackendContext } from "../featureRouter";
-import { maybeSendLiveMemberWelcomeEmail } from "./memberWelcomeEmail";
+import { maybeSendLiveMemberWelcomeEmail, saveLiveContactEmail } from "./memberWelcomeEmail";
 
 const m = vi.hoisted(() => ({
   getSettings: vi.fn(),
   registerJob: vi.fn(),
   resolvePii: vi.fn(),
   invoke: vi.fn(),
+  prepare: vi.fn(),
 }));
 
 vi.mock("./competitions", () => ({
@@ -17,6 +18,7 @@ vi.mock("./vault", () => ({
   registerLivePiiText: vi.fn(),
   resolveLivePiiTextBatch: m.resolvePii,
 }));
+vi.mock("../privateProfileNames", () => ({ preparePrivateOwnProfileEmail: m.prepare }));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { functions: { invoke: m.invoke } },
 }));
@@ -62,5 +64,20 @@ describe("maybeSendLiveMemberWelcomeEmail", () => {
     m.registerJob.mockRejectedValue(new Error("Welcome email already registered"));
     await expect(maybeSendLiveMemberWelcomeEmail(ctx, "cmp-1")).resolves.toBeUndefined();
     expect(m.invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe("private contact email save",()=>{
+  beforeEach(()=>m.prepare.mockReset());
+  it("uses the strict original-field preparer for saving and explicit clearing",async()=>{
+    await saveLiveContactEmail(ctx,"coach@example.test");
+    await saveLiveContactEmail(ctx,"");
+    expect(m.prepare).toHaveBeenNthCalledWith(1,ctx,"coach@example.test");
+    expect(m.prepare).toHaveBeenNthCalledWith(2,ctx,"");
+  });
+  it("does not report a failed private write as a successful profile save",async()=>{
+    m.prepare.mockRejectedValue(new Error("Private readback unconfirmed"));
+    await expect(saveLiveContactEmail(ctx,"coach@example.test")).rejects.toThrow("readback unconfirmed");
+    expect(m.prepare).toHaveBeenCalledOnce();
   });
 });

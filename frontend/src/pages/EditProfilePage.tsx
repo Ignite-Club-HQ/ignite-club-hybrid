@@ -41,6 +41,7 @@ export default function EditProfilePage() {
   const [leaderboardOptOut, setLeaderboardOptOut] = useState(false);
   const [country, setCountry] = useState<string>("");
   const [contactEmail, setContactEmail] = useState("");
+  const [contactEmailChanged, setContactEmailChanged] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -309,8 +310,11 @@ export default function EditProfilePage() {
         await preparePrivateOwnProfileName({ identity, target: getActiveIcpTarget() }, displayName.trim());
         // Optional contact email (own PII record, upsert semantics). Powers
         // competition welcome emails for existing members in ICP mode.
-        const { saveLiveContactEmail } = await import("@/live/features/memberWelcomeEmail");
-        await saveLiveContactEmail({ identity, target: getActiveIcpTarget() }, trimmedEmail);
+        // An unavailable initial email read is not permission to erase it.
+        if (contactEmailChanged) {
+          const { saveLiveContactEmail } = await import("@/live/features/memberWelcomeEmail");
+          await saveLiveContactEmail({ identity, target: getActiveIcpTarget() }, trimmedEmail);
+        }
         // Re-sync avatar club grants — covers clubs joined after the photo
         // was uploaded. Best-effort (never throws).
         const { syncLiveAvatarClubGrants } = await import("@/live/avatarUpload");
@@ -477,7 +481,7 @@ export default function EditProfilePage() {
                 id="contact-email"
                 type="email"
                 value={contactEmail}
-                onChange={(e) => setContactEmail(e.target.value)}
+                onChange={(e) => { setContactEmailChanged(true); setContactEmail(e.target.value); }}
                 placeholder="you@example.com"
               />
               <p className="text-xs text-muted-foreground">
