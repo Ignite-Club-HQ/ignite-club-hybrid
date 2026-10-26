@@ -558,7 +558,7 @@ export default function EventDetailPage() {
 
   // Populate form with existing RSVP data
   const localAccountId = user?.id ?? localIcpPersona;
-  const myRsvp = rsvps?.find((r) => r.user_id === (useIcpLab ? localAccountId : user?.id) && !r.child_id);
+  const myRsvp = rsvps?.find((r) => r.user_id?.replace(/^principal:/, "") === (useIcpLab ? localAccountId : user?.id)?.replace(/^principal:/, "") && !r.child_id);
   const { localAttendanceMutation } = useLocalAttendanceMutation({ id, localIcpPersona, localAccountId });
   
   useEffect(() => {
