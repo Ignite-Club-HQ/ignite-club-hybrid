@@ -88,6 +88,12 @@ try {
   dm.actor.setPrincipal(viewer);ok(await dm.actor.block_user(owner));
   assert.ok('Err' in await read(viewer,direct),'Blocked participant cannot obtain fresh direct keys');
   ok(await dm.actor.unblock_user(owner));await decrypt(viewer,direct);
+  dm.actor.setPrincipal(identity.canisterId);
+  const retained=ok(await dm.actor.read_profile_direct_batch(viewer,directConversation.id,[owner],[]));
+  dm.actor.setPrincipal(viewer);ok(await dm.actor.block_user(owner));ok(await dm.actor.unblock_user(owner));
+  dm.actor.setPrincipal(identity.canisterId);
+  assert.ok('Err' in await dm.actor.read_profile_direct_batch(viewer,directConversation.id,[owner],[retained.revision]),'Block/unblock ABA invalidates retained direct authorization');
+  await decrypt(viewer,direct);
   assert.ok('Err' in await read(viewer,scope('direct',dm.canisterId,'broadcast')),'Broadcast is never a two-person direct audience');
   identity.actor.setPrincipal(viewer);const page=ok(await identity.actor.read_guardian_profile_candidates(groups[1].club.canisterId,'child-1',[]));
   const guardian=scope('guardian_search',groups[1].club.canisterId,'child-1',page.revision);
@@ -116,5 +122,5 @@ try {
   assert.ok('Err' in await read(viewer,guardian),'Guardian removal withholds fresh keys');
   identity.actor.setPrincipal(governor);ok(await identity.actor.set_account_status(accounts.get(owner.toText()),{Suspended:null}));
   assert.ok('Err' in await read(viewer,scope('club',groups[1].club.canisterId,'club-1')));
-  console.log('PASS: real cross-group original-PII SDK decryption for club, family, guardian, competition and league; outsider/foreign scope/public competition/email/removed subject/suspended subject refusal. No live data or grants changed.');
+  console.log('PASS: real cross-group original-PII SDK decryption for club, family, guardian, competition, league and direct; caller-created peer enumeration, unrelated user, service impersonation, blocked peer, block/unblock ABA and broadcast refusal; healthy direct retries. No live data or grants changed.');
 } finally {await pic?.tearDown();await server.stop();}

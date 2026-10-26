@@ -1882,7 +1882,8 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
   // Labels only — preview text on the row is never stored here.
   useEffect(() => {
     const privateNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
-    rememberChatThreadLabels(user?.id, privateNames ? unifiedConversations.filter(row => row.type !== 'dm') : unifiedConversations);
+    if (privateNames) rememberChatThreadLabels(user?.id, unifiedConversations.filter(row => row.type !== 'dm'));
+    else rememberChatThreadLabels(user?.id, unifiedConversations);
   }, [user?.id, unifiedConversations]);
 
   const { eventTitleMap, vaultFolderNameMap, vaultFileNameMap } =
