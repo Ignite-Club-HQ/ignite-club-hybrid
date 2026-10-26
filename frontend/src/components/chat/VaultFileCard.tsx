@@ -258,7 +258,8 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
       // Use the canonical folder deep-link route so VaultPage resolves
       // the full breadcrumb path (including parents) and lands inside
       // the actual subfolder rather than the club/team root.
-      navigate(`/vault/folder/${folder.id}`);
+      // The club is only a routing hint; VaultPage still re-reads with access checks.
+      navigate(`/vault/folder/${folder.id}`, { state: { fromChat: true, vaultClubHint: folder.club_id } });
     };
     return (
       <button
