@@ -180,7 +180,7 @@ describe("child-bound ICP guardian search", () => {
     renderSheet();
     await userEvent.setup().type(screen.getByPlaceholderText(/search or type parent's name/i), "Paul");
     await waitFor(() => expect(backendMocks.searchLiveGuardianProfiles).toHaveBeenCalledWith(
-      expect.anything(), "child-1", "Paul", 6,
+      expect.anything(), "child-1", "Paul", 6, expect.any(AbortSignal),
     ));
   });
 });
