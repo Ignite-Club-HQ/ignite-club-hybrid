@@ -14,6 +14,7 @@ vi.mock('@tanstack/react-query', async (importOriginal) => ({
   useQuery: (options: { queryKey: string[] }) => {
     state.reads(options.queryKey);
     if (options.queryKey[0] === 'icp-media-post-details') return { data: null, isLoading: true };
+    if (options.queryKey[0] === 'icp-gallery-comments') return { data: [], isLoading: true };
     if (['icp-gallery-card', 'icp-gallery-card-assets', 'icp-gallery-linked-post', 'icp-gallery-views'].includes(options.queryKey[0])) return { data: null };
     if (options.queryKey[0] === 'icp-gallery-moderation') return { data: [] };
     if (options.queryKey[0] === 'blocked-users') return { data: [] };
