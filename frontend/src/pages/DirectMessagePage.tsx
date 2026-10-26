@@ -172,11 +172,11 @@ const toCachedDirectMessages = (messages: DirectMessage[]): CachedMessage[] =>
     created_at: message.created_at,
     image_url: message.image_url,
     reply_to_id: message.reply_to_id,
-    profiles: message.author
+    profiles: !(privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging")) && message.author
       ? { display_name: message.author.display_name, avatar_url: message.author.avatar_url }
       : null,
     reactions: message.reactions || [],
-    reply_to: message.reply_to ? { text: message.reply_to.text, author: message.reply_to.author } : null,
+    reply_to: message.reply_to ? { text: message.reply_to.text, author: privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging") ? undefined : message.reply_to.author } : null,
   }));
 
 const cacheDirectMessages = (conversationId: string, messages: DirectMessage[]) => {
