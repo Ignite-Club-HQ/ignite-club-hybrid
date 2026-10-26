@@ -28,12 +28,15 @@ describe('authorized event honours reads', () => {
     expect(m.legacy).not.toHaveBeenCalled();
   });
   it('never shares in-flight honours across distinct actors/accounts', async () => {
-    m.honours.mockResolvedValue({ Ok: { captains: [], goalkeepers: [] } });
+    let finish: ((value: unknown) => void) | undefined;
+    m.honours.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
     const first = listLiveMatchCaptains({} as never, 'event');
-    await first;
+    await vi.waitFor(() => expect(m.honours).toHaveBeenCalledTimes(1));
     const other = vi.fn().mockResolvedValue({ Ok: { captains: [{ ref_id: 'sam' }], goalkeepers: [] } });
     m.actor = { read_event_honours: other };
     expect(await listLiveMatchCaptains({} as never, 'event')).toEqual([{ ref_id: 'sam' }]);
     expect(other).toHaveBeenCalledTimes(1);
+    finish?.({ Ok: { captains: [], goalkeepers: [] } });
+    expect(await first).toEqual([]);
   });
 });

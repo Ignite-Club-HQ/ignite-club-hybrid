@@ -1622,7 +1622,7 @@ export default function EventDetailPage() {
   // Match awards: captain, POTM, goalkeepers — used to show inline icons next to attendees
   const isGameEvent = event?.type === "game" && !!event?.team_id;
   const { data: matchCaptainRow } = useQuery({
-    queryKey: ["match-captain", id, user?.id, isIcpAuthBackend, event?.club_id],
+    queryKey: isIcpAuthBackend ? ["match-captain", id, user?.id, true, event?.club_id] : ["match-captain", id, "marker"],
     enabled: !!id && isGameEvent && !useIcpLab,
     queryFn: async ({ signal }) => {
       if (!id) return null;
