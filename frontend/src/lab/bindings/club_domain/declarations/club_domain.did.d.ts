@@ -36,6 +36,13 @@ export interface Acl {
   'exclusions' : Array<Exclusion>,
   'roles' : Array<RoleGrant>,
 }
+export interface Batch {
+  'requester' : Principal,
+  'members' : Array<boolean>,
+  'subjects' : Array<Principal>,
+  'club' : string,
+  'revision' : bigint,
+}
 export interface Binding {
   'inventory_digest' : Uint8Array,
   'deployment' : string,
@@ -1624,6 +1631,11 @@ export interface Main {
           'acl_revision' : bigint,
         }
       } |
+      { 'Err' : string }
+  >,
+  'read_profile_membership_batch' : ActorMethod<
+    [Principal, string, Array<Principal>, [] | [bigint]],
+    { 'Ok' : Batch } |
       { 'Err' : string }
   >,
   'read_removal_media_registry' : ActorMethod<

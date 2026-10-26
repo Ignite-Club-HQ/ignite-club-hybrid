@@ -668,6 +668,13 @@ export const idlFactory = ({ IDL }) => {
     'edges' : IDL.Vec(Edge),
     'revision' : IDL.Nat,
   });
+  const Batch = IDL.Record({
+    'requester' : IDL.Principal,
+    'members' : IDL.Vec(IDL.Bool),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'club' : IDL.Text,
+    'revision' : IDL.Nat,
+  });
   const Registration = IDL.Record({
     'email_hint' : IDL.Text,
     'source_user' : IDL.Text,
@@ -2336,6 +2343,11 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        [],
+      ),
+    'read_profile_membership_batch' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Batch, 'Err' : IDL.Text })],
         [],
       ),
     'read_removal_media_registry' : IDL.Func(

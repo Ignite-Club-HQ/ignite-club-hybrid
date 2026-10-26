@@ -10,15 +10,18 @@ and other details must remain viewable in the app.
 ## Implemented locally
 
 - Added rehearsal-gated `read_club_profiles`: exact registered source/club,
-  at most 25 deduplicated active principals, repeated consensus membership
-  checks for caller and subjects, and account/configuration rechecks after
-  awaits. No new stored state, grants, name index or decryption path.
+  at most 25 deduplicated active principals, two atomic consensus membership
+  batches at one exact durable revision, and account/configuration rechecks
+  after awaits. `club_domain.read_profile_membership_batch` admits subjects
+  before evaluating all local memberships without another await, rechecks
+  revision/authority/fences after admission and refuses deleted/foreign clubs.
+  No new stored state, grants, name index or decryption path.
 - Added `searchScopedProfileCandidates`, which matches authorized returned
   names on the device after private-reference hydration, with no global
-  fallback. Ordinary pickers are intentionally unchanged: sequential boolean
-  checks cannot establish atomic multi-member freshness or acceptable cold
-  search performance. A revision-bound authoritative batch and candidate
-  paging plus disposable-canister revocation tests remain required. Never set
+  fallback. Ordinary pickers are intentionally unchanged: authoritative
+  candidate paging, complete membership-epoch coverage audit, interrupted
+  identity-to-club callbacks and private-name audience/decryption acceptance
+  remain required. Never set
   `IGNITE_PRIVATE_PROFILE_READS_REHEARSAL=1` in a production release.
 - Added dormant, original-authority-bound adult-name reference hydration to the
   shared ID-based profile reader and own-profile reader. Legacy names incur no
@@ -77,8 +80,14 @@ it must not fall back to the old unrestricted endpoint. Do not release the
 changed sheet alone before its matching service is ready. Live signed-in
 Internet Identity acceptance is not available in the local browser session.
 
-Local verification: 134 identity Rust tests pass, including four new club
+Local verification: 135 identity Rust tests pass, including five new club
 candidate rules; focused profile/search/invitation checks pass in both modes
-(45 Supabase, 29 ICP; mode skips).
+(45 Supabase, 29 ICP; mode skips), with the latest 24 private-name checks
+rerun in ICP mode. Motoko profile membership tests and build pass. The new
+disposable two-club suite passes service-only delegation, nonmember/foreign
+club rejection, candidate ceiling, family membership, removal/explicit
+re-grant ABA revision rejection, upgrade preservation and closed release gate.
+It does not exercise the shared identity transport, in-flight admission
+revocation or full encrypted name search; no live signed-in acceptance.
 All 17 generated Candid contracts pass drift checking. These checks do not
 prove a mainnet guardian search or a completed encrypted-name conversion.

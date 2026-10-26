@@ -1,0 +1,12 @@
+import Profile "../src/profileMembership";
+import Principal "mo:core/Principal";
+let caller = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
+let subject = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+assert Profile.validate(caller,"club-a",[subject]) == null;
+assert Profile.validate(Principal.anonymous(),"club-a",[subject]) != null;
+assert Profile.validate(caller,"",[subject]) != null;
+assert Profile.validate(caller,"club-a",[Principal.anonymous()]) != null;
+assert Profile.unchanged(7,7,true,false);
+assert not Profile.unchanged(7,8,true,false);
+assert not Profile.unchanged(7,7,false,false);
+assert not Profile.unchanged(7,7,true,true);

@@ -1,6 +1,25 @@
 //! Scope validation for additive authorized candidate reads; no name index,
 //! cached role grant or browser-supplied candidate list authorizes disclosure.
 use candid::Principal;
+use candid::{CandidType, Nat};
+use serde::Deserialize;
+
+#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, Eq)]
+pub struct MembershipBatch {
+    pub revision: Nat,
+    pub requester: Principal,
+    pub club: String,
+    pub subjects: Vec<Principal>,
+    pub members: Vec<bool>,
+}
+
+pub fn verify_batch(batch: &MembershipBatch, requester: Principal, club: &str, subjects: &[Principal], expected: Option<&Nat>) -> Result<(), String> {
+    if batch.requester != requester || batch.club != club || batch.subjects != subjects || batch.members.len() != subjects.len()
+        || expected.is_some_and(|revision| revision != &batch.revision) {
+        return Err("Profile membership batch scope or revision changed".into());
+    }
+    Ok(())
+}
 
 pub fn validate(authority: Principal, sources: &[Principal], club: &str, subjects: &[Principal]) -> Result<Vec<Principal>, String> {
     if authority == Principal::anonymous() || !sources.contains(&authority) {
@@ -50,5 +69,16 @@ mod tests {
     fn identity_or_configuration_drift_denies_disclosure() {
         assert!(permit(true,false,true).is_err());
         assert!(permit(true,true,false).is_err());
+    }
+    #[test]
+    fn atomic_membership_batches_bind_requester_club_order_and_revision() {
+        let batch = MembershipBatch { revision: Nat::from(7u8), requester:p(2), club:"club-a".into(), subjects:vec![p(3),p(4)], members:vec![true,false] };
+        assert!(verify_batch(&batch,p(2),"club-a",&[p(3),p(4)],Some(&Nat::from(7u8))).is_ok());
+        assert!(verify_batch(&batch,p(1),"club-a",&[p(3),p(4)],None).is_err());
+        assert!(verify_batch(&batch,p(2),"club-b",&[p(3),p(4)],None).is_err());
+        assert!(verify_batch(&batch,p(2),"club-a",&[p(4),p(3)],None).is_err());
+        assert!(verify_batch(&batch,p(2),"club-a",&[p(3),p(4)],Some(&Nat::from(8u8))).is_err());
+        let short = MembershipBatch { members: vec![true], ..batch };
+        assert!(verify_batch(&short,p(2),"club-a",&[p(3),p(4)],None).is_err());
     }
 }
