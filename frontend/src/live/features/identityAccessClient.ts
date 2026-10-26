@@ -104,7 +104,7 @@ export async function searchLiveProfiles(
   ctx: FeatureBackendContext,
   query: string,
   limit: number,
-  scope?: { clubId: string; signal?: AbortSignal },
+  scope?: { clubId: string; signal?: AbortSignal; privateAuthorityBinding?: import('../accountAuthorityRegistry').AccountRegistryBinding },
 ): Promise<Array<{ id: string; display_name: string | null; avatar_url: string | null }>> {
   const { searchLiveInvitableProfiles } = await import("./membership");
   const rows = await searchLiveInvitableProfiles(ctx, query, limit, scope);

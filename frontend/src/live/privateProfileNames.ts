@@ -6,6 +6,7 @@ import { encryptPiiText, fetchPiiVetKeys } from "./piiVetKeys";
 import { unwrapCandid } from "./features/candid";
 import { z } from "zod";
 import type { PrivateProfileAuthorityResolver } from "./privateProfileAuthority";
+import type { PrivateProfileAudience } from './privateProfileAudience';
 
 /** Dormant reference contract: publishing a reference requires the separately
  * approved identity/search cutover. The original key authority is immutable. */
@@ -82,12 +83,12 @@ export async function preparePrivateOwnProfileName(
   return prepareOwnField(ctx, FIELD, value);
 }
 
-async function readNames(ctx: FeatureBackendContext, subjects: string[], field = FIELD, active: () => void = () => {}): Promise<Map<string, string>> {
+async function readNames(ctx: FeatureBackendContext, subjects: string[], field = FIELD, active: () => void = () => {}, audience?: PrivateProfileAudience): Promise<Map<string, string>> {
   active();
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   active();
   const rows = await unwrapCandid(
-    actor.get_encrypted_pii_batch(subjects, field, "profile_display", "Read authorized personal details"),
+    audience ? actor.get_private_profile_names_batch(subjects, audience) : actor.get_encrypted_pii_batch(subjects, field, "profile_display", "Read authorized personal details"),
     "Read private display names",
   );
   active();
@@ -95,7 +96,9 @@ async function readNames(ctx: FeatureBackendContext, subjects: string[], field =
   if (rows.some(row => row.field_id !== field || !wanted.has(row.pii_id)) || new Set(rows.map(row => row.pii_id)).size !== rows.length) throw new Error("Invalid private profile response.");
   const validRows = rows;
   if (!validRows.length) return new Map();
-  const keys = await fetchPiiVetKeys(ctx, [...new Set(validRows.map(row => row.pii_id))], field, { fresh: true, assertActive: active });
+  if (audience && validRows.length !== subjects.length) throw new Error('Private-name audience did not authorize every candidate.');
+  const keys = await fetchPiiVetKeys(ctx, [...new Set(validRows.map(row => row.pii_id))], field, { fresh: true, assertActive: active, ...(audience ? { audience } : {}) });
+  if (audience && keys.size !== validRows.length) throw new Error('Private-name keys were not authorized.');
   active();
   const out = new Map<string, string>();
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -112,7 +115,7 @@ async function readNames(ctx: FeatureBackendContext, subjects: string[], field =
   return out;
 }
 
-async function boundedRead(ctx: FeatureBackendContext, subjects: string[], active: () => void): Promise<Map<string, string>> {
+async function boundedRead(ctx: FeatureBackendContext, subjects: string[], active: () => void, audience?: PrivateProfileAudience): Promise<Map<string, string>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let retired = false;
   const guard = () => {
@@ -121,12 +124,13 @@ async function boundedRead(ctx: FeatureBackendContext, subjects: string[], activ
   };
   try {
     return await Promise.race([
-      readNames(ctx, subjects, FIELD, guard),
+      readNames(ctx, subjects, FIELD, guard, audience),
       new Promise<Map<string, string>>(resolve => {
         timer = setTimeout(() => { retired = true; resolve(new Map()); }, READ_TIMEOUT_MS);
       }),
     ]);
-  } catch {
+  } catch (error) {
+    if (audience) throw error;
     return new Map();
   } finally {
     retired = true;
@@ -151,8 +155,9 @@ async function boundedAuthorityCheck<T>(read: () => Promise<T>): Promise<T> {
 export async function hydratePrivateProfileNames<T extends { display_name: string | null; principal?: Principal }>(
   ctx: FeatureBackendContext,
   profiles: readonly T[],
-  options: { signal?: AbortSignal; resolveAuthority?: PrivateProfileAuthorityResolver } = {},
+  options: { signal?: AbortSignal; resolveAuthority?: PrivateProfileAuthorityResolver; audience?: PrivateProfileAudience } = {},
 ): Promise<Array<Omit<T, "display_name"> & { display_name: string | null }>> {
+  options = { ...options, ...(options.audience ? { audience: { ...options.audience } } : {}) };
   const identity = ctx.identity;
   const principal = identity.getPrincipal().toText();
   const target = JSON.stringify(ctx.target);
@@ -178,9 +183,10 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
     byAuthority.set(ref.authority, subjects);
   }
   const names = new Map<string, Map<string, string>>();
+  const batchSize = options.audience ? 25 : BATCH_SIZE;
   const jobs = [...byAuthority].flatMap(([authority, ids]) => {
     const subjects = [...ids];
-    return Array.from({ length: Math.ceil(subjects.length / BATCH_SIZE) }, (_, index) => ({ authority, subjects: subjects.slice(index * BATCH_SIZE, (index + 1) * BATCH_SIZE) }));
+    return Array.from({ length: Math.ceil(subjects.length / batchSize) }, (_, index) => ({ authority, subjects: subjects.slice(index * batchSize, (index + 1) * batchSize) }));
   });
   // A global two-request ceiling, not two requests per group. Original-key
   // routes are checked again after all encryption/service awaits.
@@ -202,18 +208,20 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
         active();
         if (route.identity !== identity || JSON.stringify(route.target) !== routeTarget) throw new Error("Original private profile route changed.");
       };
-      const part = await boundedRead(route, subjects, routeActive);
+      const part = await boundedRead(route, subjects, routeActive, options.audience);
+      if (options.audience && part.size !== subjects.length) throw new Error('Private-name audience is incomplete or unavailable.');
       active();
       const group = names.get(authority) ?? new Map<string, string>();
       for (const [id, name] of part) group.set(id, name);
       names.set(authority, group);
-    } catch { /* Unverified/unavailable original authorities remain neutral. */ }
+    } catch (error) { if (options.audience) throw error; /* Display-only reads remain neutral. */ }
   };
   for (let start = 0; start < jobs.length; start += 2) await Promise.all(jobs.slice(start, start + 2).map(readJob));
   for (const [authority, lease] of leases) {
-    try { active(); await boundedAuthorityCheck(lease.confirm); active(); } catch { names.delete(authority); }
+    try { active(); await boundedAuthorityCheck(lease.confirm); active(); } catch (error) { if (options.audience) throw error; names.delete(authority); }
   }
   active();
+  if (options.audience && references.some(ref => ref === null || (ref && !names.get(ref.authority)?.has(ref.subject)))) throw new Error('Private-name authority is unverified or unavailable.');
   return profiles.map((profile, index) => {
     const ref = references[index];
     if (ref === undefined) return profile;

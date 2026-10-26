@@ -48,7 +48,7 @@ export async function searchEncryptedGuardianProfiles(
         if (subjects.has(subject) || seen.has(subject) || row.principal.isAnonymous()) throw new Error("Invalid guardian search candidates.");
         subjects.add(subject); seen.add(subject); originals.set(subject, row);
       }
-      const hydrated = await hydratePrivateProfileNames(ctx, page.rows, options);
+      const hydrated = await hydratePrivateProfileNames(ctx, page.rows, { ...options, audience: { kind: 'guardian_search', authority, resource: childId, profile_revision: revision } });
       active();
       // Re-read exact bindings after decryption; labels never authorize linking.
       const confirmed = await withReadDeadline(client.readGuardianProfiles(authority, childId, page.rows.map(row => row.principal), revision), "Guardian verification", 20_000, options.signal);

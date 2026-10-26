@@ -600,9 +600,11 @@ persistent actor class Main(governorInit : Principal) = this {
 
   // Explicit local configuration only. Neither scope nor PII references can
   // choose the trusted identity verifier; no new permanent reader grants.
+  transient let privateNamesRehearsal = Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") == ?"1";
+  transient let privateNamesIdentity = Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_IDENTITY");
   func privateNameVerifier() : ?Principal {
-    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1") return null;
-    switch (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_IDENTITY")) {
+    if (not privateNamesRehearsal) return null;
+    switch (privateNamesIdentity) {
       case null null;
       case (?id) { let p = Principal.fromText(id); if (p.isAnonymous() or p == Principal.fromText("aaaaa-aa")) null else ?p }
     }
