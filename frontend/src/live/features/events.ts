@@ -1298,8 +1298,7 @@ export async function removeLiveMatchCaptain(
 }
 
 export async function listLiveMatchCaptains(ctx: FeatureBackendContext, eventId: string) {
-  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_match_captains(eventId), "List match captains");
+  return (await readLiveEventHonours(ctx, eventId)).captains;
 }
 
 export async function setLiveMatchGoalkeeper(
@@ -1329,8 +1328,7 @@ export async function removeLiveMatchGoalkeeper(
 }
 
 export async function listLiveMatchGoalkeepers(ctx: FeatureBackendContext, eventId: string) {
-  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_match_goalkeepers(eventId), "List match goalkeepers");
+  return (await readLiveEventHonours(ctx, eventId)).goalkeepers;
 }
 
 /**

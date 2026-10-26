@@ -1,3 +1,7 @@
+## Captain section deep audit — 26 October 2026
+- [ ] Audit actual captain/season APIs, protected admission, duplicate marker reads and name enrichment; repair scoped reads and bounded explicit retry without weakening access.
+- [ ] Run regression coverage; live failure cause/timing awaits Paul's session and deployed frontend.
+
 ## Schedule team-name flash — 26 October 2026
 - [x] Reuse exact-club cached team labels; cold cards reveal with their own resolved name while other teams/club-wide events remain independent. Route name reads by event club, suppress generic Team including old snapshots, and retain retry evidence on failures. 25 checks passed in each mode; guards and preview build OK. Frontend only, no deployment.
 - [ ] Phone acceptance requires the updated frontend and Paul's session.

@@ -109,7 +109,8 @@ export default function MatchCaptainSelector({
       },
     }, clubId ? { clubId } : { eventId }), "Captain details", 30_000, signal),
     staleTime: 60_000,
-    retry: 1,
+    retry: isIcp ? false : 1,
+    refetchOnWindowFocus: false,
     retryDelay: 500,
   });
 
@@ -132,7 +133,7 @@ export default function MatchCaptainSelector({
   );
   const { data: seasonCaptain, isLoading: isSeasonCaptainLoading, error: seasonCaptainError, refetch: refetchSeasonCaptain } = useQuery({
     queryKey: ["team-season-captain", teamId, isIcp, user?.id, clubId],
-    enabled: !!user && !!teamId,
+    enabled: !!user && !!teamId && captain === null && !captainError,
     queryFn: async ({ signal }) => {
       if (!teamId) return null;
       return withReadDeadline(withFeatureBackend("membership", {
@@ -163,7 +164,8 @@ export default function MatchCaptainSelector({
     }, clubId ? { clubId } : { teamId }), "Season captain details", 30_000, signal);
     },
     staleTime: 5 * 60_000,
-    retry: 1,
+    retry: isIcp ? false : 1,
+    refetchOnWindowFocus: false,
     retryDelay: 500,
   });
 
@@ -255,16 +257,6 @@ export default function MatchCaptainSelector({
     (r) => !r.child_id && r.user_id && playerUserIds.includes(r.user_id.replace(/^principal:/, ""))
   );
 
-  if (isLoading && !captain) {
-    return (
-      <Card>
-        <CardContent className="p-4 flex justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
-  }
-
   const displayedCaptain = captain ?? seasonCaptain;
 
   return (
@@ -277,7 +269,9 @@ export default function MatchCaptainSelector({
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          {displayedCaptain ? (
+          {isLoading && !displayedCaptain ? (
+            <Loader2 aria-label="Checking captain" className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : displayedCaptain ? (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10 ring-2 ring-blue-500">
@@ -321,8 +315,16 @@ export default function MatchCaptainSelector({
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">We couldn’t check the captain assignment. Please try again.</p>
               {/* Temporary while testing: plain-English reason for the failure. */}
-              <p className="text-xs text-muted-foreground">Reason: {(() => { const e = captainError ?? seasonCaptainError; return e instanceof Error ? e.message : String(e); })()}</p>
-              <Button variant="outline" onClick={() => { void refetchCaptain(); void refetchSeasonCaptain(); }}>Try again</Button>
+              <p className="text-xs text-muted-foreground">{captainError ? "The match captain check did not complete." : "The season captain check did not complete."} {(() => {
+                const e = captainError ?? seasonCaptainError;
+                const message = e instanceof Error ? e.message : String(e);
+                if (/deadline|timed? ?out|too long/i.test(message)) return "The club service took too long to reply.";
+                if (/forbidden|denied|access changed/i.test(message)) return "The club service could not confirm access to this event.";
+                if (/not found|unavailable/i.test(message)) return "The event or team could not be confirmed by its club service.";
+                if (/session|identity|authenticated/i.test(message)) return "Your sign-in session could not be confirmed.";
+                return "The club service did not return a confirmed result.";
+              })()}</p>
+              <Button variant="outline" onClick={() => { if (captainError) void refetchCaptain(); else if (teamId) void refetchSeasonCaptain(); }}>Try again</Button>
             </div>
           ) : isSeasonCaptainLoading ? (
             <Loader2 aria-label="Checking season captain" className="h-5 w-5 animate-spin text-muted-foreground" />
