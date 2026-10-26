@@ -28,6 +28,7 @@ mod membership_wire;
 mod membership_acceptance;
 mod admin_accounts;
 mod guardian_search;
+mod private_profile_reference;
 mod club_profiles;
 use deletion_timing::Ticket;
 
@@ -1774,8 +1775,12 @@ fn valid_display_name(value: &str) -> bool {
 #[ic_cdk::update]
 fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Profile> {
     let caller = ic_cdk::api::msg_caller();
-    let account_id = account_for_write(caller)?.id;
-    if !valid_display_name(&display_name) {
+    let account = account_for_write(caller)?;
+    let account_id = account.id;
+    let valid_name = if display_name.starts_with("pii-display-name:") {
+        private_profile_reference::valid(&display_name, &account.principals)
+    } else { valid_display_name(&display_name) };
+    if !valid_name {
         return Err("Display name must be 1-80 characters".into());
     }
     if avatar_ref.as_deref().is_some_and(|a| a.len() > 512) {
