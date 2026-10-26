@@ -87,7 +87,7 @@ try {
   // search and without a plaintext substring query or name sidecar.
   const guardianClub=clubs[1];
   guardianClub.actor.setPrincipal(governor);
-  ok(await guardianClub.actor.replace_acl(1n,{clubs:['club-1'],teams:[],children:[{id:'guardian-search-child',parent:[requester],club_id:['club-1']}],guardians:[],exclusions:[],roles:[requester,member].map(user=>({user,role:'member',club:['club-1'],team:[]}))}));
+  ok(await guardianClub.actor.replace_acl(1n,{clubs:['club-1'],teams:[],children:[{id:'guardian-search-child',parent:[requester],club_id:['club-1'],teams:[]}],guardians:[],exclusions:[],roles:[requester,member].map(user=>({user,role:'member',club:['club-1'],team:[]}))}));
   const directoryPeople=[];
   for(let n=0;n<30;n++) {
     const subject=p(150+n);i.setPrincipal(subject);ok(await i.register_account());ok(await i.set_profile(`Guardian candidate ${n}`,[]));directoryPeople.push(subject);
