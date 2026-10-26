@@ -57,6 +57,18 @@ try {
     assert.equal(await derive(who), null, 'Unauthorized caller receives no fresh key');
   };
   await decrypt(owner); await denied(outsider); await denied(reader);
+  const ownerKey = await derive(owner); assert.ok(ownerKey);
+  const wrongField = IbeCiphertext.encrypt(verification, IbeIdentity.fromBytes(bytes.encode(`${subject}\u001femail`)), bytes.encode('Not a display name'), IbeSeed.random());
+  assert.throws(() => wrongField.decrypt(ownerKey), 'A display-name key cannot unlock another personal field');
+  const foreignVerification = DerivedPublicKey.deserialize(Uint8Array.from(await club.actor.cycles_balance().then(() => verification.publicKeyBytes())));
+  // Encrypting to a different subject is sufficient to prove identity binding;
+  // no synthetic or mainnet key material is introduced into the replica.
+  const wrongSubject = IbeCiphertext.encrypt(foreignVerification, IbeIdentity.fromBytes(bytes.encode(`${outsider.toText()}\u001f${field}`)), bytes.encode(name), IbeSeed.random());
+  assert.throws(() => wrongSubject.decrypt(ownerKey), 'The key is bound to the original subject');
+  assert.ok('Err' in await as(owner).get_encrypted_pii_batch(Array(101).fill(subject), field, 'profile_display', 'Bound test'));
+  assert.ok('Err' in await as(owner).get_encrypted_pii_vetkeys_batch(Array(26).fill(subject), field, TransportSecretKey.random().publicKeyBytes()));
+  await assert.rejects(() => as(Principal.anonymous()).get_encrypted_pii_batch([subject], field, 'profile_display', 'Anonymous test'));
+  await assert.rejects(() => as(Principal.anonymous()).get_encrypted_pii_vetkeys_batch([subject], field, TransportSecretKey.random().publicKeyBytes()));
   assert.ok('Err' in await as(outsider).register_pii(subject, field, cipher, outsider), 'Other users cannot overwrite an owned name');
   assert.ok('Err' in await as(outsider).grant_pii_read(subject, field, outsider), 'A caller cannot grant itself access');
   ok(await as(owner).grant_pii_read(subject, field, reader));
@@ -68,6 +80,10 @@ try {
   // Despite the historical staff method name, the actual authority accepts
   // any current club role. Exercise that existing rule, never widen grants.
   await decrypt(ordinary);
+  await pic.stopCanister({ canisterId: club.canisterId, sender: governor });
+  await denied(staff);
+  await pic.startCanister({ canisterId: club.canisterId, sender: governor });
+  await decrypt(staff);
   console.log('PASS: real SDK encryption/decryption; owner and explicit reader; unrelated/overwrite/self-grant refusal; explicit revocation; exact club role audiences including ordinary members.');
   club.actor.setPrincipal(governor); ok(await club.actor.remove_member(clubId, staff));
   await denied(staff);
