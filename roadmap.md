@@ -1,3 +1,8 @@
+## Approved all-group club service upgrade — 26 October 2026
+- [x] Owner approved service-only readiness across every registered group; data copying, account claim emails/redemption setup and sign-in/routing migration remain separately blocked.
+- [x] Add protected club_migration scope upgrading club_domain only across the full inventory, including closed groups, with same-source automatic preflight and existing key/journal/publication safeguards.
+- [ ] Run the approved exact-source release after repository synchronization, then verify every destination club service and published release evidence; do not open groups or migrate data/users.
+
 ## Separate migration approvals — 26 October 2026
 - [x] Require separate club/group-bound data/auth approvals, default none; live actions require configured owner matching original/rerun GitHub actors. Data runner blocks routing even after verification. Local safety tests passed; no migration, deployment or emails run.
 - [ ] Live actions remain disabled until the owner sets MIGRATION_OWNER_GITHUB_LOGIN in the protected GitHub environment; its reviewer settings have not been verified. Existing service-key, loaders and protected-release prerequisites remain.
