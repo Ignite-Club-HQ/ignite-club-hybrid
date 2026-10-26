@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { MapPin, Clock, Dumbbell, Users, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,6 +49,24 @@ interface ClubDayEvent {
 }
 
 const dayKey = (d: Date) => format(d, "yyyy-MM-dd");
+
+/**
+ * Format a time-only string ("HH:mm" or "HH:mm:ss") as e.g. "6:30pm".
+ * `new Date("18:30")` is an Invalid Date and date-fns format() throws on it,
+ * so time-only values must be parsed by hand. Returns null instead of
+ * throwing for missing or unparseable values.
+ */
+function formatTimeOnly(value: string | null): string | null {
+  if (!value) return null;
+  const m = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value.trim());
+  if (m) {
+    const d = new Date();
+    d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+    return format(d, "h:mma").toLowerCase();
+  }
+  const d = new Date(value);
+  return isValid(d) ? format(d, "h:mma").toLowerCase() : null;
+}
 
 function venueLabel(e: ClubDayEvent): string {
   return (
