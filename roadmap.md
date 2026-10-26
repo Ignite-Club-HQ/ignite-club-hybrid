@@ -1,6 +1,7 @@
 ## Locked Vault upgrade navigation — 26 October 2026
 - [x] Warm upgrade code on Vault entry; paint read-only club plan preview during downloads and club/admin checks, carrying only the clicked club label. Purchase and paid-file gates unchanged.
-- [ ] Run focused navigation/warmup checks; signed-in phone timing needs Paul's updated app/session.
+- [x] 9 focused ICP navigation/warmup/upgrade checks passed; preview build OK. Purchase and paid-file gates retained.
+- [ ] Signed-in phone timing needs Paul's updated app/session; no deployment or measured phone-speed claim.
 
 ## Media retrieval placeholders — 26 October 2026
 - [x] Pass explicit per-slide retrieval state to albums so pending photos render skeletons without mounting an empty image; retain resolved slides. Keep initial feed skeletons during progressive source reads even when the provisional query is marked successful.
