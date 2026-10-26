@@ -83,6 +83,35 @@ try {
     assert.ok('Err'in await i.read_club_profiles(sources[n],'foreign-club',[member]));
     assert.ok('Err'in await i.read_club_profiles(sources[n],`club-${n}`,Array(26).fill(member)));
   }
+  // Real bounded guardian directory pages, independently of club membership
+  // search and without a plaintext substring query or name sidecar.
+  const guardianClub=clubs[1];
+  guardianClub.actor.setPrincipal(governor);
+  ok(await guardianClub.actor.replace_acl(1n,{clubs:['club-1'],teams:[],children:[{id:'guardian-search-child',parent:[requester],club_id:['club-1']}],guardians:[],exclusions:[],roles:[requester,member].map(user=>({user,role:'member',club:['club-1'],team:[]}))}));
+  const directoryPeople=[];
+  for(let n=0;n<30;n++) {
+    const subject=p(150+n);i.setPrincipal(subject);ok(await i.register_account());ok(await i.set_profile(`Guardian candidate ${n}`,[]));directoryPeople.push(subject);
+  }
+  i.setPrincipal(Principal.anonymous());assert.ok('Err'in await i.read_guardian_profile_candidates(sources[1],'guardian-search-child',[]));
+  i.setPrincipal(stranger);assert.ok('Err'in await i.read_guardian_profile_candidates(sources[1],'guardian-search-child',[]),'Non-guardian must not enumerate the directory');
+  i.setPrincipal(requester);assert.ok('Err'in await i.read_guardian_profile_candidates(foreign,'guardian-search-child',[]));
+  const firstGuardian=ok(await i.read_guardian_profile_candidates(sources[1],'guardian-search-child',[]));
+  assert.ok(firstGuardian.rows.length<=25&&firstGuardian.scanned<=100&&firstGuardian.next.length===1);
+  const secondGuardian=ok(await i.read_guardian_profile_candidates(sources[1],'guardian-search-child',firstGuardian.next));
+  assert.equal(secondGuardian.revision,firstGuardian.revision);
+  const firstIds=new Set(firstGuardian.rows.map(row=>row.principal.toText()));
+  assert.ok(secondGuardian.rows.every(row=>!firstIds.has(row.principal.toText())),'Stable cursor never duplicates candidates');
+  assert.ok('Err'in await i.read_guardian_profile_candidates(sources[1],'another-child',firstGuardian.next),'Cursor cannot authorize another child');
+  const subject=firstGuardian.rows[0].principal;
+  const confirmedGuardian=ok(await i.read_guardian_profiles(sources[1],'guardian-search-child',[subject],firstGuardian.revision));
+  assert.equal(confirmedGuardian[0].principal.toText(),subject.toText());
+  i.setPrincipal(directoryPeople[0]);ok(await i.set_profile('Changed candidate',[]));i.setPrincipal(requester);
+  assert.ok('Err'in await i.read_guardian_profile_candidates(sources[1],'guardian-search-child',firstGuardian.next),'Profile writes invalidate continuations');
+  assert.ok('Err'in await i.read_guardian_profiles(sources[1],'guardian-search-child',[subject],firstGuardian.revision),'Retained matches cannot read back at a stale revision');
+  const freshGuardian=ok(await i.read_guardian_profile_candidates(sources[1],'guardian-search-child',[]));
+  guardianClub.actor.setPrincipal(governor);ok(await guardianClub.actor.replace_acl(1n,{clubs:['club-1'],teams:[],children:[],guardians:[],exclusions:[],roles:[requester,member].map(user=>({user,role:'member',club:['club-1'],team:[]}))}));
+  i.setPrincipal(requester);assert.ok('Err'in await i.read_guardian_profiles(sources[1],'guardian-search-child',freshGuardian.rows.map(row=>row.principal),freshGuardian.revision),'Guardian removal refuses retained matches');
+  console.log('PASS: real exact-child guardian directory paging, <=100 scans/25 candidates, no duplicates, child-bound continuation, stale-profile rejection and guardian removal.');
   if (relay) {
     const signature=identityIdl({IDL})._fields.find(([name])=>name==='read_club_profiles')?.[1];assert.ok(signature);
     const hold=async(at)=>{
