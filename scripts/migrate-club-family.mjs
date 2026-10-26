@@ -66,9 +66,9 @@ export function buildFamilyMemberships(input) {
 }
 
 /** Encrypt using the same immutable production identity/context as the app. */
-export function encryptFamilyField(target, publicKey, childId, field, text) {
+export async function encryptFamilyField(target, publicKey, childId, field, text) {
   const { Principal } = require('@icp-sdk/core/principal');
-  const { MasterPublicKey, DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = require('@icp-sdk/vetkeys');
+  const { MasterPublicKey, DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import(new URL('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js', import.meta.url).href);
   const expected = MasterPublicKey.productionKey('key_1')
     .deriveCanisterKey(Principal.fromText(target.canisters.pii_access_control).toUint8Array())
     .deriveSubKey(encoder.encode('ignite-pii-v1')).publicKeyBytes();
@@ -83,7 +83,7 @@ export function encryptFamilyField(target, publicKey, childId, field, text) {
  * No writer is registered: collision reads, metadata import and durable receipts are
  * required before a production loader can consume this output.
  */
-export function prepareFamilyCopy(input) {
+export async function prepareFamilyCopy(input) {
   bound(input);
   const { clubId, teams = [], children = [], assignments = [], guardians = [] } = input;
   const membership = buildFamilyMemberships(input);
@@ -119,7 +119,7 @@ export function prepareFamilyCopy(input) {
     const readers = [...new Map(mappedGuardians.filter(g => g.child === c.id).map(g => [g.user.toText(), g.user])).values()];
     const fields = [['name', c.name], ...(c.year_of_birth == null ? [] : [['year_of_birth', String(c.year_of_birth)]])];
     for (const [field, value] of fields) {
-      const ciphertext = encryptFamilyField(input.target, input.publicKey, c.id, field, value);
+      const ciphertext = await encryptFamilyField(input.target, input.publicKey, c.id, field, value);
       records.push({ pii_id: c.id, field_id: field, ciphertext, nonce: [], master_key_id: 'vetkey-ibe-v1',
         created_at: timestamp(c.created_at) * 1_000_000n, last_accessed: 0n, access_count: 0n, domain_owner: owner, readers });
       grants.push({ pii_id: c.id, field_id: field, club_id: clubId });
