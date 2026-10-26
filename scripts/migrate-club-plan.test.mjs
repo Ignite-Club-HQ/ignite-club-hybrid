@@ -9,8 +9,22 @@ const inventory = { clubFound: true, counts: { teams: 3 }, mediaFiles: 2, mediaB
 test('check needs only club and group; migrate needs plan hash and exact words', () => {
   assert.doesNotThrow(() => validateRequest({ action: 'check', clubId: 'abc-1', groupId: 'g2' }));
   assert.throws(() => validateRequest({ action: 'check', clubId: 'abc', groupId: 'two' }));
-  assert.throws(() => validateRequest({ action: 'migrate', clubId: 'abc', groupId: 'g2', plan: 'a'.repeat(64), confirmation: 'yes' }));
-  assert.doesNotThrow(() => validateRequest({ action: 'migrate', clubId: 'abc', groupId: 'g2', plan: 'A'.repeat(64), confirmation: ` ${CONFIRM_MIGRATE.toLowerCase()} ` }));
+  assert.throws(() => validateRequest({ action: 'migrate', approvalScope: 'data', clubId: 'abc', groupId: 'g2', plan: 'a'.repeat(64), confirmation: 'yes' }));
+  assert.doesNotThrow(() => validateRequest({ action: 'migrate', approvalScope: 'data', clubId: 'abc', groupId: 'g2', plan: 'A'.repeat(64), confirmation: ` ${CONFIRM_MIGRATE.toLowerCase()} ` }));
+});
+
+test('data copying requires explicit data approval; auth approval never authorizes it', () => {
+  for (const action of ['migrate', 'recover']) {
+    const req = { action, clubId: 'abc', groupId: 'g2', plan: 'a'.repeat(64), confirmation: action === 'migrate' ? CONFIRM_MIGRATE : 'RECOVER CLUB MIGRATION' };
+    for (const approvalScope of [undefined, 'none', 'auth']) assert.throws(() => validateRequest({ ...req, approvalScope }), /Separate data migration approval/);
+    assert.doesNotThrow(() => validateRequest({ ...req, approvalScope: 'data' }));
+  }
+});
+
+test('account claims require separate auth approval; data approval never authorizes them', () => {
+  const req = { action: 'invite', clubId: 'abc', groupId: 'g2', confirmation: 'SEND CLAIM EMAILS' };
+  for (const approvalScope of [undefined, 'none', 'data']) assert.throws(() => validateRequest({ ...req, approvalScope }), /Separate auth migration approval/);
+  assert.doesNotThrow(() => validateRequest({ ...req, approvalScope: 'auth' }));
 });
 
 test('refuses clubs already on-chain, unreadable checks and groups past 80%', () => {

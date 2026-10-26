@@ -23,6 +23,7 @@ test('members include role holders and guardians of the club’s children only',
 
 const db = (tables) => ({ all: async (t) => tables[t] ?? [] });
 const base = { clubId: 'c1', group: 'g2', appUrl: 'https://app', now: 0,
+  approval: { action: 'invite', approvalScope: 'auth', clubId: 'c1', groupId: 'g2', confirmation: 'SEND CLAIM EMAILS' },
   db: db({ user_roles: [{ user_id: 'u1' }, { user_id: 'u2' }, { user_id: 'u3' }], clubs: [{ name: 'Cats' }] }),
   authEmail: async (u) => (u === 'u3' ? null : `${u}@x.com`) };
 
@@ -42,4 +43,16 @@ test('no email is sent when registration fails or its reply is lost', async () =
   await assert.rejects(sendClaimInvites({ ...base, claimedUsers: async () => [],
     registerPage: async () => { throw Error('timeout'); }, sendEmail: async (m) => sent.push(m) }));
   assert.equal(sent.length, 0);
+});
+
+test('no claims or emails are created without separate auth approval', async () => {
+  let reads = 0, registrations = 0, emails = 0;
+  for (const approval of [undefined, { ...base.approval, approvalScope: 'data' }, { ...base.approval, groupId: 'g3' }, { ...base.approval, clubId: 'c2' }]) {
+    await assert.rejects(sendClaimInvites({ ...base, approval,
+      db: { all: async () => { reads++; return []; } }, claimedUsers: async () => [],
+      registerPage: async () => { registrations++; }, sendEmail: async () => { emails++; } }));
+  }
+  assert.equal(reads, 0);
+  assert.equal(registrations, 0);
+  assert.equal(emails, 0);
 });
