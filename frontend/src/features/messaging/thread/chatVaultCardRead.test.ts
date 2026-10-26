@@ -1,8 +1,15 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { chatVaultLocation, readChatVaultCard } from "./chatVaultCardRead";
+import { cacheTeam } from "@/lib/clubTeamCache";
 
 describe("chat Vault card routing", () => {
+  it("uses a listed team's club as a location hint without rediscovering that team", () => {
+    cacheTeam({ id: "g2-u9", club_id: "g2-test", name: "U9", logo_url: null, level_age: null });
+    const client = new QueryClient();
+    expect(chatVaultLocation(client, "paul", "/messages/g2-u9")).toEqual({ clubId: "g2-test" });
+    client.clear();
+  });
   it("reads a same-club file once without resource rediscovery", async () => {
     const read = vi.fn().mockResolvedValue({ id: "file", name: "Rules.pdf" });
     expect(await readChatVaultCard({ clubId: "goat" }, { vaultFileId: "file" }, read)).toEqual({ id: "file", name: "Rules.pdf" });

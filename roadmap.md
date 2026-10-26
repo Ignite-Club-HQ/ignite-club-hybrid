@@ -1,3 +1,8 @@
+## Group 2 U9 chat and gallery delay — 26 October 2026
+- [x] Team headers reveal before optional club labels; authorized message bodies seed cold threads before reactions/profiles, with cancellation/loaded-state guards. Gallery cards use the open chat's known club before resource discovery, reveal independently of labels, reject raw encrypted image fallback and offer explicit retry on failed reads.
+- [x] Focused regressions passed: 51 ICP / 50 Supabase checks; preview build OK. No canister changes or deployment.
+- [ ] Live U9 Group 2 timing and the original gallery card's availability require Paul's Internet Identity session and updated frontend; local tests do not establish the exact production failure.
+
 ## All-group gallery finalization recovery — 25 October 2026
 - [x] Add protected recover action using original journal/artifacts and exact checked hash; completed modules verify twice without builds/installs, G1 gallery authorities resolve from planned inventory, and repair-source publication preserves original release binding. All 69 focused safeguards pass; both operator scripts parse. No live recovery dispatched.
 - [ ] Mainnet recovery/readback waits for the fixed workflow to sync and protected recovery run with the failed release hash; never restart an unresolved release as a new upgrade.

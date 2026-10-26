@@ -17,6 +17,7 @@ vi.mock("@/live/featureRouter", () => ({ withFeatureBackend: (feature: string, p
   return providers.icp({ identity: {}, target: { canisterIds: { club_domain: "owning-group" } } });
 } }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => liveMocks.mode }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp: () => liveMocks.mode === "icp" }));
 vi.mock("@/live/internetIdentityAuth", () => ({ getCurrentInternetIdentity: liveMocks.getCurrentInternetIdentity }));
 vi.mock("@/live/targetRegistry", () => ({ getActiveIcpTarget: liveMocks.getActiveIcpTarget }));
 vi.mock("@/live/features/club", () => ({
@@ -170,9 +171,21 @@ describe("useTeamChatTeamData", () => {
       { wrapper: makeWrapper() },
     );
     await waitFor(() => expect(result.current.team?.name).toBe("ICP Team"));
-    expect(result.current.team?.clubs?.name).toBe("ICP Club");
+    await waitFor(() => expect(result.current.team?.clubs?.name).toBe("ICP Club"));
     expect(liveMocks.dispatch).toHaveBeenCalledWith("membership", { teamId: "team-icp" });
     expect(liveMocks.getLiveTeam).toHaveBeenCalledWith({ identity: {}, target: { canisterIds: { club_domain: "owning-group" } } }, "team-icp");
     expect(supabaseClient.from).not.toHaveBeenCalled();
+  });
+
+  it.runIf(liveMocks.mode === "icp")("reveals the authorized team while its optional club label is still pending", async () => {
+    liveMocks.getLiveTeam.mockResolvedValue([{ id: "u9-g2", name: "U9", club_id: "g2-test", logo_url: [] }]);
+    liveMocks.getLiveClubProfile.mockReturnValue(new Promise(() => {}));
+    const supabaseClient = { from: vi.fn() } as unknown as TeamChatTeamSupabaseClient;
+    const { result, unmount } = renderHook(() => useTeamChatTeamData({ supabaseClient, teamId: "u9-g2", useIcpLab: false,
+      getLocalLabChatTeam: vi.fn() }), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.team?.club_id).toBe("g2-test"));
+    expect(result.current.loadingTeam).toBe(false);
+    expect(supabaseClient.from).not.toHaveBeenCalled();
+    unmount();
   });
 });
