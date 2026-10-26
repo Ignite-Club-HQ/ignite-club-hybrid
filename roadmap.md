@@ -1,5 +1,5 @@
 ## Immediate RSVP status feedback — 26 October 2026
-- [ ] Show self/child/admin response edits before acknowledgement, retain canonical existing IDs, roll back only the failed subject, and verify pending-write behavior.
+- [x] Self/child/admin/mini-league-player RSVP paths now show the selected status before acknowledgement; existing canonical IDs remain, principal-prefix self matching is normalized, and rollback affects only the failed subject. Pending roster indicators/child controls are subject-specific. Known club routes avoid extra event discovery for self/child/existing-admin updates. 29 focused checks pass, including held writes and refusal recovery; preview build OK. Signed-in phone timing remains unavailable locally; remote saving still needs acknowledgement. No deployment.
 
 ## Event detail loading speed — 26 October 2026
 - [x] Authorized RSVP and duty rows now publish before private/adult display names; adult/child enrichment starts concurrently with account/event/subject-bound queries. Reads use the known event club where available; Supabase behavior and service authorization unchanged. Focused event/attendance checks pass (15 Supabase and 17 ICP); preview build OK.
