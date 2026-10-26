@@ -51,6 +51,11 @@ export const idlFactory = ({ IDL }) => {
     'authority' : IDL.Opt(IDL.Principal),
     'revision' : IDL.Nat,
   });
+  const GuardianLabel = IDL.Record({
+    'is_primary' : IDL.Opt(IDL.Bool),
+    'rel_label' : IDL.Opt(IDL.Text),
+    'guardian' : IDL.Principal,
+  });
   const ClubReadGrant = IDL.Record({
     'pii_id' : IDL.Text,
     'field_id' : IDL.Text,
@@ -73,6 +78,7 @@ export const idlFactory = ({ IDL }) => {
     'guardian' : IDL.Principal,
   });
   const FenceSnapshot = IDL.Record({
+    'guardian_labels' : IDL.Opt(IDL.Vec(GuardianLabel)),
     'grants' : IDL.Vec(ClubReadGrant),
     'records' : IDL.Vec(PiiRecord),
     'guardians' : IDL.Vec(GuardianRelationship),
