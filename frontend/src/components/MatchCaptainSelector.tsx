@@ -317,20 +317,38 @@ export default function MatchCaptainSelector({
                 </div>
               )}
             </div>
-          ) : captainError || seasonCaptainError ? (
+          ) : captainError ? (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">We couldn’t check the captain assignment. Please try again.</p>
-              {/* Temporary while testing: plain-English reason for the failure. */}
-              <p className="text-xs text-muted-foreground">{captainError ? "The match captain check did not complete." : "The season captain check did not complete."} {(() => {
-                const e = captainError ?? seasonCaptainError;
-                const message = e instanceof Error ? e.message : String(e);
+              <p className="text-xs text-muted-foreground">The match captain check did not complete. {(() => {
+                const message = captainError instanceof Error ? captainError.message : String(captainError);
                 if (/deadline|timed? ?out|too long/i.test(message)) return "The club service took too long to reply.";
                 if (/forbidden|denied|access changed/i.test(message)) return "The club service could not confirm access to this event.";
-                if (/not found|unavailable/i.test(message)) return "The event or team could not be confirmed by its club service.";
+                if (/not found|unavailable/i.test(message)) return "The event could not be confirmed by its club service.";
                 if (/session|identity|authenticated/i.test(message)) return "Your sign-in session could not be confirmed.";
                 return "The club service did not return a confirmed result.";
               })()}</p>
-              <Button variant="outline" onClick={() => { if (captainError) void refetchCaptain(); else if (teamId) void refetchSeasonCaptain(); }}>Try again</Button>
+              <Button variant="outline" onClick={() => void refetchCaptain()}>Try again</Button>
+            </div>
+          ) : seasonCaptainError ? (
+            // The match check confirmed no match captain; only the optional
+            // season-captain display failed, so admins can still assign one.
+            <div className="space-y-2">
+              {effectiveIsAdmin && (
+                <Button
+                  variant="outline"
+                  className="w-full border-blue-500/50 text-blue-600 hover:bg-blue-500/10"
+                  onClick={() => setSelectDialogOpen(true)}
+                  disabled={goingPlayers.length === 0}
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  Assign Captain
+                </Button>
+              )}
+              <p className="text-xs text-muted-foreground">
+                No match captain yet. The team’s season captain couldn’t be shown right now.{" "}
+                <button type="button" className="underline" onClick={() => void refetchSeasonCaptain()}>Try again</button>
+              </p>
             </div>
           ) : isSeasonCaptainLoading ? (
             <Loader2 aria-label="Checking season captain" className="h-5 w-5 animate-spin text-muted-foreground" />
