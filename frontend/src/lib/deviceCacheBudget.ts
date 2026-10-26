@@ -7,7 +7,7 @@ const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const EXACT_KEYS = new Set([
   'ignite_query_cache_v1', 'ignite_photos_cache', 'ignite_folders_cache',
   'ignite_clubs_cache', 'ignite_teams_cache', 'messages-page-cache-v2',
-  'signed-url-cache-v1',
+  'signed-url-cache-v1', 'ignite_chat_thread_labels_v1',
 ]);
 const PREFIXES = ['ignite_message_cache_', 'ignite_events_list_', 'ignite_event_detail_',
   'ignite_event_rsvps_', 'ignite_my_teams_carousel_v2_', 'ignite_next_up_events_'];

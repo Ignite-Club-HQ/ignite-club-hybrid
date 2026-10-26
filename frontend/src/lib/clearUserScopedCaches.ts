@@ -40,6 +40,7 @@ import { clearProfileCache } from "./profileCache";
 import { clearRolesCache } from "./rolesCache";
 import { clearClubTeamCache } from "./clubTeamCache";
 import { clearMessagesPageCache } from "./messagesPageCache";
+import { clearChatThreadLabelCache } from "./chatThreadLabelCache";
 import { clearPendingNotificationLaunchState } from "./notificationLaunchHandler";
 import { clearPendingWebPushNav } from "./webNotificationLaunchHandler";
 import { clearPendingChatJumpState } from "./pendingChatJump";
@@ -140,6 +141,7 @@ export function clearUserScopedCaches(): void {
   runSafe(clearRolesCache);
   runSafe(clearClubTeamCache);
   runSafe(clearMessagesPageCache);
+  runSafe(clearChatThreadLabelCache);
 
   // 2. Module-level pending navigation / jump / notification state that
   //    mirrors sessionStorage in JS variables. Deleting the session key
