@@ -2307,7 +2307,7 @@ export async function getLiveEventAutoReminder(ctx: FeatureBackendContext, event
 }
 export async function getLiveEventDutyTeam(ctx: FeatureBackendContext, eventId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  const result = unwrapCandid(actor.get_event_duty_team(eventId), "Get event duty team");
+  const result = await unwrapCandid(actor.get_event_duty_team(eventId), "Get event duty team");
   return result[0]?.team_id ?? null;
 }
 
