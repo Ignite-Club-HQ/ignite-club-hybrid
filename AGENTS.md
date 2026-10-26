@@ -78,5 +78,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - ICP events atomically commit dates, duties and reminders under caller receipts; consensus supplies audiences, unknown relays stay locked.
 - Vault recovery reads owner-wide intents and exact decrypted hash markers before strict grants/store acknowledgement; unknown outcomes retain locks/cursors. Erasure scrubs shared ancestors without orphaning others. Cleanup needs age/allowance or erasure receipts; backups commit validated pages to writable sinks, retaining Blob fallback where unsupported. Why: prevent guessed recovery, data loss and partial exports.
-- Private names use original-PII scoped keys; rehearsal only, no conversion/grants. DMs bind two peers and authored messages; broadcast names require recorded readers/reactors. Never cache decrypted names. Why: chat IDs cannot authorize disclosure. Read backend/identity_access/AGENTS.md.
+- Private names use original-PII scoped keys, rehearsal only. DMs bind peers/messages; broadcast binds readers/reactors; admin chats use stored owner mappings/current roles. No conversion/grants or decrypted-name caching. Why: chat IDs cannot authorize disclosure. Read backend/identity_access/AGENTS.md.
 
