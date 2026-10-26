@@ -6,7 +6,7 @@ vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: vi.fn(async () => [
 vi.mock('@/components/EmojiReactions', () => ({ EmojiReactions: () => <span>Reaction controls</span> }));
 vi.mock('@/components/AlbumCarousel', () => ({ AlbumCarousel: () => <span>Photo</span> }));
 vi.mock('@/hooks/useClubTheme', () => ({ useClubTheme: () => ({ activeClubFilter: state.club }) }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'member' }, profile: null }) }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'member' }, profile: null }), useOptionalAuth: () => null }));
 vi.mock('react-router-dom', () => ({ useSearchParams: () => [new URLSearchParams(), vi.fn()], useLocation: () => ({ key: 'gallery-test' }) }));
 vi.mock('@/live/mediaDecrypt', () => ({ storedIcpPrincipal: () => 'member' }));
 vi.mock('@tanstack/react-query', async (importOriginal) => ({
