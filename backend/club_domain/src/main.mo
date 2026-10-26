@@ -3345,6 +3345,19 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(requester) };
   };
 
+  // Trusted relationship services pin the exact membership generation across
+  // ALL their requester/subject checks; boolean replies alone are insufficient.
+  public shared ({ caller }) func read_profile_remote_revision(subjects : [Principal], expected : ?Nat) : async { #Ok : Nat; #Err : Text } {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1") return #Err("Private audience evidence is not released");
+    if (not trustedCompetition(caller) and miniLeagueDomainCanister != ?caller) return #Err("Configured relationship authority required");
+    if (subjects.size() > 26 or subjects.any(func p = p.isAnonymous())) return #Err("Bounded audience subjects required");
+    let revision = membershipEpoch();
+    switch (expected) { case (?r) if (r != revision) return #Err("Remote membership revision changed"); case null {} };
+    for (subject in subjects.values()) { await admitAccount(subject) };
+    if (revision != membershipEpoch() or subjects.any(func p = removalReceiver.denied(p))) return #Err("Remote membership changed");
+    #Ok(revision)
+  };
+
   // Adult family names: BOTH viewer and each subject are current guardians of
   // this exact child. Shared club membership alone never authorizes this path.
   public shared ({ caller }) func read_profile_family_batch(requester : Principal, child_id : Text, subjects : [Principal], expected : ?Nat) : async { #Ok : ProfileMembership.Batch; #Err : Text } {

@@ -2953,7 +2953,9 @@ persistent actor class Main(governorInit : Principal) = this {
       let pinned = snapshot();
       if (Text.encodeUtf8(pinned).size() > 32_768) return #Err("Competition audience exceeds bounded evidence");
       func active() : Bool = pinned == snapshot() and not compFenced(competition_id) and not removalReceiver.denied(requester);
-      let revision = PrivateProfileAudience.snapshotRevision(pinned);
+      let remote = await privateNameRemoteRevisions([requester].concat(subjects));
+      if (not active()) return #Err("Competition audience changed");
+      let revision = PrivateProfileAudience.snapshotRevision(debug_show((pinned, remote)));
       switch (expected) { case (?r) if (r != revision) return #Err("Competition audience changed"); case null {} };
       await admitAccount(requester);
       if (not active()) return #Err("Competition audience changed");
@@ -2967,12 +2969,24 @@ persistent actor class Main(governorInit : Principal) = this {
         if (not active()) return #Err("Competition audience changed");
         members := members.concat([allowed and not removalReceiver.denied(subject)]);
       };
+      let closing = await privateNameRemoteRevisions([requester].concat(subjects));
+      if (not active() or remote != closing) return #Err("Remote competition membership changed");
       #Ok({ revision; requester; club = competition_id; subjects; members })
     } finally { removalReceiver.leave(requester) }
   };
   func privateNameParticipant(user : Principal, id : Text) : async Bool {
     if (not competitions.any(func c = c.id == id)) return false;
-    if (canManageCompetition(user, id) or roles.any(func r = r.competition_id == id and r.user == user)) return true;
+    if (isGovernor(user) or personalCompetitionOwners.any(func o = o.0 == id and o.1 == user) or roles.any(func r = r.competition_id == id and r.user == user and r.role != "club_admin")) return true;
+    let competition = competitions.find(func c = c.id == id) ?? return false;
+    switch (clubDomainCanister) {
+      case (?authority) {
+        let domain : actor { read_account_list_user_club_roles : shared (Principal, Text) -> async [(Text, ?Text)] } = actor(authority.toText());
+        let grants = try { await (with timeout = 10) domain.read_account_list_user_club_roles(user, competition.club_id) } catch (_) { return false };
+        if (removalReceiver.denied(user) or compFenced(id)) return false;
+        if (grants.any(func g = g.0 == "club_admin" or g.0 == "app_admin")) return true;
+      };
+      case null {};
+    };
     let accepted = entries.filter(func e = e.competition_id == id and (e.status == "accepted" or e.status == "registered"));
     if (accepted.size() > 500) return false;
     for (entry in accepted.values()) {
@@ -2984,6 +2998,17 @@ persistent actor class Main(governorInit : Principal) = this {
       }
     };
     false
+  };
+  func privateNameRemoteRevisions(subjects : [Principal]) : async [(Principal, Nat)] {
+    var evidence : [(Principal, Nat)] = [];
+    if (participantAuthorities().size() > 64) throw Error.reject("Bounded participant authorities required");
+    for (authority in participantAuthorities().values()) {
+      let domain : actor { read_profile_remote_revision : shared ([Principal], ?Nat) -> async { #Ok : Nat; #Err : Text } } = actor(authority.toText());
+      let reply = await (with timeout = 10) domain.read_profile_remote_revision(subjects, null);
+      let revision = switch (reply) { case (#Ok(r)) r; case (#Err(e)) throw Error.reject(e) };
+      evidence := evidence.concat([(authority, revision)]);
+    };
+    evidence
   };
 
   public shared ({ caller }) func get_vault_access(competition_id : Text, requester : Principal) : async { #Ok : { club_id : Text; is_member : Bool; can_manage : Bool }; #Err : Text } {

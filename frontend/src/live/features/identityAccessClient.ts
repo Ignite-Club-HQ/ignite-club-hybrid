@@ -42,6 +42,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function listLiveProfilesByIds(
   ctx: FeatureBackendContext,
   ids: readonly string[],
+  privateOptions?: { audience?: import('../privateProfileAudience').PrivateProfileAudience; resolveAuthority?: import('../privateProfileAuthority').PrivateProfileAuthorityResolver; signal?: AbortSignal },
 ) {
   if (ids.length === 0) return [];
   const requestedByAccount = new Map<string, string[]>();
@@ -86,7 +87,7 @@ export async function listLiveProfilesByIds(
     }
     if (out.some(profile => profile.display_name?.startsWith("pii-display-name:"))) {
       const { hydratePrivateProfileNames } = await import("../privateProfileNames");
-      return hydratePrivateProfileNames(ctx, out);
+      return hydratePrivateProfileNames(ctx, out, privateOptions);
     }
     return out;
   } finally {
