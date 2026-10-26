@@ -76,6 +76,7 @@ import {
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { withReadDeadline } from "@/live/readDeadline";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   getLiveEventRoster,
@@ -1623,13 +1624,13 @@ export default function EventDetailPage() {
   const { data: matchCaptainRow } = useQuery({
     queryKey: ["match-captain", id, user?.id, isIcpAuthBackend, event?.club_id],
     enabled: !!id && isGameEvent && !useIcpLab,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!id) return null;
       if (isIcpAuthBackend) {
-        const rows = await withFeatureBackend("events", {
+        const rows = await withReadDeadline(withFeatureBackend("events", {
           supabase: async () => [] as any[],
           icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchCaptains(ctx, id) as Promise<any[]>,
-        }, event?.club_id ? { clubId: event.club_id } : { eventId: id });
+        }, event?.club_id ? { clubId: event.club_id } : { eventId: id }), "Captain details", 30_000, signal);
         const c = rows.find((r) => r.role === "captain");
         return c ? { id: `${c.event_id}:${c.ref_kind}:${c.ref_id}:${c.role}`, event_id: c.event_id,
           user_id: c.ref_kind === "child" ? null : c.ref_id, child_id: c.ref_kind === "child" ? c.ref_id : null,
