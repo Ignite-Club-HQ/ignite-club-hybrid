@@ -36,10 +36,20 @@ try {
     const competition=await pic.setupCanister({idlFactory:competitionIdl,wasm:wasm('competition_domain'),sender:governor,controllers:[governor],arg,environmentVariables:env});
     const league=await pic.setupCanister({idlFactory:leagueIdl,wasm:wasm('mini_league_domain'),sender:governor,controllers:[governor],arg,environmentVariables:env});
     const messaging=await pic.setupCanister({idlFactory:messagingIdl,wasm:wasm('messaging_domain'),sender:governor,controllers:[governor],arg,environmentVariables:env});
+    let directRelay;
+    if(n===1 && process.env.PRIVATE_DIRECT_NAME_RELAY_WASM) {
+      const method=messagingIdl({IDL})._fields.find(([name])=>name==='read_profile_direct_batch')?.[1];assert.ok(method);
+      const relayIdl=({IDL})=>IDL.Service({read_profile_direct_batch:method,
+        hold_on:IDL.Func([IDL.Nat],[],[]),release:IDL.Func([],[],[]),progress:IDL.Func([],[IDL.Nat,IDL.Nat,IDL.Bool],['query'])});
+      directRelay=await pic.setupCanister({idlFactory:relayIdl,wasm:process.env.PRIVATE_DIRECT_NAME_RELAY_WASM,sender:governor,controllers:[governor],
+        arg:IDL.encode([IDL.Principal,IDL.Principal,IDL.Principal],[governor,messaging.canisterId,identity.canisterId])});
+      await pic.updateCanisterSettings({canisterId:messaging.canisterId,sender:governor,environmentVariables:[privacy,{name:'IGNITE_ACCOUNT_SERVICE_IDENTITY',value:directRelay.canisterId.toText()}]});
+      await pic.upgradeCanister({canisterId:messaging.canisterId,wasm:wasm('messaging_domain'),sender:governor,arg,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+    }
     const pii=await pic.setupCanister({idlFactory:piiIdl,wasm:wasm('pii_access_control'),sender:governor,controllers:[governor],arg,environmentVariables:[privacy,{name:'IGNITE_PRIVATE_PROFILE_IDENTITY',value:identity.canisterId.toText()},{name:'VETKD_KEY_NAME',value:'key_1'}]});
     club.actor.setPrincipal(governor);ok(await club.actor.create_club(`club-${n}`,'Privacy club','privacy',[],[]));
     ok(await club.actor.replace_acl(1n,{clubs:[`club-${n}`],teams:[],children:[{id:`child-${n}`,parent:[viewer],club_id:[`club-${n}`],teams:[]}],guardians:[{child:`child-${n}`,user:owner}],exclusions:[],roles:[viewer,owner].map(user=>({user,role:'member',club:[`club-${n}`],team:[]}))}));
-    groups.push({club,competition,league,messaging,pii});
+    groups.push({club,competition,league,messaging,pii,directRelay});
   }
   const accounts=new Map();
   for(const user of [viewer,owner,outsider]){identity.actor.setPrincipal(user);accounts.set(user.toText(),ok(await identity.actor.register_account()).id);}
@@ -51,7 +61,7 @@ try {
   const subnet=await pic.getCanisterSubnetId(identity.canisterId);assert.ok(subnet);
   router.actor.setPrincipal(governor);let revision=await router.actor.version();
   for(let n=0;n<2;n++){
-    const g=groups[n];const domains=names.map((domain,index)=>({domain,canister:domain==='club_domain'?g.club.canisterId:domain==='pii_access_control'?g.pii.canisterId:domain==='competition_domain'?g.competition.canisterId:domain==='mini_league_domain'?g.league.canisterId:domain==='messaging_domain'?g.messaging.canisterId:domain==='secret_workload_identity'?p(90):p(10+n*30+index)}));
+    const g=groups[n];const domains=names.map((domain,index)=>({domain,canister:domain==='club_domain'?g.club.canisterId:domain==='pii_access_control'?g.pii.canisterId:domain==='competition_domain'?g.competition.canisterId:domain==='mini_league_domain'?g.league.canisterId:domain==='messaging_domain'?(g.directRelay?.canisterId??g.messaging.canisterId):domain==='secret_workload_identity'?p(90):p(10+n*30+index)}));
     const group={id:`g${n+1}`,target_alias:'mainnet',domains,photo_store:[],accepting:false,max_clubs:100,assigned_clubs:0,heap_budget_bytes:1_000_000n,heap_bytes:0n,min_cycles:1n,cycles:0n,observed_at_ns:0n};
     revision=ok(await router.actor.register_group(group,revision));
     revision=ok(await router.actor.register_group_placement({group_id:group.id,deployment_id:'mainnet',deployment_revision:1n,host:'https://icp-api.io',network_kind:'public_mainnet',primary_subnet:subnet,approved_subnets:[subnet],additional_subnets_enabled:false,domains:domains.map(d=>({...d,subnet}))},revision));
@@ -78,7 +88,8 @@ try {
   await decrypt(viewer,scope('family',groups[1].club.canisterId,'child-1'));
   const dm=groups[1].messaging;dm.actor.setPrincipal(viewer);
   const directConversation=ok(await dm.actor.create_conversation('dm',[],[viewer,owner]));
-  const direct=scope('direct',dm.canisterId,directConversation.id);
+  const directAuthority=groups[1].directRelay?.canisterId??dm.canisterId;
+  const direct=scope('direct',directAuthority,directConversation.id);
   assert.ok('Err' in await read(viewer,direct),'A caller-created DM cannot enumerate an arbitrary peer name');
   dm.actor.setPrincipal(owner);ok(await dm.actor.send_message(directConversation.id,'Hello','privacy-peer-consent',[],[]));
   await decrypt(viewer,direct);
@@ -88,12 +99,46 @@ try {
   dm.actor.setPrincipal(viewer);ok(await dm.actor.block_user(owner));
   assert.ok('Err' in await read(viewer,direct),'Blocked participant cannot obtain fresh direct keys');
   ok(await dm.actor.unblock_user(owner));await decrypt(viewer,direct);
-  dm.actor.setPrincipal(identity.canisterId);
+  dm.actor.setPrincipal(directAuthority===dm.canisterId?identity.canisterId:directAuthority);
   const retained=ok(await dm.actor.read_profile_direct_batch(viewer,directConversation.id,[owner],[]));
   dm.actor.setPrincipal(viewer);ok(await dm.actor.block_user(owner));ok(await dm.actor.unblock_user(owner));
-  dm.actor.setPrincipal(identity.canisterId);
+  dm.actor.setPrincipal(directAuthority===dm.canisterId?identity.canisterId:directAuthority);
   assert.ok('Err' in await dm.actor.read_profile_direct_batch(viewer,directConversation.id,[owner],[retained.revision]),'Block/unblock ABA invalidates retained direct authorization');
   await decrypt(viewer,direct);
+  if(groups[1].directRelay) {
+    const relay=groups[1].directRelay;
+    const signature=piiIdl({IDL})._fields.find(([method])=>method==='get_private_profile_name_vetkeys_batch')?.[1];assert.ok(signature);
+    const hold=async(at)=>{
+      relay.actor.setPrincipal(governor);await relay.actor.hold_on(BigInt(at));
+      const pending=await pic.client.submitCall({canisterId:original.canisterId,sender:viewer,method:'get_private_profile_name_vetkeys_batch',
+        payload:new Uint8Array(IDL.encode(signature.argTypes,[[owner.toText()],direct,TransportSecretKey.random().publicKeyBytes()]))});
+      let observed=false;
+      for(let step=0;step<100;step++){await pic.tick(1);const progress=await relay.actor.progress();if(progress[1]===BigInt(at)&&!progress[2]){observed=true;break;}}
+      assert.ok(observed,`Real messaging private-name authorization reply ${at} must be held`);
+      return async()=>{await relay.actor.release();return IDL.decode(signature.retTypes,(await pic.client.awaitCall(pending)).body)[0];};
+    };
+    for(const at of [1,2,3,4]) {
+      for(const subject of [viewer,owner]) {
+        const finish=await hold(at);
+        identity.actor.setPrincipal(governor);ok(await identity.actor.set_account_status(accounts.get(subject.toText()),{Suspended:null}));
+        assert.ok('Err' in await finish(),`Suspended ${subject===viewer?'viewer':'subject'} at reply ${at} receives no derived key`);
+        ok(await identity.actor.set_account_status(accounts.get(subject.toText()),{Active:null}));
+        await decrypt(viewer,direct);
+      }
+      const finishProfile=await hold(at);
+      identity.actor.setPrincipal(owner);ok(await identity.actor.set_profile('Changed private binding',[]));
+      assert.ok('Err' in await finishProfile(),`Changed original profile binding at reply ${at} withholds derived keys`);
+      ok(await identity.actor.set_profile(reference,[]));await decrypt(viewer,direct);
+    }
+    // Remote blocks are checked again after an opening service reply; this
+    // does not certify revocation after the final remote decision is retained.
+    for(const at of [1,3]) {
+      const finish=await hold(at);dm.actor.setPrincipal(viewer);ok(await dm.actor.block_user(owner));
+      assert.ok('Err' in await finish(),`Remote block after opening reply ${at} invalidates retained revision`);
+      ok(await dm.actor.unblock_user(owner));await decrypt(viewer,direct);
+    }
+    console.log('PASS: all four real messaging replies held during original-PII key derivation; viewer/subject suspension and original-reference drift suppress final keys, opening-reply blocks invalidate retained revisions; each restored exact DM decrypts with SDK. Final remote-block delivery fencing remains unverified.');
+  }
   assert.ok('Err' in await read(viewer,scope('direct',dm.canisterId,'broadcast')),'Broadcast is never a two-person direct audience');
   identity.actor.setPrincipal(viewer);const page=ok(await identity.actor.read_guardian_profile_candidates(groups[1].club.canisterId,'child-1',[]));
   const guardian=scope('guardian_search',groups[1].club.canisterId,'child-1',page.revision);
