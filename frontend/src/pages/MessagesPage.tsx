@@ -25,6 +25,7 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { WifiOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { getCachedMessagesPageData, cacheMessagesPageData } from "@/lib/messagesPageCache";
+import { rememberChatThreadLabels } from "@/lib/chatThreadLabelCache";
 import { filterDeletedTeams } from "@/lib/deletedTeamTombstones";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { fetchUnreadMessageCounts } from "@/lib/unreadMessageCounts";
