@@ -28,7 +28,7 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { linkLiveGuardian, listLiveChildGuardians, unlinkLiveGuardian, setLiveGuardianRelationship } from "@/live/features/club";
 import { grantLiveGuardianChildNameRead } from "@/live/features/vault";
-import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { readRelationshipProfiles } from "@/live/relationshipProfileRead";
 import { Principal } from "@icp-sdk/core/principal";
 
 interface Guardian {
@@ -99,7 +99,7 @@ export default function ManageGuardiansDialog({
       },
       icp: async (ctx) => {
         const principals = (await listLiveChildGuardians(ctx, childId)).map((principal) => principal.toText());
-        const profiles = await listLiveProfilesByIds(ctx, principals).catch(() => []);
+        const profiles = await readRelationshipProfiles(ctx, principals, { kind: 'family', resource: childId });
         const profileByPrincipal = new Map(profiles.map((profile: any) => [profile.account_id, profile]));
         return principals.map((principal) => {
           const profile = profileByPrincipal.get(principal) as any;

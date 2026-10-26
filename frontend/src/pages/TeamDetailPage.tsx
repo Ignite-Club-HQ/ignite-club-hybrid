@@ -100,6 +100,7 @@ import {
 } from "@/live/features/membership";
 import { getLiveTeam, getLiveClubProfile, getLiveClubSubscription, getLiveTeamSubscription, saveLiveTeamSubscription, saveLiveTeamPitchSettings } from "@/live/features/club";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { readRelationshipProfiles } from "@/live/relationshipProfileRead";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { Principal } from "@icp-sdk/core/principal";
 import * as fixtureData from "@/lab/fixtureDataLayer";
@@ -847,7 +848,7 @@ export default function TeamDetailPage() {
     enabled: isIcpAccount && adultNameIds.length > 0,
     queryFn: () => withFeatureBackend('membership', {
       supabase: () => { throw new Error('ICP names required'); },
-      icp: ctx => withRosterDeadline(listLiveProfilesByIds(ctx, adultNameIds), 8_000, 'member names'),
+      icp: ctx => withRosterDeadline(readRelationshipProfiles(ctx, adultNameIds, { kind: 'club', resource: team.club_id }), 8_000, 'member names'),
     }, { shared: 'person' }),
     staleTime: 60_000,
     retry: 1,

@@ -2,6 +2,7 @@ import type { FeatureBackendContext } from './featureRouter';
 import { withFeatureBackend } from './featureRouter';
 import { readMiniLeagueInScope } from './miniLeagueRouting';
 import { readMembershipInScope } from './membershipRouting';
+import { readRelationshipProfiles } from './relationshipProfileRead';
 
 export async function readLeagueAccess(ctx: FeatureBackendContext, id: string) {
   return readMiniLeagueInScope(ctx, { miniLeagueId: id }, async scoped => {
@@ -16,17 +17,15 @@ export async function readLeagueAccess(ctx: FeatureBackendContext, id: string) {
 }
 
 export async function readLeagueMembers(ctx: FeatureBackendContext, id: string) {
-  const members = await readMiniLeagueInScope(ctx, { miniLeagueId: id }, async scoped => {
+  const { members, profiles } = await readMiniLeagueInScope(ctx, { miniLeagueId: id }, async scoped => {
     const { connectLiveMiniLeagueDomain } = await import('./domains');
     const { actor } = await connectLiveMiniLeagueDomain(scoped.target, scoped.identity);
     const result = await actor.get_league_members(id);
     if ('Err' in result) throw new Error(result.Err);
-    return result.Ok;
+    const members = result.Ok;
+    const profiles = await readRelationshipProfiles(scoped, members.map(m => m.user_id), { kind: 'league', resource: id });
+    return { members, profiles };
   });
-  const profiles = await withFeatureBackend('membership', {
-    supabase: async () => { throw new Error('Canister profiles require Internet Identity'); },
-    icp: async shared => (await import('./features/identityAccessClient')).listLiveProfilesByIds(shared, members.map(m => m.user_id)),
-  }, { shared: 'person' });
   const byId = new Map(profiles.map(p => [p.account_id, p]));
   return members.map(m => ({
     id: m.user_id,

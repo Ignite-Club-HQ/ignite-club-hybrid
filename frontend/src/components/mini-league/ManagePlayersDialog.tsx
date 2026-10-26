@@ -11,6 +11,7 @@ import { listLiveInvites, listLivePlayers, removeLivePlayer, updateLivePlayer, g
 import { Principal } from "@icp-sdk/core/principal";
 import { removeLiveMember, restoreLiveMember, listLiveRemovedMembers } from "@/live/features/club";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { selectRelationshipProfiles } from "@/live/relationshipProfileRead";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -216,10 +217,10 @@ export function ManagePlayersDialog({
   // Fetch parent profiles for linked players
   const parentUserIds = [...new Set((players || []).map(p => p.parent_user_id).filter(Boolean) as string[])];
   const { data: parentProfiles } = useQuery({
-    queryKey: ["parent-profiles", parentUserIds],
+    queryKey: ["parent-profiles", miniLeagueId, parentUserIds],
     queryFn: async () => {
       if (parentUserIds.length === 0) return [];
-      const { data, error } = await selectCachedProfilesByIds(parentUserIds);
+      const { data, error } = await selectRelationshipProfiles(parentUserIds, { kind: 'league', resource: miniLeagueId });
       if (error) throw error;
       return data as ParentProfile[];
     },
@@ -262,7 +263,7 @@ export function ManagePlayersDialog({
       }, { clubId });
       const guardianIds = [...new Set((gRows || []).map(g => g.guardian_id))];
       if (guardianIds.length === 0) return [];
-      const { data: profs } = await selectCachedProfilesByIds(guardianIds);
+      const { data: profs } = await selectRelationshipProfiles(guardianIds, { kind: 'league', resource: miniLeagueId });
       const nameMap = new Map((profs || []).map(p => [p.id, p.display_name]));
       return (gRows || []).map(g => ({
         child_id: g.child_id,
