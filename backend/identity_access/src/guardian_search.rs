@@ -16,7 +16,7 @@ pub struct Cursor {
 }
 
 pub fn validate_cursor(cursor: &Cursor, revision: u64, binding: &[u8], now: u64) -> Result<(), String> {
-    if cursor.after.is_empty() || cursor.after.len() > 128 || cursor.revision != revision || cursor.binding != binding || cursor.expires_at_ns <= now {
+    if cursor.after.is_empty() || cursor.after.len() > 128 || cursor.revision != revision || cursor.binding != binding || cursor.expires_at_ns <= now || cursor.expires_at_ns.saturating_sub(now)>300_000_000_000 {
         return Err("Guardian search continuation changed or expired".into());
     }
     Ok(())

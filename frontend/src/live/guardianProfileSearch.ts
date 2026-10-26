@@ -3,6 +3,7 @@ import type { FeatureBackendContext } from "./featureRouter";
 import { connectLiveIdentityAccessClientWithIdentity } from "./identityAccess";
 import { hydratePrivateProfileNames } from "./privateProfileNames";
 import type { PrivateProfileAuthorityResolver } from "./privateProfileAuthority";
+import { withReadDeadline } from "./readDeadline";
 
 /** Rehearsal connection to exact-child-authorized directory pages. No names
  * are sent as a server-side query, indexed readably or persisted on the device.
@@ -34,7 +35,7 @@ export async function searchEncryptedGuardianProfiles(
   try {
     for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
       active();
-      const page = await client.readGuardianProfileCandidates(authority, childId, cursor);
+      const page = await withReadDeadline(client.readGuardianProfileCandidates(authority, childId, cursor), "Guardian candidates", 20_000, options.signal);
       active();
       if (page.rows.length > 25 || page.scanned > 100 || page.scanned < page.rows.length || (revision !== undefined && revision !== page.revision)) throw new Error("Guardian search directory changed.");
       revision = page.revision;
@@ -50,7 +51,7 @@ export async function searchEncryptedGuardianProfiles(
       const hydrated = await hydratePrivateProfileNames(ctx, page.rows, options);
       active();
       // Re-read exact bindings after decryption; labels never authorize linking.
-      const confirmed = await client.readGuardianProfiles(authority, childId, page.rows.map(row => row.principal), revision);
+      const confirmed = await withReadDeadline(client.readGuardianProfiles(authority, childId, page.rows.map(row => row.principal), revision), "Guardian verification", 20_000, options.signal);
       active();
       verifyBindings(page.rows, confirmed);
       for (const row of hydrated) {
@@ -60,7 +61,7 @@ export async function searchEncryptedGuardianProfiles(
       if (matches.length >= limit || !next) {
         // A later page can invalidate an earlier name without reusing its key.
         const retained = matches.map(row => originals.get(row.id)).filter((row): row is Row => !!row);
-        const final = await client.readGuardianProfiles(authority, childId, retained.map(row => row.principal), revision);
+        const final = await withReadDeadline(client.readGuardianProfiles(authority, childId, retained.map(row => row.principal), revision), "Guardian verification", 20_000, options.signal);
         active(); verifyBindings(retained, final);
         return matches;
       }

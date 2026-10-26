@@ -104,18 +104,11 @@ export async function searchLiveProfiles(
   ctx: FeatureBackendContext,
   query: string,
   limit: number,
+  scope?: { clubId: string; signal?: AbortSignal },
 ): Promise<Array<{ id: string; display_name: string | null; avatar_url: string | null }>> {
-  const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
-  try {
-    const rows = await client.searchProfiles(query, limit);
-    return rows.map((row) => ({
-      id: row.account_id,
-      display_name: row.display_name,
-      avatar_url: row.avatar_ref[0] ?? null,
-    }));
-  } finally {
-    client.dispose();
-  }
+  const { searchLiveInvitableProfiles } = await import("./membership");
+  const rows = await searchLiveInvitableProfiles(ctx, query, limit, scope);
+  return rows.map(row => ({ id: row.account_id, display_name: row.display_name, avatar_url: row.avatar_ref }));
 }
 
 /** Full-directory lookup exclusively for linking another guardian. The
