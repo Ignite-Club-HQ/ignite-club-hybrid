@@ -92,6 +92,9 @@ interface HomeRewardsSectionProps {
   onRetryRewards?: () => void;
   availableRewards: HomeReward[];
   rewardClubs: HomeRewardClub[];
+  rewardClubsLoading?: boolean;
+  rewardClubsError?: boolean;
+  onRetryRewardClubs?: () => void;
   isAppAdmin: boolean;
   userChildren: HomeRewardChild[];
   selectedReward: HomeReward | null;
@@ -151,6 +154,9 @@ export function HomeRewardsSection({
   onRetryRewards,
   availableRewards,
   rewardClubs,
+  rewardClubsLoading,
+  rewardClubsError,
+  onRetryRewardClubs,
   isAppAdmin,
   userChildren,
   selectedReward,
@@ -390,7 +396,16 @@ export function HomeRewardsSection({
                     <Gift className="h-4 w-4 text-muted-foreground" />
                   </button>
                 ))}
-                {proRewardClubs.length === 0 && (
+                {proRewardClubs.length === 0 && rewardClubsError ? (
+                  <div className="space-y-3 py-4 text-center">
+                    <p className="text-sm text-muted-foreground">Couldn’t load reward clubs. Please try again.</p>
+                    <Button variant="outline" onClick={onRetryRewardClubs}>Try again</Button>
+                  </div>
+                ) : proRewardClubs.length === 0 && rewardClubsLoading ? (
+                  <div role="status" className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" /> Loading reward clubs…
+                  </div>
+                ) : proRewardClubs.length === 0 && (
                   <p className="text-center text-muted-foreground py-4">
                     No clubs with Pro subscription found.
                   </p>
@@ -402,8 +417,8 @@ export function HomeRewardsSection({
                 <Button variant="outline" onClick={onRetryRewards}>Try again</Button>
               </div>
             ) : rewardsLoading && availableRewards.length === 0 ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <div role="status" className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" /> Loading rewards…
               </div>
             ) : availableRewards.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
