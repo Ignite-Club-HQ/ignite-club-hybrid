@@ -97,6 +97,7 @@ import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchProfilesWithCache, fetchSingleProfileWithCache, getProfilesFromCache } from "@/lib/profileCache";
 import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { useChatProfileWorkset } from "@/hooks/useChatProfileWorkset";
 import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { getCachedMessages, cacheMessages, shouldRefetchMessages } from "@/lib/messageCache";
 import { consumeFromNotificationFlag } from "@/lib/notificationPreload";
@@ -835,7 +836,8 @@ export default function ClubChatPage() {
   }, [localMessages]);
   const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
   const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
-  const getPrivateProfile = usePrivateChatProfiles(clubId, user?.id, authorIds, privateChatNames);
+  const privateWorkset = useChatProfileWorkset(localMessages ?? [], clubId, user?.id);
+  const getPrivateProfile = usePrivateChatProfiles(clubId, user?.id, privateWorkset.ids, privateChatNames);
   const getProfile = privateChatNames ? getPrivateProfile : getLegacyProfile;
   
   // Reset scroll state when clubId changes
@@ -2033,6 +2035,8 @@ export default function ClubChatPage() {
             composerHeight={composerHeight}
             currentUserId={user?.id}
             virtualHandleRef={virtualHandleRef}
+            onVisibleMessageIds={privateChatNames ? privateWorkset.onVisibleMessageIds : undefined}
+            privateProfileRevision={privateChatNames ? getPrivateProfile : undefined}
             initialBottomPinned={!targetMessageId}
             initialTargetMessageId={targetMessageId}
             renderRow={(msg, index, arr) => {

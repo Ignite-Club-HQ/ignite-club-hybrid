@@ -125,6 +125,7 @@ import { MessageReadAvatars } from "@/components/chat/MessageReadAvatars";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
+import { useChatProfileWorkset } from "@/hooks/useChatProfileWorkset";
 import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { shouldRefetchMessages } from "@/lib/messageCache";
 import {
@@ -857,7 +858,8 @@ export default function GroupChatPage() {
   }, [localMessages, reactions]);
   const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
   const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
-  const getPrivateProfile = usePrivateChatProfiles(groupId, user?.id, authorIds, privateChatNames);
+  const privateWorkset = useChatProfileWorkset(localMessages ?? [], groupId, user?.id, reactions);
+  const getPrivateProfile = usePrivateChatProfiles(groupId, user?.id, privateWorkset.ids, privateChatNames);
   const getProfile = privateChatNames ? getPrivateProfile : getLegacyProfile;
   
   // Reset scroll state when groupId changes
@@ -1873,6 +1875,8 @@ export default function GroupChatPage() {
             composerHeight={composerHeight}
             currentUserId={user?.id}
             virtualHandleRef={virtualHandleRef}
+            onVisibleMessageIds={privateChatNames ? privateWorkset.onVisibleMessageIds : undefined}
+            privateProfileRevision={privateChatNames ? getPrivateProfile : undefined}
             initialBottomPinned={!targetMessageId}
             initialTargetMessageId={targetMessageId}
             renderRow={(msg, index, arr) => {
