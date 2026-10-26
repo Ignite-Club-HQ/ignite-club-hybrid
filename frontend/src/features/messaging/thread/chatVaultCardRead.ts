@@ -10,7 +10,10 @@ export function chatVaultLocation(client: QueryClient, userId: string | undefine
   if (!scope) return undefined;
   if ("clubId" in scope) return scope;
   if ("teamId" in scope) {
-    const clubId = getCachedTeam(scope.teamId)?.club_id;
+    // The chat header has already resolved the team, often before its passive
+    // disk-cache effect runs. Use that exact query row as a location hint too.
+    const team = client.getQueryData<{ id: string; club_id?: string }>(["team", scope.teamId]);
+    const clubId = (team?.id === scope.teamId ? team.club_id : undefined) || getCachedTeam(scope.teamId)?.club_id;
     return clubId ? { clubId } : scope;
   }
   if ("conversationId" in scope && pathname.startsWith("/groups/")) {

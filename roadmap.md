@@ -1,3 +1,6 @@
+## Team gallery stuck in chat — 26 October 2026
+- [x] Gallery/Vault location hints use the exact open team's resolved query; gallery cards subscribe without fetching and replace stalled discovery when the club resolves. Focused regression verifies cold team-to-club recovery and existing refusal/unlock retries. Phone's signed-in ICP session is unavailable in the local preview; live phone verification remains outstanding.
+
 ## Private names and guardian-only full search — 26 October 2026
 - [x] Current batch: real encrypted adult-name registration and SDK decryption pass on disposable PII/club services (key_1): owner, explicit reader and ordinary/staff club roles; unrelated/anonymous/overwrite/self-grant denial; exact field/subject binding, 100-ciphertext/25-key limits; revoked grants, club removal/re-grant, stopped authority recovery and original-key upgrade persistence. 30 frontend checks pass per mode. No live conversion or picker activation.
 - [x] Continue: deterministic test-only relay forwards actual club batches and holds observed first/second replies. Caller suspension at both boundaries, final subject suspension and between-batch membership removal suppress disclosure; healthy retry controls and separate direct two-source suite pass, 17 contracts match. No production hook/live change.
