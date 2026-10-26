@@ -166,9 +166,9 @@ export async function main(env = process.env) {
 /** Signed context for writers: deploy identity agent + exact-club Supabase reads. */
 function writerContext(clubId, target) {
   const require = createRequire(join(root, 'frontend/package.json'));
-  const { HttpAgent } = require('@dfinity/agent');
-  const { Ed25519KeyIdentity } = require('@dfinity/identity');
-  const { Secp256k1KeyIdentity } = require('@dfinity/identity-secp256k1');
+  const { HttpAgent } = require('@icp-sdk/core/agent');
+  const { Ed25519KeyIdentity } = require('@icp-sdk/core/identity');
+  const { Secp256k1KeyIdentity } = require('@icp-sdk/core/identity/secp256k1');
   if (!process.env.DEPLOYER_PEM) throw Error('DEPLOYER_PEM is required to write');
   const jwk = createPrivateKey(process.env.DEPLOYER_PEM.replace(/\r/g, '').replace(/\\n/g, '\n')).export({ format: 'jwk' });
   const secret = new Uint8Array(Buffer.from(jwk.d, 'base64url'));

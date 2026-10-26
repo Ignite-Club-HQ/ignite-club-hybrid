@@ -29,7 +29,7 @@ test('snapshot keeps only this club, drops deleted teams, carries no member data
 });
 
 test('snapshot encodes against the club service schema', async () => {
-  const { IDL } = require('@dfinity/candid');
+  const { IDL } = require('@icp-sdk/core/candid');
   const type = await snapshotType(require, new URL('./migrate-schemas/club_domain.snapshot.did.js', import.meta.url).href);
   const bytes = IDL.encode([type], [buildClubSnapshot({ club, teams, sponsors })]);
   const [back] = IDL.decode([type], bytes);
@@ -38,9 +38,9 @@ test('snapshot encodes against the club service schema', async () => {
 });
 
 import { buildEventsSnapshot, buildCompetitionSnapshot, buildLeagueSnapshot } from './migrate-club-writers.mjs';
-const P = require('@dfinity/principal').Principal.fromText('aaaaa-aa');
+const P = require('@icp-sdk/core/principal').Principal.fromText('aaaaa-aa');
 const enc = async (domain, snap) => {
-  const { IDL } = require('@dfinity/candid');
+  const { IDL } = require('@icp-sdk/core/candid');
   const type = await snapshotType(require, new URL(`./migrate-schemas/${domain}.snapshot.did.js`, import.meta.url).href);
   return IDL.decode([type], IDL.encode([type], [snap]))[0];
 };

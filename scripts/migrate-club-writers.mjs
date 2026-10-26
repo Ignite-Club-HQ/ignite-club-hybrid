@@ -164,15 +164,15 @@ export function buildLeagueSnapshot({ clubId, leagues = [], sessions = [], group
 /** Candid type of a snapshot, read from the generated schema service's `schema` argument. */
 export async function snapshotType(require, file) {
   const { idlFactory } = await import(file);
-  const { IDL } = require('@dfinity/candid');
+  const { IDL } = require('@icp-sdk/core/candid');
   const svc = idlFactory({ IDL });
   return svc._fields.find(([n]) => n === 'zz_migrate_schema')[1].argTypes[0];
 }
 
 /** Lock the club on one service, then load its snapshot (idempotent replace). */
 async function loadSnapshot(ctx, domain, snap, lock) {
-  const { IDL } = ctx.require('@dfinity/candid');
-  const { Actor } = ctx.require('@dfinity/agent');
+  const { IDL } = ctx.require('@icp-sdk/core/candid');
+  const { Actor } = ctx.require('@icp-sdk/core/agent');
   const canisterId = ctx.target.canisters[domain];
   if (!canisterId) throw Error(`Destination ${domain} missing`);
   const type = await snapshotType(ctx.require, ctx.schemaFile(domain));
