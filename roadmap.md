@@ -1,3 +1,7 @@
+## Recurring Schedule refresh error — 26 October 2026
+- [x] Separate optional name/duty failures from event retrieval in one calm, explanatory notice; retain all retry evidence and visible events. Retry memberships before current event queries to avoid cancelling the retry after a changed query key.
+- [ ] Focused checks and preview verification; exact live failure needs Paul's Internet Identity session (preview redirects to sign-in).
+
 ## Locked Vault upgrade navigation — 26 October 2026
 - [x] Warm upgrade code on Vault entry; paint read-only club plan preview during downloads and club/admin checks, carrying only the clicked club label. Purchase and paid-file gates unchanged.
 - [x] 9 focused ICP navigation/warmup/upgrade checks passed; preview build OK. Purchase and paid-file gates retained.
