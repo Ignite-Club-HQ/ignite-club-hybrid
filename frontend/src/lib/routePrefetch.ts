@@ -10,11 +10,13 @@ const loaders: Record<string, Loader> = {
   "/messages": () => import("@/pages/MessagesPage"),
   "/events": () => import("@/pages/EventsPage"),
   "/media": () => import("@/pages/MediaPage"),
+  "/clubs/upgrade": () => import("@/pages/ClubUpgradePage"),
 };
 
 const started = new Map<string, Promise<unknown>>();
 
 export function prefetchRoute(path: string) {
+  if (/^\/clubs\/[^/]+\/upgrade$/.test(path)) path = "/clubs/upgrade";
   const loader = loaders[path];
   if (!loader) return Promise.resolve();
   const existing = started.get(path);

@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import { CLUB_PRICING as APPROVED_CLUB_PRICING, CLUB_PLAN_ORDER, CLUB_PLAN_NAMES, clubQuote, recommendedClubPlan, type ClubPlan } from "@/lib/subscriptionPlans";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { isNativePlatform } from "@/lib/nativePush";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { ClubUpgradePending } from "@/components/subscription/ClubUpgradePending";
 import { ArrowLeft, Crown, Loader2, Target, ArrowDown, Calendar, AlertCircle, Building2, Users, Heart, ExternalLink, Flame } from "lucide-react";
 import { differenceInDays } from "date-fns";
 import { isPast, parseISO, format, addMonths, addYears } from "date-fns";
@@ -39,7 +40,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
   UpgradeAccessDeniedState,
-  UpgradeLoadingState,
   UpgradeNotFoundState,
   UpgradeOfferCard,
   UpgradeTrialBanner,
@@ -99,6 +99,9 @@ type UpgradeTeam = Pick<Database["public"]["Tables"]["teams"]["Row"], "id" | "na
 
 export default function ClubUpgradePage() {
   const { clubId } = useParams<{ clubId: string }>();
+  const { state } = useLocation();
+  const label = state?.upgradeClubLabel;
+  const entryName = label?.id === clubId && typeof label?.name === "string" ? label.name : undefined;
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -771,7 +774,7 @@ export default function ClubUpgradePage() {
   });
 
   if (clubLoading || loadingAdminCheck) {
-    return <UpgradeLoadingState />;
+    return <ClubUpgradePending name={club?.name ?? entryName} onBack={() => navigate(-1)} />;
   }
 
   if (!club) {

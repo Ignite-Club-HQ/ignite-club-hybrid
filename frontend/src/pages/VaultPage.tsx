@@ -75,12 +75,15 @@ import { VaultContentRenderer, type ContentSectionProps, type TrashSectionProps 
 import { invalidateVaultCache } from "@/features/vault/vaultQueryKeys";
 import { useVaultAccessModel } from "@/features/vault/useVaultAccessModel";
 import { useVaultContentDataModel } from "@/features/vault/useVaultContentDataModel";
+import { prefetchRoute } from "@/lib/routePrefetch";
 
 export default function VaultPage() {
   return <SupabaseVaultPage />;
 }
 
 function SupabaseVaultPage() {
+  // Download only page code; never prefetch paid entitlement or private records.
+  useEffect(() => { void prefetchRoute("/clubs/upgrade"); }, []);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { folderId: urlFolderId } = useParams<{ folderId?: string }>();
@@ -1342,7 +1345,7 @@ function SupabaseVaultPage() {
       activeClubFilter,
       onSelectClub: (club: { id: string; name: string; is_pro?: boolean | null }) => {
         if (!club.is_pro) {
-          navigate(`/clubs/${club.id}/upgrade`);
+          navigate(`/clubs/${club.id}/upgrade`, { state: { upgradeClubLabel: { id: club.id, name: club.name } } });
           return;
         }
         setFolderPath([]);
