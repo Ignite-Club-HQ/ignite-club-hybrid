@@ -754,6 +754,11 @@ export interface Main {
     { 'Ok' : Batch } |
       { 'Err' : string }
   >,
+  'read_profile_competition_admin_batch' : ActorMethod<
+    [Principal, string, Array<Principal>, [] | [bigint]],
+    { 'Ok' : Batch } |
+      { 'Err' : string }
+  >,
   'read_profile_direct_batch' : ActorMethod<
     [Principal, string, Array<Principal>, [] | [bigint]],
     { 'Ok' : Batch } |

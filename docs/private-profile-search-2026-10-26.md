@@ -9,6 +9,29 @@ and other details must remain viewable in the app.
 
 ## Implemented locally
 
+### 23:30 batch — competition-admin names
+
+Connected the standard ICP group-chat display and nested drawers to an exact
+competition-admin audience. Messaging stores an immutable competition/member
+mapping only during authorized thread opening; it never parses a browser chat
+ID. New mappings start empty, so existing threads need an authorized reopen;
+unmapped threads stay refused. Purges discard mappings and rekey updates members.
+
+Owning competition checks current admins and the exact member, current remote
+club generations, local snapshots, and admission around awaits. Removed admins
+remain denied even if stale messaging participants still list them. Fixed the
+existing role-list response shape mismatch and added rehearsal-only original-
+human delegation for opening/listing admin threads instead of requesting a
+manager-only role list as the messaging service. No production activation.
+
+Real original-PII SDK acceptance exercises exact decryption, outsider/guessed
+thread refusal, removed admin/block/ABA refusal and preservation across messaging
+upgrade. Both sign-in mode tests cover exact authority dispatch and no generic
+profile fallback. This batch closes the admin-name connection, not the remaining
+release blockers: unanswered-DM and older broadcast reader parity, final remote
+decision-to-delivery revocation fencing, protected backfill/release execution and
+independently approved production evidence/signed-in acceptance remain open.
+
 ### 23:17 continuation — actual delayed delivery and announcement drawers
 
 The disposable messaging relay now holds each of the four real service replies

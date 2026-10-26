@@ -16,11 +16,11 @@ function context() {
 }
 beforeEach(() => { vi.resetAllMocks(); state.rehearsal = true; state.shared = context(); state.read.mockResolvedValue([]); });
 describe('relationship-scoped private display reads', () => {
-  it.each(['club', 'family', 'competition', 'league', 'direct', 'broadcast'] as const)('threads exact %s authority without creating grants', async kind => {
+  it.each(['club', 'family', 'competition', 'league', 'direct', 'broadcast', 'competition_admin'] as const)('threads exact %s authority without creating grants', async kind => {
     const ctx = context();
     await readRelationshipProfiles(ctx, ['person'], { kind, resource: 'exact-resource' });
     const options = state.read.mock.calls[0][2];
-    const domain = kind === 'competition' ? 'competition_domain' : kind === 'league' ? 'mini_league_domain' : ['direct', 'broadcast'].includes(kind) ? 'messaging_domain' : 'club_domain';
+    const domain = kind === 'competition' ? 'competition_domain' : kind === 'league' ? 'mini_league_domain' : ['direct', 'broadcast', 'competition_admin'].includes(kind) ? 'messaging_domain' : 'club_domain';
     expect(options.audience).toEqual({ kind, resource: 'exact-resource', authority: Principal.fromText(ctx.target.canisterIds[domain]), profile_revision: 0n });
     expect(state.evidence).not.toHaveBeenCalled();
   });
