@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { withReadDeadline } from "@/live/readDeadline";
+import { readChatVaultCard } from "@/features/messaging/thread/chatVaultCardRead";
 import { listLiveMiniLeaguesByClub, listMyLiveMiniLeagues, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { listLiveTeams, getLiveTeam, getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
 import { listLiveTeamSubscriptions, liveHasAnyPro } from "@/live/features/proAccess";
@@ -94,6 +95,9 @@ function SupabaseVaultPage() {
   // and break the header back button after opening from a chat's pinned vault.
   const [fromChat] = useState<boolean>(
     () => (location.state as { fromChat?: boolean } | null)?.fromChat === true,
+  );
+  const [vaultClubHint] = useState<string | null>(
+    () => (location.state as { vaultClubHint?: string } | null)?.vaultClubHint ?? null,
   );
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeClubFilter } = useClubTheme();
@@ -515,7 +519,7 @@ function SupabaseVaultPage() {
       if (!urlFolderId || initialLoadComplete || !userClubs) return;
       
       try {
-        const result = await withReadDeadline(withFeatureBackend("vault", {
+        const result = await withReadDeadline(readChatVaultCard(vaultClubHint ? { clubId: vaultClubHint } : undefined, { vaultFolderId: urlFolderId }, scope => withFeatureBackend("vault", {
           supabase: async () => {
             // Fetch the folder to get its details
             const { data: folder, error } = await supabase
@@ -613,7 +617,7 @@ function SupabaseVaultPage() {
               clubName,
             };
           },
-        }, { vaultFolderId: urlFolderId }), 'Vault folder');
+        }, scope)), 'Vault folder');
         if (cancelled) return;
 
         if (!result) {
@@ -652,13 +656,19 @@ function SupabaseVaultPage() {
       } catch (error) {
         if (cancelled) return;
         console.error("Error loading folder:", error);
+        if (/not found or not authorized/i.test(error instanceof Error ? error.message : "")) {
+          toast.error("Folder not found or access denied");
+          navigate("/vault", { replace: true });
+          setInitialLoadComplete(true);
+          return;
+        }
         toast.error("Failed to load folder", { action: { label: "Try again", onClick: () => setEntryRetry(value => value + 1) } });
       }
     };
 
     loadFolderFromUrl();
     return () => { cancelled = true; };
-  }, [urlFolderId, userClubs, initialLoadComplete, navigate, entryRetry]);
+  }, [urlFolderId, userClubs, initialLoadComplete, navigate, entryRetry, vaultClubHint]);
 
   // Handle direct navigation via query parameters (?club=X or ?team=X)
   useEffect(() => {
