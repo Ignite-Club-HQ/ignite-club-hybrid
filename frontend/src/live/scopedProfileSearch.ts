@@ -122,7 +122,7 @@ export async function searchScopedProfileCandidates(
     // Refuse foreign server rows rather than letting a response extend scope.
     const requested = new Set(subjects.map(p => p.toText()));
     if (rows.some(row => !requested.has(row.principal.toText()))) throw new Error("Person search returned an unexpected identity.");
-    const hydrated = await hydratePrivateProfileNames(ctx, rows);
+    const hydrated = await hydratePrivateProfileNames(ctx, rows, signal ? { signal } : undefined);
     assertActive(signal);
     // Decryption adds asynchronous authorization boundaries. Verify identity
     // admission and both memberships again, not just the club page revision:

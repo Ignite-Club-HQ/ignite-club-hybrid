@@ -250,7 +250,9 @@ export async function searchLiveInvitableProfiles(
   // Keep existing production names/search until the coordinated release.
   const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
   try {
+    if (scope.signal?.aborted) throw new Error("Member search cancelled.");
     const results = await client.searchProfiles(query.trim(), limit);
+    if (scope.signal?.aborted) throw new Error("Member search cancelled.");
     return results.map((r) => ({
       id: r.principal.toText(),
       account_id: r.account_id,

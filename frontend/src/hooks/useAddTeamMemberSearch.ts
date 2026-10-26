@@ -7,6 +7,7 @@ import {
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { useAuth } from "@/hooks/useAuth";
 import { searchLiveInvitableProfiles, listLiveRoleGrants, listLiveMembershipTeams } from "@/live/features/membership";
 import { listLivePendingInvitesByClub } from "@/live/features/club";
 import type { MemberRole as LiveMemberRole } from "@/lib/memberIdentity";
@@ -62,8 +63,9 @@ export function useAddTeamMemberSearch({
   selectedSecondParent,
   bulkMembers,
 }: UseAddTeamMemberSearchArgs) {
+  const { user } = useAuth();
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
-    queryKey: ["user-search-team-member", debouncedNameInput, clubId],
+    queryKey: ["user-search-team-member", user?.id, debouncedNameInput, clubId],
     queryFn: async ({ signal }) => {
       if (debouncedNameInput.length < 2) return [];
       return withFeatureBackend("membership", {
@@ -86,7 +88,7 @@ export function useAddTeamMemberSearch({
         },
       }, { clubId });
     },
-    enabled: debouncedNameInput.length >= 2,
+    enabled: open && debouncedNameInput.length >= 2,
   });
 
   const { data: pendingInviteResults = [] } = useQuery({
@@ -326,8 +328,8 @@ export function useAddTeamMemberSearch({
     ),
   );
   const { data: bulkSearchResults = [] } = useQuery({
-    queryKey: ["bulk-user-search-team-member", bulkSearchTerms, clubId, teamId],
-    queryFn: async () => {
+    queryKey: ["bulk-user-search-team-member", user?.id, bulkSearchTerms, clubId, teamId],
+    queryFn: async ({ signal }) => {
       const searches = await Promise.all(
         bulkSearchTerms.map((term) =>
           withFeatureBackend("membership", {
@@ -359,7 +361,7 @@ export function useAddTeamMemberSearch({
               return { term, results: [...profileResults, ...pendingResults] };
             },
             icp: async (ctx) => {
-              const profileResults = (await searchLiveInvitableProfiles(ctx, term, 8, { clubId })).map(
+              const profileResults = (await searchLiveInvitableProfiles(ctx, term, 8, { clubId, signal })).map(
                 (r): SearchProfile => ({
                   id: r.id,
                   display_name: r.display_name,
@@ -408,8 +410,8 @@ export function useAddTeamMemberSearch({
     ),
   );
   const { data: bulkSecondParentResults = [] } = useQuery({
-    queryKey: ["bulk-second-parent-search", bulkSecondParentTerms, clubId],
-    queryFn: async () =>
+    queryKey: ["bulk-second-parent-search", user?.id, bulkSecondParentTerms, clubId],
+    queryFn: async ({ signal }) =>
       Promise.all(
         bulkSecondParentTerms.map((term) =>
           withFeatureBackend("membership", {
@@ -429,7 +431,7 @@ export function useAddTeamMemberSearch({
               };
             },
             icp: async (ctx) => {
-              const results = (await searchLiveInvitableProfiles(ctx, term, 5, { clubId })).map((r) => ({
+              const results = (await searchLiveInvitableProfiles(ctx, term, 5, { clubId, signal })).map((r) => ({
                 id: r.id,
                 display_name: r.display_name,
                 avatar_url: r.avatar_ref ?? null,
@@ -443,8 +445,8 @@ export function useAddTeamMemberSearch({
   });
 
   const { data: secondParentSearchResults = [] } = useQuery({
-    queryKey: ["second-parent-search", debouncedSecondParentSearch, clubId],
-    queryFn: async () => {
+    queryKey: ["second-parent-search", user?.id, debouncedSecondParentSearch, clubId],
+    queryFn: async ({ signal }) => {
       if (debouncedSecondParentSearch.length < 2) return [];
       return withFeatureBackend("membership", {
         supabase: async () => {
@@ -460,7 +462,7 @@ export function useAddTeamMemberSearch({
           }));
         },
         icp: async (ctx) => {
-          const results = await searchLiveInvitableProfiles(ctx, debouncedSecondParentSearch, 5, { clubId });
+          const results = await searchLiveInvitableProfiles(ctx, debouncedSecondParentSearch, 5, { clubId, signal });
           return results.map((r): SearchProfile => ({
             id: r.id,
             display_name: r.display_name,
@@ -469,7 +471,7 @@ export function useAddTeamMemberSearch({
         },
       }, { clubId });
     },
-    enabled: debouncedSecondParentSearch.length >= 2 && !selectedSecondParent,
+    enabled: open && debouncedSecondParentSearch.length >= 2 && !selectedSecondParent,
   });
 
   return {
