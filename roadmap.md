@@ -1,3 +1,8 @@
+## Vault theme-filter delay — 26 October 2026
+- [x] Retain account/club ICP directory, roles, allowance and explicitly scoped folder/file caches on theme selection; reuse directory labels immediately without granting access, warm up to three authorized club roots, and treat pending reads as pending rather than empty.
+- [x] Focused safeguards: 89 Supabase / 95 ICP passed, guards passed, preview build OK. Frontend-only; no deployment.
+- [ ] Giddy Goat phone timing requires the updated frontend and Paul's Internet Identity session; a 1–2 second cold on-chain read is not verified.
+
 ## Group 2 U9 chat and gallery delay — 26 October 2026
 - [x] Team headers reveal before optional club labels; authorized message bodies seed cold threads before reactions/profiles, with cancellation/loaded-state guards. Gallery cards use the open chat's known club before resource discovery, reveal independently of labels, reject raw encrypted image fallback and offer explicit retry on failed reads.
 - [x] Focused regressions passed: 51 ICP / 50 Supabase checks; preview build OK. No canister changes or deployment.

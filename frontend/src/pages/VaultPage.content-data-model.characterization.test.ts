@@ -130,7 +130,7 @@ describe("VaultPage content/folder/item/search data-model contract", () => {
     expect(vaultPageSource).toContain("const [showTrash, setShowTrash] = useState(false);");
     expect(contentDataModelHookSource).not.toMatch(/useState<FolderView>/);
     expect(contentDataModelHookSource).not.toContain("useState(false)");
-    expect(vaultPageSource).toMatch(/useVaultContentDataModel\(\{\s*\n\s*currentView,\s*\n\s*showTrash,/);
+    expect(vaultPageSource).toMatch(/useVaultContentDataModel\(\{\s*\n\s*userId: user\?\.id,\s*\n\s*currentView,\s*\n\s*showTrash,/);
   });
 
   it("keeps the trash workflow, storage, upload/Drive/export/bulk-delete/folder-management, and dialogs page-owned and unaffected", () => {

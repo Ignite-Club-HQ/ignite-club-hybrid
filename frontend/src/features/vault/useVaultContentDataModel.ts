@@ -35,6 +35,7 @@ const EMPTY_FOLDER_TREE: VaultFolderTree = {
 };
 
 export interface UseVaultContentDataModelOptions {
+  userId?: string;
   currentView: VaultFolderView;
   /** Page-owned trash toggle. Gates the active-content and recursive-search
    * queries (both must stay off while the trash view is showing) but the
@@ -81,6 +82,7 @@ export interface UseVaultContentDataModelResult {
  * management/trash), mutations, and presentation stay in `VaultPage`.
  */
 export function useVaultContentDataModel({
+  userId,
   currentView,
   showTrash,
   vaultSearchQuery,
@@ -90,6 +92,7 @@ export function useVaultContentDataModel({
   isAppAdmin,
   userRoles,
 }: UseVaultContentDataModelOptions): UseVaultContentDataModelResult {
+  const useIcpVault = isFeatureRoutedToIcp("vault");
   // Roles the current user holds in the active club (used to filter
   // role-restricted chat folders like "Coaches Chat", "Club Admin Chat", etc.)
   const userClubRoleSet = useMemo(
@@ -102,13 +105,13 @@ export function useVaultContentDataModel({
   );
 
   const { data: subfolders } = useQuery({
-    queryKey: vaultKeys.subfoldersForView(
+    queryKey: [...vaultKeys.subfoldersForView(
       currentView,
       isClubAdmin,
       isCoachOrTeamAdmin,
       isAppAdmin,
       clubRoleSignature,
-    ),
+    ), userId, useIcpVault],
     queryFn: () =>
       fetchVaultSubfolders({
         view: currentView,
@@ -118,16 +121,18 @@ export function useVaultContentDataModel({
         clubRoles: userClubRoleSet,
       }),
     enabled: currentView.type !== "root",
+    staleTime: 60_000,
   });
 
   // Vault now reads all content from vault_files table only
   // Photos uploaded via Media page are also added to vault_files
   // Photos uploaded directly to Vault stay in vault_files only (not in photos table)
   const { data: vaultItems } = useQuery({
-    queryKey: vaultKeys.filesForView(currentView, isClubAdmin, isCoachOrTeamAdmin),
+    queryKey: [...vaultKeys.filesForView(currentView, isClubAdmin, isCoachOrTeamAdmin), userId, useIcpVault],
     queryFn: () =>
       fetchVaultItems({ view: currentView, isClubAdmin, isCoachOrTeamAdmin }),
     enabled: currentView.type !== "root" && !showTrash,
+    staleTime: 60_000,
   });
 
   // Separate vault items into photos and files using the shared classifier
@@ -140,7 +145,6 @@ export function useVaultContentDataModel({
   //    available instantly across searches.
   //  - Push the name filter to Postgres via ilike so the payload only
   //    contains matches, not the entire vault.
-  const useIcpVault = isFeatureRoutedToIcp("vault");
   const recursiveEnabled =
     debouncedVaultSearchQuery.trim().length > 0 && currentView.type !== "root" && !showTrash &&
     !(useIcpVault && currentView.type === "competition");

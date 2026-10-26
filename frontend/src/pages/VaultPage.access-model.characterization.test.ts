@@ -42,9 +42,9 @@ describe("VaultPage access/entitlement/root-navigation data-model contract", () 
   it("keeps the root auto-navigation once-only, Pro-gated, and scoped to the theme filter's club", () => {
     expect(clusterSource).toContain("hasAutoNavigatedRef");
     expect(clusterSource).toMatch(/activeClubFilter\s*&&[\s\S]{0,60}currentView\.type === "root"/);
-    expect(clusterSource).toMatch(/userClubs\s*&&\s*userClubs\.length > 0\s*&&\s*!hasAutoNavigatedRef\.current/);
+    expect(clusterSource).toMatch(/userClubs\s*&&\s*userClubs\.length > 0\s*&&\s*hasAutoNavigatedRef\.current !== activeClubFilter/);
     expect(clusterSource).toMatch(/club\.is_pro/);
-    expect(clusterSource).toContain("hasAutoNavigatedRef.current = true");
+    expect(clusterSource).toContain("hasAutoNavigatedRef.current = activeClubFilter");
     // The club/team/mini-league content queries (clubTeams, teamFolders,
     // subfolders, vaultItems, clubMiniLeagues) stay in the page and must
     // keep reading the resolved role/entitlement values, not re-derive them.
