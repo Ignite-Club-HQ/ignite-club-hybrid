@@ -43,7 +43,7 @@ jobs:
       - name: Install existing dependencies
         run: node scripts/ensure-frontend-deps.mjs
       - name: Test migration safety rules
-        run: node --test scripts/migrate-club-plan.test.mjs
+        run: node --test scripts/migrate-club-plan.test.mjs scripts/migrate-club-writers.test.mjs
       - name: Run
         env:
           ACTION: ${{ inputs.action }}
