@@ -25,6 +25,12 @@ export type MemberScheduleScope = { clubIds: string[]; teamIds: string[]; adminC
 export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: MemberScheduleScope,
   onUpdate?: (snapshot: MemberScheduleSnapshot) => void, signal?: AbortSignal): Promise<MemberScheduleSnapshot> {
   const read = <T,>(value: Promise<T>, label: string) => withReadDeadline(value, label, 20_000, signal);
+  // Cold group discovery may perform several consensus reads before reaching
+  // the events actor. Its time must not consume the actor's entire deadline.
+  // Bound coordination separately; still refuse real routing/service failures.
+  const eventRead = <T,>(clubId: string, label: string, action: (scoped: FeatureBackendContext) => Promise<T>) =>
+    withReadDeadline(readContentInScope(ctx, 'events', { clubId }, scoped => read(action(scoped), label)),
+      `${label} connection`, 60_000, signal);
   const ids = [...new Set(scope.clubIds)];
   const rows = new Map<string, MemberScheduleEvent[]>();
   const failed = new Set<string>();
@@ -53,7 +59,7 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
   };
   await Promise.all(ids.map(async clubId => {
     try {
-      const raw = await read(readContentInScope(ctx, 'events', { clubId }, scoped => listLiveEvents(scoped, clubId, scope.selectedTeamId)), 'Schedule events');
+      const raw = await eventRead(clubId, 'Schedule events', scoped => listLiveEvents(scoped, clubId, scope.selectedTeamId));
       successful++;
       const visible = raw.flatMap<MemberScheduleEvent>(event => {
         const start = scheduleTimestampDate(event.starts_at_ms);
@@ -93,7 +99,7 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
           rows.set(clubId, (rows.get(clubId) ?? []).map(row => ({ ...row, clubs: { name: profile?.name ?? 'Club', sport: profile?.sport[0] ?? null } })));
           publish();
         }).catch(() => { failed.add(`profile:${clubId}`); }),
-        read(readContentInScope(ctx, 'events', { clubId }, scoped => listLiveEventDutyTeams(scoped, visible.map(row => row.id))), 'Schedule duties').then(value => {
+        eventRead(clubId, 'Schedule duties', scoped => listLiveEventDutyTeams(scoped, visible.map(row => row.id))).then(value => {
           const duties = new Map(value.map(row => [row.event_id, row.team_id]));
           rows.set(clubId, (rows.get(clubId) ?? []).map(row => ({ ...row, duty_team_id: duties.get(row.id) ?? null })));
           publish();

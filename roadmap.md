@@ -1,3 +1,6 @@
+## Schedule refresh source failures — 26 October 2026
+- [ ] Separate group-location coordination from the event service deadline; verify slow valid routing does not become a failed club refresh while genuine event failures remain visible. Signed-in phone failure unavailable locally.
+
 ## Team gallery stuck in chat — 26 October 2026
 - [x] Gallery/Vault location hints use the exact open team's resolved query; gallery cards subscribe without fetching and replace stalled discovery when the club resolves. Focused regression verifies cold team-to-club recovery and existing refusal/unlock retries. Phone's signed-in ICP session is unavailable in the local preview; live phone verification remains outstanding.
 
