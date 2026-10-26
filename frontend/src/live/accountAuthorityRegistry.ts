@@ -12,6 +12,8 @@ export type AccountRegistrySnapshot = {
 };
 export type AccountRegistryBinding = {
   targetAlias: string; deploymentId: string; deploymentRevision: bigint; host: string; networkKind: string;
+  /** On-chain deployment alias may differ from the app's runtime target alias. */
+  registryAlias?: string;
   registryRevision: bigint; requiredClubAuthorities: readonly string[];
 };
 
@@ -28,7 +30,7 @@ export function accountAuthoritiesFromRegistry(snapshot: AccountRegistrySnapshot
   let subnetSignature: string | undefined;
   const groups = snapshot.groups.map(g => {
     const p = snapshot.placements.find(p => p.group_id === g.id);
-    if (!p || g.target_alias !== binding.targetAlias || p.deployment_id !== binding.deploymentId ||
+    if (!p || g.target_alias !== (binding.registryAlias ?? binding.targetAlias) || p.deployment_id !== binding.deploymentId ||
         p.deployment_revision !== binding.deploymentRevision || p.host !== binding.host || p.network_kind !== binding.networkKind) throw new Error('Foreign account authority deployment');
     const approved = p.approved_subnets.map(s => s.toText()).sort();
     if (!approved.length || approved.length > 64 || new Set(approved).size !== approved.length ||
@@ -69,6 +71,7 @@ export async function readLiveAccountAuthorityRegistry(
 export async function readLiveAccountAuthoritySnapshot(
   ctx: import('./featureRouter').FeatureBackendContext, binding: AccountRegistryBinding,
 ): Promise<AccountRegistrySnapshot> {
+  binding = { ...binding, requiredClubAuthorities: [...binding.requiredClubAuthorities] };
   if (ctx.target.alias !== binding.targetAlias || new URL(ctx.target.host).origin !== binding.host ||
       ctx.target.networkKind !== binding.networkKind || ctx.identity.getPrincipal().isAnonymous()) throw new Error('Account registry target mismatch');
   const identity = ctx.identity;
@@ -84,7 +87,7 @@ export async function readLiveAccountAuthoritySnapshot(
   recheck();
   const { readPinnedGroupRegistry } = await import('./groupRegistryPager');
   recheck();
-  const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => actor.read_group_registry_page(binding.targetAlias, revision, cursor, limit),
+  const snapshot = await readPinnedGroupRegistry((revision, cursor, limit) => actor.read_group_registry_page(binding.registryAlias ?? binding.targetAlias, revision, cursor, limit),
     binding.registryRevision, recheck);
   recheck();
   accountAuthoritiesFromRegistry(snapshot, binding);

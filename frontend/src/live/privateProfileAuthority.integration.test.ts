@@ -44,4 +44,12 @@ describe("live original-PII resolver consensus composition",()=>{
     const f=fixture();mocks.page.mockImplementationOnce(async()=>{f.ctx.target.canisterIds.club_domain=p(120).toText();return f.reply;});
     await expect(f.resolve(f.authority)).rejects.toThrow("identity or target changed");
   });
+  it("keeps the runtime target alias while reading the independently pinned on-chain alias",async()=>{
+    const f=fixture();f.ctx.target.alias="app-mainnet";
+    const binding={...f.binding,targetAlias:"app-mainnet",registryAlias:"mainnet"};
+    const lease=await createLivePrivateProfileAuthorityResolver(f.ctx,binding)(f.authority);
+    expect(mocks.page).toHaveBeenCalledWith("mainnet",[8n],[],64);
+    expect(lease.context.target.alias).toBe("app-mainnet");
+    await lease.confirm();
+  });
 });
