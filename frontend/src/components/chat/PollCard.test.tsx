@@ -6,7 +6,7 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: { channel: mocks.ch
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'parent' } }) }));
 vi.mock('@/live/loadBackendRouting', () => ({ isFeatureRoutedToIcp: () => mocks.icp }));
 vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: mocks.dispatch }));
-vi.mock('@/live/features/messaging', () => ({ getLivePollResults: mocks.results, voteLivePoll: mocks.vote, closeLivePoll: vi.fn(), deleteLivePoll: vi.fn() }));
+vi.mock('@/live/features/messaging', () => ({ getLivePollResults: mocks.results, voteLivePoll: mocks.vote, closeLivePoll: vi.fn(), deleteLivePoll: vi.fn(), takeBundledPollResult: () => null }));
 vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: async () => new Map([
   ['parent', { display_name: 'Paul', avatar_url: null }],
   ['member-2', { display_name: 'Alex', avatar_url: null }],

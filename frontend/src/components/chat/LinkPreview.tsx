@@ -84,6 +84,20 @@ async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
           return (await res.json()) as LinkPreviewData | null;
         },
         icp: async (ctx) => {
+          // Fast path first: the app's own link-preview endpoint fetches only
+          // public og metadata and answers in well under a second. The
+          // canister's replicated HTTPS outcall (several seconds per link)
+          // stays as the fallback when the endpoint is unavailable.
+          try {
+            const res = await fetch("/api/fetch-link-preview", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ url: fetchUrl }),
+            });
+            if (res.ok) return (await res.json()) as LinkPreviewData | null;
+          } catch {
+            // fall through to the canister outcall
+          }
           const p = await fetchLiveLinkPreview(ctx, fetchUrl);
           return {
             url: fetchUrl,
