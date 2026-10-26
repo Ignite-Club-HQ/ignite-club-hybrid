@@ -1088,6 +1088,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Batch, 'Err' : IDL.Text })],
         [],
       ),
+    'read_profile_competition_admin_batch' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Batch, 'Err' : IDL.Text })],
+        [],
+      ),
     'read_profile_direct_batch' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
         [IDL.Variant({ 'Ok' : Batch, 'Err' : IDL.Text })],

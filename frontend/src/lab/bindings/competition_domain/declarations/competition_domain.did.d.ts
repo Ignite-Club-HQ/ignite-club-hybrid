@@ -784,6 +784,19 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'read_profile_admin_thread_batch' : ActorMethod<
+    [Principal, string, Principal, Array<Principal>, [] | [bigint]],
+    {
+        'Ok' : {
+          'requester' : Principal,
+          'members' : Array<boolean>,
+          'subjects' : Array<Principal>,
+          'club' : string,
+          'revision' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'read_profile_audience_batch' : ActorMethod<
     [Principal, string, Array<Principal>, [] | [bigint]],
     {

@@ -1028,6 +1028,19 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_profile_admin_thread_batch(requester: Principal, competition_id: string, member: Principal, subjects: Array<Principal>, expected: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            requester: Principal;
+            members: Array<boolean>;
+            subjects: Array<Principal>;
+            club: string;
+            revision: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_profile_audience_batch(requester: Principal, competition_id: string, subjects: Array<Principal>, expected: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -2686,6 +2699,22 @@ export class Competition_domain implements competition_domainInterface {
     }> {
         const result = await this.actor.read_playhq_stats(arg0);
         return from_candid_variant_n114(result);
+    }
+    async read_profile_admin_thread_batch(arg0: Principal, arg1: string, arg2: Principal, arg3: Array<Principal>, arg4: bigint | null): Promise<{
+        __kind__: "Ok";
+        Ok: {
+            requester: Principal;
+            members: Array<boolean>;
+            subjects: Array<Principal>;
+            club: string;
+            revision: bigint;
+        };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_profile_admin_thread_batch(arg0, arg1, arg2, arg3, to_candid_opt_n115(arg4));
+        return from_candid_variant_n116(result);
     }
     async read_profile_audience_batch(arg0: Principal, arg1: string, arg2: Array<Principal>, arg3: bigint | null): Promise<{
         __kind__: "Ok";
