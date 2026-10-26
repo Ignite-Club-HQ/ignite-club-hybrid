@@ -28,6 +28,7 @@ mod membership_wire;
 mod membership_acceptance;
 mod admin_accounts;
 mod guardian_search;
+mod private_name_audience;
 mod private_profile_reference;
 mod club_profiles;
 use deletion_timing::Ticket;
@@ -1522,6 +1523,75 @@ async fn read_guardian_profile_candidates(authority: Principal, child: String, c
     rows.retain(|row|membership_lookup_viewer(row.principal).is_ok());
     let next=if has_next {last.map(|after|guardian_search::Cursor{after,revision,binding,expires_at_ns:cursor.map(|c|c.expires_at_ns).unwrap_or(ic_cdk::api::time()+300_000_000_000)})} else {None};
     Ok(GuardianProfilePage{revision,rows,scanned,next})
+}
+
+/// Service-delegated name permission only. Registry placement authenticates
+/// both the ORIGINAL PII caller and owning audience service; location alone
+/// never admits a human. References must name this precise original PII caller.
+#[ic_cdk::update]
+async fn read_private_profile_name_authorization(viewer_principal: Principal, subjects: Vec<Principal>, scope: private_name_audience::Scope) -> Outcome<Vec<ProfileSearchResult>> {
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1") { return Err("Private name audiences are not released".into()); }
+    private_name_audience::validate(viewer_principal, &subjects, &scope)?;
+    let service = ic_cdk::api::msg_caller();
+    if !service_authorities().contains(&service) { return Err("Configured private-name service required".into()); }
+    let viewer = membership_lookup_viewer(viewer_principal)?;
+    let config = directory_config()?;
+    let history = removal_history_revision();
+    let revision = profile_search_revision();
+    let active = || -> Outcome<()> {
+        if membership_lookup_viewer(viewer_principal)? != viewer || !config.same_configuration(&directory_config()?)
+            || history != removal_history_revision() || revision != profile_search_revision() {
+            return Err("Private-name audience changed".into());
+        }
+        Ok(())
+    };
+    let inventory = read_registry_pages(&config.binding, active).await?;
+    active()?;
+    group_inventory::validate(&inventory, &config.binding, &[], &[])?;
+    if !inventory.groups.iter().any(|g| g.domains.iter().any(|d| d.domain == "pii_access_control" && d.canister == service)) {
+        return Err("Original private-name service is not registered".into());
+    }
+    let domain = match scope.kind.as_str() { "competition" => "competition_domain", "league" => "mini_league_domain", _ => "club_domain" };
+    if !inventory.groups.iter().any(|g| g.domains.iter().any(|d| d.domain == domain && d.canister == scope.authority)) {
+        return Err("Private-name audience authority is not registered".into());
+    }
+    let mut rows = Vec::new();
+    for subject in &subjects {
+        let account = membership_lookup_viewer(*subject)?;
+        let profile = get_profile_entry(&account.account).ok_or("Private profile not found")?;
+        let expected = format!("pii-display-name:v1:{}:{}", service.to_text(), subject.to_text());
+        if profile.display_name != expected { return Err("Original private-name binding changed".into()); }
+        rows.push(ProfileSearchResult { account_id: profile.account_id, principal: *subject, display_name: profile.display_name, avatar_ref: profile.avatar_ref });
+    }
+    if scope.kind == "guardian_search" {
+        if scope.profile_revision != revision { return Err("Guardian directory changed".into()); }
+        verify_guardian_search(viewer_principal, scope.authority, &scope.resource, &viewer, &config).await?;
+        active()?;
+        verify_guardian_search(viewer_principal, scope.authority, &scope.resource, &viewer, &config).await?;
+        active()?;
+    } else {
+        let method = match scope.kind.as_str() { "club" => "read_profile_membership_batch", "family" => "read_profile_family_batch", "competition" | "league" => "read_profile_audience_batch", _ => return Err("Invalid audience".into()) };
+        let mut retained: Option<club_profiles::MembershipBatch> = None;
+        for _ in 0..2 {
+            let expected = retained.as_ref().map(|r| r.revision.clone());
+            let reply = ic_cdk::call::Call::bounded_wait(scope.authority, method)
+                .with_args(&(viewer_principal, scope.resource.clone(), subjects.clone(), expected.clone())).await
+                .map_err(|_| "Private-name relationship verification unavailable")?;
+            active()?;
+            let batch: Outcome<club_profiles::MembershipBatch> = reply.candid().map_err(|_| "Invalid private-name relationship reply")?;
+            let batch = batch?;
+            club_profiles::verify_batch(&batch, viewer_principal, &scope.resource, &subjects, expected.as_ref())?;
+            if batch.members.iter().any(|member| !member) || retained.as_ref().is_some_and(|prior| prior != &batch) { return Err("Private-name relationship denied or changed".into()); }
+            retained = Some(batch);
+        }
+    }
+    // No await after these final subject/reference and caller rechecks.
+    active()?;
+    for row in &rows {
+        let account = membership_lookup_viewer(row.principal)?;
+        if account.account != row.account_id || get_profile_entry(&account.account).map(|p| p.display_name) != Some(row.display_name.clone()) { return Err("Private-name subject changed".into()); }
+    }
+    Ok(rows)
 }
 
 /// Final retained-match readback, without rescanning or deriving keys twice.
