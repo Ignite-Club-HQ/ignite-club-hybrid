@@ -84,8 +84,10 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
         const receipts = await withFeatureBackend("messaging", {
           supabase: async () => [],
           icp: async (ctx) => {
-            const { listLiveReadReceipts } = await import("@/live/features/messaging");
-            return listLiveReadReceipts(ctx, contextId || messageId);
+            const { listLiveReadReceipts, listLiveBroadcastMessageReaders } = await import("@/live/features/messaging");
+            return messageType === 'broadcast' && privateNames
+              ? listLiveBroadcastMessageReaders(ctx, [messageId])
+              : listLiveReadReceipts(ctx, contextId || messageId);
           },
         }, contextId ? { conversationId: contextId } : currentChatScope());
         if (cancelled) return;

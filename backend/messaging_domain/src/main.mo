@@ -29,6 +29,7 @@ import Timer "mo:core/Timer";
 import PhotoReminderPolicy "photoReminderPolicy";
 import DefaultChatPolicy "defaultChatPolicy";
 import PrivateDirectNames "privateDirectNames";
+import BroadcastReadPolicy "broadcastReadPolicy";
 import PrivateProfileAudience "../../shared/PrivateProfileAudience";
 
 persistent actor class Main(governorInit : Principal) = this {
@@ -4020,6 +4021,39 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  // Both the displayed message and recorded frontier must still exist in the
+  // exact broadcast conversation. IDs/timestamps from a browser prove nothing.
+  func broadcastReceiptCovers(receipt : Types.Receipt, target : Types.Message) : Bool {
+    if (not receipt.read or receipt.conversation_id != BROADCAST_CONVERSATION_ID or target.conversation_id != BROADCAST_CONVERSATION_ID) return false;
+    let ?frontier = messages.find(func m = m.id == receipt.message_id and m.conversation_id == BROADCAST_CONVERSATION_ID) else return false;
+    if (messages.filter(func m = m.id == receipt.message_id and m.conversation_id == BROADCAST_CONVERSATION_ID).size() != 1) return false;
+    BroadcastReadPolicy.covers(target.sequence, frontier.sequence, target.id == frontier.id)
+  };
+
+  // Bounded exact-message reader rows, not a global account/presence directory.
+  public shared ({ caller }) func list_broadcast_message_readers(message_ids : [Text]) : async { #Ok : [Types.Receipt]; #Err : Text } {
+    if (caller.isAnonymous() or message_ids.size() == 0 or message_ids.size() > 100
+      or message_ids.any(func id = id == "" or id.size() > 128 or message_ids.filter(func other = other == id).size() != 1)) return #Err("Exact bounded broadcast messages required");
+    if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
+    try {
+      await admitAccount(caller);
+      await* requireChatAccess(caller, BROADCAST_CONVERSATION_ID);
+      if (convFenced(BROADCAST_CONVERSATION_ID) or removalReceiver.denied(caller) or not canAccessConversation(caller, BROADCAST_CONVERSATION_ID)) return #Err("Broadcast access forbidden");
+      var result : [Types.Receipt] = [];
+      for (id in message_ids.values()) {
+        let targets = messages.filter(func m = m.id == id and m.conversation_id == BROADCAST_CONVERSATION_ID);
+        if (targets.size() != 1) return #Err("Broadcast message missing or ambiguous");
+        for (receipt in receipts.values()) {
+          if (broadcastReceiptCovers(receipt, targets[0]) and not removalReceiver.denied(receipt.user) and not isBlockedPair(caller, receipt.user)) {
+            if (not BroadcastReadPolicy.canAppend(result.size())) return #Err("Broadcast reader response exceeds 2500 rows; narrow message selection");
+            result := result.concat([{ receipt with message_id = id }]);
+          };
+        };
+      };
+      #Ok(result)
+    } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
+  };
+
   // Broadcast author is the fixed Announcements label. Only independently
   // recorded readers/reactors can disclose a personal name in those drawers;
   // a caller-supplied principal is never a global person-search selector.
@@ -4034,7 +4068,9 @@ persistent actor class Main(governorInit : Principal) = this {
     let revision = mediaEvidenceRevision;
     switch (expected) { case (?r) if (r != revision) return #Err("Broadcast name revision changed"); case null {} };
     func participant(p : Principal) : Bool {
-      receipts.any(func r = r.conversation_id == conversation_id and r.message_id == message_id and r.user == p and r.read)
+      let targets = messages.filter(func m = m.id == message_id and m.conversation_id == conversation_id);
+      if (targets.size() != 1) return false;
+      receipts.any(func r = r.user == p and broadcastReceiptCovers(r, targets[0]))
       or reactions.any(func r = r.user == p and r.message_id == message_id)
     };
     func active() : Bool {

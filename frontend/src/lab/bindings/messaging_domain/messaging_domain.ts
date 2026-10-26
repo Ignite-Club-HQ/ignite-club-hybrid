@@ -530,6 +530,13 @@ export interface MainInterface {
         Err: string;
     }>;
     list_blocked_users(): Promise<Array<Principal>>;
+    list_broadcast_message_readers(message_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Receipt__1>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     list_club_admin_threads(club_id: string): Promise<Array<{
         id: string;
         member: Principal;
@@ -2097,6 +2104,16 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.list_blocked_users();
         return result;
     }
+    async list_broadcast_message_readers(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Receipt__1>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_broadcast_message_readers(arg0);
+        return from_candid_variant_n74(result);
+    }
     async list_club_admin_threads(arg0: string): Promise<Array<{
         id: string;
         member: Principal;
@@ -2112,7 +2129,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_club_dm_settings();
-        return from_candid_variant_n74(result);
+        return from_candid_variant_n75(result);
     }
     async list_competition_admin_threads(arg0: string): Promise<Array<{
         id: string;
@@ -2129,7 +2146,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_content_reports(to_candid_opt_n12(arg0));
-        return from_candid_variant_n75(result);
+        return from_candid_variant_n76(result);
     }
     async list_conversation_online_users(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2169,7 +2186,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_groups_by_club(arg0);
-        return from_candid_variant_n76(result);
+        return from_candid_variant_n77(result);
     }
     async list_groups_by_clubs(arg0: Array<string>): Promise<{
         __kind__: "Ok";
@@ -2179,7 +2196,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_groups_by_clubs(arg0);
-        return from_candid_variant_n76(result);
+        return from_candid_variant_n77(result);
     }
     async list_groups_by_team(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2189,7 +2206,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_groups_by_team(arg0);
-        return from_candid_variant_n76(result);
+        return from_candid_variant_n77(result);
     }
     async list_join_requests(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2199,7 +2216,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_join_requests(arg0);
-        return from_candid_variant_n78(result);
+        return from_candid_variant_n79(result);
     }
     async list_latest_messages_page(arg0: string, arg1: bigint | null, arg2: number): Promise<{
         __kind__: "Ok";
@@ -2238,7 +2255,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_open_groups(arg0);
-        return from_candid_variant_n79(result);
+        return from_candid_variant_n80(result);
     }
     async list_pinned_messages(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2248,7 +2265,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_pinned_messages(arg0);
-        return from_candid_variant_n82(result);
+        return from_candid_variant_n83(result);
     }
     async list_reactions(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2258,7 +2275,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_reactions(arg0);
-        return from_candid_variant_n83(result);
+        return from_candid_variant_n84(result);
     }
     async list_read_receipts(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2268,7 +2285,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_read_receipts(arg0);
-        return from_candid_variant_n84(result);
+        return from_candid_variant_n74(result);
     }
     async list_typing(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2524,7 +2541,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_club_dm_settings();
-        return from_candid_variant_n74(result);
+        return from_candid_variant_n75(result);
     }
     async read_account_list_content_reports(arg0: string | null): Promise<{
         __kind__: "Ok";
@@ -2534,7 +2551,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_content_reports(to_candid_opt_n12(arg0));
-        return from_candid_variant_n75(result);
+        return from_candid_variant_n76(result);
     }
     async read_account_list_deleted_groups(): Promise<{
         __kind__: "Ok";
@@ -2564,7 +2581,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_groups_by_club(arg0);
-        return from_candid_variant_n76(result);
+        return from_candid_variant_n77(result);
     }
     async read_account_list_groups_by_clubs(arg0: Array<string>): Promise<{
         __kind__: "Ok";
@@ -2574,7 +2591,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_groups_by_clubs(arg0);
-        return from_candid_variant_n76(result);
+        return from_candid_variant_n77(result);
     }
     async read_account_list_groups_by_team(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2584,7 +2601,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_groups_by_team(arg0);
-        return from_candid_variant_n76(result);
+        return from_candid_variant_n77(result);
     }
     async read_account_list_join_requests(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2594,7 +2611,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_join_requests(arg0);
-        return from_candid_variant_n78(result);
+        return from_candid_variant_n79(result);
     }
     async read_account_list_latest_messages_page(arg0: string, arg1: bigint | null, arg2: number): Promise<{
         __kind__: "Ok";
@@ -2633,7 +2650,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_open_groups(arg0);
-        return from_candid_variant_n79(result);
+        return from_candid_variant_n80(result);
     }
     async read_account_list_pinned_messages(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2643,7 +2660,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_pinned_messages(arg0);
-        return from_candid_variant_n82(result);
+        return from_candid_variant_n83(result);
     }
     async read_account_list_reactions(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2653,7 +2670,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_reactions(arg0);
-        return from_candid_variant_n83(result);
+        return from_candid_variant_n84(result);
     }
     async read_account_list_read_receipts(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2663,7 +2680,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.read_account_list_read_receipts(arg0);
-        return from_candid_variant_n84(result);
+        return from_candid_variant_n74(result);
     }
     async read_account_list_typing(arg0: string): Promise<{
         __kind__: "Ok";
@@ -3968,7 +3985,7 @@ function from_candid_record_n73(value: {
         platform: record_opt_to_undefined(from_candid_opt_n5(value.platform))
     };
 }
-function from_candid_record_n81(value: {
+function from_candid_record_n82(value: {
     requested: boolean;
     join_policy: string;
     summary: _GroupSummary;
@@ -4686,6 +4703,25 @@ function from_candid_variant_n70(value: {
     } : value;
 }
 function from_candid_variant_n74(value: {
+    Ok: Array<_Receipt__1>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<Receipt__1>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n75(value: {
     Ok: Array<_ClubDmSettings>;
 } | {
     Err: string;
@@ -4704,7 +4740,7 @@ function from_candid_variant_n74(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n75(value: {
+function from_candid_variant_n76(value: {
     Ok: Array<_ContentReport>;
 } | {
     Err: string;
@@ -4723,7 +4759,7 @@ function from_candid_variant_n75(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n76(value: {
+function from_candid_variant_n77(value: {
     Ok: Array<_GroupSummary>;
 } | {
     Err: string;
@@ -4736,13 +4772,13 @@ function from_candid_variant_n76(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n77(value.Ok)
+        Ok: from_candid_vec_n78(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n78(value: {
+function from_candid_variant_n79(value: {
     Ok: Array<_JoinRequest>;
 } | {
     Err: string;
@@ -4756,35 +4792,6 @@ function from_candid_variant_n78(value: {
     return "Ok" in value ? {
         __kind__: "Ok",
         Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n79(value: {
-    Ok: Array<{
-        requested: boolean;
-        join_policy: string;
-        summary: _GroupSummary;
-        category: [] | [string];
-    }>;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Array<{
-        requested: boolean;
-        join_policy: string;
-        summary: GroupSummary;
-        category?: string;
-    }>;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_vec_n80(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -4809,7 +4816,36 @@ function from_candid_variant_n8(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n82(value: {
+function from_candid_variant_n80(value: {
+    Ok: Array<{
+        requested: boolean;
+        join_policy: string;
+        summary: _GroupSummary;
+        category: [] | [string];
+    }>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<{
+        requested: boolean;
+        join_policy: string;
+        summary: GroupSummary;
+        category?: string;
+    }>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_vec_n81(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n83(value: {
     Ok: Array<_PinnedMessage>;
 } | {
     Err: string;
@@ -4828,32 +4864,13 @@ function from_candid_variant_n82(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n83(value: {
+function from_candid_variant_n84(value: {
     Ok: Array<_Reaction>;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
     Ok: Array<Reaction>;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n84(value: {
-    Ok: Array<_Receipt__1>;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Array<Receipt__1>;
 } | {
     __kind__: "Err";
     Err: string;
@@ -5088,10 +5105,10 @@ function from_candid_vec_n46(value: Array<_RoleGrant>): Array<RoleGrant> {
 function from_candid_vec_n71(value: Array<_OnlineUser>): Array<OnlineUser> {
     return value.map((x)=>from_candid_OnlineUser_n72(x));
 }
-function from_candid_vec_n77(value: Array<_GroupSummary>): Array<GroupSummary> {
+function from_candid_vec_n78(value: Array<_GroupSummary>): Array<GroupSummary> {
     return value.map((x)=>from_candid_GroupSummary_n27(x));
 }
-function from_candid_vec_n80(value: Array<{
+function from_candid_vec_n81(value: Array<{
     requested: boolean;
     join_policy: string;
     summary: _GroupSummary;
@@ -5102,7 +5119,7 @@ function from_candid_vec_n80(value: Array<{
     summary: GroupSummary;
     category?: string;
 }> {
-    return value.map((x)=>from_candid_record_n81(x));
+    return value.map((x)=>from_candid_record_n82(x));
 }
 function from_candid_vec_n89(value: Array<_MessageWithReactions>): Array<MessageWithReactions> {
     return value.map((x)=>from_candid_MessageWithReactions_n90(x));

@@ -649,6 +649,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'list_blocked_users' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
+    'list_broadcast_message_readers' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt__1), 'Err' : IDL.Text })],
+        [],
+      ),
     'list_club_admin_threads' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(IDL.Record({ 'id' : IDL.Text, 'member' : IDL.Principal }))],

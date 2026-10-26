@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   get_direct_conversation: vi.fn(),
   get_message_window: vi.fn(),
   list_conversation_online_users: vi.fn(),
+  list_broadcast_message_readers: vi.fn(),
 }));
 
 vi.mock("../domains", () => ({
@@ -28,6 +29,7 @@ vi.mock("../domains", () => ({
       get_direct_conversation: mocks.get_direct_conversation,
       get_message_window: mocks.get_message_window,
       list_conversation_online_users: mocks.list_conversation_online_users,
+      list_broadcast_message_readers: mocks.list_broadcast_message_readers,
     },
   })),
 }));
@@ -44,11 +46,28 @@ import {
   getLiveDirectConversation,
   getLiveMessageWindow,
   listLiveConversationOnlineUsers,
+  listLiveBroadcastMessageReaders,
 } from "./messaging";
 
 const ctx = { target: {}, identity: {} } as never;
 const other = { toText: () => "aaaaa-aa" } as never;
 describe("exact private messaging reads", () => {
+  it('reads the exact displayed broadcast messages with bounded selectors and no client ordering inference', async () => {
+    const identity = { getPrincipal: () => ({ toText: () => 'viewer' }) };
+    const owner = { target: {}, identity } as never;
+    mocks.list_broadcast_message_readers.mockResolvedValue({ Ok: [{ conversation_id: 'broadcast', message_id: 'older', user: other, read: true }] });
+    expect(await listLiveBroadcastMessageReaders(owner, ['older', 'older'])).toEqual([{ conversationId: 'broadcast', messageId: 'older', user: other, read: true }]);
+    expect(mocks.list_broadcast_message_readers).toHaveBeenLastCalledWith(['older']);
+    await expect(listLiveBroadcastMessageReaders(owner, Array.from({ length: 101 }, (_, i) => String(i)))).rejects.toThrow('bounded');
+  });
+  it('refuses wrong-message reader responses and held account drift', async () => {
+    const identity = { getPrincipal: () => ({ toText: () => 'viewer' }) };
+    const owner = { target: {}, identity };
+    mocks.list_broadcast_message_readers.mockResolvedValueOnce({ Ok: [{ conversation_id: 'broadcast', message_id: 'foreign', user: other, read: true }] });
+    await expect(listLiveBroadcastMessageReaders(owner as never, ['older'])).rejects.toThrow('mismatch');
+    mocks.list_broadcast_message_readers.mockImplementationOnce(async () => { owner.identity = { ...identity }; return { Ok: [] }; });
+    await expect(listLiveBroadcastMessageReaders(owner as never, ['older'])).rejects.toThrow('account changed');
+  });
   it("reads empty DM participants with the exact caller identity", async () => {
     const self = { toText: () => "self" };
     const peer = { toText: () => "peer" };

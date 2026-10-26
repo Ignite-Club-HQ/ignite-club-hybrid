@@ -462,6 +462,11 @@ type Main =
        Ok: vec OnlineUser;
      }) query;
    list_blocked_users: () -> (vec principal) query;
+   list_broadcast_message_readers: (message_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Receipt__1;
+     });
    list_club_admin_threads: (club_id: text) ->
     (vec record {
            id: text;

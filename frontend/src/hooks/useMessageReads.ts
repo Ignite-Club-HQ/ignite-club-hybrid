@@ -5,7 +5,8 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import { markLiveConversationRead, listLiveReadReceipts } from "@/live/features/messaging";
+import { markLiveConversationRead, listLiveReadReceipts, listLiveBroadcastMessageReaders } from "@/live/features/messaging";
+import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { selectCachedProfilesByIds, selectCachedProfileById } from "@/lib/profileCache";
 
 type MessageType = "team" | "club" | "group" | "broadcast" | "dm" | "club_admin";
@@ -173,7 +174,9 @@ export function useMessageReads(
       const idSet = new Set(ids);
       const receipts = await withFeatureBackend("messaging", {
         supabase: async () => [],
-        icp: (ctx) => listLiveReadReceipts(ctx, contextId),
+        icp: (ctx) => messageType === 'broadcast' && privateProfileSearchRehearsalEnabled()
+          ? listLiveBroadcastMessageReaders(ctx, ids.slice(-100))
+          : listLiveReadReceipts(ctx, contextId),
       }, { conversationId: contextId });
 
       const readers: Record<string, Map<string, ReaderInfo>> = {};

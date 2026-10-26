@@ -387,6 +387,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_blocked_users' : ActorMethod<[], Array<Principal>>,
+  'list_broadcast_message_readers' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<Receipt__1> } |
+      { 'Err' : string }
+  >,
   'list_club_admin_threads' : ActorMethod<
     [string],
     Array<{ 'id' : string, 'member' : Principal }>
