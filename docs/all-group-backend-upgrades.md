@@ -11,6 +11,7 @@ Workflow: **Upgrade backend (all mainnet groups)** (`upgrade-all-groups.yml`) in
 | Scope | Services per group | Shared once |
 |---|---|---|
 | full_backend (default) | all 13 group services, including PII, timers, insights and points | identity_access, placement_registry, migration_coordinator, secret_workload_identity, shard_router |
+| club_migration | club_domain only, including closed registered groups | — |
 | app_admin | notification_queue | identity_access |
 | team_invites | club_domain, mini_league_domain | — |
 | messaging | messaging_domain | — |
