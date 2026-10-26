@@ -86,6 +86,25 @@ try {
   };
   await decrypt(viewer,scope('club',groups[1].club.canisterId,'club-1'));
   await decrypt(viewer,scope('family',groups[1].club.canisterId,'child-1'));
+  const broadcastService=groups[0].messaging;
+  broadcastService.actor.setPrincipal(governor);ok(await broadcastService.actor.ensure_broadcast_conversation());
+  const announcement=ok(await broadcastService.actor.send_message('broadcast','Announcement','private-broadcast-test',[],[]));
+  const broadcast=scope('broadcast',broadcastService.canisterId,'broadcast');
+  assert.ok('Err' in await read(viewer,broadcast),'Unrelated signed-in profile cannot become global search via broadcast');
+  broadcastService.actor.setPrincipal(owner);ok(await broadcastService.actor.toggle_reaction(announcement.id,'like'));
+  await decrypt(viewer,broadcast);
+  broadcastService.actor.setPrincipal(identity.canisterId);
+  const reacted=ok(await broadcastService.actor.read_profile_broadcast_batch(viewer,'broadcast',[owner],[]));
+  broadcastService.actor.setPrincipal(owner);ok(await broadcastService.actor.toggle_reaction(announcement.id,'like'));
+  assert.ok('Err' in await read(viewer,broadcast),'Removing the final reaction removes the personal-name audience');
+  ok(await broadcastService.actor.mark_read('broadcast',announcement.id));await decrypt(viewer,broadcast);
+  broadcastService.actor.setPrincipal(identity.canisterId);
+  assert.ok('Err' in await broadcastService.actor.read_profile_broadcast_batch(viewer,'broadcast',[owner],[reacted.revision]),'Reaction/read ABA invalidates retained audience');
+  broadcastService.actor.setPrincipal(viewer);ok(await broadcastService.actor.block_user(owner));
+  assert.ok('Err' in await read(viewer,broadcast),'Blocked broadcast participant supplies no fresh name keys');
+  ok(await broadcastService.actor.unblock_user(owner));await decrypt(viewer,broadcast);
+  assert.ok('Err' in await read(viewer,scope('broadcast',broadcastService.canisterId,'fake')),'Only canonical broadcast scope is allowed');
+  console.log('PASS: real broadcast participant SDK names require their recorded reaction/read; unrelated profiles, removed reactions, blocks, stale revisions and forged scopes denied. Fixed Announcements author label remains unchanged.');
   const dm=groups[1].messaging;dm.actor.setPrincipal(viewer);
   const directConversation=ok(await dm.actor.create_conversation('dm',[],[viewer,owner]));
   const directAuthority=groups[1].directRelay?.canisterId??dm.canisterId;
@@ -138,7 +157,7 @@ try {
       ok(await dm.actor.unblock_user(owner));await decrypt(viewer,direct);
     }
     console.log('PASS: all four real messaging replies held during original-PII key derivation; viewer/subject suspension and original-reference drift suppress final keys, opening-reply blocks invalidate retained revisions; each restored exact DM decrypts with SDK. Final remote-block delivery fencing remains unverified.');
-  }
+  } else console.log('SKIPPED: held direct-name reply checks; set PRIVATE_DIRECT_NAME_RELAY_WASM to run observed interruptions.');
   assert.ok('Err' in await read(viewer,scope('direct',dm.canisterId,'broadcast')),'Broadcast is never a two-person direct audience');
   identity.actor.setPrincipal(viewer);const page=ok(await identity.actor.read_guardian_profile_candidates(groups[1].club.canisterId,'child-1',[]));
   const guardian=scope('guardian_search',groups[1].club.canisterId,'child-1',page.revision);

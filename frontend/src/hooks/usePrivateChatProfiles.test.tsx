@@ -1,11 +1,17 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ read: vi.fn(), direct: vi.fn(), legacy: vi.fn() }));
-vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: async (_feature: string, providers: any) => providers.icp({}) }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), direct: vi.fn(), legacy: vi.fn(), routing: vi.fn() }));
+vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: async (_feature: string, providers: any, scope: unknown) => { mocks.routing(scope); return providers.icp({}); } }));
 vi.mock('@/live/chatRelationshipProfiles', () => ({ readChatRelationshipProfiles: mocks.read, readDirectChatProfiles: mocks.direct }));
 import { usePrivateChatProfiles } from './usePrivateChatProfiles';
 beforeEach(() => { vi.resetAllMocks(); });
 describe('mounted private chat name lifetime', () => {
+  it('routes broadcast names to the app service rather than conversation discovery', async () => {
+    mocks.read.mockResolvedValue(new Map([['person', { id: 'person', display_name: 'Reader' }]]));
+    const hook=renderHook(() => usePrivateChatProfiles('broadcast', 'viewer', ['person'], true));
+    await waitFor(() => expect(hook.result.current('person')?.display_name).toBe('Reader'));
+    expect(mocks.routing).toHaveBeenCalledWith({ shared: 'app' });
+  });
   it('uses only the direct reader and clears names when switching chat purpose', async () => {
     mocks.direct.mockResolvedValue(new Map([['person', { id: 'person', display_name: 'Direct name' }]]));
     mocks.read.mockRejectedValue(new Error('Not a group'));
