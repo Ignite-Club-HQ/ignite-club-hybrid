@@ -1,5 +1,6 @@
 ## Stable background refresh — 26 October 2026
-- [ ] Preserve visible list order while updating row content; reset ordering on page return or explicit filters, keep removals authoritative, and verify focused regressions.
+- [x] ICP inbox sections, gallery and schedule lists retain active placement, update content/badges and append additions; missing rows disappear and hidden-page/filter/account changes reset order. Targeted card anchoring compensates size changes without smooth scroll. Calendar membership stays live and Supabase ordering is unchanged.
+- [x] 40 focused checks passed per mode plus 36 ICP page/cache checks; isolation guard and preview build OK. Browser fixture verified fresh text, stable ordering, compensation for an 80px resize above the reader and latest order on page return, with no page errors. Fixture does not establish signed-in production timing.
 - [ ] Signed-in phone acceptance requires Paul's Internet Identity session and the updated frontend; no deployment requested.
 
 ## Immediate bottom-tab response — 26 October 2026
