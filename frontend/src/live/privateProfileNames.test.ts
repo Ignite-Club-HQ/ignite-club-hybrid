@@ -43,6 +43,12 @@ describe("private profile name preparation", () => {
     await expect(preparePrivateOwnProfileName({ ...ctx, identity: { getPrincipal: () => Principal.anonymous() } } as FeatureBackendContext, "Paul")).rejects.toThrow("identity");
     expect(mocks.encrypt).not.toHaveBeenCalled();
   });
+  it("does not register ciphertext if the key authority changes during encryption", async () => {
+    const changed = { ...ctx, target: { ...ctx.target, canisterIds: { ...ctx.target.canisterIds } } };
+    mocks.encrypt.mockImplementation(async () => { changed.target.canisterIds.pii_access_control = "ryjl3-tyaaa-aaaaa-aaaba-cai"; return new Uint8Array([1]); });
+    await expect(preparePrivateOwnProfileName(changed, "Paul")).rejects.toThrow("authority changed");
+    expect(mocks.register).not.toHaveBeenCalled();
+  });
 });
 
 describe("authorized name display", () => {
@@ -203,5 +209,20 @@ describe("original-authority display rehearsal", () => {
     controller.abort(); release(new Map([[subject, "key"]]));
     await expect(pending).rejects.toThrow("cancelled");
     expect(mocks.decrypt).not.toHaveBeenCalled();
+  });
+  it("globally bounds ciphertext batches to 100 subjects and two concurrent requests", async () => {
+    const rows = Array.from({ length: 201 }, (_, i) => ({ display_name: privateProfileNameReference(authority, Principal.fromUint8Array(new Uint8Array([i + 1, 2])).toText()) }));
+    let inFlight = 0; let peak = 0;
+    mocks.read.mockImplementation(async ids => {
+      inFlight++; peak = Math.max(peak, inFlight);
+      await new Promise(resolve => setTimeout(resolve, 1));
+      inFlight--;
+      return { Ok: ids.map(id => ({ pii_id: id, field_id: "display_name", ciphertext: [9] })) };
+    });
+    mocks.keys.mockImplementation(async (_, ids) => new Map(ids.map(id => [id, "key"])));
+    const result = await hydratePrivateProfileNames(ctx, rows);
+    expect(result.every(row => row.display_name === "Paul Cranwell")).toBe(true);
+    expect(mocks.read.mock.calls.map(call => call[0].length)).toEqual([100, 100, 1]);
+    expect(peak).toBe(2);
   });
 });

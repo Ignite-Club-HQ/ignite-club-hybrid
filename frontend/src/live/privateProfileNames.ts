@@ -28,11 +28,20 @@ async function prepareOwnField(ctx: FeatureBackendContext, field: "contact_email
   const authority = ctx.target.canisterIds.pii_access_control;
   if (!authority) throw new Error("Private profile authority is not configured.");
   const subject = canonicalPrincipal(ctx.identity.getPrincipal().toText());
+  const identity = ctx.identity;
+  const target = JSON.stringify(ctx.target);
+  const active = () => {
+    if (ctx.identity !== identity || ctx.identity.getPrincipal().toText() !== subject || JSON.stringify(ctx.target) !== target) throw new Error("Private profile write identity or authority changed.");
+  };
   canonicalPrincipal(authority);
   const ciphertext = await encryptPiiText(ctx, subject, field, value);
+  active();
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  active();
   await unwrapCandid(actor.register_pii(subject, field, ciphertext, ctx.identity.getPrincipal()), "Save private profile field");
-  const values = await readNames(ctx, [subject], field);
+  active();
+  const values = await readNames(ctx, [subject], field, active);
+  active();
   if (values.get(subject) !== value) throw new Error("Private profile readback was not confirmed.");
   return field === FIELD ? privateProfileNameReference(authority, subject) : `pii-email:v1:${authority}:${subject}`;
 }
@@ -181,12 +190,19 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
       active();
       let lease = leases.get(authority);
       if (!lease) {
-        lease = options.resolveAuthority ? await boundedAuthorityCheck(() => options.resolveAuthority ? options.resolveAuthority(authority) : Promise.reject(new Error("Missing original authority resolver."))) : { context: ctx, confirm: async () => {} };
+        const resolve = options.resolveAuthority;
+        lease = resolve ? await boundedAuthorityCheck(() => resolve(authority)) : { context: ctx, confirm: async () => {} };
         active();
         if (lease.context.identity !== identity || lease.context.target.host !== ctx.target.host || lease.context.target.networkKind !== ctx.target.networkKind || lease.context.target.canisterIds.pii_access_control !== authority) throw new Error("Invalid original private profile route.");
         leases.set(authority, lease);
       }
-      const part = await boundedRead(lease.context, subjects, active);
+      const route = lease.context;
+      const routeTarget = JSON.stringify(route.target);
+      const routeActive = () => {
+        active();
+        if (route.identity !== identity || JSON.stringify(route.target) !== routeTarget) throw new Error("Original private profile route changed.");
+      };
+      const part = await boundedRead(route, subjects, routeActive);
       active();
       const group = names.get(authority) ?? new Map<string, string>();
       for (const [id, name] of part) group.set(id, name);
