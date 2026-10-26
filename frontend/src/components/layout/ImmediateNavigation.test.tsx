@@ -7,6 +7,21 @@ import { TabPagePlaceholder } from "./TabPagePlaceholder";
 afterEach(() => { cleanup(); window.history.replaceState(null, "", "/"); });
 
 describe("immediate destination navigation", () => {
+  it("opens the locked club destination immediately during a stalled download and allows Back", () => {
+    const Pending = React.lazy(() => new Promise<{ default: React.ComponentType }>(() => {}));
+    render(<BrowserRouter useTransitions={false}>
+      <Link to="/clubs/group2/upgrade" state={{ upgradeClubLabel: { id: "group2", name: "Group 2 test" } }}>Locked club folder</Link>
+      <Suspense fallback={<TabPagePlaceholder />}><Routes>
+        <Route path="/" element={<div>Vault folders</div>} />
+        <Route path="/clubs/:clubId/upgrade" element={<Pending />} />
+      </Routes></Suspense>
+    </BrowserRouter>);
+    fireEvent.click(screen.getByRole("link", { name: "Locked club folder" }));
+    expect(window.location.pathname).toBe("/clubs/group2/upgrade");
+    expect(screen.getByRole("button", { name: "Go back" })).toBeEnabled();
+    // Pending authorization must not expose payment controls.
+    expect(screen.queryByRole("button", { name: /subscribe|purchase|trial/i })).not.toBeInTheDocument();
+  });
   it("commits the tapped destination before its lazy module resolves and allows another tap", async () => {
     let finish: ((module: { default: React.ComponentType }) => void) | undefined;
     const Pending = React.lazy(() => new Promise<{ default: React.ComponentType }>((resolve) => { finish = resolve; }));
