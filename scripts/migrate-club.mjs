@@ -246,7 +246,7 @@ export async function runSteps({ journal, path, ctx, approval, writers = WRITERS
     if (next.step === 'route') throw Error('Data migration approval does not authorize sign-in/routing cutover; separate authentication approval is required');
     const write = writers[next.step];
     if (!write) return journal; // verify/route steps run separately
-    if (['events', 'rewards'].includes(next.step) && !ctx.claims) {
+    if (['events', 'rewards', 'messaging', 'notifications', 'media', 'vault'].includes(next.step) && !ctx.claims) {
       ctx.claims = await (ctx.readClaims ? ctx.readClaims() : claimedAccounts(ctx));
     }
     journal = recordIntent(journal, next.step, next.page); save(journal);

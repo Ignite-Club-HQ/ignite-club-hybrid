@@ -13,6 +13,10 @@
 // leave member-owned arrays empty; the claim attaches people afterwards.
 
 import { buildPointsSnapshot, buildClaimedRsvps } from './migrate-club-members.mjs';
+import { buildChatPages } from './migrate-club-messaging.mjs';
+import { buildNotificationSnapshot } from './migrate-club-notifications.mjs';
+import { buildMediaSnapshot } from './migrate-club-media.mjs';
+import { buildVaultSnapshot } from './migrate-club-vault.mjs';
 const ms = (iso) => (iso ? BigInt(Date.parse(iso)) : null);
 const opt = (v) => (v === null || v === undefined || v === '' ? [] : [v]);
 const optMs = (iso) => opt(ms(iso));
