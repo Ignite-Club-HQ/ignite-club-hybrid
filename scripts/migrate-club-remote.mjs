@@ -47,16 +47,20 @@ export async function pushJournal(env, clubId, journal, fetchImpl = fetch) {
   if (existing && existing.journal.planHash !== journal.planHash) {
     throw Error('Remote journal belongs to a different plan; refusing to overwrite');
   }
-  const res = await fetchImpl(`${cfg.base}/${remoteJournalPath(clubId)}`, {
+  const put = (branch) => fetchImpl(`${cfg.base}/${remoteJournalPath(clubId)}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message: `migration journal ${clubId} (${Object.keys(journal.steps ?? {}).length} steps)`,
       content: Buffer.from(text, 'utf8').toString('base64'),
-      branch: BRANCH,
+      ...(branch ? { branch } : {}),
       ...(existing ? { sha: existing.sha } : {}),
     }),
   });
+  let res = await put(BRANCH);
+  // First ever push: the journal branch may not exist yet — create the file
+  // on the default branch instead of failing the migration step.
+  if (!res.ok && !existing && (res.status === 404 || res.status === 422)) res = await put(null);
   if (!res.ok) throw Error(`Remote journal write failed: ${res.status}`);
   const back = await pullJournal(env, clubId, fetchImpl);
   if (!back || back.hash !== sha256(text)) throw Error('Remote journal readback mismatch; stopping before any further write');
