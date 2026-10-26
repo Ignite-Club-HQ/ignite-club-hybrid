@@ -1,4 +1,5 @@
 ## Private names and guardian-only full search — 26 October 2026
+- [ ] Continue: replace ordinary unrestricted name search with authorized club candidates and protect the legacy global search for app-admin management only; retain exact-child guardian search and existing names.
 - [x] Continue: strict encrypted owner-name preparation requires decrypted readback; bounded reference hydration is wired at shared ID-based and own-profile readers. Legacy names take the zero-request path; no references published, plaintext converted, search changed or deployment run.
 - [ ] Next: verified private-name audience/location contracts and replacement scoped/guardian encrypted search; live conversion/release require separate approval. Current reference hydration is dormant until those coordinated contracts pass; signed-in acceptance remains unavailable locally.
 - [ ] Implement private personal names with existing in-app display preserved and authorized, bounded reads.
