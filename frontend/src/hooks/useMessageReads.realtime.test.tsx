@@ -1,11 +1,12 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { channel, removeChannel, from, onAuthStateChange, channels, mutationCalls, mutationOptions, mode, listLiveReadReceipts, markLiveRead } = vi.hoisted(() => ({
+const { channel, removeChannel, from, onAuthStateChange, channels, mutationCalls, mutationOptions, mode, listLiveReadReceipts, listBroadcastReaders, markLiveRead } = vi.hoisted(() => ({
   channel: vi.fn(), removeChannel: vi.fn(), from: vi.fn(), onAuthStateChange: vi.fn(), channels: new Map<string, any>(), mutationCalls: [] as string[][],
   mutationOptions: [] as any[],
   mode: process.env.IGNITE_TEST_BACKEND_MODE === "icp" ? "icp" : "supabase",
   listLiveReadReceipts: vi.fn(),
+  listBroadcastReaders: vi.fn(),
   markLiveRead: vi.fn(),
 }));
 const supabaseMode = mode === "supabase";
@@ -18,12 +19,14 @@ vi.mock("@/live/loadBackendRouting", () => ({
 vi.mock("@/live/authBackendMode", () => ({
   resolveAuthBackend: () => mode,
 }));
+vi.mock('@/live/privateProfileSearchMode', () => ({ privateProfileSearchRehearsalEnabled: () => true }));
 vi.mock("@/live/featureRouter", () => ({
   withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
     mode === "icp" ? providers.icp({ identity: {}, target: {} }) : providers.supabase(),
 }));
 vi.mock("@/live/features/messaging", () => ({
   listLiveReadReceipts: (...args: unknown[]) => listLiveReadReceipts(...args),
+  listLiveBroadcastMessageReaders: (...args: unknown[]) => listBroadcastReaders(...args),
   markLiveConversationRead: (...args: unknown[]) => markLiveRead(...args),
 }));
 vi.mock("@/lib/profileCache", () => ({
@@ -178,6 +181,15 @@ describe.runIf(!supabaseMode)("useMessageReads ICP receipt polling", () => {
     mutationCalls.length = 0;
     mutationOptions.length = 0;
     markLiveRead.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('uses service-resolved readers for older broadcast messages instead of dropping later stored frontiers', async () => {
+    listBroadcastReaders.mockResolvedValue([{ messageId: 'older', user: { toText: () => 'reader' }, read: true }]);
+    const { result, unmount } = renderHook(() => useMessageReads('broadcast', 'broadcast', ['older'], 'viewer'));
+    await waitFor(() => expect(result.current.readCounts).toEqual({ older: 1 }));
+    expect(listBroadcastReaders).toHaveBeenCalledWith({ identity: {}, target: {} }, ['older']);
+    expect(listLiveReadReceipts).not.toHaveBeenCalled();
+    unmount();
   });
 
   it("maps only visible canister receipts without subscribing to Supabase realtime", async () => {

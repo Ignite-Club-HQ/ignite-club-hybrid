@@ -9,6 +9,22 @@ and other details must remain viewable in the app.
 
 ## Implemented locally
 
+### Older announcement readers
+
+The owning messaging service now resolves a reader's stored frontier against
+the exact displayed announcement using server message sequences. A later
+frontier covers earlier messages, but earlier frontiers never cover newer ones;
+missing, ambiguous and legacy-zero frontier references do not imply other
+messages were read. Exact reactions remain independently scoped. The new
+reader endpoint caps selectors at 100 and returns only exact-message rows,
+with current conversation access, blocks and removal checks. Rehearsal badges
+and drawers use it; production stays on its existing interface until release.
+Original-PII authorization independently rechecks the same recorded evidence.
+
+Unanswered DMs still require independent authorization; a caller-created chat
+must not turn into global person search. Final remote delivery fencing,
+protected release/backfill and approved signed-in acceptance remain unfinished.
+
 ### 23:30 batch — competition-admin names
 
 Connected the standard ICP group-chat display and nested drawers to an exact

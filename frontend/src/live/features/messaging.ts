@@ -1339,6 +1339,19 @@ export interface LiveReadReceipt {
   user: Principal;
 }
 
+/** The owning service resolves stored read frontiers to exact displayed messages. */
+export async function listLiveBroadcastMessageReaders(ctx: FeatureBackendContext, messageIds: readonly string[]): Promise<LiveReadReceipt[]> {
+  const ids = [...new Set(messageIds)];
+  if (!ids.length) return [];
+  if (ids.length > 100 || ids.some(id => !id || id.length > 128)) throw new Error('Exact bounded broadcast messages required');
+  const identity = ctx.identity, principal = identity.getPrincipal().toText(), target = JSON.stringify(ctx.target);
+  const { actor } = await connectLiveMessagingDomain(ctx.target, identity);
+  const raw = await unwrapCandid(actor.list_broadcast_message_readers(ids), 'Read broadcast message readers');
+  if (identity !== ctx.identity || identity.getPrincipal().toText() !== principal || target !== JSON.stringify(ctx.target)) throw new Error('Broadcast reader account changed');
+  if (raw.some(r => r.conversation_id !== 'broadcast' || !ids.includes(r.message_id) || !r.read)) throw new Error('Broadcast reader message mismatch');
+  return raw.map(r => ({ conversationId: r.conversation_id, messageId: r.message_id, read: r.read, user: r.user }));
+}
+
 /** Per-conversation read receipts — the canister counterpart of the Supabase `message_reads` table read. */
 export async function listLiveReadReceipts(ctx: FeatureBackendContext, conversationId: string) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
