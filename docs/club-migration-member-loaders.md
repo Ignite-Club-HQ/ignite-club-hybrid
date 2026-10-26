@@ -19,6 +19,19 @@ records, destination canisters, account claims, emails or routing were changed.
   primary flag and timestamp are retained separately, not silently discarded.
   The SDK pins the supplied public key to the production destination PII canister
   and immutable `ignite-pii-v1` context; no encryption key is stored in canisters.
+- Messaging loader (`migrate-club-messaging.mjs`): team/club/group/club-admin
+  conversations with canonical ids (team chat id = team id, club chat id = club
+  id), ordered per-conversation sequences, replies, image attachments and
+  system-message attribution to the deploy identity. Imported through the
+  canister's paged import (500 messages per page, idempotent per message id).
+- Notifications loader (`migrate-club-notifications.mjs`): historical
+  notifications import as delivered receipts with stable idempotency keys;
+  pending scheduled messages keep send time, recurrence and status variants.
+- Media and Vault loaders (`migrate-club-media.mjs`, `migrate-club-vault.mjs`):
+  photo/folder/file metadata with scoping, captions and attribution. Bytes are
+  NOT copied: storage_path/file_url keep pointing at Supabase and blob_ref
+  stays empty until the separate copy-and-encrypt job moves bytes into the
+  group's blob store.
 
 ## Family preparation boundary
 The new helper accepts local input arrays only. It neither fetches source data nor
