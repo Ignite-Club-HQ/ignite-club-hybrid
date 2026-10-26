@@ -80,18 +80,24 @@ export function planByteCopies({ clubId, photos = [], vaultFiles = [], claims, c
   return items;
 }
 
-/** IBE-encrypt bytes to the production key under identity `path ++ U+001F ++ "blob"`. */
+/**
+ * IBE-encrypt bytes to the production key under identity `path ++ U+001F ++ "blob"`.
+ * The seed is derived deterministically from the path and plaintext so an
+ * interrupted item re-encrypts to the SAME ciphertext and content hash —
+ * resume re-registers an identical PII marker instead of conflicting with it.
+ */
 export async function encryptBlob(target, publicKey, path, bytes) {
   const { DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import(new URL('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js', import.meta.url).href);
   const expected = await productionPiiPublicKey(target);
   if (!(publicKey instanceof Uint8Array) || publicKey.length !== expected.length || publicKey.some((b, i) => b !== expected[i])) {
     throw Error('Destination PII public key mismatch');
   }
+  const seedBytes = createHash('sha256').update(`${path}\u001f`).update(bytes).digest();
   return IbeCiphertext.encrypt(
     DerivedPublicKey.deserialize(publicKey),
     IbeIdentity.fromBytes(new TextEncoder().encode(`${path}${BLOB_FIELD}`)),
     bytes,
-    IbeSeed.random(),
+    IbeSeed.fromBytes(seedBytes),
   ).serialize();
 }
 
