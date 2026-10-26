@@ -104,8 +104,15 @@ try {
   const secondAnnouncement=ok(await broadcastService.actor.send_message('broadcast','Another announcement','private-broadcast-second',[],[]));
   assert.ok('Err' in await read(viewer,scope('broadcast',broadcastService.canisterId,secondAnnouncement.id)),'A reader of one announcement is not a reader/reactor of another');
   broadcastService.actor.setPrincipal(owner);ok(await broadcastService.actor.mark_read('broadcast',secondAnnouncement.id));
-  assert.ok('Err' in await read(viewer,broadcast),'A newer receipt cannot be used as old-message private-name evidence');
+  await decrypt(viewer,broadcast);
+  broadcastService.actor.setPrincipal(viewer);
+  const olderReaders=ok(await broadcastService.actor.list_broadcast_message_readers([announcement.id]));
+  assert.ok(olderReaders.some(r=>r.user.toText()===owner.toText()&&r.message_id===announcement.id),'A later stored sequence covers an older displayed announcement');
+  assert.ok('Err' in await broadcastService.actor.list_broadcast_message_readers(Array.from({length:101},(_,i)=>`message-${i}`)),'Reader selection is bounded at 100 messages');
+  assert.ok('Err' in await broadcastService.actor.list_broadcast_message_readers(['missing']),'Missing targets cannot manufacture readers');
+  broadcastService.actor.setPrincipal(owner);
   ok(await broadcastService.actor.mark_read('broadcast',announcement.id));await decrypt(viewer,broadcast);
+  assert.ok('Err' in await read(viewer,scope('broadcast',broadcastService.canisterId,secondAnnouncement.id)),'A lower stored frontier never covers a newer announcement');
   broadcastService.actor.setPrincipal(viewer);ok(await broadcastService.actor.block_user(owner));
   assert.ok('Err' in await read(viewer,broadcast),'Blocked broadcast participant supplies no fresh name keys');
   ok(await broadcastService.actor.unblock_user(owner));await decrypt(viewer,broadcast);
