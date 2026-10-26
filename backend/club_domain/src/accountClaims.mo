@@ -11,6 +11,9 @@ import Text "mo:core/Text";
 import Principal "mo:core/Principal";
 import Nat8 "mo:core/Nat8";
 import Sha256 "mo:sha2/Sha256";
+import Iter "mo:core/Iter";
+import Array "mo:core/Array";
+import Char "mo:core/Char";
 
 module {
   public type Claim = { club_id : Text; source_user : Text; email_hint : Text; expires_ms : Nat64; claimed_by : ?Principal; claimed_ms : ?Nat64 };
