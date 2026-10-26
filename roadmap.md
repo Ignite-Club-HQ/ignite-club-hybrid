@@ -1,3 +1,7 @@
+## Immediate bottom-tab response — 26 October 2026
+- [x] Commit navigation without deferred lazy transitions, show destination placeholders, centralize earlier sequential code warmup, and reveal existing scoped ICP inbox rows during quiet refresh. Keep tab state, auth gates, cache scopes and Supabase ordering intact.
+- [ ] Run focused navigation/cache checks and verify the visible delayed-chunk transition. Paul's signed-in phone timing requires the updated frontend and his Internet Identity session; no deployment requested.
+
 ## Captain section deep audit — 26 October 2026
 - [x] Audited captain/season contracts, protected-read adapter, admission gates and honours authorization. Removed duplicate marker/widget requests, scoped marker by known club, shared actor-bound in-flight honours, fixed shared identity profile routing and gated season fallback on confirmed match absence. Stable heading/errors with explicit failed-check-only retry; no timeout increase or backend change. Evidence/limits recorded in docs/event-captain-audit-2026-10-26.md.
 - [x] 35 focused checks passed in each mode, ICP guards passed, preview build OK. No deployment.

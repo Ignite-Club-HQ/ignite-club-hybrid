@@ -8,8 +8,8 @@ import {
   type Location,
 } from "react-router-dom";
 import { useContext } from "react";
-import { Loader2 } from "lucide-react";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { TabPagePlaceholder } from "./TabPagePlaceholder";
 
 /**
  * Keeps the bottom-tab pages (Home, Messages, Schedule, Media) mounted once
@@ -50,11 +50,7 @@ const KeptTab = memo(function KeptTab({ path, location, active }: { path: TabPat
     <div className={active ? "contents" : "hidden"} aria-hidden={!active || undefined} data-kept-tab={path}>
       <FrozenNavigation frozen={!active}>
         <Suspense
-          fallback={active ? (
-            <div className="flex-1 flex items-center justify-center py-16" role="status" aria-label="Loading page">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
-          ) : null}
+          fallback={active ? <TabPagePlaceholder /> : null}
         >
           <Routes location={location}>
             <Route path={path} element={<Page />} />
