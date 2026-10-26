@@ -78,5 +78,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - ICP events atomically commit dates, duties and reminders under caller receipts; consensus supplies audiences, unknown relays stay locked.
 - Vault recovery reads owner-wide intents and exact decrypted hash markers before strict grants/store acknowledgement; unknown outcomes retain locks/cursors. Erasure scrubs shared ancestors without orphaning others. Cleanup needs age/allowance or erasure receipts; backups commit validated pages to writable sinks, retaining Blob fallback where unsupported. Why: prevent guessed recovery, data loss and partial exports.
-- Guardian search pins authority/exact-child checks and active principals. Private names pin original PII and require decrypted readback, no auto-publish. Club candidates use exact-revision authority batches, rehearsal-only until scoped-search acceptance. Why: screens, stale roles and partial writes cannot authorize privacy cutover.
+- Guardian search pins authority/exact-child checks and active principals. Private names pin original PII/readback, no auto-publish. Club candidates use bounded revision-pinned pages/batches and post-decryption confirmation, rehearsal-only until acceptance. Why: screens, stale roles and partial writes cannot authorize privacy cutover.
 

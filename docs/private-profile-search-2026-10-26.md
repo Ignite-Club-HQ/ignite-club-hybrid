@@ -18,10 +18,19 @@ and other details must remain viewable in the app.
   No new stored state, grants, name index or decryption path.
 - Added `searchScopedProfileCandidates`, which matches authorized returned
   names on the device after private-reference hydration, with no global
-  fallback. Ordinary pickers are intentionally unchanged: authoritative
-  candidate paging, complete membership-epoch coverage audit, interrupted
+  fallback. Added `read_profile_candidates` and cancellable
+  `searchScopedClubProfiles`: each authority page scans at most 100 source
+  rows and emits at most 25 role/parent/guardian principals; cursors pin one
+  durable revision, results deduplicate across pages, and final confirmation
+  follows all name/decryption awaits. A 100-page work ceiling refuses incomplete
+  traversal rather than presenting an empty completed search. No new storage.
+- Membership-state audit found a missing epoch bump in the empty owner-test
+  identity setter; it now invalidates suspended reads like other membership
+  authority changes. The remaining direct membership-bearing assignments have
+  synchronous revision bumps in their update paths.
+- Ordinary pickers are intentionally unchanged: interrupted full
   identity-to-club callbacks and private-name audience/decryption acceptance
-  remain required. Never set
+  remain required, as do competition/mini-league relationship scopes. Never set
   `IGNITE_PRIVATE_PROFILE_READS_REHEARSAL=1` in a production release.
 - Added dormant, original-authority-bound adult-name reference hydration to the
   shared ID-based profile reader and own-profile reader. Legacy names incur no
@@ -82,11 +91,13 @@ Internet Identity acceptance is not available in the local browser session.
 
 Local verification: 135 identity Rust tests pass, including five new club
 candidate rules; focused profile/search/invitation checks pass in both modes
-(45 Supabase, 29 ICP; mode skips), with the latest 24 private-name checks
-rerun in ICP mode. Motoko profile membership tests and build pass. The new
+(45 Supabase, 29 ICP; mode skips), with the latest 30 private-name checks
+rerun in each mode. Motoko profile membership tests and build pass. The new
 disposable two-club suite passes service-only delegation, nonmember/foreign
 club rejection, candidate ceiling, family membership, removal/explicit
-re-grant ABA revision rejection, upgrade preservation and closed release gate.
+re-grant ABA revision rejection, upgrade preservation and closed release gate,
+plus bounded multi-page traversal of 252 real role holders, family candidates,
+malformed/stale cursor refusal and removed requester denial.
 It does not exercise the shared identity transport, in-flight admission
 revocation or full encrypted name search; no live signed-in acceptance.
 All 17 generated Candid contracts pass drift checking. These checks do not
