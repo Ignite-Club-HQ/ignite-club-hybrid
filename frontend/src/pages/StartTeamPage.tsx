@@ -52,9 +52,10 @@ export default function StartTeamPage() {
           supabase: async () => [],
           icp: async (ctx) => {
             const grants = await myLiveRoleGrants(ctx);
+            const one = (v: any): string | null => (Array.isArray(v) ? v[0] : v) || null;
             const ids = [...new Set(grants
-              .filter((g: any) => g.club && !g.team && (g.role === "club_admin" || g.role === "app_admin"))
-              .map((g: any) => g.club as string))];
+              .filter((g: any) => one(g.club) && !one(g.team) && (g.role === "club_admin" || g.role === "app_admin"))
+              .map((g: any) => one(g.club) as string))];
             const rows = await Promise.all(ids.map(async (id) => {
               const p = await getLiveClubProfile(ctx, id).catch(() => [] as const);
               const prof: any = p[0];
