@@ -32,9 +32,18 @@ test('photo metadata keeps scope, caption and source URL with no blob reference 
   assert.equal(a.deleted, false);
 });
 
-test('refuses albums, foreign photos and unclaimed uploaders rather than dropping data', () => {
+test('albums keep their names and covers; foreign rows and unclaimed uploaders refuse', async () => {
   const photo = { id: 'ph1', club_id: 'c1', uploader_id: 'u1', image_url: 'https://x/a.jpg', created_at: now };
-  assert.throws(() => buildMediaSnapshot({ clubId: 'c1', claims, photos: [photo], albums: [{ id: 'al1' }] }), /album metadata/);
+  const snap = buildMediaSnapshot({ clubId: 'c1', claims, photos: [photo],
+    albums: [{ id: 'al1', club_id: 'c1', name: 'Grand Final', cover_photo_id: 'ph1', created_by: 'u1', created_at: now }] });
+  assert.equal(snap.albums[0][0].title, 'Grand Final');
+  assert.deepEqual(snap.albums[0][0].cover_asset_id, ['ph1']);
+  const type = await snapshotType(require, new URL('./migrate-schemas/media_metadata.snapshot.did.js', import.meta.url).href);
+  const { IDL } = require('@icp-sdk/core/candid');
+  const [back] = IDL.decode([type], IDL.encode([type], [snap]));
+  assert.equal(back.albums[0][0].title, 'Grand Final');
+  assert.throws(() => buildMediaSnapshot({ clubId: 'c1', claims, photos: [photo], albums: [{ id: 'al1', club_id: 'other', created_by: 'u1', created_at: now }] }), /Foreign photo album/);
+  assert.throws(() => buildMediaSnapshot({ clubId: 'c1', claims, photos: [photo], albums: [{ id: 'al1', club_id: 'c1', cover_photo_id: 'missing', created_by: 'u1', created_at: now }] }), /cover/);
   assert.throws(() => buildMediaSnapshot({ clubId: 'c1', claims, photos: [{ ...photo, club_id: 'other' }] }), /Foreign photo/);
   assert.throws(() => buildMediaSnapshot({ clubId: 'c1', claims, photos: [{ ...photo, uploader_id: 'stranger' }] }), /claim/);
   assert.throws(() => buildMediaSnapshot({ clubId: 'c1', claims, photos: [photo, photo] }), /Duplicate photo id/);

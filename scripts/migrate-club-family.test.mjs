@@ -41,8 +41,8 @@ test('child fields are encrypted with app-compatible identities, parents and exp
     assert.equal(new TextDecoder().decode(r.ciphertext).includes('Private child name'), false);
   }
   assert.deepEqual(copy.pii.guardians[0].children, ['child1']);
-  assert.deepEqual(copy.guardianMetadata[0].is_primary, [false]);
-  assert.deepEqual(copy.guardianMetadata[0].relationship_type, ['aunt']);
+  assert.deepEqual(copy.pii.guardian_labels[0][0].is_primary, [false]);
+  assert.deepEqual(copy.pii.guardian_labels[0][0].rel_label, ['aunt']);
   assert.deepEqual(copy.counts, { children: 1, guardians: 1, privateFields: 2, roles: 1 });
 });
 test('prepared family fragment encodes within the actual club snapshot without overwriting club structure', async () => {
