@@ -2827,6 +2827,23 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  // Counts and votes for one poll. Shared by get_poll_results and the
+  // open_conversation bundle so both return identical results.
+  func pollResultsFor(poll : Types.Poll) : Types.PollResults {
+    var counts = Array.repeat<Nat32>(0, poll.options.size());
+    var total : Nat32 = 0;
+    for (v in pollVotes.values()) {
+      if (v.poll_id == poll.id) {
+        let idx = Nat32.toNat(v.option_index);
+        if (idx < counts.size()) {
+          counts := Array.tabulate<Nat32>(counts.size(), func(pos) = if (pos == idx) counts[pos] + 1 else counts[pos]);
+          total += 1;
+        };
+      };
+    };
+    { poll; counts; total_votes = total; votes = ?pollVotes.filter(func(v) = v.poll_id == poll.id and Nat32.toNat(v.option_index) < poll.options.size()) }
+  };
+
   public shared ({ caller }) func get_poll_results(poll_id : Text) : async { #Ok : Types.PollResults; #Err : Text } {
     await* requirePollChatAccess(caller, poll_id);
     denyLegacyAccountQuery();
@@ -2835,18 +2852,7 @@ persistent actor class Main(governorInit : Principal) = this {
       case (?i) {
         let poll = polls[i];
         if (not canAccessConversation(caller, poll.conversation_id)) return #Err("Conversation access forbidden");
-        var counts = Array.repeat<Nat32>(0, poll.options.size());
-        var total : Nat32 = 0;
-        for (v in pollVotes.values()) {
-          if (v.poll_id == poll_id) {
-            let idx = Nat32.toNat(v.option_index);
-            if (idx < counts.size()) {
-              counts := Array.tabulate<Nat32>(counts.size(), func(pos) = if (pos == idx) counts[pos] + 1 else counts[pos]);
-              total += 1;
-            };
-          };
-        };
-        #Ok({ poll; counts; total_votes = total; votes = ?pollVotes.filter(func(v) = v.poll_id == poll_id and Nat32.toNat(v.option_index) < poll.options.size()) })
+        #Ok(pollResultsFor(poll))
       };
     }
   };
