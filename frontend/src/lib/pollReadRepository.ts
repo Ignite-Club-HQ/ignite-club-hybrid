@@ -60,10 +60,10 @@ export function pollQueryOptions(pollId: string, userId: string | undefined, sco
     queryKey: ['poll', pollId, userId, JSON.stringify(scope ?? null)],
     queryFn: async (): Promise<PollData | null> => {
       if (icpMode) {
-        if (ctx) return readIcpPoll(ctx, pollId);
+        if (ctx) return readIcpPoll(ctx, pollId, scope);
         return withFeatureBackend('messaging', {
           supabase: async () => { throw new Error('unreachable'); },
-          icp: scoped => readIcpPoll(scoped, pollId),
+          icp: scoped => readIcpPoll(scoped, pollId, scope),
         }, scope);
       }
       const [pollRes, optsRes, votesRes] = await Promise.all([
@@ -92,5 +92,16 @@ export function prefetchMessagePolls(client: QueryClient, rows: Array<{ text?: s
       if (ids.size < 6) ids.add(match[1]);
     }
   }
-  for (const id of ids) void client.prefetchQuery(pollQueryOptions(id, userId, scope, icpMode, ctx));
+  const convKey = conversationKeyOf(scope);
+  for (const id of ids) {
+    // Polls that rode along with open_conversation seed the cache directly —
+    // no second round trip for something the thread open already fetched.
+    const bundled = icpMode && convKey ? takeBundledPollResult(convKey, id) : null;
+    if (bundled) {
+      const options = pollQueryOptions(id, userId, scope, icpMode, ctx);
+      client.setQueryData(options.queryKey, pollResultsToData(id, bundled));
+      continue;
+    }
+    void client.prefetchQuery(pollQueryOptions(id, userId, scope, icpMode, ctx));
+  }
 }
