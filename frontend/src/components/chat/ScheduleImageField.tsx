@@ -46,7 +46,7 @@ export function ScheduleImageField({
 
   return (
     <div className="space-y-2">
-      <Label>Attachment (optional)</Label>
+      <Label className="block">Attachment (optional)</Label>
       <input
         ref={inputRef}
         type="file"
