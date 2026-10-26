@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Image } from "lucide-react";
 import { SecureImage } from "@/components/SecureImage";
 import { fetchMediaFeedPage } from "@/features/media/mediaReadRepository";
+import { Button } from '@/components/ui/button';
+import { readLatestTeamAssets } from './teamLatestPhotoRead';
 
 interface TeamLatestPhotosProps {
   teamId: string;
@@ -12,15 +14,31 @@ interface TeamLatestPhotosProps {
 export function TeamLatestPhotos({ teamId, clubId }: TeamLatestPhotosProps) {
   const navigate = useNavigate();
 
-  const { data: photos = [], isLoading } = useQuery({
+  const { data: photos = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["team-latest-photos", teamId, clubId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       // Routed reader: Supabase in email mode, the club's media canister in
       // ICP mode (a direct photos read is blocked for Internet Identity).
-      const page = await fetchMediaFeedPage({ teamId, clubId, offset: 0, pageSize: 6 });
-      return page.photos;
+      const { withFeatureBackend } = await import('@/live/featureRouter');
+      return withFeatureBackend('media', {
+        supabase: async () => {
+          const page = await fetchMediaFeedPage({ teamId, clubId, offset: 0, pageSize: 6, signal,
+            eventId: null, competitionId: null, dateFrom: null, dateTo: null, cardId: null, cardPhotoIds: undefined });
+          if (page.incomplete) throw new Error('Team photos could not be loaded');
+          return page.photos;
+        },
+        icp: async ctx => {
+          const { liveAssetSource } = await import('@/live/features/media');
+          const assets = await readLatestTeamAssets(ctx, clubId, teamId, signal);
+          return assets.map(asset => {
+            const source = liveAssetSource(asset);
+            const url = source.kind === 'icp-blob' ? source.url : source.storagePath;
+            return { id: asset.id, file_url: url, image_url: url, title: asset.kind };
+          });
+        },
+      }, { clubId });
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !!clubId,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -37,6 +55,7 @@ export function TeamLatestPhotos({ teamId, clubId }: TeamLatestPhotosProps) {
     );
   }
 
+  if (isError && photos.length === 0) return <Button variant="ghost" size="sm" onClick={() => refetch()}>Retry team photos</Button>;
   if (photos.length === 0) return null;
 
   return (

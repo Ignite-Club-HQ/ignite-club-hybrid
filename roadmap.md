@@ -1,3 +1,6 @@
+## Team page information delays — 26 October 2026
+- [x] Verified team core now reveals before club settings/subscription reads; removed duplicate club subscription and whole-pitch roster loading, published adult roles/child assignments before independently authorized name unlocks, routed next event by known club and paged latest photos until six matches rather than retrieving every club asset. Child failures remain retryable, pending counts no longer claim zero. 18 focused tests/ICP guards pass; preview build OK. Browser has no signed-in ICP session and redirects to /auth with no runtime errors; real phone timing remains unverified. No deployment.
+
 ## Gallery team-chat announcement failure — 26 October 2026
 - [x] Upload announcement omitted existing missing-only conversation preparation. Added exact authorized absence check, one owning-club membership repair only when absent, closing presence check and single-attempt messaging write; existing threads skip provisioning, denied/unknown reads stop and sends never replay. 30 gallery/messaging/thread regressions and ICP guards pass; preview build OK. Screenshot does not reveal the actual failed stage; signed-in phone announcement and deployed wiring remain unverified. No deployment.
 

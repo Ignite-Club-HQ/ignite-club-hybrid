@@ -20,7 +20,7 @@ export function TeamNextEventCard({ teamId, clubId }: TeamNextEventCardProps) {
   const today = format(new Date(), "yyyy-MM-dd");
 
   const { data: nextEvent, isLoading } = useQuery({
-    queryKey: ["team-next-event", teamId],
+    queryKey: ["team-next-event", teamId, clubId],
     queryFn: async () => {
       const { withFeatureBackend } = await import("@/live/featureRouter");
       return withFeatureBackend("events", {
@@ -72,9 +72,9 @@ export function TeamNextEventCard({ teamId, clubId }: TeamNextEventCardProps) {
             .sort((a, b) => a.event_date.localeCompare(b.event_date));
           return upcoming[0] ?? null;
         },
-      }, { teamId });
+      }, { clubId });
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !!clubId,
     staleTime: 2 * 60 * 1000,
   });
 
