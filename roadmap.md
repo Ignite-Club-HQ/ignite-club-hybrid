@@ -1,3 +1,7 @@
+## Profile rewards and points history — 26 October 2026
+- [x] Bound individual ICP discovery/club/history reads rather than racing the whole waterfall against 20 seconds; optional settings/names no longer block required reads. Authorized existing history renders independently of pending directory/Pro lookup; purchase/entitlement checks remain unchanged.
+- [ ] Run regression checks; Paul's live Profile needs updated frontend and Internet Identity session.
+
 ## Recurring Schedule refresh error — 26 October 2026
 - [x] Separate optional name/duty failures from event retrieval in one calm, explanatory notice; retain all retry evidence and visible events. Retry memberships before current event queries to avoid cancelling the retry after a changed query key.
 - [x] 14 focused checks passed per mode; ICP isolation guard and preview build OK. Browser attempt redirected to sign-in with no runtime errors.

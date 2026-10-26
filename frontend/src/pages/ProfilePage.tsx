@@ -642,7 +642,7 @@ export default function ProfilePage() {
 
       {/* Points History — sits directly under Rewards to preserve the engagement loop */}
       <div ref={pointsHistoryRef}>
-      {hasProAccess ? (
+      {hasProAccess || (isIcpAuth && (pointsHistoryData?.length ?? 0) > 0) ? (
         (() => {
           // When a club is active, the per-club table (`user_club_points`) is the
           // sole source of truth — `balance_after` rows in `points_history` are a
