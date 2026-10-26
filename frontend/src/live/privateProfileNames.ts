@@ -5,6 +5,7 @@ import { connectLivePiiAccessControl } from "./domains";
 import { encryptPiiText, fetchPiiVetKeys } from "./piiVetKeys";
 import { unwrapCandid } from "./features/candid";
 import { z } from "zod";
+import type { PrivateProfileAuthorityResolver } from "./privateProfileAuthority";
 
 /** Dormant reference contract: publishing a reference requires the separately
  * approved identity/search cutover. The original key authority is immutable. */
@@ -27,11 +28,20 @@ async function prepareOwnField(ctx: FeatureBackendContext, field: "contact_email
   const authority = ctx.target.canisterIds.pii_access_control;
   if (!authority) throw new Error("Private profile authority is not configured.");
   const subject = canonicalPrincipal(ctx.identity.getPrincipal().toText());
+  const identity = ctx.identity;
+  const target = JSON.stringify(ctx.target);
+  const active = () => {
+    if (ctx.identity !== identity || ctx.identity.getPrincipal().toText() !== subject || JSON.stringify(ctx.target) !== target) throw new Error("Private profile write identity or authority changed.");
+  };
   canonicalPrincipal(authority);
   const ciphertext = await encryptPiiText(ctx, subject, field, value);
+  active();
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  active();
   await unwrapCandid(actor.register_pii(subject, field, ciphertext, ctx.identity.getPrincipal()), "Save private profile field");
-  const values = await readNames(ctx, [subject], field);
+  active();
+  const values = await readNames(ctx, [subject], field, active);
+  active();
   if (values.get(subject) !== value) throw new Error("Private profile readback was not confirmed.");
   return field === FIELD ? privateProfileNameReference(authority, subject) : `pii-email:v1:${authority}:${subject}`;
 }
@@ -72,17 +82,21 @@ export async function preparePrivateOwnProfileName(
   return prepareOwnField(ctx, FIELD, value);
 }
 
-async function readNames(ctx: FeatureBackendContext, subjects: string[], field = FIELD): Promise<Map<string, string>> {
+async function readNames(ctx: FeatureBackendContext, subjects: string[], field = FIELD, active: () => void = () => {}): Promise<Map<string, string>> {
+  active();
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  active();
   const rows = await unwrapCandid(
     actor.get_encrypted_pii_batch(subjects, field, "profile_display", "Read authorized personal details"),
     "Read private display names",
   );
+  active();
   const wanted = new Set(subjects);
   if (rows.some(row => row.field_id !== field || !wanted.has(row.pii_id)) || new Set(rows.map(row => row.pii_id)).size !== rows.length) throw new Error("Invalid private profile response.");
   const validRows = rows;
   if (!validRows.length) return new Map();
-  const keys = await fetchPiiVetKeys(ctx, [...new Set(validRows.map(row => row.pii_id))], field);
+  const keys = await fetchPiiVetKeys(ctx, [...new Set(validRows.map(row => row.pii_id))], field, { fresh: true, assertActive: active });
+  active();
   const out = new Map<string, string>();
   const decoder = new TextDecoder("utf-8", { fatal: true });
   for (const row of validRows) {
@@ -98,29 +112,56 @@ async function readNames(ctx: FeatureBackendContext, subjects: string[], field =
   return out;
 }
 
-async function boundedRead(ctx: FeatureBackendContext, subjects: string[]): Promise<Map<string, string>> {
+async function boundedRead(ctx: FeatureBackendContext, subjects: string[], active: () => void): Promise<Map<string, string>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let retired = false;
+  const guard = () => {
+    if (retired) throw new Error("Private profile read retired.");
+    active();
+  };
   try {
     return await Promise.race([
-      readNames(ctx, subjects),
+      readNames(ctx, subjects, FIELD, guard),
       new Promise<Map<string, string>>(resolve => {
-        timer = setTimeout(() => resolve(new Map()), READ_TIMEOUT_MS);
+        timer = setTimeout(() => { retired = true; resolve(new Map()); }, READ_TIMEOUT_MS);
       }),
     ]);
   } catch {
     return new Map();
   } finally {
+    retired = true;
     clearTimeout(timer);
   }
 }
 
+async function boundedAuthorityCheck<T>(read: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Private profile authority check timed out.")), READ_TIMEOUT_MS); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
 /** Purely display enrichment. No new persistent names/cache, no grants and no
  * guessed group searches. Legacy names take the zero-network path unchanged.
- * An authority mismatch stays unresolved until verified owner routing exists. */
+ * Foreign authorities require the explicit rehearsal resolver; existing readers
+ * never scan groups or use the reference itself as location authorization. */
 export async function hydratePrivateProfileNames<T extends { display_name: string | null; principal?: Principal }>(
   ctx: FeatureBackendContext,
   profiles: readonly T[],
+  options: { signal?: AbortSignal; resolveAuthority?: PrivateProfileAuthorityResolver } = {},
 ): Promise<Array<Omit<T, "display_name"> & { display_name: string | null }>> {
+  const identity = ctx.identity;
+  const principal = identity.getPrincipal().toText();
+  const target = JSON.stringify(ctx.target);
+  const active = () => {
+    if (options.signal?.aborted || ctx.identity !== identity || identity.getPrincipal().toText() !== principal || JSON.stringify(ctx.target) !== target) {
+      throw new Error("Private profile read cancelled or changed.");
+    }
+  };
+  active();
   const references = profiles.map(profile => {
     if (!profile.display_name?.startsWith("pii-display-name:")) return undefined;
     if (!profile.display_name.startsWith(PREFIX)) return null;
@@ -129,23 +170,54 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
     if (ref && profile.principal && profile.principal.toText() !== ref.subject) return null;
     return ref;
   });
-  const subjects = [...new Set(references.flatMap(ref =>
-    ref?.authority === ctx.target.canisterIds.pii_access_control ? [ref.subject] : [],
-  ))];
-  const names = new Map<string, string>();
-  // Two bounded chunks at a time; each ciphertext request obeys the canister's
-  // 100-row ceiling, while key derivations use the existing 25-row SDK relay.
-  for (let start = 0; start < subjects.length; start += BATCH_SIZE * 2) {
-    const parts = await Promise.all([
-      subjects.slice(start, start + BATCH_SIZE),
-      subjects.slice(start + BATCH_SIZE, start + BATCH_SIZE * 2),
-    ].filter(chunk => chunk.length).map(chunk => boundedRead(ctx, chunk)));
-    for (const part of parts) for (const [id, name] of part) names.set(id, name);
+  const byAuthority = new Map<string, Set<string>>();
+  for (const ref of references) {
+    if (!ref || (!options.resolveAuthority && ref.authority !== ctx.target.canisterIds.pii_access_control)) continue;
+    const subjects = byAuthority.get(ref.authority) ?? new Set<string>();
+    subjects.add(ref.subject);
+    byAuthority.set(ref.authority, subjects);
   }
+  const names = new Map<string, Map<string, string>>();
+  const jobs = [...byAuthority].flatMap(([authority, ids]) => {
+    const subjects = [...ids];
+    return Array.from({ length: Math.ceil(subjects.length / BATCH_SIZE) }, (_, index) => ({ authority, subjects: subjects.slice(index * BATCH_SIZE, (index + 1) * BATCH_SIZE) }));
+  });
+  // A global two-request ceiling, not two requests per group. Original-key
+  // routes are checked again after all encryption/service awaits.
+  const leases = new Map<string, Awaited<ReturnType<PrivateProfileAuthorityResolver>>>();
+  const readJob = async ({ authority, subjects }: typeof jobs[number]) => {
+    try {
+      active();
+      let lease = leases.get(authority);
+      if (!lease) {
+        const resolve = options.resolveAuthority;
+        lease = resolve ? await boundedAuthorityCheck(() => resolve(authority)) : { context: ctx, confirm: async () => {} };
+        active();
+        if (lease.context.identity !== identity || lease.context.target.host !== ctx.target.host || lease.context.target.networkKind !== ctx.target.networkKind || lease.context.target.canisterIds.pii_access_control !== authority) throw new Error("Invalid original private profile route.");
+        leases.set(authority, lease);
+      }
+      const route = lease.context;
+      const routeTarget = JSON.stringify(route.target);
+      const routeActive = () => {
+        active();
+        if (route.identity !== identity || JSON.stringify(route.target) !== routeTarget) throw new Error("Original private profile route changed.");
+      };
+      const part = await boundedRead(route, subjects, routeActive);
+      active();
+      const group = names.get(authority) ?? new Map<string, string>();
+      for (const [id, name] of part) group.set(id, name);
+      names.set(authority, group);
+    } catch { /* Unverified/unavailable original authorities remain neutral. */ }
+  };
+  for (let start = 0; start < jobs.length; start += 2) await Promise.all(jobs.slice(start, start + 2).map(readJob));
+  for (const [authority, lease] of leases) {
+    try { active(); await boundedAuthorityCheck(lease.confirm); active(); } catch { names.delete(authority); }
+  }
+  active();
   return profiles.map((profile, index) => {
     const ref = references[index];
     if (ref === undefined) return profile;
-    const name = ref?.authority === ctx.target.canisterIds.pii_access_control ? names.get(ref.subject) : undefined;
+    const name = ref ? names.get(ref.authority)?.get(ref.subject) : undefined;
     return { ...profile, display_name: name ?? null };
   });
 }

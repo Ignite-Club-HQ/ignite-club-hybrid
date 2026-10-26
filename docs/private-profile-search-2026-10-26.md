@@ -91,6 +91,35 @@ evaluated remote final replies do not prove atomic delivery-time revocation.
 The real preview redirects `/edit-profile` to `/auth`; authenticated profile
 saving remains UNVERIFIED without the owner's Internet Identity session.
 
+### Continued original-authority preparation
+
+- Added an explicit, disconnected `createPrivateProfileAuthorityResolver`
+  composition. Its transport must supply a complete consensus registry under
+  the exact approved deployment/revision/host/network/subnet binding. It rejects
+  missing/foreign/duplicate PII authorities, preserves the immutable referenced
+  key service and authenticated identity, and compares the full inventory again
+  after decryption. It never enables groups, creates grants, or changes keys.
+- Private-name hydration can opt into that resolver in rehearsal, groups by
+  original authority without mixing same-subject names, and bounds all groups
+  together to two concurrent ciphertext requests of at most 100 subjects each.
+  Both original-location discovery and closing confirmation are bounded;
+  refusal or stalled confirmation withholds decrypted names. Existing production
+  readers remain on their configured authority, with legacy zero-network names.
+- Found and removed reliance on retained media/session keys in private-profile
+  reads: owner name/email readback and private-name hydration now request fresh
+  gated keys without loading or storing cached keys. Other child/media paths
+  retain their existing policy. Relay batches deduplicate and cap at 25; truncated
+  replies refuse. Account/target/cancellation guards recheck each await;
+  timed-out ciphertext replies cannot start late key derivation or display names.
+- Owner writes reject authority/identity drift before registration and again
+  after acknowledgement/readback, without replaying uncertain writes.
+
+This is tested preparation, not the completed live cross-group location
+contract: the production resolver wiring and release evidence remain blocked,
+along with family/competition/league audiences, encrypted guardian search,
+picker replacement and approved backfill. No deployment, conversion or new
+grants occurred; real signed-in cross-group name display remains unverified.
+
 This is the purpose-bound guardian-search foundation, **not** a completed
 private-name migration. Existing `search_profiles` and `get_profiles_by_ids`
 still expose their historical data. Removing them now would break current

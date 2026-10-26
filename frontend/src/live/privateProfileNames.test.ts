@@ -43,6 +43,12 @@ describe("private profile name preparation", () => {
     await expect(preparePrivateOwnProfileName({ ...ctx, identity: { getPrincipal: () => Principal.anonymous() } } as FeatureBackendContext, "Paul")).rejects.toThrow("identity");
     expect(mocks.encrypt).not.toHaveBeenCalled();
   });
+  it("does not register ciphertext if the key authority changes during encryption", async () => {
+    const changed = { ...ctx, target: { ...ctx.target, canisterIds: { ...ctx.target.canisterIds } } };
+    mocks.encrypt.mockImplementation(async () => { changed.target.canisterIds.pii_access_control = "ryjl3-tyaaa-aaaaa-aaaba-cai"; return new Uint8Array([1]); });
+    await expect(preparePrivateOwnProfileName(changed, "Paul")).rejects.toThrow("authority changed");
+    expect(mocks.register).not.toHaveBeenCalled();
+  });
 });
 
 describe("authorized name display", () => {
@@ -70,7 +76,7 @@ describe("authorized name display", () => {
     ]);
     expect(mocks.read).toHaveBeenCalledOnce();
     expect(mocks.read.mock.calls[0][0]).toEqual([subject]);
-    expect(mocks.keys).toHaveBeenCalledWith(ctx, [subject], "display_name");
+    expect(mocks.keys).toHaveBeenCalledWith(ctx, [subject], "display_name", { fresh: true, assertActive: expect.any(Function) });
   });
   it("never substitutes another group's PII authority", async () => {
     const foreign = privateProfileNameReference("ryjl3-tyaaa-aaaaa-aaaba-cai", subject);
@@ -110,7 +116,7 @@ describe("private own email preparation", () => {
     mocks.decrypt.mockReturnValue(new TextEncoder().encode("paul@example.test"));
     expect(await preparePrivateOwnProfileEmail(ctx," paul@example.test ")).toBe(`pii-email:v1:${authority}:${subject}`);
     expect(mocks.encrypt).toHaveBeenCalledWith(ctx,subject,"contact_email","paul@example.test");
-    expect(mocks.keys).toHaveBeenCalledWith(ctx,[subject],"contact_email");
+    expect(mocks.keys).toHaveBeenCalledWith(ctx,[subject],"contact_email",{fresh:true,assertActive:expect.any(Function)});
   });
   it("refuses invalid email before any encryption or write",async()=>{
     await expect(preparePrivateOwnProfileEmail(ctx,"not-an-email")).rejects.toThrow();
@@ -128,5 +134,95 @@ describe("private own email preparation", () => {
     await preparePrivateOwnProfileEmail(ctx," ");
     expect(mocks.encrypt).toHaveBeenCalledWith(ctx,subject,"contact_email","");
     expect(mocks.register).toHaveBeenCalledWith(subject,"contact_email",expect.any(Uint8Array),Principal.fromText(subject));
+  });
+});
+
+describe("original-authority display rehearsal", () => {
+  const foreignAuthority = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+  const foreignReference = privateProfileNameReference(foreignAuthority, subject);
+  const lease = (confirm = vi.fn(async () => {})) => ({ context: { ...ctx, target: { ...ctx.target, canisterIds: { ...ctx.target.canisterIds, pii_access_control: foreignAuthority } } }, confirm });
+
+  it("decrypts through the verified original authority and confirms it after unlocking", async () => {
+    const route = lease(); const resolveAuthority = vi.fn(async () => route);
+    expect(await hydratePrivateProfileNames(ctx, [{ display_name: foreignReference }], { resolveAuthority })).toEqual([{ display_name: "Paul Cranwell" }]);
+    expect(resolveAuthority).toHaveBeenCalledWith(foreignAuthority);
+    expect(mocks.keys).toHaveBeenCalledWith(route.context, [subject], "display_name", { fresh: true, assertActive: expect.any(Function) });
+    expect(route.confirm).toHaveBeenCalledOnce();
+  });
+  it("keeps names isolated by original authority even when subject identifiers match", async () => {
+    const resolveAuthority = vi.fn(async id => id === authority ? { context: ctx, confirm: async () => {} } : lease());
+    mocks.keys.mockImplementation(async route => new Map([[subject, route.target.canisterIds.pii_access_control]]));
+    mocks.decrypt.mockImplementation(key => new TextEncoder().encode(key === authority ? "Original name" : "Other name"));
+    expect(await hydratePrivateProfileNames(ctx, [{ display_name: reference }, { display_name: foreignReference }], { resolveAuthority })).toEqual([{ display_name: "Original name" }, { display_name: "Other name" }]);
+  });
+  it("withholds already decrypted names when the closing inventory check refuses", async () => {
+    const route = lease(vi.fn(async () => { throw new Error("drift"); }));
+    expect(await hydratePrivateProfileNames(ctx, [{ display_name: foreignReference }], { resolveAuthority: async () => route })).toEqual([{ display_name: null }]);
+    expect(mocks.decrypt).toHaveBeenCalled();
+  });
+  it("does not start private reads when original-authority resolution is refused", async () => {
+    expect(await hydratePrivateProfileNames(ctx, [{ display_name: foreignReference }], { resolveAuthority: async () => { throw new Error("unregistered"); } })).toEqual([{ display_name: null }]);
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it("rejects a resolver that substitutes a different key authority", async () => {
+    expect(await hydratePrivateProfileNames(ctx, [{ display_name: foreignReference }], { resolveAuthority: async () => ({ context: ctx, confirm: async () => {} }) })).toEqual([{ display_name: null }]);
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it("bounds stalled original-authority discovery without starting private reads", async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = hydratePrivateProfileNames(ctx, [{ display_name: foreignReference }], { resolveAuthority: () => new Promise(() => {}) });
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(await pending).toEqual([{ display_name: null }]);
+      expect(mocks.read).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+  it("withholds decrypted names if closing authority confirmation stalls", async () => {
+    vi.useFakeTimers();
+    try {
+      const route = lease(vi.fn(() => new Promise<void>(() => {})));
+      const pending = hydratePrivateProfileNames(ctx, [{ display_name: foreignReference }], { resolveAuthority: async () => route });
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(await pending).toEqual([{ display_name: null }]);
+      expect(mocks.decrypt).toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+  it("does not fetch keys after a timed-out ciphertext read eventually returns", async () => {
+    vi.useFakeTimers();
+    try {
+      let release: (value: unknown) => void = () => {};
+      mocks.read.mockImplementation(() => new Promise(resolve => { release = resolve; }));
+      const pending = hydratePrivateProfileNames(ctx, [{ display_name: reference }]);
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(await pending).toEqual([{ display_name: null }]);
+      release({ Ok: [{ pii_id: subject, field_id: "display_name", ciphertext: [9] }] });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.keys).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+  it("discards an unlock when the request is cancelled while keys are pending", async () => {
+    const controller = new AbortController();
+    let release: (value: Map<string, string>) => void = () => {};
+    mocks.keys.mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    const pending = hydratePrivateProfileNames(ctx, [{ display_name: reference }], { signal: controller.signal });
+    await vi.waitFor(() => expect(mocks.keys).toHaveBeenCalled());
+    controller.abort(); release(new Map([[subject, "key"]]));
+    await expect(pending).rejects.toThrow("cancelled");
+    expect(mocks.decrypt).not.toHaveBeenCalled();
+  });
+  it("globally bounds ciphertext batches to 100 subjects and two concurrent requests", async () => {
+    const rows = Array.from({ length: 201 }, (_, i) => ({ display_name: privateProfileNameReference(authority, Principal.fromUint8Array(new Uint8Array([i + 1, 2])).toText()) }));
+    let inFlight = 0; let peak = 0;
+    mocks.read.mockImplementation(async ids => {
+      inFlight++; peak = Math.max(peak, inFlight);
+      await new Promise(resolve => setTimeout(resolve, 1));
+      inFlight--;
+      return { Ok: ids.map(id => ({ pii_id: id, field_id: "display_name", ciphertext: [9] })) };
+    });
+    mocks.keys.mockImplementation(async (_, ids) => new Map(ids.map(id => [id, "key"])));
+    const result = await hydratePrivateProfileNames(ctx, rows);
+    expect(result.every(row => row.display_name === "Paul Cranwell")).toBe(true);
+    expect(mocks.read.mock.calls.map(call => call[0].length)).toEqual([100, 100, 1]);
+    expect(peak).toBe(2);
   });
 });

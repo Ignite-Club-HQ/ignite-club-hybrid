@@ -209,16 +209,23 @@ export async function fetchPiiVetKeys(
   ctx: FeatureBackendContext,
   piiIds: string[],
   fieldId: string,
+  options: { fresh?: boolean; assertActive?: () => void } = {},
 ): Promise<Map<string, VetKey>> {
+  const active = options.assertActive ?? (() => {});
+  active();
   const out = new Map<string, VetKey>();
   const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  active();
   const cid = canisterId.toText();
   const principal = ctx.identity.getPrincipal().toText();
   // Device-stored keys (30 days, cleared on sign-out) skip the paid
   // derivation — previously every app open re-derived every visible name.
   const memoryKey = (id: string) => `${ctx.target.host}|${cid}|${principal}|${fieldId}\u001f${id}`;
   const storeKey = (id: string) => `pii:${fieldId}:${id}`;
+  // Private profile reads require a fresh authorization decision, never a
+  // retained media/session key. Fresh results are not placed into any cache.
   for (const id of piiIds) {
+    if (options.fresh) continue;
     const memKey = memoryKey(id);
     if (vetKeyCache.has(memKey)) continue;
     const stored = loadStoredClubKey(cid, principal, storeKey(id));
@@ -229,15 +236,17 @@ export async function fetchPiiVetKeys(
       forgetStoredClubKey(cid, principal, storeKey(id));
     }
   }
-  const missing = piiIds.filter((id) => !vetKeyCache.has(memoryKey(id)));
+  const missing = [...new Set(piiIds)].filter((id) => options.fresh || !vetKeyCache.has(memoryKey(id)));
   if (missing.length === 0) {
     for (const id of piiIds) { const key = vetKeyCache.get(memoryKey(id)); if (key) out.set(id, key); }
     return out;
   }
 
   const { key: verificationKey } = await getPiiVerificationKey(ctx);
+  active();
 
   for (let start = 0; start < missing.length; start += VETKEY_BATCH_SIZE) {
+    active();
     const chunk = missing.slice(start, start + VETKEY_BATCH_SIZE);
     // One fresh transport key per relay call; every derived key in the
     // batch is encrypted under it.
@@ -246,6 +255,8 @@ export async function fetchPiiVetKeys(
       actor.get_encrypted_pii_vetkeys_batch(chunk, fieldId, transport.publicKeyBytes()),
       "Fetch PII vetKeys",
     );
+    active();
+    if (keys.length !== chunk.length) throw new Error("Invalid PII key response length.");
     for (let i = 0; i < chunk.length; i++) {
       const entry = keys[i];
       if (!entry || entry.length === 0) continue; // no access / not registered
@@ -254,10 +265,13 @@ export async function fetchPiiVetKeys(
         verificationKey,
         piiIbeIdentity(chunk[i], fieldId),
       );
-      vetKeyCache.set(memoryKey(chunk[i]), vetKey);
+      if (options.fresh) out.set(chunk[i], vetKey);
+      else vetKeyCache.set(memoryKey(chunk[i]), vetKey);
     }
   }
 
+  active();
+  if (options.fresh) return out;
   for (const id of piiIds) {
     const cached = vetKeyCache.get(memoryKey(id));
     if (cached) out.set(id, cached);
