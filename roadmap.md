@@ -1,3 +1,6 @@
+## Home View rewards responsiveness — 26 October 2026
+- [ ] Open on the first tap independently of pending Home/club information; load the selected club catalogue directly, reuse warm rows, distinguish pending/error/confirmed-empty directory states, and run focused interaction checks. No deployment or permission changes.
+
 ## Team carousel on session resume — 26 October 2026
 - [x] Native/browser return now coalesces targeted current-account carousel recovery, releasing suspended initial queries before refetching; healthy cards/unrelated pages remain untouched. Required team/league read failures no longer become successful empty lists. Shared membership discovery times out/retire-fences its own pending operation so retries cannot join it forever or publish late old replies. 20 focused query-observer/native/browser/discovery checks and ICP guards pass; preview build OK. Real signed-in phone resumption remains unverified; no deployment.
 

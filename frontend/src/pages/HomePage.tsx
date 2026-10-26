@@ -74,7 +74,8 @@ import {
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { logHomeOpenLatency, resetHomeOpenLog } from "@/lib/homeOpenLatency";
 import { recordPointsHistory } from "@/lib/pointsHistory";
-import { homeRewardQuery } from "@/features/home/homeRewardQuery";
+import { homeRewardQuery, readHomeRewardsWithDeadline } from "@/features/home/homeRewardQuery";
+import { useHomeRewardsBrowser } from "@/components/home/useHomeRewardsBrowser";
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { findNearbyGameEvent } from "@/hooks/useNearbyGameEvent";
 import { useClubTheme, hasClubThemeCached } from "@/hooks/useClubTheme";
@@ -220,8 +221,6 @@ export default function HomePage() {
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
   
   const [selectedUpgradeClub, setSelectedUpgradeClub] = useState<string>("");
-  const [rewardsDialogOpen, setRewardsDialogOpen] = useState(false);
-  const [selectedRewardClubId, setSelectedRewardClubId] = useState<string | null>(null);
   const [selectedReward, setSelectedReward] = useState<HomeReward | null>(null);
   const [confirmRedeemDialogOpen, setConfirmRedeemDialogOpen] = useState(false);
   const [selectedRedeemFor, setSelectedRedeemFor] = useState<string>("myself");
@@ -931,9 +930,9 @@ export default function HomePage() {
   const showProBadge = !!userRoles && !isLoadingUserRoles && !isLoadingProAccess && !hasProAccess && !isAppAdmin;
 
   // Fetch clubs for rewards with Pro status - uses memberships data
-  const { data: rewardClubs = [] } = useQuery({
-    queryKey: ["reward-clubs-home", user?.id, activeClubFilter, userMemberships?.clubIds],
-    queryFn: async () => {
+  const { data: rewardClubs = [], isPending: rewardClubsPending, isError: rewardClubsError, refetch: retryRewardClubs } = useQuery({
+    queryKey: ["reward-clubs-home", user?.id, resolveAuthBackend(), activeClubFilter, userMemberships?.clubIds],
+    queryFn: () => readHomeRewardsWithDeadline(async () => {
       // ICP: club profiles + Pro grants come from club_domain.
       if (isFeatureRoutedToIcp("membership")) {
         return withFeatureBackend("membership", {
@@ -943,7 +942,7 @@ export default function HomePage() {
             if (clubIds.length === 0) return [];
             const [subs, profiles] = await Promise.all([
               listLiveClubSubscriptions(ctx, clubIds),
-              Promise.all(clubIds.map((clubId) => readMembershipInScope(ctx, { clubId }, scoped => getLiveClubProfile(scoped, clubId)).catch(() => null))),
+              Promise.all(clubIds.map((clubId) => readMembershipInScope(ctx, { clubId }, scoped => getLiveClubProfile(scoped, clubId)))),
             ]);
             return clubIds.flatMap((clubId, index) => {
               const profile = profiles[index];
@@ -982,11 +981,25 @@ export default function HomePage() {
         const hasPro = sub?.is_pro || sub?.is_pro_football || sub?.admin_pro_override || sub?.admin_pro_football_override;
         return { ...club, hasPro: !!hasPro };
       });
-    },
-    enabled: !!user && !!userMemberships,
+    }),
+    enabled: !!user && (!!activeClubFilter || !!userMemberships),
     staleTime: 5 * 60 * 1000,
-    placeholderData: (prev) => prev,
+    retry: false,
   });
+
+  const { open: rewardsDialogOpen, setOpen: setRewardsDialogOpen,
+    selectedClubId: selectedRewardClubId, setSelectedClubId: setSelectedRewardClubId,
+    browse: handleBrowseRewards } = useHomeRewardsBrowser(
+      activeClubFilter,
+      rewardClubs.filter((club: any) => isAppAdmin || club.hasPro).map((club: any) => club.id),
+    );
+
+  // Warm the exact selected club without waiting for Home's feed/Pro directory.
+  // Catalogue reads remain authorized by the owning service; warming grants nothing.
+  useEffect(() => {
+    if (!user?.id || !activeClubFilter) return;
+    void queryClient.prefetchQuery(homeRewardQuery(supabase, user.id, resolveAuthBackend(), activeClubFilter));
+  }, [user?.id, activeClubFilter, queryClient]);
 
   // Rewards are per-club. Lock if none of the user's relevant clubs have Pro
   // (scoped to activeClubFilter when set, otherwise any club). App admins bypass.
@@ -1000,7 +1013,7 @@ export default function HomePage() {
 
   // Fetch the next reward info across user's clubs
   const { data: nextRewardInfo = null } = useQuery<{ points_required: number; name: string } | null>({
-    queryKey: ["next-reward-info", rewardClubs.map((c: any) => c.id)],
+    queryKey: ["next-reward-info", user?.id, resolveAuthBackend(), isAppAdmin, rewardClubs.map((c: any) => [c.id, c.hasPro])],
     queryFn: async () => {
       const proClubIds = rewardClubs.filter((c: any) => isAppAdmin || c.hasPro).map((c: any) => c.id);
       if (proClubIds.length === 0) return null;
@@ -1084,23 +1097,6 @@ export default function HomePage() {
     }
     return child.ignite_points || 0;
   };
-  const handleBrowseRewards = () => {
-    const proClubs = rewardClubs.filter((club: any) => isAppAdmin || club.hasPro);
-    
-    // In club mode with single Pro club, auto-select it
-    if (activeClubFilter && proClubs.length === 1) {
-      setSelectedRewardClubId(proClubs[0].id);
-      setRewardsDialogOpen(true);
-    } else if (proClubs.length === 1) {
-      // Only one Pro club total
-      setSelectedRewardClubId(proClubs[0].id);
-      setRewardsDialogOpen(true);
-    } else if (proClubs.length > 1) {
-      // Multiple clubs - show club selection first
-      setRewardsDialogOpen(true);
-    }
-  };
-
   // Stable per-attempt idempotency key so retries/double taps can't double-spend.
   const redeemAttemptKeyRef = useRef<string | null>(null);
 
@@ -2378,6 +2374,9 @@ export default function HomePage() {
               rewardsLoading,
               rewardsError,
               onRetryRewards: () => void retryRewards(),
+              rewardClubsLoading: rewardClubsPending,
+              rewardClubsError,
+              onRetryRewardClubs: () => void retryRewardClubs(),
               availableRewards,
               rewardClubs,
               isAppAdmin,
