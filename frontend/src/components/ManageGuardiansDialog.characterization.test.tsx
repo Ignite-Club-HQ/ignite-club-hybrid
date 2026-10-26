@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mocks.from } }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: 'viewer' } }) }));
 vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => mocks.mode }));
 vi.mock("@/live/featureRouter", () => ({
   withFeatureBackend: (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
@@ -31,6 +32,7 @@ vi.mock("@/live/featureRouter", () => ({
 vi.mock("@/live/features/club", () => ({ listLiveChildGuardians: (...args: unknown[]) => mocks.guardiansLive(...args) }));
 vi.mock("@/live/features/membership", () => ({ listLiveTeamRoleGrants: (...args: unknown[]) => mocks.rolesLive(...args) }));
 vi.mock("@/live/features/identityAccessClient", () => ({ listLiveProfilesByIds: (...args: unknown[]) => mocks.profilesLive(...args) }));
+vi.mock("@/live/relationshipProfileRead", () => ({ readRelationshipProfiles: (...args: unknown[]) => mocks.profilesLive(...args) }));
 vi.mock("@/live/features/vault", () => ({ grantLiveGuardianChildNameRead: (...args: unknown[]) => mocks.grantName(...args) }));
 vi.mock("@icp-sdk/core/principal", () => ({ Principal: { fromText: (text: string) => ({ toText: () => text, text }) } }));
 
@@ -238,7 +240,7 @@ describe.runIf(mocks.mode === "icp")("ManageGuardiansDialog ICP boundary", () =>
     expect(screen.getByRole("status")).toHaveTextContent(/not available in ICP yet/i);
     expect(guardianRow("Guardian One").queryByRole("button")).not.toBeInTheDocument();
     expect(mocks.guardiansLive).toHaveBeenCalledWith(mocks.context, "child-1");
-    expect(mocks.profilesLive).toHaveBeenCalledWith(mocks.context, ["guardian-principal"]);
+    expect(mocks.profilesLive).toHaveBeenCalledWith(mocks.context, ["guardian-principal"], { kind: 'family', resource: 'child-1' });
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.rolesLive).not.toHaveBeenCalled();
   });

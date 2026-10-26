@@ -52,6 +52,26 @@ describe("private profile name preparation", () => {
 });
 
 describe("authorized name display", () => {
+  it.each(['club', 'family', 'competition', 'league', 'guardian_search'] as const)('withholds %s names when final authority confirmation changes after decryption', async kind => {
+    const audience = { kind, authority: Principal.fromText(authority), resource: 'exact-resource', profile_revision: 7n };
+    mocks.scopedRead.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9] }] });
+    let release: (() => void) | undefined;
+    let drifted = false;
+    const confirm = vi.fn(async () => {
+      await new Promise<void>(resolve => { release = resolve; });
+      if (drifted) throw new Error('Original authority inventory changed');
+    });
+    const pending = hydratePrivateProfileNames(ctx, [{ display_name: reference }], {
+      audience, resolveAuthority: async () => ({ context: ctx, confirm }),
+    });
+    const rejected = expect(pending).rejects.toThrow('Original authority inventory changed');
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+    expect(mocks.decrypt).toHaveBeenCalled();
+    drifted = true;
+    release?.();
+    await rejected;
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
   it.each(['club', 'family', 'competition', 'league', 'guardian_search'] as const)('carries exact %s audience to ciphertext and fresh-key reads without generic fallback', async kind => {
     const audience = {kind,authority:Principal.fromText(authority),resource:'child-1',profile_revision:7n};
     mocks.scopedRead.mockResolvedValue({Ok:[{pii_id:subject,field_id:'display_name',ciphertext:[9,8]}]});

@@ -10,6 +10,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { addLiveAdmin, removeLiveAdmin } from "@/live/features/miniLeagues";
 import { Principal } from "@icp-sdk/core/principal";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { readRelationshipProfiles } from "@/live/relationshipProfileRead";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -87,7 +88,7 @@ export function ManageMiniLeagueAdminsSheet({
 
   // Current per-league admin grants
   const { data: currentAdmins, isLoading: loadingCurrent } = useQuery({
-    queryKey: ["mini-league-admins", miniLeagueId],
+    queryKey: ["mini-league-admins", miniLeagueId, user?.id],
     queryFn: () =>
       withFeatureBackend("mini_leagues", {
         supabase: async () => {
@@ -110,17 +111,23 @@ export function ManageMiniLeagueAdminsSheet({
             avatar_url: profileMap.get(r.user_id)?.avatar_url ?? null,
           }));
         },
-        // Gated: admin display names come from Supabase profiles joined by
-        // uuid, which has no canister equivalent (canister keys by principal).
-        icp: async () => [] as { id: string; user_id: string; display_name: string | null; avatar_url: string | null }[],
-      }, { clubId }),
+        icp: async ctx => {
+          const { listLiveAdmins } = await import('@/live/features/miniLeagues');
+          const admins = await listLiveAdmins(ctx, miniLeagueId);
+          const ids = admins.map(admin => admin.user_id.toText());
+          const profiles = await readRelationshipProfiles(ctx, ids, { kind: 'league', resource: miniLeagueId });
+          const byId = new Map(profiles.map(profile => [profile.account_id, profile]));
+          return ids.map(id => ({ id, user_id: id, display_name: byId.get(id)?.display_name ?? null, avatar_url: byId.get(id)?.avatar_ref[0] ?? null }));
+        },
+      }, { miniLeagueId }),
     enabled: open && !!miniLeagueId,
   });
 
   // Club members eligible to be promoted (anyone with a role in the club)
   const { data: clubMembers } = useQuery({
-    queryKey: ["club-members-pickable", clubId],
-    queryFn: async () => {
+    queryKey: ["club-members-pickable", clubId, user?.id],
+    queryFn: () => withFeatureBackend('membership', {
+      supabase: async () => {
       const { data: roles } = await supabase
         .from("user_roles")
         .select("user_id")
@@ -136,7 +143,15 @@ export function ManageMiniLeagueAdminsSheet({
         display_name: p.display_name,
         avatar_url: p.avatar_url,
       })) as ClubMember[];
-    },
+      },
+      icp: async ctx => {
+        const { listLiveRoleGrants } = await import('@/live/features/membership');
+        const grants = await listLiveRoleGrants(ctx, clubId);
+        const ids = [...new Set(grants.map(grant => grant.user.toText()))];
+        const profiles = await readRelationshipProfiles(ctx, ids, { kind: 'club', resource: clubId });
+        return profiles.map(profile => ({ user_id: profile.account_id, display_name: profile.display_name, avatar_url: profile.avatar_ref[0] ?? null }));
+      },
+    }, { clubId }),
     enabled: open && !!clubId,
   });
 

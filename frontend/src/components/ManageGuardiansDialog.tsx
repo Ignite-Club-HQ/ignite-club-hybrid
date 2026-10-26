@@ -28,8 +28,9 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { linkLiveGuardian, listLiveChildGuardians, unlinkLiveGuardian, setLiveGuardianRelationship } from "@/live/features/club";
 import { grantLiveGuardianChildNameRead } from "@/live/features/vault";
-import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { readRelationshipProfiles } from "@/live/relationshipProfileRead";
 import { Principal } from "@icp-sdk/core/principal";
+import { useAuth } from '@/hooks/useAuth';
 
 interface Guardian {
   id: string;
@@ -80,13 +81,14 @@ export default function ManageGuardiansDialog({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isIcp = resolveAuthBackend() === "icp";
+  const { user: profileViewer } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [relationshipType, setRelationshipType] = useState("guardian");
 
   // Fetch current guardians
   const { data: guardians, isLoading: loadingGuardians } = useQuery({
-    queryKey: ["child_guardians", childId],
+    queryKey: ["child_guardians", childId, profileViewer?.id, resolveAuthBackend()],
     queryFn: async () => withFeatureBackend("membership", {
       supabase: async () => {
         const { data, error } = await supabase
@@ -99,7 +101,7 @@ export default function ManageGuardiansDialog({
       },
       icp: async (ctx) => {
         const principals = (await listLiveChildGuardians(ctx, childId)).map((principal) => principal.toText());
-        const profiles = await listLiveProfilesByIds(ctx, principals).catch(() => []);
+        const profiles = await readRelationshipProfiles(ctx, principals, { kind: 'family', resource: childId });
         const profileByPrincipal = new Map(profiles.map((profile: any) => [profile.account_id, profile]));
         return principals.map((principal) => {
           const profile = profileByPrincipal.get(principal) as any;

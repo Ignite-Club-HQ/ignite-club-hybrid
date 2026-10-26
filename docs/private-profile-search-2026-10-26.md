@@ -9,6 +9,39 @@ and other details must remain viewable in the app.
 
 ## Implemented locally
 
+### 22:46 completion batch — relationship display connections
+
+Added one relationship display reader that keeps the owning service context
+separate from shared identity profile lookup. During disposable rehearsal it
+passes exact club/family/league/competition selectors, obtains original-PII
+evidence only when an encrypted reference actually needs it, and checks identity,
+target and cancellation throughout opening and closing reads. Scoped names do
+not enter the generic profile-ID cache. Hosted legacy reads remain unchanged;
+this is not an activation switch.
+
+Connected guardian management's exact child, league member list (therefore league
+detail), linked-player parent/guardian labels, league administrators and pickable
+club members, team adult roster labels and event player-report adult labels.
+Some previously suspected caches are Supabase-only: team parent enrichment,
+league detail's fallback joins, second-parent email lookup and the legacy
+competition-admin chat page. They must remain unchanged. ICP competition-admin
+threads use the regular group chat, whose metadata does not yet carry a verified
+competition/league audience; inferring one from a conversation ID is prohibited.
+
+Added an offline consistency checker for full expected group set, required
+original Group 1, per-group original key comparison and exact subject-to-original
+authority conversion receipts. Pending/unknown/missing/mismatched evidence
+refuses. This checker does not authenticate receipts, run deployment/backfill,
+authorize activation or establish real encrypted readback from supplied booleans.
+Five held frontend closing-inventory cases withhold decrypted names after drift;
+these are not actual service membership-revocation callback tests.
+
+Still unfinished: verified competition/league chat audience metadata and all
+remaining display paths, actual held-final-service audience tests, complete
+production legacy inventory/evidence and a protected executable release/backfill
+runner. Real signed-in acceptance also requires an Internet Identity session.
+Separate approvals still precede any deployment, conversion, grants or activation.
+
 - Added rehearsal-gated `read_club_profiles`: exact registered source/club,
   at most 25 deduplicated active principals, two atomic consensus membership
   batches at one exact durable revision, and account/configuration rechecks

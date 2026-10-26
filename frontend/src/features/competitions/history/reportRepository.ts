@@ -9,7 +9,7 @@ export async function readReportPlayerStats(teamId: string, eventId?: string, ra
     },
     icp:async(ctx)=>{
       const {listLiveEvents,listLiveDetailedGamePlayerStats,getLiveGameResult}=await import("@/live/features/events");
-      const {listLiveProfilesByIds}=await import("@/live/features/identityAccessClient");
+      const {readRelationshipProfiles}=await import("@/live/relationshipProfileRead");
       const {resolveLivePiiTextBatch}=await import("@/live/features/vault");
       const scopedEvents=await listLiveEvents(ctx,null,teamId);
       if(eventId && !scopedEvents.some(e=>e.id===eventId && e.team_id[0]===teamId && !e.deleted))throw new Error("Forbidden report event/team scope");
@@ -17,7 +17,7 @@ export async function readReportPlayerStats(teamId: string, eventId?: string, ra
       const rows:any[]=[];
       for(const event of events){
         const stats=await listLiveDetailedGamePlayerStats(ctx,event.id);
-        const profiles = await listLiveProfilesByIds(ctx, stats.flatMap(s => s.user_id));
+        const profiles = await readRelationshipProfiles(ctx, stats.flatMap(s => s.user_id), { kind: 'club', resource: event.club_id });
         const byId = new Map(profiles.map(p => [p.account_id,p]));
         const childNames=await resolveLivePiiTextBatch(ctx,stats.flatMap(s=>s.child_id?[s.child_id]:[]),"name","competition_player_report","Authorized player report");
         const [result]=await getLiveGameResult(ctx,event.id);

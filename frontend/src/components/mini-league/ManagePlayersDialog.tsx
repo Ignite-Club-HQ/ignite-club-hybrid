@@ -9,8 +9,9 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { listLiveInvites, listLivePlayers, removeLivePlayer, updateLivePlayer, getLivePlayerGuardianStatus } from "@/live/features/miniLeagues";
 import { Principal } from "@icp-sdk/core/principal";
+import { useAuth } from '@/hooks/useAuth';
 import { removeLiveMember, restoreLiveMember, listLiveRemovedMembers } from "@/live/features/club";
-import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { selectRelationshipProfiles } from "@/live/relationshipProfileRead";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -214,12 +215,13 @@ export function ManagePlayersDialog({
   });
 
   // Fetch parent profiles for linked players
+  const { user: profileViewer } = useAuth();
   const parentUserIds = [...new Set((players || []).map(p => p.parent_user_id).filter(Boolean) as string[])];
   const { data: parentProfiles } = useQuery({
-    queryKey: ["parent-profiles", parentUserIds],
+    queryKey: ["parent-profiles", profileViewer?.id, miniLeagueId, parentUserIds],
     queryFn: async () => {
       if (parentUserIds.length === 0) return [];
-      const { data, error } = await selectCachedProfilesByIds(parentUserIds);
+      const { data, error } = await selectRelationshipProfiles(parentUserIds, { kind: 'league', resource: miniLeagueId });
       if (error) throw error;
       return data as ParentProfile[];
     },
@@ -231,7 +233,7 @@ export function ManagePlayersDialog({
   // Fetch additional guardians (second parents) for all children in the list
   const childIdsForGuardians = [...new Set((players || []).map(p => p.child_id).filter(Boolean) as string[])];
   const { data: additionalGuardians } = useQuery({
-    queryKey: ["mini-league-additional-guardians", miniLeagueId, childIdsForGuardians],
+    queryKey: ["mini-league-additional-guardians", profileViewer?.id, miniLeagueId, childIdsForGuardians],
     queryFn: async () => {
       if (childIdsForGuardians.length === 0) return [] as { child_id: string; guardian_id: string; display_name: string | null }[];
       const gRows = await withFeatureBackend("mini_leagues", {
@@ -262,7 +264,7 @@ export function ManagePlayersDialog({
       }, { clubId });
       const guardianIds = [...new Set((gRows || []).map(g => g.guardian_id))];
       if (guardianIds.length === 0) return [];
-      const { data: profs } = await selectCachedProfilesByIds(guardianIds);
+      const { data: profs } = await selectRelationshipProfiles(guardianIds, { kind: 'league', resource: miniLeagueId });
       const nameMap = new Map((profs || []).map(p => [p.id, p.display_name]));
       return (gRows || []).map(g => ({
         child_id: g.child_id,
