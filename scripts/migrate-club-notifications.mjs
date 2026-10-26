@@ -13,7 +13,7 @@ export function buildNotificationSnapshot({ clubId, notifications = [], schedule
   for (const n of notifications) if (n.club_id !== clubId) throw Error('Foreign notification refused');
   for (const s of scheduledMessages) if (s.club_id !== clubId) throw Error('Foreign scheduled message refused');
   return {
-    broadcast_proofs: null, // no competition broadcast receipts exist before cutover
+    broadcast_proofs: [], // no competition broadcast receipts exist before cutover
     items: notifications.map((n) => ({
       id: n.id, user: claimedPrincipal(claims, n.user_id).toText(), club: clubId, kind: n.type, body: n.message,
       idempotency_key: n.dedupe_key ?? `migrated:${n.id}`, status: { Delivered: null }, attempts: 0,

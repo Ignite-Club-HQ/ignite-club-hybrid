@@ -24,7 +24,7 @@ test('notifications import as delivered receipts and scheduled messages keep var
   const type = await snapshotType(require, new URL('./migrate-schemas/notification_queue.snapshot.did.js', import.meta.url).href);
   const { IDL } = require('@icp-sdk/core/candid');
   const [back] = IDL.decode([type], IDL.encode([type], [snap]));
-  assert.equal(back.broadcast_proofs, null);
+  assert.deepEqual(back.broadcast_proofs, []);
   assert.equal(back.items.length, 2);
   assert.equal(back.items[0].user, member.toText());
   assert.deepEqual(back.items[0].status, { Delivered: null });
