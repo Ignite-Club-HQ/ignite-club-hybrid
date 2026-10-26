@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { DeviceStorageSettings } from '@/components/DeviceStorageSettings';
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Loader2, User, Bell, Moon, Sun, Smartphone, Download, Send, MessageSquare, Calendar, Image, Users, LayoutGrid, Mail, Gift, Trophy, Settings, Fingerprint, ChevronRight, Lock, HelpCircle, Eye, Sparkles, Accessibility, Copy } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -630,6 +631,8 @@ export default function SettingsPage() {
       </Card>
 
       {/* Accessibility */}
+      <DeviceStorageSettings />
+
       <Card
         className="cursor-pointer hover:border-primary/50 transition-colors"
         onClick={() => navigate("/settings/accessibility")}
