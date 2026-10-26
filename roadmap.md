@@ -1,4 +1,5 @@
 ## Continue migration-tool loaders — 26 October 2026
+- [ ] Next requested batch: build offline child/privacy and membership conversion with exact-destination claims, relationship checks and no plaintext child fields in snapshots; keep live execution blocked.
 - [x] Build claim-gated points/rewards ledger conversion and import plus ordinary RSVP conversion. Preserve balances/history/redemption IDs, verifiers, cooldowns, points toggles and payment flags; refuse unresolved child/media references and unsupported RSVP award receipts. Destination claims read before member-step intent. No live copying, claims, emails or routing changes authorized.
 - [ ] Remaining implementation: child/privacy and membership writers, full event duties/results/award receipts, chats, notifications, media/Vault, stable source inventory/durable recovery and final reconciliation/cutover. Overall missing-writer gate continues to refuse all live data writes; real testing also waits for the deferred secrets and separate exact-club/group approvals.
 
