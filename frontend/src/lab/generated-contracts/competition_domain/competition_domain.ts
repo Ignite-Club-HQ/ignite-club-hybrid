@@ -1028,6 +1028,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    read_private_admin_thread_participants(requester: Principal, competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_profile_admin_thread_batch(requester: Principal, competition_id: string, member: Principal, subjects: Array<Principal>, expected: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -2699,6 +2706,16 @@ export class Competition_domain implements competition_domainInterface {
     }> {
         const result = await this.actor.read_playhq_stats(arg0);
         return from_candid_variant_n114(result);
+    }
+    async read_private_admin_thread_participants(arg0: Principal, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_private_admin_thread_participants(arg0, arg1);
+        return from_candid_variant_n82(result);
     }
     async read_profile_admin_thread_batch(arg0: Principal, arg1: string, arg2: Principal, arg3: Array<Principal>, arg4: bigint | null): Promise<{
         __kind__: "Ok";

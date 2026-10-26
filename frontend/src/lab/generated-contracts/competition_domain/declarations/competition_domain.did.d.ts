@@ -784,6 +784,11 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'read_private_admin_thread_participants' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
   'read_profile_admin_thread_batch' : ActorMethod<
     [Principal, string, Principal, Array<Principal>, [] | [bigint]],
     {

@@ -1060,6 +1060,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_private_admin_thread_participants' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        [],
+      ),
     'read_profile_admin_thread_batch' : IDL.Func(
         [
           IDL.Principal,
