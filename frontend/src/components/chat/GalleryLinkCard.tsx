@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { chatVaultLocation, readChatVaultCard } from "@/features/messaging/thread/chatVaultCardRead";
 import { isIcpBlobUrl } from "@/hooks/useResolvedIcpBlobSrc";
 import { Button } from "@/components/ui/button";
+import { chatScopeFromPath } from "@/live/chatScope";
 
 interface GalleryLinkCardProps {
   cardId: string;
@@ -29,6 +30,11 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
   const { user, sessionRestoration } = useAuth();
   const queryClient = useQueryClient();
   const { pathname } = useLocation();
+  const chatScope = chatScopeFromPath(pathname);
+  const teamId = chatScope && "teamId" in chatScope ? chatScope.teamId : undefined;
+  // Subscribe without fetching: React.memo otherwise hides the header's
+  // newly resolved owning club from a card already showing its skeleton.
+  useQuery({ queryKey: ["team", teamId], enabled: false });
   const location = isIcp ? chatVaultLocation(queryClient, user?.id, pathname) : undefined;
   const locationKey = location && "clubId" in location ? `club:${location.clubId}`
     : location && "teamId" in location ? `team:${location.teamId}` : "resource";
