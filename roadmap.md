@@ -1,3 +1,6 @@
+## Cold chat header visibility — 26 October 2026
+- [ ] Replace shared cold-header action/subtitle placeholders with visible, disabled standard icons and remembered/type labels; verify narrow widths and access gating. Signed-in phone verification requires Paul's Internet Identity session.
+
 ## Schedule refresh source failures — 26 October 2026
 - [x] Separate bounded group-location coordination from the event/duty service deadline; regression reproduces healthy 25-second routing plus 15-second service reads without false failure, while genuinely stalled services still fail at 20 seconds. Retired routing cannot start abandoned reads. 16 focused tests pass; signed-in phone cause remains unverified locally.
 
