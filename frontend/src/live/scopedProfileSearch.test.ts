@@ -56,6 +56,34 @@ describe("scoped decrypted person matching", () => {
     await expect(searchScopedProfileCandidates(ctx,"club-a",[subject],"Paul",10,controller.signal)).rejects.toThrow("cancelled");
     expect(mocks.dispose).toHaveBeenCalledOnce();
   });
+  it("refuses retained decrypted names when caller membership is revoked during unlock", async () => {
+    mocks.hydrate.mockImplementation(async () => {
+      mocks.read.mockRejectedValueOnce(new Error("Club membership changed"));
+      return [row];
+    });
+    await expect(searchScopedProfileCandidates(ctx,"club-a",[subject],"Paul")).rejects.toThrow("membership changed");
+    expect(mocks.read).toHaveBeenCalledTimes(2);
+    expect(mocks.dispose).toHaveBeenCalledOnce();
+  });
+  it.each([
+    ["removed subject", []],
+    ["relinked account", [{ ...row, account_id: "replacement-account" }]],
+    ["changed original name reference", [{ ...row, display_name: "different-reference" }]],
+    ["duplicate final subjects", [row, row]],
+    ["foreign final subject", [{ ...row, principal: Principal.fromText(authority) }]],
+  ])("discards decrypted matches after %s during unlock", async (_, confirmed) => {
+    mocks.read.mockResolvedValueOnce([row]).mockResolvedValueOnce(confirmed);
+    await expect(searchScopedProfileCandidates(ctx,"club-a",[subject],"Paul")).rejects.toThrow("authority changed");
+    expect(mocks.dispose).toHaveBeenCalledOnce();
+  });
+  it("confirms the same principal/account/reference after unlocking a private name", async () => {
+    const privateRow = { ...row, display_name: "pii-display-name:v1:original:subject" };
+    mocks.read.mockResolvedValue(privateRow ? [privateRow] : []);
+    mocks.hydrate.mockResolvedValue([row]);
+    expect((await searchScopedProfileCandidates(ctx,"club-a",[subject],"Paul"))[0]?.account_id).toBe("account-id");
+    expect(mocks.read).toHaveBeenCalledTimes(2);
+    expect(mocks.read.mock.calls[1]).toEqual(mocks.read.mock.calls[0]);
+  });
 });
 
 describe("authority-owned paged club search", () => {
