@@ -113,8 +113,13 @@ export function buildEventsSnapshot({ clubId, events = [], creator, rsvps = [], 
     };
   });
   const game = buildGameResults({ eventIds: rows.map((e) => e.id), gameResults, gameSummaries, gamePlayerStats, claims, migratedChildren });
+  // A team's duty assignment may live on the event row itself.
+  const eventDutyTeams = events.filter((e) => e.club_id === clubId && e.duty_team_id).map((e) => ({ event_id: e.id, team_id: e.duty_team_id }));
+  const extras = buildEventExtras({ eventIds: rows.map((e) => e.id), duties, eventDutyTeams, captains, goalkeepers, playerOfMatch, guests, claims, migratedChildren });
   return { events: rows, rsvps: buildClaimedRsvps({ events: rows, rsvps, claims, migratedChildren }), series: [], groups: [], group_players: [], group_duties: [], match_links: [], materializations: [],
-    operations: [], player_details: [game.player_details], results: [game.results], stats: [game.stats], summaries: [game.summaries] };
+    operations: [], player_details: [game.player_details], results: [game.results], stats: [game.stats], summaries: [game.summaries],
+    duties: [extras.duties], duty_teams: [extras.duty_teams], open_duties: [extras.open_duties], guests: [extras.guests],
+    captains: [extras.captains], goalkeepers: [extras.goalkeepers], player_of_match: [extras.player_of_match] };
 }
 
 /** Supabase competitions organised by this club -> competition_domain FenceSnapshot. Hidden scores stay hidden. */
@@ -232,17 +237,17 @@ export const WRITERS = {
   async events(ctx) {
     const events = await ctx.rows('events', 'club_id');
     const eventIds = events.map((e) => e.id);
-    const [rsvps, gameResults, gameSummaries, gamePlayerStats, ...unsupported] = await Promise.all([
+    const [rsvps, gameResults, gameSummaries, gamePlayerStats, duties, captains, goalkeepers, playerOfMatch, guests] = await Promise.all([
       ctx.rowsIn('rsvps', 'event_id', eventIds), ctx.rowsIn('game_results', 'event_id', eventIds),
       ctx.rowsIn('game_summaries', 'event_id', eventIds), ctx.rowsIn('game_player_stats', 'event_id', eventIds),
-      ...UNSUPPORTED_EVENT_TABLES.map((t) => ctx.rowsIn(t, 'event_id', eventIds)),
+      ctx.rowsIn('duties', 'event_id', eventIds), ctx.rowsIn('match_captains', 'event_id', eventIds),
+      ctx.rowsIn('match_goalkeepers', 'event_id', eventIds), ctx.rowsIn('player_of_match', 'event_id', eventIds),
+      ctx.rowsIn('event_guests', 'event_id', eventIds),
     ]);
-    // Duties, captains, goalkeepers, player-of-the-match and guests have no
-    // destination contract yet; any row stops the step rather than dropping it.
-    assertNoUnsupportedEventRows(Object.fromEntries(UNSUPPORTED_EVENT_TABLES.map((t, i) => [t, unsupported[i]])));
-    const snap = buildEventsSnapshot({ clubId: ctx.clubId, events, creator: ctx.creator, rsvps, claims: ctx.claims, migratedChildren: ctx.migratedChildren, gameResults, gameSummaries, gamePlayerStats });
+    const snap = buildEventsSnapshot({ clubId: ctx.clubId, events, creator: ctx.creator, rsvps, claims: ctx.claims, migratedChildren: ctx.migratedChildren, gameResults, gameSummaries, gamePlayerStats, duties, captains, goalkeepers, playerOfMatch, guests });
     await loadSnapshot(ctx, 'events_domain', snap, 'fence');
-    const n = snap.events.length + snap.rsvps.length + gameResults.length + gamePlayerStats.length + gameSummaries.length;
+    const n = snap.events.length + snap.rsvps.length + gameResults.length + gamePlayerStats.length + gameSummaries.length
+      + duties.length + captains.length + goalkeepers.length + playerOfMatch.length + guests.length + snap.duty_teams[0].length + snap.open_duties[0].length;
     return { records: n, counts: { events_domain: n } };
   },
   async children(ctx) {
