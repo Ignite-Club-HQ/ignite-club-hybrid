@@ -93,6 +93,20 @@ persistent actor class Main(governorInit : Principal) = this {
 
 
   // ==================== Types ====================
+  // Own-name saving does not release club audiences, conversion or cleanup.
+  transient let secureAdultNameSave = Runtime.envVar<system>("IGNITE_SECURE_ADULT_NAME_SAVE_RELEASE") == ?"1";
+  transient let secureAdultNameIdentity = Runtime.envVar<system>("IGNITE_SECURE_ADULT_NAME_IDENTITY");
+  public shared ({ caller }) func verify_secure_profile_name(subject : Principal) : async { #Ok : Bool; #Err : Text } {
+    if (not secureAdultNameSave or caller.isAnonymous() or subject.isAnonymous()) return #Err("Secure own-name verification is not released");
+    switch (secureAdultNameIdentity) {
+      case null return #Err("Secure name identity is not configured");
+      case (?id) { if (caller.toText() != id) return #Err("Configured identity required") }
+    };
+    switch (pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == "display_name")) {
+      case null #Ok(false);
+      case (?r) #Ok(r.domain_owner == subject and r.master_key_id == vetkeySchemeId() and r.ciphertext.size() > 0 and r.ciphertext.size() <= 4096)
+    }
+  };
 
   public type EncryptedPii = {
     pii_id : Text;

@@ -327,6 +327,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'verify_secure_profile_name' : ActorMethod<
+    [Principal],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
 }
 export interface PiiDeleteResult {
   'shredded_at' : bigint,

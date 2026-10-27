@@ -62,6 +62,7 @@ use group_inventory::RemovalInventory;
 use private_name_coordination::Intent;
 use private_name_conversion::{ConversionPage, ConversionProfileRow};
 mod private_profile_reference;
+mod secure_name_save;
 mod club_profiles;
 use deletion_timing::Ticket;
 
@@ -2025,13 +2026,34 @@ fn valid_display_name(value: &str) -> bool {
 
 /// Sets (or replaces) the caller's profile. The account must already exist —
 /// sign-in provisioning calls register_account first.
+fn secure_name_save_released() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    { ic_cdk::api::env_var_name_exists("IGNITE_SECURE_ADULT_NAME_SAVE_RELEASE") && ic_cdk::api::env_var_value("IGNITE_SECURE_ADULT_NAME_SAVE_RELEASE") == "1" }
+    #[cfg(not(target_arch = "wasm32"))]
+    { false }
+}
+fn secure_name_authority(caller: Principal, existing: Option<&Profile>) -> Outcome<Principal> {
+    #[cfg(target_arch = "wasm32")]
+    let configured = if ic_cdk::api::env_var_name_exists("IGNITE_SECURE_ADULT_NAME_PII") { Some(ic_cdk::api::env_var_value("IGNITE_SECURE_ADULT_NAME_PII")) } else { None };
+    #[cfg(not(target_arch = "wasm32"))]
+    let configured: Option<String> = None;
+    secure_name_save::authority(secure_name_save_released(), configured.as_deref(), existing.map(|p|p.display_name.as_str()), caller)
+}
+/// Authenticated consensus capability: returns only the operator-pinned own-name
+/// authority, never a browser-selected sink or authorization for other people.
 #[ic_cdk::update]
-fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Profile> {
+fn read_secure_name_authority() -> Outcome<Principal> {
+    let caller=ic_cdk::api::msg_caller();
+    let account=account_for_write(caller)?;
+    secure_name_authority(caller, get_profile_entry(&account.id).as_ref())
+}
+#[ic_cdk::update]
+async fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Profile> {
     let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
 
     let caller = ic_cdk::api::msg_caller();
     let account = account_for_write(caller)?;
-    let account_id = account.id;
+    let account_id = account.id.clone();
     let valid_name = if display_name.starts_with("pii-display-name:") {
         private_profile_reference::valid(&display_name, &account.principals)
     } else { valid_display_name(&display_name) };
@@ -2047,6 +2069,22 @@ fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Prof
         &display_name,
     ) {
         return Err("Encrypted name must be updated at its original private-name authority".into());
+    }
+    if secure_name_save_released() {
+        let authority=secure_name_authority(caller, existing.as_ref())?;
+        if !secure_name_save::reference_matches(&display_name, authority, caller) {
+            return Err("Save your personal name encrypted before updating the profile".into());
+        }
+        let revision=profile_search_revision();
+        let history=removal_history_revision();
+        let reply=ic_cdk::call::Call::bounded_wait(authority,"verify_secure_profile_name")
+            .with_args(&(caller,)).await.map_err(|_|"Encrypted personal-name verification unavailable")?;
+        let verified: Outcome<bool>=reply.candid().map_err(|_|"Invalid encrypted-name verification reply")?;
+        if !verified? { return Err("Encrypted personal name is not saved".into()); }
+        if account_for_write(caller)? != account || profile_search_revision()!=revision || removal_history_revision()!=history
+            || get_profile_entry(&account_id)!=existing || secure_name_authority(caller,existing.as_ref())?!=authority {
+            return Err("Profile changed during secure saving; check before retrying".into());
+        }
     }
     let profile = Profile {
         account_id: account_id.clone(),
