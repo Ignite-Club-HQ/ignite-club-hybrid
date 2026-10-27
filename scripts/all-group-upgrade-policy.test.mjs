@@ -70,6 +70,19 @@ test('cleanup targets identity once and only PII/club across every group',()=>{
   assert.equal(p.targets.some(t=>t.name==='shard_router'||t.name==='media_blob_store'),false);
   assert.throws(()=>planInventory(shared,f.provisions.slice(0,1),f.registry,'private_name_cleanup',f.hashes),/inventory differ/);
 });
+test('secure saving and club display are separate all-group scopes, with no unrelated services',()=>{
+  const f=fixture(4);
+  assert.deepEqual(SCOPES.secure_name_save,['pii_access_control','identity_access']);
+  assert.deepEqual(SCOPES.private_club_name_display,['pii_access_control','club_domain','identity_access']);
+  for(const scope of ['secure_name_save','private_club_name_display']) {
+    const plan=planInventory(shared,f.provisions,f.registry,scope,f.hashes);
+    assert.equal(plan.targets.filter(t=>t.name==='identity_access').length,1);
+    assert.equal(plan.targets.filter(t=>t.name==='pii_access_control').length,4);
+    assert.equal(plan.targets.filter(t=>t.name==='club_domain').length,scope==='secure_name_save'?0:4);
+    assert.equal(plan.targets.some(t=>!SCOPES[scope].includes(t.name)),false);
+    assert.throws(()=>planInventory(shared,f.provisions.slice(0,1),f.registry,scope,f.hashes));
+  }
+});
 test('migration readiness refuses to omit a registered destination group',()=>{
   const f=fixture(4);
   assert.throws(()=>planInventory(shared,f.provisions.slice(0,1),f.registry,'club_migration',f.hashes),/inventory differ/);
