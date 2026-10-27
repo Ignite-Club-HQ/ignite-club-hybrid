@@ -10,6 +10,7 @@ import type { PrivateProfileAudience } from './privateProfileAudience';
 import { capturePrivateProfileSession } from './privateProfileSession';
 import { privateProfileSearchRehearsalEnabled } from './privateProfileSearchMode';
 import { isLoopbackRehearsalHost } from './accountReadAdapter.mjs';
+import { privateClubNameDisplaysEnabled } from './privateClubNameDisplayMode';
 
 /** Dormant reference contract: publishing a reference requires the separately
  * approved identity/search cutover. The original key authority is immutable. */
@@ -127,8 +128,8 @@ export async function refreshPrivateOwnClubNames(
   discoverClubs: () => Promise<readonly string[]>,
   assertSaveActive: () => void = () => {},
 ): Promise<void> {
-  if (!privateProfileSearchRehearsalEnabled()) return;
-  if (!isLoopbackRehearsalHost(ctx.target.host)) throw new Error('Private name maintenance requires a loopback rehearsal target.');
+  if (!privateClubNameDisplaysEnabled()) return;
+  if (privateProfileSearchRehearsalEnabled() && !isLoopbackRehearsalHost(ctx.target.host)) throw new Error('Private name maintenance requires a loopback rehearsal target.');
   const value = name.trim();
   if (!value || new TextEncoder().encode(value).length > 512) throw new Error('A display name of at most 512 bytes is required.');
   const identity = ctx.identity;
