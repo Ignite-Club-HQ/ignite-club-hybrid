@@ -1,7 +1,7 @@
 // Offline, ciphertext-only protected plan artifacts. These helpers do not
 // authenticate evidence, make network calls, or authorize a production release.
 import { createHash } from 'node:crypto';
-import { openSync, closeSync, readFileSync, writeFileSync, fsyncSync, mkdirSync, unlinkSync, fstatSync } from 'node:fs';
+import { openSync, closeSync, readFileSync, writeFileSync, fsyncSync, mkdirSync, unlinkSync, fstatSync, readSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { canonical } from './migrate-club-plan.mjs';
 
@@ -74,7 +74,6 @@ export function readPrivateNameArtifact(path, expectedHash) {
     // One bounded allocation; reject truncated/extended files rather than
     // reading an unbounded replacement through the path after stat.
     const buffer = Buffer.alloc(status.size + 1);
-    const { readSync } = fsRead;
     let count = 0;
     while (count < buffer.length) {
       const n = readSync(fd, buffer, count, buffer.length - count, null);

@@ -1,16 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, statSync, existsSync, truncateSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { preparePrivateNameArtifact, verifyPrivateNameArtifact, savePrivateNameArtifact, readPrivateNameArtifact, reconcilePrivateNameRecovery, claimPrivateNameArtifactLock } from './private-name-plan-artifact.mjs';
+import { preparePrivateNameArtifact, verifyPrivateNameArtifact, savePrivateNameArtifact, readPrivateNameArtifact, reconcilePrivateNameRecovery, claimPrivateNameArtifactLock, MAX_ARTIFACT_BYTES } from './private-name-plan-artifact.mjs';
 
 const args = () => ({ identityId: 'identity', operator: 'governor', deploymentHash: 'a'.repeat(64), inventoryHash: 'b'.repeat(64), historyRevision: '9007199254740993', sinks: [{id: 'pii-1', publicKey: [8,9]}], rows: [{accountId: 'account-1', subject: 'person-1', sink: 'pii-1', name: 'Paul Cranwell', clubs: ['club-1', 'club-2']}, {accountId: 'account-2', subject: 'person-2', sink: 'pii-1', name: 'Other adult', clubs: []}] });
 const encryption = { encryptName: async (_k, subject) => subject === 'person-1' ? [1,2] : [3,4], encryptClubName: async (_k, club) => club === 'club-1' ? [5,6] : [7,8] };
 const create = () => preparePrivateNameArtifact(args(), encryption);
 const binding = body => ({identityId: body.identityId, operator: body.operator, deploymentHash: body.deploymentHash, inventoryHash: body.inventoryHash, sinks: body.sinks});
 const profiles = () => args().rows.map(r => ({ account_id: r.accountId, principals: [r.subject], display_name: r.name }));
-const resume = (body, overrides = {}) => reconcilePrivateNameRecovery(body, {profiles: profiles(), binding: binding(body), decryptName: async row => args().rows.find(r => r.accountId === row.accountId)?.name, ...overrides});
+const resume = (body, overrides = {}) => reconcilePrivateNameRecovery(body, {profiles: profiles(), binding: binding(body), decryptName: async row => args().rows.find(r => r.accountId === row.accountId)?.name, readCiphertext: async (row, club) => club === null ? row.ciphertext : row.clubs.find(c => c.id === club)?.ciphertext, ...overrides});
 
 test('approved artifact contains ciphertext only and preserves exact clubs and big revisions', async () => {
   const artifact = await create();
@@ -107,4 +107,23 @@ test('wrong retained lock cannot be removed by completion', async () => {
   writeFileSync(path,'other');
   assert.throws(()=>lock.complete(),/changed/);
   assert.equal(existsSync(path),true);
+});
+
+test('already published references cannot hide missing original or club ciphertext', async () => {
+  const {body} = await create(), live = profiles(); live[0].display_name = 'pii-display-name:v1:pii-1:person-1';
+  await assert.rejects(resume(body,{profiles:live,readCiphertext:undefined}),/readback required/);
+  await assert.rejects(resume(body,{profiles:live,readCiphertext:async()=>[99]}),/original ciphertext mismatch/);
+  await assert.rejects(resume(body,{profiles:live,readCiphertext:async(row,club)=>club===null ? row.ciphertext : []}),/club ciphertext mismatch/);
+});
+test('oversized saved artifacts fail before JSON parsing', async () => {
+  const path = join(mkdtempSync(join(tmpdir(),'name-plan-')), 'plan.json');
+  writeFileSync(path,''); truncateSync(path,MAX_ARTIFACT_BYTES+1);
+  await assert.rejects(async()=>readPrivateNameArtifact(path,'a'.repeat(64)),/byte budget/);
+});
+test('invalid full inventory refuses before encryption adapters run', async () => {
+  let calls=0; const adapters={encryptName:async()=>{calls++;return [1];},encryptClubName:async()=>{calls++;return [2];}};
+  for (const mutate of [a=>a.sinks.push(a.sinks[0]),a=>{a.sinks[0].publicKey=[];},a=>{a.rows[1].subject='bad/subject';},a=>{a.rows[1].clubs=['bad/club'];},a=>{a.rows[1].name='x'.repeat(4097);}]) {
+    const input=args(); mutate(input); await assert.rejects(preparePrivateNameArtifact(input,adapters));
+  }
+  assert.equal(calls,0);
 });
