@@ -39,7 +39,6 @@ jobs:
       PLAN_HASH: ${{ inputs.plan_hash }}
       APPROVAL_EVENT_ID: ${{ inputs.approval_event_id }}
       CONFIRMATION: ${{ inputs.confirmation }}
-      GH_TOKEN: ${{ github.token }}
       IDENTITY_ACCESS_CANISTER: ${{ vars.IDENTITY_ACCESS_CANISTER }}
       IDENTITY_APPROVAL_MODULE_HASH: ${{ vars.IDENTITY_APPROVAL_MODULE_HASH }}
       PRIVATE_NAME_APPROVER_PUBLIC_KEY: ${{ vars.PRIVATE_NAME_APPROVER_PUBLIC_KEY }}
@@ -47,8 +46,20 @@ jobs:
       OPERATOR_PEM_PATH: ${{ runner.temp }}/name-approval-operator.pem
       REPORT_PATH: ${{ runner.temp }}/name-approval-report.json
     steps:
+      - name: Reject unreviewed delivery source before checkout or credentials
+        env:
+          TRUSTED_SOURCE_COMMIT: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_COMMIT }}
+          TRUSTED_SOURCE_REF: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_REF }}
+          TRUSTED_REPOSITORY: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          test -n "$TRUSTED_SOURCE_COMMIT"
+          test "$GITHUB_SHA" = "$TRUSTED_SOURCE_COMMIT"
+          test "$GITHUB_REF" = "$TRUSTED_SOURCE_REF"
+          test "$GITHUB_REPOSITORY" = "$TRUSTED_REPOSITORY"
       - uses: actions/checkout@v4
         with:
+          ref: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_COMMIT }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -72,6 +83,8 @@ jobs:
           umask 077
           printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$OPERATOR_PEM_PATH"
       - name: Deliver original signature and verify retained receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: npx --yes tsx@4.21.0 frontend/scripts/deliver-private-name-approval.ts
       - name: Remove delivery credential
         if: always()

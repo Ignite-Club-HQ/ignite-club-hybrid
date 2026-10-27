@@ -25,7 +25,7 @@ const operatorIdentity=loadOperatorIdentity(required('OPERATOR_PEM_PATH'));
 const operator=operatorIdentity.getPrincipal().toText();
 if(operator!=='vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae')throw Error('Existing deployment governor required');
 // Mapping is source-pinned and may never be overridden to an arbitrary target.
-const ids=JSON.parse(readFileSync(new URL('../../deploy/mainnet/.icp/data/mappings/ic.ids.json',import.meta.url),'utf8')));
+const ids=JSON.parse(readFileSync(new URL('../../deploy/mainnet/.icp/data/mappings/ic.ids.json',import.meta.url),'utf8'));
 if(ids.identity_access!==identityId)throw Error('Approval destination differs from checked mainnet mapping');
 const binding={artifactHash,planHash,identityId,operator,approvalId:required('APPROVAL_EVENT_ID'),approverKey:required('PRIVATE_NAME_APPROVER_PUBLIC_KEY'),targetModule:required('IDENTITY_APPROVAL_MODULE_HASH'),artifactCommit,canonicalPrincipal:(v:string)=>Principal.fromText(v).toText()};
 async function github(path:string,method='GET',body?:unknown,allowMissing=false):Promise<any>{
@@ -48,18 +48,37 @@ const ok=(r:any)=>{if(!r || !('Ok'in r) || 'Err'in r)throw Error('Approval canis
 const management=Actor.createActor(({IDL:I})=>I.Service({canister_status:I.Func([I.Record({canister_id:I.Principal})],[I.Record({status:I.Variant({running:I.Null,stopped:I.Null,stopping:I.Null}),module_hash:I.Opt(I.Vec(I.Nat8)),settings:I.Record({controllers:I.Vec(I.Principal)})})],[])}),{agent,canisterId:'aaaaa-aa',effectiveCanisterId:identityId}) as any;
 const receiptPath=`private-name-approval-delivery/${artifactHash}.json`;
 let stored:any=null;
+let observedHead='';
+let lastCommit='';
 async function readJournal(){
   const ref=await github(`git/ref/heads/${branch}`);if(!hex(ref.object?.sha??'',40))throw Error('Receipt branch readback refused');
+  observedHead=ref.object.sha;
   stored=await github(`contents/${receiptPath}?ref=${ref.object.sha}`,'GET',undefined,true);
   return stored?JSON.parse(content(stored,16384).toString('utf8')):null;
 }
 async function persistJournal(journal:unknown){
   const bytes=Buffer.from(JSON.stringify(journal));
-  const saved=await github(`contents/${receiptPath}`,'PUT',{branch,message:'Retain signed name approval delivery receipt',content:bytes.toString('base64'),...(stored?{sha:stored.sha}:{})});
-  const commit=saved.commit?.sha;
+  const head=await github(`git/ref/heads/${branch}`);
+  if(head.object?.sha!==observedHead)throw Error('Receipt branch changed; retain unknown outcome');
+  const parent=await github(`git/commits/${observedHead}`);
+  const blob=await github('git/blobs','POST',{content:bytes.toString('base64'),encoding:'base64'});
+  const expectedBlob=createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+  if(blob.sha!==expectedBlob)throw Error('Receipt blob acknowledgement differs');
+  const tree=await github('git/trees','POST',{base_tree:parent.tree.sha,tree:[{path:receiptPath,mode:'100644',type:'blob',sha:blob.sha}]});
+  const saved=await github('git/commits','POST',{message:'Retain signed name approval delivery receipt',tree:tree.sha,parents:[observedHead]});
+  const commit=saved.sha;
   if(!hex(commit??'',40))throw Error('Delivery intent acknowledgement unknown; no replay');
+  // Explicit compare + non-force fast-forward; an external branch write loses
+  // this race and stops, rather than replacing its unknown delivery evidence.
+  const before=await github(`git/ref/heads/${branch}`);
+  if(before.object?.sha!==observedHead)throw Error('Receipt branch CAS conflict; no submission');
+  const updated=await github(`git/refs/heads/${branch}`,'PATCH',{sha:commit,force:false});
+  if(updated.object?.sha!==commit)throw Error('Receipt branch acknowledgement unknown; no replay');
   const readback=await github(`contents/${receiptPath}?ref=${commit}`);
   if(!content(readback,16384).equals(bytes))throw Error('Delivery intent readback mismatch; no replay');
+  const retained=await github(`git/ref/heads/${branch}`);
+  if(retained.object?.sha!==commit)throw Error('Receipt commit not retained; no submission');
+  observedHead=commit;lastCommit=commit;
   stored=readback;
 }
 const request=(r:any)=>({...r,generation:String(r.generation),inventory_digest:Array.from(r.inventory_digest)});
@@ -67,7 +86,10 @@ const approvalReceipt=(r:any)=>({...r,request:request(r.request),identity:r.iden
 const wire=(a:any)=>({body:{...a.body,identity:Principal.fromText(a.body.identity),operator:Principal.fromText(a.body.operator),request:{...a.body.request,generation:BigInt(a.body.request.generation)},rows:a.body.rows.map((r:any)=>({...r,subject:Principal.fromText(r.subject),sink:Principal.fromText(r.sink)}))},signature:Array.from(Buffer.from(a.signature,'hex'))});
 const report=await deliverNameApproval({artifact,binding,action},{
   readJournal,persistJournal,
-  assertTarget:async()=>{const s=await management.canister_status({canister_id:Principal.fromText(identityId)});return 'running'in s.status && s.settings.controllers.length===1 && s.settings.controllers[0].toText()===operator && Buffer.from(s.module_hash[0]??[]).toString('hex')===binding.targetModule;},
+  assertTarget:async()=>{
+    if(lastCommit){const ref=await github(`git/ref/heads/${branch}`);if(ref.object?.sha!==lastCommit)return false;const retained=await github(`contents/${receiptPath}?ref=${lastCommit}`);if(!stored || !content(retained,16384).equals(content(stored,16384)))return false;}
+    const s=await management.canister_status({canister_id:Principal.fromText(identityId)});return 'running'in s.status && s.settings.controllers.length===1 && s.settings.controllers[0].toText()===operator && Buffer.from(s.module_hash[0]??[]).toString('hex')===binding.targetModule;
+  },
   readWindow:async(id:string)=>{const w=ok(await actor.read_private_name_write_window(id));return {request:request(w.request),phase:Object.keys(w.phase)[0]};},
   readApproval:async(id:string)=>{const r=ok(await actor.read_private_name_conversion_approval(id));return r.length?approvalReceipt(r[0]):null;},
   submitApproval:async(id:string,a:any)=>{ok(await actor.approve_private_name_conversion(id,wire(a)));},
