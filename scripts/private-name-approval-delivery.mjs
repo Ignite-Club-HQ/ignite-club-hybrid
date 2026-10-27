@@ -15,7 +15,7 @@ export function admissionBytes(b){
   return Buffer.concat(chunks);
 }
 export function verifyAdmissionArtifact(raw,{artifactHash,planHash,identityId,operator,approverKey,approvalId,canonicalPrincipal}){
-  if(!Buffer.isBuffer(raw) || raw.length>32*1024*1024 || !hex(artifactHash,64) || hash(raw)!==artifactHash)throw Error('Original pinned approval artifact required');
+  if(!Buffer.isBuffer(raw) || raw.length>1500000 || !hex(artifactHash,64) || hash(raw)!==artifactHash)throw Error('Original pinned bounded approval artifact required');
   const a=JSON.parse(raw.toString('utf8')),b=a?.body;
   if(!exact(a,['body','signature']) || !exact(b,['kind','approval_id','identity','operator','request','plan_hash','rows']) || !exact(b.request,['operation_id','generation','inventory_digest']))throw Error('Strict backend signed approval required');
   if(typeof canonicalPrincipal!=='function')throw Error('Canonical principal verifier required');
@@ -31,7 +31,7 @@ export function verifyAdmissionArtifact(raw,{artifactHash,planHash,identityId,op
     const clubs=new Set();for(const c of r.clubs){if(!exact(c,['club','ciphertext']) || !text(c.club,128) || clubs.has(c.club) || !bytes(c.ciphertext,4096))throw Error('Invalid approved club ciphertext');clubs.add(c.club);}
   }
   const signed=admissionBytes(b);
-  if(signed.length>32*1024*1024)throw Error('Signed approval byte budget exceeded');
+  if(signed.length>1500000)throw Error('Signed approval ingress byte budget exceeded');
   const key=createPublicKey({key:Buffer.concat([Buffer.from('302a300506032b6570032100','hex'),Buffer.from(approverKey,'hex')]),format:'der',type:'spki'});
   if(!verify(null,signed,key,Buffer.from(a.signature,'hex')))throw Error('Original owner signature required');
   return {approval:a,operationId:`club-name-conversion-${planHash}`,receipt:{request:b.request,approval_id:b.approval_id,plan_hash:b.plan_hash,operator:b.operator,identity:b.identity,signed_digest:Array.from(createHash('sha256').update(signed).update(Buffer.from(a.signature,'hex')).digest())}};

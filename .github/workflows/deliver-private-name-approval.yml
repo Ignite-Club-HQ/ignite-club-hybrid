@@ -72,7 +72,7 @@ jobs:
           umask 077
           printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$OPERATOR_PEM_PATH"
       - name: Deliver original signature and verify retained receipt
-        run: frontend/node_modules/.bin/tsx frontend/scripts/deliver-private-name-approval.ts
+        run: npx --yes tsx@4.21.0 frontend/scripts/deliver-private-name-approval.ts
       - name: Remove delivery credential
         if: always()
         run: rm -f "$OPERATOR_PEM_PATH"
