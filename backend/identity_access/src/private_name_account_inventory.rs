@@ -24,7 +24,7 @@ pub struct AccountInventoryPage {
     pub rows: Vec<AccountInventoryRow>, pub next: Option<AccountInventoryCursor>,
 }
 
-fn authority(profile: &Option<Profile>, aliases: &[Principal], sinks: &[Principal]) -> Outcome<OriginalNameAuthority> {
+pub(super) fn authority(profile: &Option<Profile>, aliases: &[Principal], sinks: &[Principal]) -> Outcome<OriginalNameAuthority> {
     let Some(profile) = profile else { return Ok(OriginalNameAuthority::NoName) };
     if profile.display_name.is_empty() { return Ok(OriginalNameAuthority::NoName); }
     if !profile.display_name.starts_with("pii-display-name:") { return Ok(OriginalNameAuthority::Unresolved); }

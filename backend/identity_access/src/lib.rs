@@ -50,6 +50,8 @@ mod guardian_search;
 mod private_name_audience;
 mod private_name_conversion;
 mod private_name_account_inventory;
+mod private_name_cleanup;
+use private_name_cleanup::CleanupAccount;
 use private_name_account_inventory::{AccountInventoryCursor, AccountInventoryPage};
 mod private_name_conversion_approval;
 use private_name_conversion_approval::{SignedApproval,ApprovalReceipt};

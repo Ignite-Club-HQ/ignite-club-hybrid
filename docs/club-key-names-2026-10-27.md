@@ -2,7 +2,11 @@
 
 Local implementation only. No production conversion, rollout, permissions or email policy changed.
 
-## Current essential status — 27 October, 05:53 UTC
+## Current essential status — 27 October, 06:08 UTC
+
+The automatic-cleanup routing prerequisite is now implemented in identity: `read_private_name_cleanup_account` accepts one principal only from a registered directory club caller, verifies the complete current router registry, and returns identity-owned account aliases/version plus the exact original PII reference. It exposes no personal name, avatar, ciphertext or profile payload and grants no deletion permission. Every alias index, account lifecycle, profile/history revision and trusted configuration is checked around registry awaits. Plaintext names remain explicitly unresolved rather than guessing a sink; profileless names are explicit NoName. Unit coverage retains suspended accounts without bypassing existing coordinated suspension.
+
+Real disposable canisters verify registered club access, browser/owner/unrelated PII caller denial, exact output fields, NoName/Unresolved results and refusal after real registry configuration drift. Full isolated workflow passes: 186 script tests, 129 frontend/display tests and 4 exact-routing rules; 178 identity regressions pass with rehearsal disabled. Ordinary backend member/last-role removal still needs the retained cleanup intent and narrow original-PII receiver; this reader is a prerequisite, not an automatic trigger or production-readiness claim.
 
 Authorized member removal and exact encrypted-name cleanup now share one retained operation in `removeMemberAndReconcileNames`. Each verified account alias has a saved intent before the existing administrator-authorized removal; cleanup starts only after all aliases have definitive nonmembership. Lost removal and purge replies recover by exact readback without resending either write. Unverified membership, rejoining, changed saved ciphertext, malformed journals and failed durability stop with work retained. The composition remains dormant and requires independently authenticated complete original-authority/alias targets and uninterrupted exclusion; it is not an automatic all-group backend hook or atomic remote revocation.
 

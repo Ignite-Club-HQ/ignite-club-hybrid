@@ -68,6 +68,20 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     expect(oldCopy.master_key_id).toBe(`vetkey-club-names-v1:${f.clubId}`);
     const storedProfile = f.ok(await identity.get_profile());
     expect(storedProfile.display_name).toBe(reference);
+    // Real trusted service caller, not an owner/browser alias list.
+    const cleanupReader = f.connect('identity_access', f.services.club_domain.canisterId).actor;
+    const routing = f.ok(await cleanupReader.read_private_name_cleanup_account(f.owner));
+    expect(routing.principals.map((p: any) => p.toText())).toEqual([subject]);
+    expect(routing.original_authority).toEqual({ Existing: { sink: f.services.pii_access_control.canisterId, subject: f.owner } });
+    expect(Object.keys(routing).sort()).toEqual(['account_id','account_version','original_authority','principals','revision']);
+    expect('Err' in await identity.read_private_name_cleanup_account(f.owner)).toBe(true);
+    expect('Err' in await f.connect('identity_access', f.outsider).actor.read_private_name_cleanup_account(f.owner)).toBe(true);
+    const unrelatedService = f.connect('identity_access', f.services.pii_access_control.canisterId).actor;
+    expect('Err' in await unrelatedService.read_private_name_cleanup_account(f.owner)).toBe(true);
+    expect(f.ok(await cleanupReader.read_private_name_cleanup_account(f.outsider)).original_authority).toEqual({ NoName: null });
+    const viewerIdentity = f.connect('identity_access', f.viewer).actor;
+    f.ok(await viewerIdentity.set_profile('Unconverted person', []));
+    expect(f.ok(await cleanupReader.read_private_name_cleanup_account(f.viewer)).original_authority).toEqual({ Unresolved: null });
     local.context = viewerContext;
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const msg = { id: f.message.id, text: f.message.text, image_url: null, created_at: new Date().toISOString(), author_id: subject, group_id: f.conversationId, reply_to_id: null };
@@ -132,5 +146,17 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     expect(purges).toBe(1); expect(f.ok(await governorPii.read_private_club_name_lifecycle(f.owner, f.clubId, []))).toEqual([]);
     expect(f.ok(await identity.get_profile()).display_name).toBe(reference);
     expect(f.ok(await governorPii.get_encrypted_pii_batch([subject], 'display_name', 'read', 'Verify original retained'))).toHaveLength(1);
+    const governorIdentity = f.connect('identity_access', f.governor).actor;
+    // Existing coordinated suspension cannot be bypassed for a fixture.
+    expect('Err' in await governorIdentity.set_account_status(routing.account_id, { Suspended: null })).toBe(true);
+    const retainedRouting = f.ok(await cleanupReader.read_private_name_cleanup_account(f.owner));
+    expect(retainedRouting.principals.map((p: any) => p.toText())).toEqual([subject]);
+    expect(retainedRouting.original_authority).toEqual(routing.original_authority);
+    // Registry mutation cannot silently repin the cleanup authority.
+    const router = f.services.shard_router.actor;
+    router.setPrincipal(f.governor);
+    const group = f.ok(await router.list_groups())[0];
+    f.ok(await router.register_group({ ...group, max_clubs: group.max_clubs + 1 }, await router.version()));
+    expect('Err' in await cleanupReader.read_private_name_cleanup_account(f.owner)).toBe(true);
   }, 120000);
 });
