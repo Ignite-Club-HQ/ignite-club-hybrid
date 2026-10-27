@@ -33,9 +33,11 @@ let pic;
 try {
   pic = await PocketIc.create(server.getUrl(), { fiduciary: { state: { type: 'new' } } });
   const init = IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]);
-  const identity = await pic.setupCanister({ idlFactory: identityIdl, wasm: rustWasm('identity_access'), sender: governor, controllers: [governor],
-    environmentVariables: [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }, { name: 'IGNITE_PRIVATE_NAME_WRITER_REHEARSAL', value: '1' }], arg: init });
+  const identity = await pic.setupCanister({ idlFactory: identityIdl, wasm: rustWasm('identity_access'), sender: governor, controllers: [governor], arg: init });
   identity.actor.setPrincipal(governor); ok(await identity.actor.register_account());
+  await pic.updateCanisterSettings({ canisterId: identity.canisterId, sender: governor, environmentVariables:
+    [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }, { name: 'IGNITE_PRIVATE_NAME_WRITER_REHEARSAL', value: '1' }] });
+  await pic.upgradeCanister({ canisterId: identity.canisterId, wasm: rustWasm('identity_access'), sender: governor, arg: init });
   const router = await pic.setupCanister({ idlFactory: routerIdl, wasm: rustWasm('shard_router'), sender: governor, controllers: [governor], arg: init });
   const placement = await pic.setupCanister({ idlFactory: placementIdl, wasm: rustWasm('placement_registry'), sender: governor, controllers: [governor], arg: init });
   router.actor.setPrincipal(governor);
