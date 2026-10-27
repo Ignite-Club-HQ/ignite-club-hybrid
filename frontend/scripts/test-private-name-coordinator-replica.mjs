@@ -35,6 +35,12 @@ try {
   const init = IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]);
   const identity = await pic.setupCanister({ idlFactory: identityIdl, wasm: rustWasm('identity_access'), sender: governor, controllers: [governor], arg: init });
   identity.actor.setPrincipal(governor); ok(await identity.actor.register_account());
+  ok(await identity.actor.set_profile('Governor', []));
+  // A plaintext-named account awaiting conversion, created before the gate closes.
+  identity.actor.setPrincipal(outsider);
+  const convertee = ok(await identity.actor.register_account());
+  ok(await identity.actor.set_profile('Paul Cranwell', []));
+  identity.actor.setPrincipal(governor);
   await pic.updateCanisterSettings({ canisterId: identity.canisterId, sender: governor, environmentVariables:
     [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }] });
   await pic.upgradeCanister({ canisterId: identity.canisterId, wasm: rustWasm('identity_access'), sender: governor, arg: init });
@@ -87,7 +93,9 @@ try {
   // Group inventory is pinned; router topology writes now close.
   await pic.updateCanisterSettings({ canisterId: router.canisterId, sender: governor, environmentVariables: topologyEnv });
   ok(await actor.set_club_authorities(groups.map(g => g.club_domain.canisterId)));
-  ok(await actor.set_service_authorities(mediaStores.map(s => s.canisterId)));
+  ok(await actor.set_service_authorities([
+    ...groups.flatMap(g => [g.club_domain.canisterId, g.messaging_domain.canisterId, g.competition_domain.canisterId, g.mini_league_domain.canisterId, g.pii_access_control.canisterId]),
+    ...mediaStores.map(s => s.canisterId)]));
   let binding = { registry: router.canisterId, registry_revision: await router.actor.version(), target_alias: 'local',
     deployment_id: 'isolated-replica', deployment_revision: 1n, host: 'https://isolated.invalid', network_kind: 'public_mainnet' };
   const revision = async () => ok(await actor.read_removal_history_manifest()).revision;
@@ -134,6 +142,35 @@ try {
   router.actor.setPrincipal(governor);
   await denied(() => router.actor.set_website_default_club_domain(outsider));
 
+  // Real conversion round inside the open window: deterministic IBE encrypt,
+  // governor register, ciphertext readback compare, then reference publication.
+  const sink0pre = groups[0].pii_access_control;
+  const { DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import('@icp-sdk/vetkeys');
+  const { createHash } = await import('node:crypto');
+  const subject = outsider.toText(), field = 'display_name', name = 'Paul Cranwell';
+  const dpk = DerivedPublicKey.deserialize(Uint8Array.from(await sink0pre.actor.pii_vetkey_verification_key()));
+  const seed = createHash('sha256').update(`${subject}${field}`).update(name).digest();
+  const ciphertext = Array.from(IbeCiphertext.encrypt(dpk, IbeIdentity.fromBytes(new TextEncoder().encode(`${subject}${field}`)),
+    new TextEncoder().encode(name), IbeSeed.fromBytes(seed)).serialize());
+  sink0pre.actor.setPrincipal(governor);
+  ok(await sink0pre.actor.register_pii(subject, field, ciphertext, outsider));
+  const readback = ok(await sink0pre.actor.get_encrypted_pii_batch([subject], field, 'profile_display', 'conversion readback'));
+  assert.deepEqual(Array.from(readback[0].ciphertext), ciphertext, 'Stored ciphertext must be the exact deterministic encryption');
+  const reference = `pii-display-name:v1:${sink0pre.canisterId.toText()}:${subject}`;
+  const converted = ok(await actor.convert_profile_name(convertee.id, reference));
+  assert.equal(converted.display_name, reference);
+  // Idempotent resume; a different reference is never overwritten.
+  assert.equal(ok(await actor.convert_profile_name(convertee.id, reference)).display_name, reference);
+  const otherRef = `pii-display-name:v1:${groups[1].pii_access_control.canisterId.toText()}:${subject}`;
+  await denied(() => actor.convert_profile_name(convertee.id, otherRef));
+  // Conversion paging shows the reference, never plaintext, and pages exactly.
+  const page1 = ok(await actor.list_profiles_for_conversion([], 1));
+  assert.equal(page1.rows.length, 1); assert.ok(page1.next.length === 1);
+  const page2 = ok(await actor.list_profiles_for_conversion(page1.next, 200));
+  const allRows = [...page1.rows, ...page2.rows];
+  assert.equal(allRows.find(r => r.account_id === convertee.id).display_name, reference);
+  actor.setPrincipal(outsider); await denied(() => actor.list_profiles_for_conversion([], 10)); actor.setPrincipal(governor);
+
   // Close, seal every writer, then release sinks with a stopped-sink hold.
   w = ok(await actor.close_private_name_write_window('go-live'));
   assert.equal(phaseOf(w), 'Closing');
@@ -167,11 +204,12 @@ try {
     await denied(() => g.pii_access_control.actor.open_private_name_writer_window(w.request));
   }
   // A later operation is a fresh generation, not a replay.
-  // The mid-Opening upgrade bumped removal history once through post_upgrade.
-  const next = ok(await actor.begin_private_name_write_window('second-op', pinnedRevision + 1n));
+  // History moved twice since pinning: the mid-Opening upgrade's post_upgrade
+  // and the conversion's own authority-visible bump.
+  const next = ok(await actor.begin_private_name_write_window('second-op', pinnedRevision + 2n));
   assert.equal(phaseOf(next), 'Fencing');
   assert.ok(next.request.generation > w.request.generation);
   assert.notDeepEqual(next.request.inventory_digest, []);
 
-  console.log('PASS: real identity coordinator fenced 2 sinks, opened/sealed 11 writers across two groups, resumed after a mid-Opening upgrade and a stopped-sink hold, kept topology closed, and completed with durable receipts.');
+  console.log('PASS: real identity coordinator fenced 2 sinks, opened/sealed 11 writers across two groups, resumed after a mid-Opening upgrade and a stopped-sink hold, kept topology closed, converted a real plaintext name to a verified reference inside the window, and completed with durable receipts.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
