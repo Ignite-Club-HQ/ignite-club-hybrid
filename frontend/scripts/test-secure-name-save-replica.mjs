@@ -28,7 +28,7 @@ try {
   const subject=owner.toText(), reference=`pii-display-name:v1:${pii.canisterId}:${owner}`;
   assert.ok('Err' in await identity.actor.set_profile(reference,[]),'No profile publication without saved ciphertext');
   pii.actor.setPrincipal(owner);
-  const publicKey=DerivedPublicKey.deserialize(Uint8Array.from(ok(await pii.actor.get_pii_ibe_public_key())));
+  const publicKey=DerivedPublicKey.deserialize(Uint8Array.from(await pii.actor.pii_vetkey_verification_key()));
   const encoder=new TextEncoder(), input=encoder.encode(`${subject}\u001fdisplay_name`);
   let previous;
   for(const name of ['Secure test adult','Updated secure adult']) {
