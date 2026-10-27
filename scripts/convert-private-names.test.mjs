@@ -2,6 +2,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
+import { mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   validateConversionRequest, assertNamesApproval, planConversions, buildConversionPlan,
   encryptName, nameReference, conversionJournal, convertOneAccount, withConversionWindow,
@@ -72,7 +75,7 @@ test('nameReference builds the exact v1 binding', () => {
 });
 
 function fakeDeps(overrides = {}) {
-  const journal = conversionJournal('/tmp/nonexistent-conversion-journal.json');
+  const journal = conversionJournal(join(mkdtempSync(join(tmpdir(), 'name-conversion-')), 'journal.json'));
   journal.put('__seed__', { phase: 'seed' }); // ensure file exists path works in-memory
   const stored = new Map();
   const deps = {
@@ -112,7 +115,7 @@ test('ciphertext mismatch refuses to publish the reference', async () => {
 
 test('unknown outcomes are retained and stop the run', async () => {
   const { deps } = fakeDeps();
-  deps.journal.put('acct-3', { phase: 'unknown' });
+  deps.journal.put('acct-3', { phase: 'unknown', sink: SINK, subject: SUBJECT });
   const key = await testKey();
   await assert.rejects(() => convertOneAccount(SINK, key, { accountId: 'acct-3', name: 'A', subject: SUBJECT }, deps), /Unknown outcome retained/);
 });
