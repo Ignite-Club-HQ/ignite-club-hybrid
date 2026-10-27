@@ -1819,7 +1819,16 @@ fn ensure_account(principal: Principal) -> Outcome<String> {
         return Err("Account quota reached".into());
     }
     let id = account_id(principal);
-    if get_account(&id).is_some() {
+    if let Some(existing) = get_account(&id) {
+        // Self-heal a lost principal index entry: the account derived from this
+        // principal still lists it as a live alias, so the caller IS that
+        // account. Re-index instead of locking the owner out. Any account
+        // that does not list the caller stays refused.
+        if existing.principals.contains(&principal) {
+            index_principal(principal, &id);
+            account_for(principal)?;
+            return Ok(id);
+        }
         return Err("Account ID collision".into());
     }
     put_account(&Account {
