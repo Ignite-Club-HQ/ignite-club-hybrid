@@ -80,6 +80,8 @@ try {
       environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }, { name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' },
         { name: 'IGNITE_ACCOUNT_SERVICE_IDENTITY', value: identity.canisterId.toText() }], arg: IDL.encode([IDL.Principal], [governor]) });
     ok(await group.club_domain.actor.register_media_quota_store(store.canisterId));
+    await pic.updateCanisterSettings({canisterId:group.club_domain.canisterId,sender:governor,environmentVariables:[]});
+    await pic.upgradeCanister({canisterId:group.club_domain.canisterId,wasm:motokoWasm('club_domain'),sender:governor,arg:IDL.encode([IDL.Principal],[governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
     ok(await group.club_domain.actor.create_club(`club-${n}`,'Conversion club','privacy',[],[]));
     ok(await group.club_domain.actor.replace_acl(1n,{clubs:[`club-${n}`],teams:[],children:[],guardians:[],exclusions:[],roles:[governor,outsider].map(user=>({user,role:'member',club:[`club-${n}`],team:[]}))}));
     await pic.updateCanisterSettings({ canisterId: group.club_domain.canisterId, sender: governor, environmentVariables: env });
