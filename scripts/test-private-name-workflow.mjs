@@ -10,7 +10,7 @@ export const NAME_TEST_CANISTERS = ['club_domain', 'messaging_domain', 'competit
 export function privateNameTestEnvironment(parent, publicKey, signerPath) {
   if (!/^[a-f0-9]{64}$/.test(publicKey) || !signerPath) throw Error('Disposable signer required');
   // Pass only tooling/environment settings, not inherited production secrets.
-  const env = Object.fromEntries(['PATH', 'HOME', 'USER', 'TMPDIR', 'CARGO_HOME', 'RUSTUP_HOME', 'LANG', 'CI', 'NODE_OPTIONS'].filter(key => parent[key]).map(key => [key, parent[key]]));
+  const env = Object.fromEntries(['PATH', 'HOME', 'USER', 'TMPDIR', 'CARGO_HOME', 'RUSTUP_HOME', 'LANG', 'CI', 'NODE_OPTIONS', 'NIX_LD', 'NIX_LD_LIBRARY_PATH'].filter(key => parent[key]).map(key => [key, parent[key]]));
   return { ...env, IGNITE_PRIVATE_PROFILE_READS_REHEARSAL: '1', IGNITE_PRIVATE_NAME_APPROVER_PUBLIC_KEY: publicKey, PRIVATE_NAME_FIXTURE_SIGNER: signerPath, IGNITE_NAME_EDIT_REPLICA: '1' };
 }
 
