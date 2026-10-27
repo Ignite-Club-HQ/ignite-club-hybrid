@@ -3578,6 +3578,7 @@ mod tests {
     }
     #[test]
     fn sign_in_parked_on_empty_duplicate_moves_back_to_original() {
+        init(Init { governor: principal(190) });
         let user = principal(174);
         let original = Account { id: account_id(user), principals: vec![principal(175)], version: 2, status: AccountStatus::Active };
         put_account(&original);
