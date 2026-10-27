@@ -37,20 +37,29 @@ Account/profile/history drift refuses commit while retaining fences, and subject
 private references cannot point outside the captured original-PII targets.
 Suspension advances the account version; retries never reset committed progress.
 
-The complete writer/coordinator connection is still not implemented. Remaining
-coverage includes identity account/profile/alias changes; club ACL, guardians,
-teams, lifecycle and import/purge/rekey; messaging block/participants/evidence
-and admin mappings; competition/league roles, entries, guardians and nested
-club checks; authority configuration and recovery. Each reducing mutation must
-first journal and fence the complete pinned original-PII inventory, read back
-all exact acknowledgements, commit while fenced, then reopen with generation
-invalidation. A sink receipt alone cannot establish this. Production stays
-disabled until that coverage and protected release acceptance are verified.
-The identity regression suite passes 154 tests, including nine new coordinator
-policy/stable-recovery checks; all 17 contracts and ICP guards pass. These are
-not real multi-canister coordinator acceptance: participating remote inventory
-writers, remaining identity writers, real held-callback/upgrade recovery and
-approved signed-in acceptance remain unverified. No deployment or conversion.
+The wider writer connection is now implemented as a separate stop-the-world
+rehearsal, not a production switch. Identity captures the complete registry and
+supplemental original-PII inventory in stable memories 28–29. Every sink must
+acknowledge its fence before any identity/club/chat/competition/league/PII writer
+opens; all writers must seal with zero active work before any sink completes.
+Owning methods retain existing permissions. PII management writes participate
+as writers too. Topology mutation stays closed, authority timers do not run,
+and the older suspension coordinator cannot overlap this rehearsal.
+
+Eleven real local canister writers across two groups pass closed admission,
+forged callers, authorized exact-window writes, seal/drain, delayed reopening,
+and PII upgrade preservation. The separate real-SDK held first/final ciphertext
+and key tests still pass. All 236 Rust tests, 93 focused frontend tests, 17
+contracts and ICP guards pass. Production data remains unchanged.
+
+Recovery is NOT complete: a callback trap can leave an anonymous durable active
+count unresolved. It safely retains all locks, but can indefinitely prevent
+reopening. Do not reset counts or expire them. Individually journaled leases and
+verifiable terminal-outcome recovery, plus an actual identity-driven inventory
+orchestration test with interrupted callbacks, are required before release.
+The eleven-service test manually follows the phases; it is not that complete
+orchestration acceptance. Protected conversion and signed-in checks remain
+separate. No deployment, conversion or activation approval is implied.
 
 Final local disclosure safeguards now snapshot caller rows, share and confirm
 one pending original-authority lease, validate route bindings after closing
