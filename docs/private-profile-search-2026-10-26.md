@@ -9,6 +9,37 @@ and other details must remain viewable in the app.
 
 ## Implemented locally
 
+### Consolidated completion status — 27 October
+
+Unanswered DM headers now reuse the page's already-known shared-club locator
+through the exact owning club's independent name authorization. The chat's two
+participants are checked before and after disclosure; club routing must retain
+the same identity. A changed club clears mounted names immediately. Denial never
+falls back to direct/global/cache names, and this reader does not scan clubs.
+Without a shared authorized club or a peer-authored message, names remain neutral;
+an arbitrary caller-created conversation cannot authorize person search.
+
+The connection is rehearsal-only. Both sign-in methods pass 54 focused tests,
+including club refusal, foreign subjects, identity/participant drift and mounted
+club changes. All 17 contracts and ICP boundary guards pass. No live conversion,
+deployment, configuration, email or reader grants changed.
+
+**Production release remains blocked**, not merely awaiting a publish button:
+
+- Final remote decision-to-delivery revocation fencing is not established;
+  previously obtained keys cannot be recalled.
+- No protected executable private-name release/backfill runner exists. The
+  membership-lookup release is a different operation and does not authorize it.
+- Production acceptance requires independently approved complete original-PII
+  inventory/evidence and an Internet Identity session.
+
+A future protected release must bind every shared/group participant service,
+exact original PII key and account reference; journal unknown writes without
+replaying them; verify encrypted readback before any plaintext deletion; retain
+recovery authority until verification succeeds; and separate deployment from
+conversion and authentication approval. Local readiness booleans cannot serve
+as authenticated receipts. Do not enable rehearsal flags on production.
+
 ### Older announcement readers
 
 The owning messaging service now resolves a reader's stored frontier against

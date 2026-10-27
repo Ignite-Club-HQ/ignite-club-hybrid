@@ -6,6 +6,19 @@ vi.mock('@/live/chatRelationshipProfiles', () => ({ readChatRelationshipProfiles
 import { usePrivateChatProfiles } from './usePrivateChatProfiles';
 beforeEach(() => { vi.resetAllMocks(); });
 describe('mounted private chat name lifetime', () => {
+  it('refreshes unanswered DM names when its known shared club arrives and drops them on club change', async () => {
+    mocks.direct.mockResolvedValueOnce(new Map())
+      .mockResolvedValueOnce(new Map([['person', { id: 'person', display_name: 'Club name' }]]))
+      .mockImplementationOnce(() => new Promise(() => {}));
+    const hook = renderHook(({ club }) => usePrivateChatProfiles('dm', 'viewer', ['person'], true, 'direct', undefined, club), { initialProps: { club: undefined as string | undefined } });
+    await waitFor(() => expect(mocks.direct).toHaveBeenCalledTimes(1));
+    hook.rerender({ club: 'club-a' });
+    await waitFor(() => expect(hook.result.current('person')?.display_name).toBe('Club name'));
+    expect(mocks.direct.mock.calls[1][4]).toBe('club-a');
+    hook.rerender({ club: 'club-b' });
+    expect(hook.result.current('person')).toBeNull();
+    expect(mocks.direct.mock.calls[1][3].aborted).toBe(true);
+  });
   it('routes broadcast names to the app service rather than conversation discovery', async () => {
     mocks.read.mockResolvedValue(new Map([['person', { id: 'person', display_name: 'Reader' }]]));
     const hook=renderHook(({ message }) => usePrivateChatProfiles('broadcast', 'viewer', ['person'], true, 'group', message), { initialProps: { message: 'msg-broadcast-1' } });

@@ -422,44 +422,6 @@ export default function DirectMessagePage() {
     [isIgniteSupportConversation, replyTo, editingMessage],
   );
 
-  // Fetch other participant's profile
-  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
-  const directNameIds = conversation ? [conversation.participant_1, conversation.participant_2] : [];
-  const getPrivateProfile = usePrivateChatProfiles(conversationId, user?.id, directNameIds, privateChatNames, 'direct');
-  const { data: legacyOtherUser, isLoading: legacyOtherUserLoading } = useQuery({
-    queryKey: ["dm-other-user", otherUserId, user?.id, privateChatNames],
-    queryFn: async () => {
-      const { data, error } = await selectCachedProfileById(otherUserId!);
-      if (error) {
-        console.error("[DM] Failed to fetch other user profile:", error.message);
-        throw error;
-      }
-      if (!data?.display_name) {
-        console.warn("[DM] Profile returned without display_name for", otherUserId);
-      }
-      return data;
-    },
-    enabled: !!otherUserId && authReady && !privateChatNames,
-    staleTime: 5 * 60 * 1000,
-    retry: 3,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
-  });
-  const otherUser = privateChatNames ? getPrivateProfile(otherUserId ?? '') : legacyOtherUser;
-  const otherUserLoading = privateChatNames ? !otherUser : legacyOtherUserLoading;
-
-  // Once this thread's own read names the other person, remember it (account
-  // scoped, label only — no message text) so the next open paints the header
-  // instantly instead of showing skeleton bars for the whole cold read.
-  useEffect(() => {
-    if (!user?.id || !conversationId || privateChatNames) return;
-    const title = isIgniteSupportConversation ? "Ignite Support" : otherUser?.display_name;
-    if (!title) return;
-    rememberChatThreadLabel(user.id, "dm", conversationId, {
-      title,
-      avatarUrl: isIgniteSupportConversation ? null : otherUser?.avatar_url,
-    });
-  }, [user?.id, conversationId, isIgniteSupportConversation, otherUser?.display_name, otherUser?.avatar_url, privateChatNames]);
-
   // Find the first club both DM participants share. Used to scope vault picker
   // and event picker actions inside the "+" menu so users can attach files /
   // events / live boards even from a 1:1 conversation.
@@ -497,6 +459,44 @@ export default function DirectMessagePage() {
     enabled: !!user?.id && !!otherUserId && !isIgniteSupportConversation,
     staleTime: 5 * 60 * 1000,
   });
+
+  // Fetch other participant's profile
+  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const directNameIds = conversation ? [conversation.participant_1, conversation.participant_2] : [];
+  const getPrivateProfile = usePrivateChatProfiles(conversationId, user?.id, directNameIds, privateChatNames, 'direct', undefined, sharedClubId ?? undefined);
+  const { data: legacyOtherUser, isLoading: legacyOtherUserLoading } = useQuery({
+    queryKey: ["dm-other-user", otherUserId, user?.id, privateChatNames],
+    queryFn: async () => {
+      const { data, error } = await selectCachedProfileById(otherUserId!);
+      if (error) {
+        console.error("[DM] Failed to fetch other user profile:", error.message);
+        throw error;
+      }
+      if (!data?.display_name) {
+        console.warn("[DM] Profile returned without display_name for", otherUserId);
+      }
+      return data;
+    },
+    enabled: !!otherUserId && authReady && !privateChatNames,
+    staleTime: 5 * 60 * 1000,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
+  });
+  const otherUser = privateChatNames ? getPrivateProfile(otherUserId ?? '') : legacyOtherUser;
+  const otherUserLoading = privateChatNames ? !otherUser : legacyOtherUserLoading;
+
+  // Once this thread's own read names the other person, remember it (account
+  // scoped, label only — no message text) so the next open paints the header
+  // instantly instead of showing skeleton bars for the whole cold read.
+  useEffect(() => {
+    if (!user?.id || !conversationId || privateChatNames) return;
+    const title = isIgniteSupportConversation ? "Ignite Support" : otherUser?.display_name;
+    if (!title) return;
+    rememberChatThreadLabel(user.id, "dm", conversationId, {
+      title,
+      avatarUrl: isIgniteSupportConversation ? null : otherUser?.avatar_url,
+    });
+  }, [user?.id, conversationId, isIgniteSupportConversation, otherUser?.display_name, otherUser?.avatar_url, privateChatNames]);
 
   // App-admin-controlled per-club / per-user disable of the "+" attachment menu in DMs
   const { data: attachmentsDisabled } = useQuery({

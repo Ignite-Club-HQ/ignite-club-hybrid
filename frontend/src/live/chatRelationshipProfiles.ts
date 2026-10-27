@@ -1,4 +1,5 @@
 import type { FeatureBackendContext } from './featureRouter';
+import { withFeatureBackend } from './featureRouter';
 import { privateProfileSearchRehearsalEnabled } from './privateProfileSearchMode';
 import { readRelationshipProfiles, type ProfileRelationship } from './relationshipProfileRead';
 import { getLiveDirectConversation, getLiveGroupMetadata, type LiveGroupMetadata } from './features/messaging';
@@ -9,7 +10,7 @@ export type ChatProfile = { id: string; display_name: string | null; avatar_url:
 
 /** Real two-person DMs only; read exact participants before and after names.
  * The identity service separately delegates to the owning messaging authority. */
-export async function readDirectChatProfiles(owner: FeatureBackendContext, conversationId: string, ids: readonly string[], signal?: AbortSignal): Promise<Map<string, ChatProfile>> {
+export async function readDirectChatProfiles(owner: FeatureBackendContext, conversationId: string, ids: readonly string[], signal?: AbortSignal, clubId?: string): Promise<Map<string, ChatProfile>> {
   if (!privateProfileSearchRehearsalEnabled()) return (await import('@/lib/profileCache')).fetchProfilesWithCache([...ids]);
   ids = [...new Set(ids)];
   if (ids.length > 2) throw new Error('Direct names require at most two participants.');
@@ -24,7 +25,23 @@ export async function readDirectChatProfiles(owner: FeatureBackendContext, conve
   const participants = [opening.participant_1, opening.participant_2];
   if (opening.id !== conversationId || participants[0] === participants[1] || !participants.includes(principal) || ids.some(id => !participants.includes(id)))
     throw new Error('Exact direct name participants required.');
-  const rows = await readRelationshipProfiles(owner, ids, { kind: 'direct', resource: conversationId }, signal); active();
+  // An unanswered DM has no peer-authored-message proof. A known shared club
+  // is only a locator: its owning service must independently authorize both
+  // people and original PII must recheck that exact club before name delivery.
+  // Never scan clubs here or turn a refused club read into a direct fallback.
+  const rows = clubId
+    ? await withFeatureBackend('membership', {
+      supabase: async () => { throw new Error('Private direct names require Internet Identity.'); },
+      icp: async clubOwner => {
+        active();
+        if (clubOwner.identity !== identity) throw new Error('Direct name reader identity changed.');
+        const rows = await readRelationshipProfiles(clubOwner, ids, { kind: 'club', resource: clubId }, signal);
+        active();
+        return rows;
+      },
+    }, { clubId })
+    : await readRelationshipProfiles(owner, ids, { kind: 'direct', resource: conversationId }, signal);
+  active();
   const closing = await getLiveDirectConversation(owner, conversationId); active();
   if (JSON.stringify(closing) !== JSON.stringify(opening)) throw new Error('Direct name participants changed.');
   const out = new Map<string, ChatProfile>();
