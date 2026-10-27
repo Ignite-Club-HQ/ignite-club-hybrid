@@ -7,6 +7,7 @@ import Release "PrivateNameReleaseFence";
 // methods keep their existing authorization. Identity opens only after every
 // original PII sink is fenced, and may reopen PII only after every writer seals.
 module {
+  public func exclusive(request : Release.Request) : Bool { Text.startsWith(request.operation_id, #text "names:club-name-conversion-") };
   public type Intent = { request : Release.Request; closing : Bool; sealed : Bool; active : Nat };
   public type Receipt = { request : Release.Request; receiver : Principal; closing : Bool; sealed : Bool; active : Nat };
   public class Gate(enabled : Bool, authority : ?Principal, intents : Map.Map<Text, Intent>, capacity : Nat) {
@@ -35,11 +36,25 @@ module {
       if (not enabled) return #Ok(null);
       switch (current()) {
         case (?intent) {
+          if (exclusive(intent.request)) return #Err("Edits locked for private-name conversion");
           if (intent.closing or intent.active >= 4096) return #Err("Private-name writer closing or busy");
           intents.add(intent.request.operation_id, { intent with active = intent.active + 1 });
           #Ok(?intent.request)
         };
         case null #Err("Coordinated private-name write window required")
+      }
+    };
+    // Only the configured coordinator can submit exact approved conversion
+    // mutations. Ordinary governor/owner methods never receive this lease.
+    public func enterConversion(caller : Principal, request : Release.Request) : { #Ok : ?Release.Request; #Err : Text } {
+      if (not authorized(caller) or not exclusive(request)) return #Err("Approved conversion coordinator required");
+      switch (current()) {
+        case (?intent) {
+          if (intent.request != request or intent.closing or intent.active >= 4096) return #Err("Exact open conversion window required");
+          intents.add(request.operation_id, { intent with active = intent.active + 1 });
+          #Ok(?request)
+        };
+        case null #Err("Exact open conversion window required")
       }
     };
     public func leave(request : ?Release.Request) {
