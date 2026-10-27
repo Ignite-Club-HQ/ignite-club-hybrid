@@ -14,6 +14,8 @@ pub struct ApprovedRow { pub account_id:String,pub subject:Principal,pub sink:Pr
 pub struct ApprovalBody { pub kind:String,pub approval_id:String,pub identity:Principal,pub operator:Principal,pub request:WriterRequest,pub plan_hash:String,pub rows:Vec<ApprovedRow> }
 #[derive(Clone,Debug,CandidType,Serialize,Deserialize,PartialEq,Eq)]
 pub struct SignedApproval { pub body:ApprovalBody,pub signature:Vec<u8> }
+#[derive(Clone,Debug,CandidType,Serialize,Deserialize,PartialEq,Eq)]
+pub struct ApprovalReceipt { pub request:WriterRequest,pub approval_id:String,pub plan_hash:String,pub operator:Principal,pub identity:Principal,pub signed_digest:Vec<u8> }
 thread_local!{static APPROVALS:RefCell<StableBTreeMap<String,Vec<u8>,super::Memory>>=RefCell::new(StableBTreeMap::init(super::memory(31)));}
 thread_local!{static WRITES:RefCell<StableBTreeMap<String,Vec<u8>,super::Memory>>=RefCell::new(StableBTreeMap::init(super::memory(32)));}
 fn receipt_key(id:&str,account:&str,club:&Option<String>)->String{format!("{}",hex_digest(&super::encode(&(id,account,club))))}
@@ -60,6 +62,18 @@ fn validate(a:&SignedApproval,w:&WriteWindow,operator:Principal,identity:Princip
     }Ok(())
 }
 pub(super) fn require_approval(id:&str,w:&WriteWindow)->Outcome<()>{validate(&get(id)?,w,ic_cdk::api::msg_caller(),ic_cdk::api::canister_self(),&key()?)}
+// Consensus readback of the retained exact signed bytes, not a phase/boolean.
+// Returning None permits delivery preparation, never unknown-outcome replay.
+#[ic_cdk::update]
+fn read_private_name_conversion_approval(operation_id:String)->Outcome<Option<ApprovalReceipt>>{
+    super::private_name_write_coordinator::access()?;
+    let w=super::private_name_write_coordinator::get(&operation_id)?;
+    let Some(bytes)=APPROVALS.with(|m|m.borrow().get(&operation_id)) else {return Ok(None)};
+    let a:SignedApproval=super::decode(&bytes);
+    validate(&a,&w,ic_cdk::api::msg_caller(),ic_cdk::api::canister_self(),&key()?)?;
+    let mut signed=approval_bytes(&a.body);signed.extend_from_slice(&a.signature);
+    Ok(Some(ApprovalReceipt{request:a.body.request,approval_id:a.body.approval_id,plan_hash:a.body.plan_hash,operator:a.body.operator,identity:a.body.identity,signed_digest:Sha256::digest(signed).to_vec()}))
+}
 #[ic_cdk::update]
 fn approve_private_name_conversion(operation_id:String,approval:SignedApproval)->Outcome<()>{
     super::private_name_write_coordinator::access()?;let w=super::private_name_write_coordinator::get(&operation_id)?;

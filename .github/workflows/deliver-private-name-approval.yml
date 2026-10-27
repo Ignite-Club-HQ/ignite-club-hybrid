@@ -1,0 +1,99 @@
+name: Deliver signed name approval (no conversion)
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Deliver once, or reconcile a retained unknown delivery without replay
+        required: true
+        type: choice
+        options: [deliver, reconcile]
+      approval_commit:
+        description: Exact repository commit containing private-name-approvals/<plan hash>.json
+        required: true
+      artifact_hash:
+        description: SHA-256 of the original signed approval file bytes
+        required: true
+      plan_hash:
+        description: Exact approved conversion plan hash
+        required: true
+      approval_event_id:
+        description: Exact signed approval event ID
+        required: true
+      confirmation:
+        description: Type DELIVER SIGNED NAME APPROVAL ONLY
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: ignite-mainnet-governor-deployment
+  cancel-in-progress: false
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    environment: private-name-approval-delivery
+    timeout-minutes: 20
+    env:
+      ACTION: ${{ inputs.action }}
+      APPROVAL_COMMIT: ${{ inputs.approval_commit }}
+      APPROVAL_ARTIFACT_HASH: ${{ inputs.artifact_hash }}
+      PLAN_HASH: ${{ inputs.plan_hash }}
+      APPROVAL_EVENT_ID: ${{ inputs.approval_event_id }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      IDENTITY_ACCESS_CANISTER: ${{ vars.IDENTITY_ACCESS_CANISTER }}
+      IDENTITY_APPROVAL_MODULE_HASH: ${{ vars.IDENTITY_APPROVAL_MODULE_HASH }}
+      PRIVATE_NAME_APPROVER_PUBLIC_KEY: ${{ vars.PRIVATE_NAME_APPROVER_PUBLIC_KEY }}
+      PRIVATE_NAME_APPROVAL_RECEIPTS_BRANCH: ${{ vars.PRIVATE_NAME_APPROVAL_RECEIPTS_BRANCH }}
+      OPERATOR_PEM_PATH: ${{ runner.temp }}/name-approval-operator.pem
+      REPORT_PATH: ${{ runner.temp }}/name-approval-report.json
+    steps:
+      - name: Reject unreviewed delivery source before checkout or credentials
+        env:
+          TRUSTED_SOURCE_COMMIT: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_COMMIT }}
+          TRUSTED_SOURCE_REF: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_REF }}
+          TRUSTED_REPOSITORY: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          test -n "$TRUSTED_SOURCE_COMMIT"
+          test "$GITHUB_SHA" = "$TRUSTED_SOURCE_COMMIT"
+          test "$GITHUB_REF" = "$TRUSTED_SOURCE_REF"
+          test "$GITHUB_REPOSITORY" = "$TRUSTED_REPOSITORY"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_COMMIT }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Require separate protected delivery configuration
+        env:
+          DELIVERY_PROTECTION_READY: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_PROTECTION_READY }}
+        run: |
+          test "$DELIVERY_PROTECTION_READY" = yes || { echo 'Configure required reviewers and protected approval storage first'; exit 1; }
+          test "$CONFIRMATION" = 'DELIVER SIGNED NAME APPROVAL ONLY'
+      - name: Install existing project dependencies
+        run: |
+          node scripts/ensure-frontend-deps.mjs
+          npx --yes tsx@4.21.0 --version
+      - name: Test delivery-only safeguards
+        run: node --test scripts/private-name-approval-delivery.test.mjs
+      - name: Restore existing delivery governor, not the approval signer
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYER_PEM"
+          umask 077
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' | sed -n '/-----BEGIN/,/-----END/p' > "$OPERATOR_PEM_PATH"
+      - name: Deliver original signature and verify retained receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npx --offline --yes tsx@4.21.0 frontend/scripts/deliver-private-name-approval.ts
+      - name: Remove delivery credential
+        if: always()
+        run: rm -f "$OPERATOR_PEM_PATH"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: name-approval-delivery-report
+          path: ${{ runner.temp }}/name-approval-report.json
+          if-no-files-found: ignore

@@ -42,7 +42,7 @@ mod guardian_search;
 mod private_name_audience;
 mod private_name_conversion;
 mod private_name_conversion_approval;
-use private_name_conversion_approval::SignedApproval;
+use private_name_conversion_approval::{SignedApproval,ApprovalReceipt};
 mod private_name_coordination;
 mod private_name_write_coordinator;
 use private_name_write_coordinator::WriteWindow;

@@ -21,6 +21,7 @@ import {prepareInventoriedPrivateNameArtifact} from '../../scripts/private-name-
 import {savePrivateNameArtifact,readPrivateNameArtifact} from '../../scripts/private-name-plan-artifact.mjs';
 import {openPreparedExecutionJournal} from '../../scripts/private-name-execution-journal.mjs';
 import {executeSavedApprovedNamePlan} from '../../scripts/private-name-approved-execution.mjs';
+import {admissionBytes,deliverNameApproval,verifyAdmissionArtifact} from '../../scripts/private-name-approval-delivery.mjs';
 import {encryptName,encryptClubName} from '../../scripts/convert-private-names.mjs';
 import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -265,15 +266,26 @@ try {
       await denied(()=>actor.advance_private_name_write_window(id,Principal.fromText(window.sinks[0])));
       const body={kind:'ignite-private-name-admission-v1',approval_id:'fixture-explicit-names',identity:identity.canisterId,operator:governor,request:window.request,plan_hash:artifact.hash,
         rows:artifact.body.rows.map(r=>({account_id:r.accountId,subject:Principal.fromText(r.subject),sink:Principal.fromText(r.sink),source_digest:sourceDigests.get(r.accountId),ciphertext:r.ciphertext,clubs:r.clubs.map(c=>({club:c.id,ciphertext:c.ciphertext}))}))};
-      const chunks=[],add=v=>{const bytes=typeof v==='string'?Buffer.from(v):Buffer.from(v);const length=Buffer.alloc(8);length.writeBigUInt64BE(BigInt(bytes.length));chunks.push(length,bytes);};
-      for(const v of [body.kind,body.approval_id,body.identity.toText(),body.operator.toText(),body.request.operation_id,String(body.request.generation),body.plan_hash])add(v);
-      add(body.request.inventory_digest);add(String(body.rows.length));
-      for(const r of body.rows){for(const v of [r.account_id,r.subject.toText(),r.sink.toText()])add(v);add(r.source_digest);add(r.ciphertext);add(String(r.clubs.length));for(const c of r.clubs){add(c.club);add(c.ciphertext);}}
-      admission={body,signature:Array.from(sign(null,Buffer.concat(chunks),fixtureSigningKey))};
+      const jsonBody={...body,identity:body.identity.toText(),operator:body.operator.toText(),request:{...body.request,generation:String(body.request.generation),inventory_digest:Array.from(body.request.inventory_digest)},rows:body.rows.map(r=>({...r,subject:r.subject.toText(),sink:r.sink.toText()}))};
+      const signature=sign(null,admissionBytes(jsonBody),fixtureSigningKey);
+      admission={body,signature:Array.from(signature)};
       await denied(()=>actor.approve_private_name_conversion(id,{...admission,signature:Array(64).fill(0)}));
       await denied(()=>actor.approve_private_name_conversion(id,{...admission,body:{...admission.body,operator:outsider}}));
       await denied(()=>actor.approve_private_name_conversion(id,{...admission,body:{...admission.body,request:{...admission.body.request,generation:admission.body.request.generation+1n}}}));
-      ok(await actor.approve_private_name_conversion(id,admission));
+      const signedBytes=Buffer.from(JSON.stringify({body:jsonBody,signature:signature.toString('hex')}));
+      const publicHex=fixtureSigningKey.asymmetricKeyType==='ed25519'?(await import('node:crypto')).createPublicKey(fixtureSigningKey).export({type:'spki',format:'der'}).subarray(-32).toString('hex'):'';
+      const deliveryBinding={artifactHash:createHash('sha256').update(signedBytes).digest('hex'),planHash:artifact.hash,identityId:identity.canisterId.toText(),operator:governor.toText(),approvalId:body.approval_id,approverKey:publicHex,targetModule:'a'.repeat(64),artifactCommit:'b'.repeat(40),canonicalPrincipal:v=>Principal.fromText(v).toText()};
+      let receiptJournal=null,deliveryCalls=0;
+      const normalizeRequest=r=>({...r,generation:String(r.generation),inventory_digest:Array.from(r.inventory_digest)});
+      const deliveryDeps={assertTarget:async()=>true,readWindow:async()=>({request:normalizeRequest(window.request),phase:'Fencing'}),readJournal:async()=>receiptJournal,persistJournal:async j=>{receiptJournal=structuredClone(j);},
+        readApproval:async()=>{const r=ok(await actor.read_private_name_conversion_approval(id));return r.length?{...r[0],request:normalizeRequest(r[0].request),identity:r[0].identity.toText(),operator:r[0].operator.toText(),signed_digest:Array.from(r[0].signed_digest)}:null;},
+        submitApproval:async()=>{deliveryCalls++;ok(await actor.approve_private_name_conversion(id,admission));throw Error('Lost approval delivery reply');}};
+      assert.equal((await deliveryDeps.readApproval()),null);
+      await assert.rejects(deliverNameApproval({artifact:signedBytes,binding:deliveryBinding,action:'deliver'},deliveryDeps),/Lost approval delivery reply/);
+      assert.equal(receiptJournal.phase,'unknown');
+      const delivered=await deliverNameApproval({artifact:signedBytes,binding:deliveryBinding,action:'reconcile'},deliveryDeps);
+      assert.equal(delivered.phase,'verified');assert.equal(deliveryCalls,1);
+      assert.deepEqual(await deliveryDeps.readApproval(),verifyAdmissionArtifact(signedBytes,deliveryBinding).receipt);
       await denied(()=>actor.publish_approved_private_name(id,artifact.body.rows[0].accountId));
     }
     return window;
