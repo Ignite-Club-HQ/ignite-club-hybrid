@@ -77,6 +77,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - ICP events atomically commit dates, duties and reminders under caller receipts; consensus supplies audiences, unknown relays stay locked.
 - Vault recovery reads owner-wide intents and exact decrypted hash markers before strict grants/store acknowledgement; unknown outcomes retain locks/cursors. Erasure scrubs shared ancestors without orphaning others. Cleanup needs age/allowance or erasure receipts; backups commit validated pages to writable sinks, retaining Blob fallback where unsupported. Why: prevent guessed recovery, data loss and partial exports.
-- Names stay rehearsal-only; v2 holds all writers. Counters never prove legacy drain. Lifecycle uses exact bytes; approval dedup may reuse verified immutable canister receipts, never conversion-write replay. Read scripts/, frontend/, backend/identity_access/AGENTS.md. Why: local checks never authorize release.
+- Names stay rehearsal-only; read scripts/, frontend/, backend/identity_access/AGENTS.md. V2 holds writers; counters never prove legacy drain; lifecycle uses exact bytes; immutable approval dedup never permits conversion replay. Opt-in PocketIC edit acceptance retains real authorization, ciphertext, SDK crypto and chat/event rows. Why: fixtures never authorize release.
 
 

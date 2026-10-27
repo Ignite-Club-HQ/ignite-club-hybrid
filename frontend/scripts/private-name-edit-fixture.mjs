@@ -49,7 +49,7 @@ export async function createNameEditFixture() {
     ok(await identity.actor.set_service_authorities([pii.canisterId]));
     ok(await identity.actor.configure_membership_directory(binding, [club.canisterId], 1n));
     messaging.actor.setPrincipal(governor);
-    const group = ok(await messaging.actor.create_group_with_roles(clubId, [], 'Acceptance chat', 'group', [[owner, 'owner'], [viewer, 'member']]));
+    const group = ok(await messaging.actor.create_group_with_roles(clubId, [], 'Acceptance chat', 'group', [[governor, 'owner'], [owner, 'member'], [viewer, 'member']]));
     messaging.actor.setPrincipal(owner);
     const message = ok(await messaging.actor.send_message(group.conversation_id, 'Name-edit acceptance message', 'name-edit-1', [], []));
     const factories = { club_domain: clubIdl, pii_access_control: piiIdl, messaging_domain: messagingIdl, identity_access: identityIdl };
