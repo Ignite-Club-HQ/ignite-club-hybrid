@@ -49,6 +49,7 @@ const vetKeyCache = new Map<string, VetKey>();
 export function clearPiiVetKeyCache(): void {
   verificationKeyCache = null;
   vetKeyCache.clear();
+  clubNameKeyCache.clear();
   clubMediaKeyCache.clear();
   clubMediaLockSupported.clear();
   void import("./mediaDecrypt").then(m => m.clearIcpPhotoResolutionCache());
@@ -61,6 +62,67 @@ export function clearPiiVetKeyCache(): void {
 const CLUB_MEDIA_FIELD = "blob";
 const clubMediaKeyCache = new Map<string, Promise<VetKey>>();
 const clubMediaLockSupported = new Map<string, Promise<boolean>>();
+
+const clubNameKeyCache = new Map<string, Promise<VetKey>>();
+export const CLUB_NAME_SCHEME_PREFIX = 'vetkey-club-names-v1:';
+export function clubNamePiiId(club: string): string {
+  if (!club || club.length > 64 || /[\u001f/]/.test(club)) throw new Error('Invalid club name scope.');
+  return `clubnames:${club}`;
+}
+
+/** Separate from photo/email keys. Caller must freshly authorize ciphertext
+ * before using this cache; possession is never an application access grant.
+ * Retained keys cannot be withdrawn from a previously authorized device. */
+export async function fetchClubNameVetKey(
+  ctx: FeatureBackendContext, ids: string[], audience: PrivateProfileAudience, assertActive: () => void,
+): Promise<VetKey> {
+  if (audience.kind !== 'club' || !ids.length || ids.length > 25 || new Set(ids).size !== ids.length) throw new Error('Exact bounded club name audience required.');
+  const piiId = clubNamePiiId(audience.resource);
+  const identity = ctx.identity;
+  const principal = identity.getPrincipal().toText();
+  const target = JSON.stringify(ctx.target);
+  const scope = { ...audience };
+  const subjects = [...ids];
+  const active = () => {
+    assertActive();
+    if (ctx.identity !== identity || identity.getPrincipal().toText() !== principal || JSON.stringify(ctx.target) !== target) throw new Error('Club name key context changed.');
+  };
+  active();
+  const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, identity);
+  active();
+  const cid = canisterId.toText();
+  const slot = `private-club-name:${ctx.target.host}:${piiId}`;
+  const cacheId = `${target}|${principal}|${scope.authority.toText()}|${piiId}`;
+  let pending = clubNameKeyCache.get(cacheId);
+  if (!pending) {
+    pending = (async () => {
+      const stored = loadStoredClubKey(cid, principal, slot);
+      if (stored) {
+        try { return VetKey.deserialize(stored); } catch { forgetStoredClubKey(cid, principal, slot); }
+      }
+      const { key: verification } = await getPiiVerificationKey(ctx);
+      active();
+      const transport = TransportSecretKey.random();
+      const bytes = await unwrapCandid((actor as unknown as {
+        get_private_profile_club_name_vetkey: (ids: string[], scope: PrivateProfileAudience, transport: Uint8Array) => Promise<{ Ok: Uint8Array | number[] } | { Err: string }>;
+      }).get_private_profile_club_name_vetkey(subjects, scope, transport.publicKeyBytes()), 'Unlock club names');
+      active();
+      const key = EncryptedVetKey.deserialize(Uint8Array.from(bytes)).decryptAndVerify(transport, verification, piiIbeIdentity(piiId, 'display_name'));
+      active();
+      storeClubKey(cid, principal, slot, key.serialize());
+      return key;
+    })();
+    if (clubNameKeyCache.size >= 64) {
+      const oldest = clubNameKeyCache.keys().next().value;
+      if (oldest !== undefined) clubNameKeyCache.delete(oldest);
+    }
+    clubNameKeyCache.set(cacheId, pending);
+    void pending.catch(() => { if (clubNameKeyCache.get(cacheId) === pending) clubNameKeyCache.delete(cacheId); });
+  }
+  const key = await pending;
+  active();
+  return key;
+}
 
 /** pii id whose IBE identity locks every photo of a club. Mirrors main.mo. */
 export function clubMediaPiiId(clubId: string): string {
