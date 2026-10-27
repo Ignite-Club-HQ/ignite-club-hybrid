@@ -8,6 +8,7 @@ vi.mock("./piiVetKeys", () => ({ encryptPiiText: mocks.encrypt, fetchPiiVetKeys:
 vi.mock("@icp-sdk/vetkeys", () => ({ IbeCiphertext: { deserialize: () => ({ decrypt: mocks.decrypt }) } }));
 
 import { hydratePrivateProfileNames, preparePrivateOwnProfileName, preparePrivateOwnProfileEmail, privateProfileNameReference } from "./privateProfileNames";
+import { retirePrivateProfileSession } from './privateProfileSession';
 
 const subject = "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe";
 const authority = "rrkah-fqaaa-aaaaa-aaaaq-cai";
@@ -52,6 +53,17 @@ describe("private profile name preparation", () => {
 });
 
 describe("authorized name display", () => {
+  it('rejects a held read when the global session retires with its old context unchanged', async () => {
+    let release: (value: unknown) => void = () => {};
+    mocks.read.mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    const pending = hydratePrivateProfileNames(ctx, [{ display_name: reference }]);
+    await vi.waitFor(() => expect(mocks.read).toHaveBeenCalled());
+    retirePrivateProfileSession();
+    release({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9] }] });
+    await expect(pending).rejects.toThrow('session retired');
+    expect(mocks.keys).not.toHaveBeenCalled();
+    expect(mocks.decrypt).not.toHaveBeenCalled();
+  });
   it.each(['club', 'family', 'competition', 'league', 'guardian_search'] as const)('withholds %s names when final authority confirmation changes after decryption', async kind => {
     const audience = { kind, authority: Principal.fromText(authority), resource: 'exact-resource', profile_revision: 7n };
     mocks.scopedRead.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9] }] });

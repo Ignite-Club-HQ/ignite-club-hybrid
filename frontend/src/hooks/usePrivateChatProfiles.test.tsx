@@ -4,8 +4,30 @@ const mocks = vi.hoisted(() => ({ read: vi.fn(), direct: vi.fn(), legacy: vi.fn(
 vi.mock('@/live/featureRouter', () => ({ withFeatureBackend: async (_feature: string, providers: any, scope: unknown) => { mocks.routing(scope); return providers.icp({}); } }));
 vi.mock('@/live/chatRelationshipProfiles', () => ({ readChatRelationshipProfiles: mocks.read, readDirectChatProfiles: mocks.direct }));
 import { usePrivateChatProfiles } from './usePrivateChatProfiles';
+import { PRIVATE_PROFILE_DISPLAY_LIFETIME_MS, retirePrivateProfileSession } from '@/live/privateProfileSession';
 beforeEach(() => { vi.resetAllMocks(); });
 describe('mounted private chat name lifetime', () => {
+  it('expires foreground names and withholds them during refused reauthorization', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.read.mockResolvedValueOnce(new Map([['person', { id: 'person', display_name: 'Allowed' }]])).mockRejectedValueOnce(new Error('Removed'));
+      const hook = renderHook(() => usePrivateChatProfiles('chat', 'viewer', ['person'], true));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(hook.result.current('person')?.display_name).toBe('Allowed');
+      await act(async () => { await vi.advanceTimersByTimeAsync(PRIVATE_PROFILE_DISPLAY_LIFETIME_MS); });
+      expect(hook.result.current('person')).toBeNull();
+      expect(mocks.read).toHaveBeenCalledTimes(2);
+      hook.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+  it('drops mounted labels immediately when the active session retires', async () => {
+    mocks.read.mockResolvedValue(new Map([['person', { id: 'person', display_name: 'Old session' }]]));
+    const hook = renderHook(() => usePrivateChatProfiles('chat', 'viewer', ['person'], true));
+    await waitFor(() => expect(hook.result.current('person')?.display_name).toBe('Old session'));
+    act(() => retirePrivateProfileSession());
+    expect(hook.result.current('person')).toBeNull();
+    expect(mocks.read.mock.calls[0][3].aborted).toBe(true);
+  });
   it('aborts pending names on backgrounding and ignores their late reply', async () => {
     let finish: (value: unknown) => void = () => {};
     mocks.read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValueOnce(new Map([['person', { id: 'person', display_name: 'Reauthorized' }]]));
