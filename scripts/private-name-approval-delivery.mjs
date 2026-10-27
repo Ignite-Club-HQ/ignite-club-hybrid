@@ -21,8 +21,9 @@ export function verifyAdmissionArtifact(raw,{artifactHash,planHash,identityId,op
   if(typeof canonicalPrincipal!=='function')throw Error('Canonical principal verifier required');
   const principal=v=>{if(!text(v,64) || ['2vxsx-fae','aaaaa-aa'].includes(v) || canonicalPrincipal(v)!==v)throw Error('Exact canonical principal required');};
   principal(identityId);principal(operator);principal(b.identity);principal(b.operator);
-  if(b.kind!=='ignite-private-name-admission-v1' || b.identity!==identityId || b.operator!==operator || !hex(planHash,64) || b.plan_hash!==planHash || !text(approvalId,128) || b.approval_id!==approvalId
-    || b.request.operation_id!==`names:club-name-conversion-${planHash}` || !nat(b.request.generation) || !bytes(b.request.inventory_digest,32) || b.request.inventory_digest.length!==32
+  const preparation=b.kind==='ignite-private-name-preparation-admission-v2';
+  if((!preparation && b.kind!=='ignite-private-name-admission-v1') || b.identity!==identityId || b.operator!==operator || !hex(planHash,64) || b.plan_hash!==planHash || !text(approvalId,128) || b.approval_id!==approvalId
+    || (preparation?!/^names:club-name-preparation-[A-Za-z0-9_-]{1,70}$/.test(b.request.operation_id):b.request.operation_id!==`names:club-name-conversion-${planHash}`) || !nat(b.request.generation) || !bytes(b.request.inventory_digest,32) || b.request.inventory_digest.length!==32
     || !Array.isArray(b.rows) || !b.rows.length || b.rows.length>4096 || !hex(a.signature,128) || !hex(approverKey,64))throw Error('Exact signed approval binding required');
   const accounts=new Set(),subjects=new Set();
   for(const r of b.rows){
@@ -34,7 +35,7 @@ export function verifyAdmissionArtifact(raw,{artifactHash,planHash,identityId,op
   if(signed.length>1500000)throw Error('Signed approval ingress byte budget exceeded');
   const key=createPublicKey({key:Buffer.concat([Buffer.from('302a300506032b6570032100','hex'),Buffer.from(approverKey,'hex')]),format:'der',type:'spki'});
   if(!verify(null,signed,key,Buffer.from(a.signature,'hex')))throw Error('Original owner signature required');
-  return {approval:a,operationId:`club-name-conversion-${planHash}`,receipt:{request:b.request,approval_id:b.approval_id,plan_hash:b.plan_hash,operator:b.operator,identity:b.identity,signed_digest:Array.from(createHash('sha256').update(signed).update(Buffer.from(a.signature,'hex')).digest())}};
+  return {approval:a,operationId:b.request.operation_id.slice('names:'.length),receipt:{request:b.request,approval_id:b.approval_id,plan_hash:b.plan_hash,operator:b.operator,identity:b.identity,signed_digest:Array.from(createHash('sha256').update(signed).update(Buffer.from(a.signature,'hex')).digest())}};
 }
 export async function deliverNameApproval({artifact,binding,action},{readWindow,readApproval,submitApproval,readJournal,persistJournal,assertTarget}){
   if(!['deliver','reconcile'].includes(action))throw Error('Delivery-only action required');

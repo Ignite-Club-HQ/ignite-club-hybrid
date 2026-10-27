@@ -14,7 +14,7 @@ const revision = value => {
   const n=BigInt(value);if(n>18446744073709551615n)throw Error('Exact nat64 revision required');return n;
 };
 export function normalizePrivateNameWindow(window) {
-  const phases=['Fencing','Opening','Writing','Closing','Releasing','Done'];
+  const phases=['Preparing','AwaitingApproval','Fencing','Opening','Writing','Closing','Releasing','Done'];
   if (!window || !window.phase || Object.keys(window.phase).length!==1 || !phases.includes(Object.keys(window.phase)[0])) throw Error('Unknown private-name coordinator phase');
   const receipts = value => {
     if (!Array.isArray(value)) throw Error('Complete coordinator receipts required');
@@ -29,6 +29,17 @@ export function createPrivateNameCoordinatorAdapter(actor, Principal) {
     advance:async(id,target)=>normalizePrivateNameWindow(unwrap(await actor.advance_private_name_write_window(id,Principal.fromText(target)))),
     close:async id=>normalizePrivateNameWindow(unwrap(await actor.close_private_name_write_window(id))),
     read:async id=>normalizePrivateNameWindow(unwrap(await actor.read_private_name_write_window(id))),
+  };
+}
+/** Starts only preparation admission; no signature, conversion or unlock. */
+export function createPrivateNamePreparationAdapter(actor,Principal,{assertFence}){
+  if(typeof assertFence!=='function')throw Error('Authenticated preparation coverage required');
+  const guard=async()=>{if(await assertFence()!==true)throw Error('Preparation coverage changed');};
+  return {
+    begin:async(id,rev,candidate)=>{await guard();const w=normalizePrivateNameWindow(unwrap(await actor.begin_private_name_preparation(id,revision(rev),structuredClone(candidate))));await guard();return w;},
+    advance:async(id,target)=>{await guard();const w=normalizePrivateNameWindow(unwrap(await actor.advance_private_name_preparation(id,Principal.fromText(target))));await guard();return w;},
+    verify:async id=>{await guard();const w=normalizePrivateNameWindow(unwrap(await actor.verify_private_name_preparation(id)));await guard();return w;},
+    read:async id=>{await guard();const w=normalizePrivateNameWindow(unwrap(await actor.read_private_name_write_window(id)));await guard();return w;},
   };
 }
 

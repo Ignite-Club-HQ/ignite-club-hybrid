@@ -48,6 +48,7 @@ fn approval_bytes(b:&ApprovalBody)->Vec<u8>{
 fn validate(a:&SignedApproval,w:&WriteWindow,operator:Principal,identity:Principal,k:&VerifyingKey)->Outcome<()>{
     let b=&a.body;
     let prep=super::private_name_writer_window::preparation(&w.request);
+    if prep && (w.opened.len()!=w.writers.len() || w.opened.iter().any(|r|r.request!=w.request||r.closing||r.sealed||r.active!=candid::Nat::from(0u8))){return Err("Every preparation participant must drain before signed admission".into());}
     if b.kind!=if prep{"ignite-private-name-preparation-admission-v2"}else{"ignite-private-name-admission-v1"} || b.approval_id.is_empty() || b.approval_id.len()>128 || b.identity!=identity || b.operator!=operator || b.request!=w.request
         || b.plan_hash.len()!=64 || !b.plan_hash.bytes().all(|c|c.is_ascii_digit()||(b'a'..=b'f').contains(&c))
         || (!prep && b.request.operation_id!=format!("names:club-name-conversion-{}",b.plan_hash)) || b.rows.is_empty() || b.rows.len()>4096{return Err("Exact signed conversion binding required".into());}
