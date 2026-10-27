@@ -3598,7 +3598,7 @@ mod tests {
         let busy = Account { id: "busy-duplicate".into(), principals: vec![other], version: 0, status: AccountStatus::Active };
         put_account(&busy); index_principal(other, &busy.id);
         let mut s = state();
-        s.roles.push(RoleGrant { account_id: busy.id.clone(), role: "member".into(), site_id: None, club_id: Some("c".into()), team_id: None });
+        s.roles.push(RoleGrant { account_id: busy.id.clone(), role: "member".into(), site_id: None, club: Some("c".into()), team: None });
         store(&s);
         assert_eq!(ensure_account(other).unwrap(), busy.id);
         assert!(get_account(&busy.id).is_some());
