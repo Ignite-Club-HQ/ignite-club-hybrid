@@ -17,7 +17,7 @@ import { InviteFlowProgress, getInviteFlowContext, clearInviteFlowContext } from
 import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 import { resolveKeyboardCssHeight } from "@/lib/keyboardCssHeight";
-import { isIcpAuthAvailable, useIcpAuthScreen } from "@/live/authBackendMode";
+import { isAuthChoiceOverrideOrigin, isIcpAuthAvailable, useIcpAuthScreen } from "@/live/authBackendMode";
 import { GOOGLE_SIGN_IN_ENABLED } from "@/lib/authProviderFlags";
 import { describeIcpSignInError } from "@/lib/internetIdentitySignInHelp";
 import { IcpSignInScreen } from "@/components/IcpSignInScreen";
@@ -148,7 +148,11 @@ export default function AuthPage() {
   // the Internet Identity screen and re-cache the hint on sign-in. Only
   // honoured when canisters are actually configured.
   const authParam = new URLSearchParams(window.location.search).get("auth");
-  const forceIcpAuth = authParam === "icp" && isIcpAuthAvailable();
+  // Must match the app's sign-in system picker (readAuthChoice): showing the
+  // passkey screen where the override is not honoured ran email/Google
+  // sign-in behind it and bounced straight back to this page.
+  const icpOverrideAllowed = isIcpAuthAvailable() && isAuthChoiceOverrideOrigin();
+  const forceIcpAuth = authParam === "icp" && icpOverrideAllowed;
   // `?auth=email` is the opposite hatch: show the email/Google screen even
   // when routing would pick Internet Identity (e.g. on the on-chain copy of
   // the app, where a single ICP-pinned club otherwise decides for every new
@@ -1106,7 +1110,7 @@ export default function AuthPage() {
                       but the cached hint was lost, the screen defaults to
                       email — offer a way back to the Internet Identity
                       screen. Only shown when canisters are configured. */}
-                  {isIcpAuthAvailable() && (
+                  {icpOverrideAllowed && (
                     <button
                       type="button"
                       className="w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline pt-1"
