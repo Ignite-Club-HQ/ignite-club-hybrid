@@ -7,6 +7,7 @@ import {loadOperatorIdentity} from '../src/live/operatorTransport';
 import {idlFactory} from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
 import {deliverNameApproval,verifyAdmissionArtifact} from '../../scripts/private-name-approval-delivery.mjs';
 import {createHash} from 'node:crypto';
+import {verifyNameApprovalGithubSetup} from '../../scripts/private-name-github-protection.mjs';
 
 const env=process.env;
 const required=(name:string)=>{const value=env[name];if(!value)throw Error(`${name} is required`);return value;};
@@ -21,9 +22,7 @@ if(!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/.test(branch) || branch.includes('..'))
 const action=required('ACTION');
 if(!['deliver','reconcile'].includes(action) || required('CONFIRMATION').trim()!=='DELIVER SIGNED NAME APPROVAL ONLY')throw Error('Delivery-only confirmation required');
 const identityId=Principal.fromText(required('IDENTITY_ACCESS_CANISTER')).toText();
-const operatorIdentity=loadOperatorIdentity(required('OPERATOR_PEM_PATH'));
-const operator=operatorIdentity.getPrincipal().toText();
-if(operator!=='vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae')throw Error('Existing deployment governor required');
+const operator='vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae';
 // Mapping is source-pinned and may never be overridden to an arbitrary target.
 const ids=JSON.parse(readFileSync(new URL('../../deploy/mainnet/.icp/data/mappings/ic.ids.json',import.meta.url),'utf8'));
 if(ids.identity_access!==identityId)throw Error('Approval destination differs from checked mainnet mapping');
@@ -39,12 +38,15 @@ function content(file:any,max:number){
   const bytes=Buffer.from(file.content,'base64');if(bytes.length!==file.size)throw Error('Committed artifact length mismatch');
   const sha=createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');if(file.sha!==sha)throw Error('Committed artifact byte readback mismatch');return bytes;
 }
-if((await github('')).private!==true)throw Error('Signed private-name artifacts require a private repository');
+const setup=await verifyNameApprovalGithubSetup({repository:repo,sourceCommit:required('PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_COMMIT'),sourceRef:required('PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_REF'),receiptBranch:branch,reviewerId:Number(required('PRIVATE_NAME_APPROVAL_REVIEWER_ID'))},{read:(path:string)=>github(path)});
+if(!setup.deliveryReady)throw Error(setup.blocker); // never load a governor for unverified storage
 const artifact=content(await github(`contents/${artifactPath}?ref=${artifactCommit}`),1500000);
 const verifiedArtifact=verifyAdmissionArtifact(artifact,binding); // before agent or any canister operation
 await github(`git/ref/heads/${branch}`); // require a pre-provisioned receipts branch
 const protection=await github(`branches/${encodeURIComponent(branch)}/protection`);
 if(protection.enforce_admins?.enabled!==true || protection.allow_force_pushes?.enabled!==false || protection.allow_deletions?.enabled!==false)throw Error('Receipt branch must enforce administrator protection and prohibit rewinds/deletion');
+const operatorIdentity=loadOperatorIdentity(required('OPERATOR_PEM_PATH'));
+if(operatorIdentity.getPrincipal().toText()!==operator)throw Error('Existing deployment governor required');
 const agent=await HttpAgent.create({host:'https://icp-api.io',identity:operatorIdentity}); // platform root key only
 const actor=Actor.createActor(idlFactory,{agent,canisterId:identityId}) as any;
 const ok=(r:any)=>{if(!r || !('Ok'in r) || 'Err'in r)throw Error('Approval canister refused; blocker remains locked');return r.Ok;};
