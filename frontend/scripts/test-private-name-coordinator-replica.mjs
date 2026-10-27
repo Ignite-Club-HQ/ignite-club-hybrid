@@ -213,8 +213,8 @@ try {
   // Full saved-plan execution starts a FRESH real coordinator operation.
   // Lose a reply after a real club ciphertext commit, close the local handle,
   // reopen the immutable artifact/receipts and recover without a repeated write.
-  let held=false,journal;
-  const lock={enter:async()=>{held=true;return true;},assertHeld:async()=>held,complete:async()=>{held=false;}};
+  let lockHeld=false,journal;
+  const lock={enter:async()=>{lockHeld=true;return true;},assertHeld:async()=>lockHeld,complete:async()=>{lockHeld=false;}};
   const openJournal=()=>openPreparedExecutionJournal(join(directory,'receipts'),{artifact,expectedHash:artifact.hash,assertHeld:()=>harnessExclusive});
   journal=openJournal();
   const originalPii=piiBySink.get(sink0pre.canisterId.toText());const writeClub=originalPii.writeClub;
@@ -232,12 +232,12 @@ try {
   try {
     await assert.rejects(executePreparedPrivateNamePlan(request,deps),/Injected lost committed club reply/);
     const operationId=`club-name-conversion-${artifact.hash}`;
-    assert.equal((await deps.coordinator.read(operationId)).phase,'Writing');assert.equal(held,true);
+    assert.equal((await deps.coordinator.read(operationId)).phase,'Writing');assert.equal(lockHeld,true);
     journal.close();const savedBody=readPrivateNameArtifact(join(directory,'plan'),artifact.hash);
     assert.deepEqual(savedBody,artifact.body);journal=openJournal();deps.journal=journal;
     request.approval={action:'recover',plan:artifact.hash,approvalScope:'names',confirmation:CONFIRM_RECOVER};
     const report=await executePreparedPrivateNamePlan(request,deps);
-    assert.equal(report.phase,'Done');assert.equal(report.converted,2);assert.equal(attempts,4);assert.equal(held,false);
+    assert.equal(report.phase,'Done');assert.equal(report.converted,2);assert.equal(attempts,4);assert.equal(lockHeld,false);
     const finalProfiles=await profileAdapter.listProfiles();assert.ok(finalProfiles.every(p=>p.display_name.startsWith('pii-display-name:v1:')));
     // Real original-key SDK decryption verifies each saved plaintext; club
     // ciphertext is byte-verified by the driver before any reference publishes.
