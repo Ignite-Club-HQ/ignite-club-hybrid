@@ -40,7 +40,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Scaling: separate cutover; reject partial batches; distinguish client/callback loss. Bind deployment/revision/HTTPS/network/subnets/account; gate extra subnets. Recovery: exact inventory, stop stores before authority, full restore, approved authority-first resume. Persist locked intent/acks; replay interruptions, retain locks on disk failure. Raw hashes cannot prove decoded ledgers. Why: prevent routing/data mismatch.
 - messaging owns photo timers; notification owns audiences. Vault progress uses pending mutations; denied rosters throw; season placements use membership routing. Why: preserve errors/export authorization.
 
-- OQL: bounded read-only, allowlisted fields; authorize before filtering/paging/counts; no self-calls.
 - ICP invites use public-source previews and atomic owning-group family receipts, never Supabase; child fields stay encrypted in PII. Why: bearer location grants no access; retries cannot duplicate children.
 - Media moves require operator-authenticated registries, journaled fences and bounded consensus pages. Policy 2026-10-19: encrypted-media clubs stay put; no re-encryption or reconciliation bypass. Place new clubs into groups. Why: photo keys belong to the creating group.
 - Router-only deploy upgrades the pinned mainnet router: no creation, rewiring or automatic fuel conversion. Why: approval-counter repairs must preserve club services/media keys.
@@ -81,4 +80,3 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Private names use rehearsal-only original-PII audiences and synchronous session retirement; generic caches never decrypt references and generation-fence late results. Why: chat IDs and retired contexts cannot authorize disclosure. Read frontend/AGENTS.md and backend/identity_access/AGENTS.md.
 
 
-- Whole-authority private-name writer coordination uses backend/shared writer gates and identity-owned immutable phase journals; topology remains closed and production activation is forbidden until trapped-callback recovery and actual complete-inventory orchestration pass. Why: sink-only receipts and anonymous abandoned counts cannot prove safe recoverable revocation.
