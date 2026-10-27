@@ -1,4 +1,6 @@
-import {test} from 'node:test';
+import {test,mock} from 'node:test';
+import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {mkdtempSync,rmSync,readFileSync,writeFileSync,appendFileSync,statSync,symlinkSync,truncateSync,mkdirSync} from 'node:fs';
@@ -29,6 +31,19 @@ test('missing parent is not automatically created; provisioned nested directorie
   assert.throws(open,/ENOENT/);assert.throws(()=>statSync(parent),/ENOENT/);
   mkdirSync(parent,{recursive:true,mode:0o700});let j=open();j.put('original:a1',s.entry);j.close();
   j=open();assert.deepEqual(j.get('original:a1'),s.entry);j.close();
+});
+test('existing-file open syncs file then directories; directory sync failure prevents usable recovery',async t=>{
+  const s=await fixture(t);const first=s.open();first.put('original:a1',s.entry);first.close();
+  const realSync=fs.fsyncSync,events=[];let fail=false;
+  mock.method(fs,'fsyncSync',fd=>{
+    const kind=fs.fstatSync(fd).isDirectory()?'directory':'file';events.push(kind);
+    if(fail&&kind==='directory')throw Error('directory sync refused');
+    return realSync(fd);
+  });syncBuiltinESMExports();
+  try {
+    const j=s.open();j.close();assert.equal(events[0],'file');assert.equal(events.filter(e=>e==='directory').length>=2,true);
+    const before=readFileSync(s.path);fail=true;assert.throws(s.open,/directory sync refused/);assert.deepEqual(readFileSync(s.path),before);
+  } finally {mock.restoreAll();syncBuiltinESMExports();}
 });
 test('lost lock prevents persistence and poisons the handle',async t=>{
   const s=await fixture(t),j=s.open();const before=readFileSync(s.path);s.lock.held=false;
