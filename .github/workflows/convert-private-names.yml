@@ -1,0 +1,51 @@
+name: Convert private names (protected)
+
+# Converts readable identity display names to encrypted PII references.
+# check is read-only; convert/recover require APPROVAL_SCOPE=names, the exact
+# plan hash from the check run, and typed confirmation. Runs the coordinated
+# writer window so no access change can race the conversion.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: check (read-only plan), convert, or recover
+        required: true
+        type: choice
+        options: [check, convert, recover]
+      plan:
+        description: 64-char plan hash from the check run (convert/recover only)
+        required: false
+      confirmation:
+        description: Type CONVERT PRIVATE NAMES or RECOVER PRIVATE NAME CONVERSION
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: convert-private-names
+  cancel-in-progress: false
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - name: Run conversion action
+        env:
+          ACTION: ${{ inputs.action }}
+          PLAN: ${{ inputs.plan }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          APPROVAL_SCOPE: names
+          MIGRATION_OWNER: ${{ vars.MIGRATION_OWNER }}
+          DEPLOY_IDENTITY_PEM: ${{ secrets.DEPLOY_IDENTITY_PEM }}
+          IDENTITY_ACCESS_CANISTER: ${{ vars.IDENTITY_ACCESS_CANISTER }}
+          PII_ACCESS_CONTROL_CANISTER: ${{ vars.PII_ACCESS_CONTROL_CANISTER }}
+        run: node scripts/convert-private-names.mjs
