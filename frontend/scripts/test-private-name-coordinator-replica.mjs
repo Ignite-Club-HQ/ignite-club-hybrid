@@ -155,7 +155,8 @@ try {
     await denied(() => g.pii_access_control.actor.open_private_name_writer_window(w.request));
   }
   // A later operation is a fresh generation, not a replay.
-  const next = ok(await actor.begin_private_name_write_window('second-op', pinnedRevision));
+  // The mid-Opening upgrade bumped removal history once through post_upgrade.
+  const next = ok(await actor.begin_private_name_write_window('second-op', pinnedRevision + 1n));
   assert.equal(phaseOf(next), 'Fencing');
   assert.ok(next.request.generation > w.request.generation);
   assert.notDeepEqual(next.request.inventory_digest, []);
