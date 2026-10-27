@@ -1338,6 +1338,8 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     }
   });
   const principal = session?.principal ?? null;
+  const [signingOut, setSigningOut] = useState(false);
+  const signingOutRef = useRef(false);
   // Real identity profile resolved from the identity_access canister
   // (Stage B of the ICP-only cutover). Starts from the per-principal
   // localStorage cache for instant render, then refreshes from the canister.
@@ -1588,6 +1590,15 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     // the member on a spinner with no way forward.
     resumingSignIn: iiResumePending && iiSignInReady,
     signOut: async () => {
+      if (signingOutRef.current) return;
+      signingOutRef.current = true;
+      setSigningOut(true);
+      // Retire mounted pages before clearing queries/delegations. Otherwise
+      // their still-enabled observers restart reads as the identity disappears.
+      ++icpProfileRequestRef.current;
+      navigateApp("/auth", { replace: true });
+      try {
+      await queryClient.cancelQueries();
       // Clear the Internet Identity session FIRST and only then drop the
       // app session: setSession(null) re-arms the silent resume effect, so
       // the stored delegation (and its block-resume flag) must already be
@@ -1620,10 +1631,19 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       clearIcpEntitlementsCache(principal ?? undefined);
       const { disconnectChatRealtime } = await import("@/live/wsRealtime");
       disconnectChatRealtime();
+      } finally {
+      localStorage.removeItem("ignite_icp_internet_identity_session");
+      queryClient.clear();
+      setIcpProfile(null);
+      setIcpProfileResolved(false);
       setSession(null);
+      signingOutRef.current = false;
+      setSigningOut(false);
+      }
     },
     refreshProfile: async () => {
-      if (!principal) return;
+      if (!principal || signingOutRef.current) return;
+      const requestId = icpProfileRequestRef.current;
       try {
         const [authMod, { fetchIcpIdentityProfile }] = await Promise.all([
           import("@/live/internetIdentityAuth"),
@@ -1637,17 +1657,18 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
           return;
         }
         const fetched = await withIcpTimeout(fetchIcpIdentityProfile(identity, principal), 20000);
+        if (signingOutRef.current || requestId !== icpProfileRequestRef.current) return;
         setIcpProfile(fetched);
         setIcpProfileResolved(true);
         setIcpProfileError(false);
       } catch (error) {
         console.warn("[Auth] ICP profile refresh failed:", error);
-        if (!getCachedIcpIdentityProfile(principal)?.displayName) setIcpProfileError(true);
+        if (!signingOutRef.current && requestId === icpProfileRequestRef.current && !getCachedIcpIdentityProfile(principal)?.displayName) setIcpProfileError(true);
       }
     },
     refreshUnreadCount: async () => {},
     clearUnreadCount: () => {},
     decrementUnreadCount: () => {},
   } satisfies AuthContextType;
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}>{signingOut ? null : children}</AuthContext.Provider>;
 }

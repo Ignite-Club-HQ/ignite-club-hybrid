@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: () => ({}) } }));
-vi.mock("./authBackendMode", () => ({ isSignedInWithEmail: () => true }));
+vi.mock("./authBackendMode", () => ({ isSignedInWithEmail: () => true, isIcpProviderMounted: () => false }));
 vi.mock("./userClubs", () => ({ getUserClubIds: () => ["club-icp"] }));
 vi.mock("./targetRegistry", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./targetRegistry")>()),
