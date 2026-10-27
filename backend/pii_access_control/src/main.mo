@@ -1,6 +1,7 @@
 import AccountAdmission "../../shared/AccountAdmission";
 import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
+import PrivateNameReleaseFence "../../shared/PrivateNameReleaseFence";
 import Error "mo:core/Error";
 import PrimMem "mo:⛔";
 /// PII Access Control Canister
@@ -602,11 +603,37 @@ persistent actor class Main(governorInit : Principal) = this {
   // choose the trusted identity verifier; no new permanent reader grants.
   transient let privateNamesRehearsal = Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") == ?"1";
   transient let privateNamesIdentity = Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_IDENTITY");
+  var private_name_release_intents : Map.Map<Text, PrivateNameReleaseFence.Intent>;
+  var private_name_release_epoch : Nat;
   func privateNameVerifier() : ?Principal {
     if (not privateNamesRehearsal) return null;
     switch (privateNamesIdentity) {
       case null null;
       case (?id) { let p = Principal.fromText(id); if (p.isAnonymous() or p == Principal.fromText("aaaaa-aa")) null else ?p }
+    }
+  };
+  transient let privateNameReleaseFence = PrivateNameReleaseFence.Gate(privateNamesRehearsal, privateNameVerifier(), private_name_release_intents, 4096);
+  // Sink acknowledgements certify only this receiver. The coordinator must
+  // fence the COMPLETE original-PII inventory before acknowledging revocation.
+  public shared ({ caller }) func prepare_private_name_release_fence(request : PrivateNameReleaseFence.Request) : async { #Ok : PrivateNameReleaseFence.Receipt; #Err : Text } {
+    switch (privateNameReleaseFence.prepare(caller, request)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(changed)) {
+        if (changed) private_name_release_epoch += 1;
+        privateNameReleaseFence.receipt(caller, request, Principal.fromActor(this), private_name_release_epoch)
+      }
+    }
+  };
+  public shared ({ caller }) func read_private_name_release_fence(request : PrivateNameReleaseFence.Request) : async { #Ok : PrivateNameReleaseFence.Receipt; #Err : Text } {
+    privateNameReleaseFence.receipt(caller, request, Principal.fromActor(this), private_name_release_epoch)
+  };
+  public shared ({ caller }) func complete_private_name_release_fence(request : PrivateNameReleaseFence.Request) : async { #Ok : PrivateNameReleaseFence.Receipt; #Err : Text } {
+    switch (privateNameReleaseFence.complete(caller, request)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(changed)) {
+        if (changed) private_name_release_epoch += 1;
+        privateNameReleaseFence.receipt(caller, request, Principal.fromActor(this), private_name_release_epoch)
+      }
     }
   };
   func authorizePrivateNames(caller : Principal, ids : [Text], scope : PrivateNameScope) : async [PrivateNameRow] {
@@ -631,6 +658,8 @@ persistent actor class Main(governorInit : Principal) = this {
 
   // Field is fixed: guardian/family/member scopes NEVER unlock email/media.
   public shared ({ caller }) func get_private_profile_names_batch(ids : [Text], scope : PrivateNameScope) : async { #Ok : [EncryptedPii]; #Err : Text } {
+    let releaseEpoch = private_name_release_epoch;
+    if (not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name release fenced or not configured");
     if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
     try {
       await admitAccount(caller); auth(caller);
@@ -638,7 +667,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let first = await authorizePrivateNames(caller, ids, scope);
       await admitAccount(caller);
       let final = await authorizePrivateNames(caller, ids, scope);
-      if (epoch != mediaAuthEpoch or first != final) return #Err("Private-name authorization changed");
+      if (epoch != mediaAuthEpoch or first != final or not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name authorization changed");
       var out : [EncryptedPii] = [];
       for (id in ids.values()) {
         let r = pii_records.find(func r = r.pii_id == id and r.field_id == "display_name") ?? return #Err("Private name not found");
@@ -649,6 +678,8 @@ persistent actor class Main(governorInit : Principal) = this {
     } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
   };
   public shared ({ caller }) func get_private_profile_name_vetkeys_batch(ids : [Text], scope : PrivateNameScope, transport : Blob) : async { #Ok : [?Blob]; #Err : Text } {
+    let releaseEpoch = private_name_release_epoch;
+    if (not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name release fenced or not configured");
     if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
     try {
       await admitAccount(caller); auth(caller);
@@ -658,13 +689,13 @@ persistent actor class Main(governorInit : Principal) = this {
       var out : [?Blob] = [];
       for (id in ids.values()) {
         let key = await ManagementCanister.vetKdDeriveKey(ibeIdentity(id, "display_name"), vetkdContext(), vetkdKeyId<system>(), transport);
-        if (epoch != mediaAuthEpoch) return #Err("Private-name authorization changed");
+        if (epoch != mediaAuthEpoch or not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name authorization changed");
         out := out.concat([?key]);
       };
       // One whole-batch closing authorization AFTER all derivations.
       await admitAccount(caller);
       let final = await authorizePrivateNames(caller, ids, scope);
-      if (epoch != mediaAuthEpoch or first != final) return #Err("Private-name authorization changed");
+      if (epoch != mediaAuthEpoch or first != final or not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name authorization changed");
       for (id in ids.values()) { log_audit(caller, id, "display_name", "private_name_vetkey", true, scope.kind) };
       #Ok(out)
     } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
