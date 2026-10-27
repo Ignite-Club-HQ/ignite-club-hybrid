@@ -1,4 +1,8 @@
 export const CLEANUP_RELEASE = 'IGNITE_PRIVATE_NAME_CLEANUP_RELEASE';
+export function requireCleanupGithubProtection(environment, branch) {
+  if(environment?.can_admins_bypass!==false || !environment.protection_rules?.some(r=>r.type==='required_reviewers'&&r.reviewers?.length>0) || !environment.deployment_branch_policy) throw Error('Cleanup deployment requires existing reviewed environment and restricted source branches');
+  if(branch?.enforce_admins?.enabled!==true || branch.allow_force_pushes?.enabled!==false || branch.allow_deletions?.enabled!==false || !branch.required_pull_request_reviews) throw Error('Cleanup source branch must be protected against unreviewed changes, force pushes and deletion');
+}
 const forbidden = name => name.includes('REHEARSAL') && (name.startsWith('IGNITE_PRIVATE_') || name === 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL');
 export function cleanupEnvironment(environment, service) {
   if (!['identity_access','club_domain','pii_access_control'].includes(service) || !Array.isArray(environment)) throw Error('Exact cleanup target required');

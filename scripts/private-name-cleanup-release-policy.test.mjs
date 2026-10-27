@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanupEnvironment, requireCleanupWiring, activateCleanupSettings } from './private-name-cleanup-release-policy.mjs';
+import { cleanupEnvironment, requireCleanupWiring, activateCleanupSettings, requireCleanupGithubProtection } from './private-name-cleanup-release-policy.mjs';
+test('cleanup release refuses unprotected source and deployment settings',()=>{
+  assert.throws(()=>requireCleanupGithubProtection({can_admins_bypass:true,protection_rules:[],deployment_branch_policy:null},{}));
+  const env={can_admins_bypass:false,protection_rules:[{type:'required_reviewers',reviewers:[{id:1}]}],deployment_branch_policy:{custom_branch_policies:true}};
+  const branch={enforce_admins:{enabled:true},allow_force_pushes:{enabled:false},allow_deletions:{enabled:false},required_pull_request_reviews:{required_approving_review_count:1}};
+  assert.doesNotThrow(()=>requireCleanupGithubProtection(env,branch));
+  assert.throws(()=>requireCleanupGithubProtection(env,{...branch,allow_force_pushes:{enabled:true}}));
+});
 test('cleanup approval preserves existing settings and enables only cleanup',()=>{
   const env=[{name:'VETKD_KEY_NAME',value:'key_1'},{name:'CUSTOM_SETTING',value:'preserve'}];
   for(const service of ['identity_access','club_domain','pii_access_control']) {

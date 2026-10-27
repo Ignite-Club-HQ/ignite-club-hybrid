@@ -72,6 +72,8 @@ jobs:
         if: inputs.scope == 'private_name_cleanup' && inputs.action != 'recover'
         run: node scripts/test-private-name-workflow.mjs
       - name: Restore existing governor only
+        # Cleanup must not restore signing credentials until live protections
+        # and real disposable acceptance have passed on this exact source.
         env:
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
         run: |
