@@ -7,4 +7,4 @@ assert not Scope.valid("giddy-goat", "u9", [{ u9 with is_active = false }], [{ i
 assert not Scope.valid("giddy-goat", "u9", [{ u9 with deleted_at_ms = ?1 }], [{ id = "u9"; club = "giddy-goat" }]);
 assert Scope.valid("giddy-goat", "u9", [], [{ id = "u9"; club = "giddy-goat" }]);
 assert not Scope.valid("giddy-goat", "u9", [], []);
-assert not Scope.valid("giddy-goat", "u9", [u9], [{ id = "u9"; club = "other-club" }]) == false;
+assert Scope.valid("giddy-goat", "u9", [u9], [{ id = "u9"; club = "other-club" }]);
