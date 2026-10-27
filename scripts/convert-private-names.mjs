@@ -287,6 +287,10 @@ async function pageAllProfiles(identity) {
 export async function main(env = process.env) {
   const req = { action: env.ACTION, plan: env.PLAN, confirmation: env.CONFIRMATION, approvalScope: env.APPROVAL_SCOPE };
   validateConversionRequest(req);
+  // The old runner rebuilds a plaintext-only plan and supplies no complete
+  // club inventory. Do not allow that path to masquerade as a club-key rollout.
+  // Offline artifact helpers do not yet supply authenticated release evidence.
+  if (req.action !== 'check') throw Error('Club-key live conversion is blocked: complete authenticated inventory, protected artifact transport and release acceptance are required');
   assertMigrationOwner(req.action === 'check' ? 'check' : 'migrate', env);
   const deps = await liveDeps(env);
   const journalPath = join(dirname(new URL(import.meta.url).pathname), '.private-name-conversion', 'journal.json');

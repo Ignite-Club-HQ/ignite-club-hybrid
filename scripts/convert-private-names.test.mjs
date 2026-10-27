@@ -10,6 +10,7 @@ import {
   encryptName, nameReference, conversionJournal, convertOneAccount, withConversionWindow,
   reconcileConversion, CONFIRM_CONVERT,
   encryptClubName, prepareClubNameCopies,
+  main,
 } from './convert-private-names.mjs';
 
 const SINK = 'rkp4c-7iaaa-aaaaa-aaaca-cai';
@@ -200,4 +201,10 @@ test('unknown shared-name writes stay locked and are never replayed', async () =
   await assert.rejects(prepareClubNameCopies(SINK, key, row, deps), /lost reply/);
   await assert.rejects(prepareClubNameCopies(SINK, key, row, deps), /Unknown club name/);
   assert.equal(attempts, 1);
+});
+
+test('legacy live runner cannot bypass missing club-key inventory and release evidence', async () => {
+  for (const action of ['convert', 'recover']) {
+    await assert.rejects(main({ACTION: action, APPROVAL_SCOPE: 'names', PLAN: 'a'.repeat(64), CONFIRMATION: action === 'convert' ? CONFIRM_CONVERT : 'RECOVER PRIVATE NAME CONVERSION'}), /Club-key live conversion is blocked/);
+  }
 });
