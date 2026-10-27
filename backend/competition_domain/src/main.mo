@@ -50,7 +50,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var removal_subjects : Map.Map<Principal, Text>;
   var removal_active : Map.Map<Principal, Nat>;
   transient let removalReceiver = RemovalReceiver.Gate(accountAdmissionEnabled, accountAdmissionAuthority, removal_intents, removal_subjects, removal_active);
-  include RemovalEndpoints(removalReceiver, Principal.fromActor(this), func _ = 0);
+  include RemovalEndpoints(removalReceiver, Principal.fromActor(this), func _ = 0, func () = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) Runtime.trap(reason) }, privateNameWriterGate.leave);
   func admitAccount(subject : Principal) : async () {
     if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
     let eligible = await accountAdmission.eligible(subject);
