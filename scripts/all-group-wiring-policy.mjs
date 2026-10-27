@@ -41,3 +41,9 @@ export function validateClubIdentityWiring(target, rows, identityCanisterId, lif
       && identities[0][1] === '' && lifecycleDisabled === true) return;
   throw Error('Club identity wiring differs; legacy absence is allowed only on pinned Group 1 with lifecycle and placement settings disabled');
 }
+export function approvedDisplayLinkRows(target, rows, identityCanisterId) {
+  if(target.groupId!=='g1'||target.name!=='club_domain'||target.canisterId!==LEGACY_CLUB||identityCanisterId!==IDENTITY)throw Error('Only the approved original Group 1 display link is allowed');
+  const matches=rows.filter(row=>row[0]==='identity_access');
+  if(matches.length!==1||matches[0][1]!=='')throw Error('Display link requires one empty original identity');
+  return rows.map(row=>row[0]==='identity_access'?[row[0],identityCanisterId]:[...row]);
+}

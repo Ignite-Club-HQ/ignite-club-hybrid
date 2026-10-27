@@ -22,8 +22,20 @@ test('display release requires secure saving and existing reciprocal identity, c
   assert.equal(result.find(r=>r.name===DISPLAY_RELEASE)?.value,'1');
   for(const r of env)assert.deepEqual(result.find(x=>x.name===r.name),r);
   assert.throws(()=>secureNameEnvironment(env.filter(r=>r.name!==SAVE_RELEASE),'pii_access_control','private_club_name_display',pins));
-  assert.throws(()=>secureNameEnvironment(env.filter(r=>r.name!=='IGNITE_PRIVATE_PROFILE_IDENTITY'),'pii_access_control','private_club_name_display',pins));
+  assert.throws(()=>secureNameEnvironment(env.map(r=>r.name==='IGNITE_PRIVATE_PROFILE_IDENTITY'?{...r,value:'foreign-cai'}:r),'pii_access_control','private_club_name_display',pins),/IGNITE_PRIVATE_PROFILE_IDENTITY/);
   assert.deepEqual(secureNameChangedSettings('private_club_name_display','club_domain'),[DISPLAY_RELEASE]);
+});
+test('display adds an absent verifier only to the identity already pinned by secure saving',()=>{
+  const env=[{name:'VETKD_KEY_NAME',value:'key_1'},{name:SAVE_RELEASE,value:'1'},{name:'IGNITE_SECURE_ADULT_NAME_IDENTITY',value:pins.identity},{name:'custom',value:'keep'}];
+  const result=secureNameEnvironment(env,'pii_access_control','private_club_name_display',pins);
+  assert.equal(result.find(r=>r.name==='IGNITE_PRIVATE_PROFILE_IDENTITY')?.value,pins.identity);
+  assert.equal(result.find(r=>r.name===DISPLAY_RELEASE)?.value,'1');
+  for(const r of env)assert.deepEqual(result.find(x=>x.name===r.name),r);
+  assert.equal(env.length,4);
+  assert.deepEqual(secureNameChangedSettings('private_club_name_display','pii_access_control'),[DISPLAY_RELEASE,'IGNITE_PRIVATE_PROFILE_IDENTITY']);
+  assert.throws(()=>secureNameEnvironment(env.filter(r=>r.name!=='IGNITE_SECURE_ADULT_NAME_IDENTITY'),'pii_access_control','private_club_name_display',pins));
+  assert.throws(()=>secureNameEnvironment(env.map(r=>r.name==='IGNITE_SECURE_ADULT_NAME_IDENTITY'?{...r,value:'foreign-cai'}:r),'pii_access_control','private_club_name_display',pins));
+  assert.equal(result.some(r=>r.name.includes('CLEANUP')||r.name.includes('REHEARSAL')),false);
 });
 test('live account admission release switch is preserved, not mistaken for a rehearsal',()=>{
   const env=[{name:'VETKD_KEY_NAME',value:'key_1'},{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'}];

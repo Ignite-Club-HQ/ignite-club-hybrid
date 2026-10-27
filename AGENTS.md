@@ -77,6 +77,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - ICP events atomically commit dates, duties and reminders under caller receipts; consensus supplies audiences, unknown relays stay locked.
 - Vault recovery reads owner-wide intents and exact decrypted hash markers before strict grants/store acknowledgement; unknown outcomes retain locks/cursors. Erasure scrubs shared ancestors without orphaning others. Cleanup needs age/allowance or erasure receipts; backups commit validated pages to writable sinks, retaining Blob fallback where unsupported. Why: prevent guessed recovery, data loss and partial exports.
-- Adult-name saves and exact-club displays have separate releases; other audiences/conversion stay gated. Read nested name rules. Cleanup releases enable only cleanup. Why: encrypted saving/display must not grant unrelated readers.
+- Name save/display/cleanup releases stay separate; read nested rules. Display initializes only the secure-save-pinned PII verifier; approved G1 linking journals exact whole-wiring readback. Why: permit only approved authority transitions, not other audiences or drift.
 
 

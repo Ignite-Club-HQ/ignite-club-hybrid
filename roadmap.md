@@ -1,3 +1,9 @@
+## Private-club display release check — 27 October 2026, 20:13 UTC
+- [x] Corrected missing PII display verifier initialization using only the existing secure-save identity pin; foreign identities still refuse, unrelated settings remain unchanged.
+- [x] Approved original G1 link now journals before/after whole-wiring hashes and acknowledges exact readback; final checks accept only that recorded transition, unknown outcomes stop without replay.
+- [x] All 94 workflow release regressions pass; preview build OK. GitHub run 40574189813 failed during read-only CHECK; upgrade/publication skipped, so no live changes occurred in that run.
+- [ ] Run private_club_name_display on the corrected synced main source with environment approval; real signed-in Giddy Goat acceptance waits on successful release and Internet Identity access.
+
 ## All-group release publication fix — 27 October 2026
 - [x] Diagnosed run 40474669083 (scope full_backend, 53m): on-chain upgrade completed (modulesComplete, all phases complete, signing material removed); only the evidence-publish step failed. Root cause: the workflow pushed the evidence commit straight to main and the Lovable two-way sync reverted main to f86b6f98, so the second verification saw the publication commit gone.
 - [x] Landed the release's three verified snapshot files (deploy/groups/g2/general-opening.json, deploy/mainnet/backend-release.json, frontend/src/live/generated/routingGates.ts) into the project byte-exact from the receipts journal, digest-checked against snapshotFilesHash 22340dfb; Lovable sync carries them to main.
