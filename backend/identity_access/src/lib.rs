@@ -29,6 +29,7 @@ mod membership_acceptance;
 mod admin_accounts;
 mod guardian_search;
 mod private_name_audience;
+mod private_name_coordination;
 mod private_profile_reference;
 mod club_profiles;
 use deletion_timing::Ticket;
@@ -2862,6 +2863,10 @@ fn set_account_status(account_id: String, status: AccountStatus) -> Outcome<Acco
     let state = state();
     admin_accounts::authorize(&state, caller)?;
     let mut account = get_account(&account_id).ok_or("Unknown account")?;
+    if private_name_coordination::pending(&account_id) { return Err("Private-name suspension recovery pending".into()); }
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") == Some("1") && status == AccountStatus::Suspended {
+        return Err("Use coordinated private-name suspension".into());
+    }
     if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)) { return Err("Deletion reservation pending".into()); }
     if status == AccountStatus::Suspended && account.principals.contains(&state.governor) {
         return Err("Governor account cannot be suspended".into());
