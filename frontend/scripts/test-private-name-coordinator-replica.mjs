@@ -148,7 +148,9 @@ try {
     payload: new Uint8Array(IDL.encode(signature.argTypes, ['go-live', w.sinks[0]])) });
   await pic.tick(3);
   await pic.startCanister({ canisterId: sink0.canisterId, sender: governor });
-  w = ok({ Ok: IDL.decode(signature.retTypes, (await pic.client.awaitCall(held)).body)[0] });
+  const heldReply = IDL.decode(signature.retTypes, (await pic.client.awaitCall(held)).body)[0];
+  console.log('held advance reply:', JSON.stringify(heldReply, (_, v) => typeof v === 'bigint' ? String(v) : v).slice(0, 400));
+  w = ok(heldReply);
   assert.equal(w.completed.length, 1);
   w = ok(await actor.advance_private_name_write_window('go-live', w.sinks[1]));
   assert.equal(phaseOf(w), 'Done');
