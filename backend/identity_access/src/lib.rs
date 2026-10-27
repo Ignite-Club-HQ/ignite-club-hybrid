@@ -1818,19 +1818,56 @@ fn ensure_account(principal: Principal) -> Outcome<String> {
     if account_count() >= MAX_ACCOUNTS as u64 {
         return Err("Account quota reached".into());
     }
-    let id = account_id(principal);
-    if let Some(existing) = get_account(&id) {
+    let derived = account_id(principal);
+    if let Some(mut existing) = get_account(&derived) {
         // Self-heal a lost principal index entry: the account derived from this
         // principal still lists it as a live alias, so the caller IS that
-        // account. Re-index instead of locking the owner out. Any account
-        // that does not list the caller stays refused.
+        // account. Re-index instead of locking the owner out.
         if existing.principals.contains(&principal) {
-            index_principal(principal, &id);
+            index_principal(principal, &derived);
             account_for(principal)?;
-            return Ok(id);
+            return Ok(derived);
         }
-        return Err("Account ID collision".into());
+        // Orphaned derived account (no sign-in IDs left, not erased, no
+        // pending lifecycle work): only this principal can ever own it.
+        if existing.principals.is_empty() && !account_is_erased(&derived)
+            && !link_lifecycle().pending.iter().any(|job| job.account_id == derived)
+            && !DELETION_TICKETS.with(|m| m.borrow().contains_key(&derived)) {
+            existing.principals.push(principal);
+            existing.version = existing.version.checked_add(1).ok_or("Account version exhausted")?;
+            put_account(&existing);
+            index_principal(principal, &derived);
+            account_for(principal)?;
+            return Ok(derived);
+        }
     }
+    // The derived slot belongs to another live account (the caller was
+    // unlinked from it). Never join it; give this unindexed, undenied
+    // principal its own fresh account under a salted deterministic id.
+    let id = if get_account(&derived).is_none() && !account_is_erased(&derived) { derived } else {
+        let mut chosen = None;
+        for n in 1u8..=16 {
+            let mut hasher = Sha256::new();
+            hasher.update(b"ignite-account-salt");
+            hasher.update([n]);
+            hasher.update(principal.as_slice());
+            let digest = hasher.finalize();
+            let hex: String = digest[..16].iter().map(|b| format!("{b:02x}")).collect();
+            let candidate = format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..]);
+            if let Some(found) = get_account(&candidate) {
+                if found.principals.contains(&principal) {
+                    index_principal(principal, &candidate);
+                    account_for(principal)?;
+                    return Ok(candidate);
+                }
+                continue;
+            }
+            if account_is_erased(&candidate) { continue; }
+            chosen = Some(candidate);
+            break;
+        }
+        chosen.ok_or("Account ID collision")?
+    };
     put_account(&Account {
         id: id.clone(),
         principals: vec![principal],
@@ -3479,7 +3516,21 @@ mod tests {
         let stranger = principal(171);
         let foreign = Account { id: account_id(stranger), principals: vec![principal(172)], version: 0, status: AccountStatus::Active };
         put_account(&foreign);
-        assert_eq!(ensure_account(stranger).unwrap_err(), "Account ID collision");
+        // Occupied by another live account: caller gets its own fresh account,
+        // never joins the foreign one, and repeat sign-ins are stable.
+        let fresh = ensure_account(stranger).unwrap();
+        assert_ne!(fresh, foreign.id);
+        assert_eq!(get_account(&foreign.id).unwrap().principals, vec![principal(172)]);
+        assert_eq!(ensure_account(stranger).unwrap(), fresh);
+        deindex_principal(stranger);
+        assert_eq!(ensure_account(stranger).unwrap(), fresh);
+        // Orphaned derived account (no logins left) is reclaimed by its owner.
+        let orphan_owner = principal(173);
+        let orphan_id = ensure_account(orphan_owner).unwrap();
+        let mut orphan = get_account(&orphan_id).unwrap();
+        orphan.principals.clear(); put_account(&orphan); deindex_principal(orphan_owner);
+        assert_eq!(ensure_account(orphan_owner).unwrap(), orphan_id);
+        assert_eq!(get_account(&orphan_id).unwrap().principals, vec![orphan_owner]);
     }
     #[test]
     fn removal_intent_survives_restored_accounts_and_cannot_complete_without_receivers() {
