@@ -9,6 +9,7 @@ import type { PrivateProfileAuthorityResolver } from "./privateProfileAuthority"
 import type { PrivateProfileAudience } from './privateProfileAudience';
 import { capturePrivateProfileSession } from './privateProfileSession';
 import { privateProfileSearchRehearsalEnabled } from './privateProfileSearchMode';
+import { isLoopbackRehearsalHost } from './accountReadAdapter.mjs';
 
 /** Dormant reference contract: publishing a reference requires the separately
  * approved identity/search cutover. The original key authority is immutable. */
@@ -124,8 +125,10 @@ export async function refreshPrivateOwnClubNames(
   ctx: FeatureBackendContext,
   name: string,
   discoverClubs: () => Promise<readonly string[]>,
+  assertSaveActive: () => void = () => {},
 ): Promise<void> {
   if (!privateProfileSearchRehearsalEnabled()) return;
+  if (!isLoopbackRehearsalHost(ctx.target.host)) throw new Error('Private name maintenance requires a loopback rehearsal target.');
   const value = name.trim();
   if (!value || new TextEncoder().encode(value).length > 512) throw new Error('A display name of at most 512 bytes is required.');
   const identity = ctx.identity;
@@ -133,6 +136,7 @@ export async function refreshPrivateOwnClubNames(
   const target = JSON.stringify(ctx.target);
   const sessionActive = capturePrivateProfileSession();
   const active = () => {
+    assertSaveActive();
     sessionActive();
     if (ctx.identity !== identity || identity.getPrincipal().toText() !== subject || JSON.stringify(ctx.target) !== target) throw new Error('Private name maintenance changed.');
   };
@@ -148,16 +152,16 @@ export async function refreshPrivateOwnClubNames(
   active();
   const original = originals[0];
   if (originals.length !== 1 || !original || original.pii_id !== subject || original.field_id !== FIELD || original.master_key_id !== 'vetkey-ibe-v1') throw new Error('Exact original private name required.');
-  const originalBytes = Array.from(original.ciphertext);
+  const originalBytes = Uint8Array.from(original.ciphertext);
   if (!originalBytes.length || originalBytes.length > 4096) throw new Error('Bounded original private name required.');
   const keys = await fetchPiiVetKeys(ctx, [subject], FIELD, { fresh: true, assertActive: active });
   active();
   const key = keys.get(subject);
   if (!key || new TextDecoder('utf-8', { fatal: true }).decode(IbeCiphertext.deserialize(Uint8Array.from(originalBytes)).decrypt(key)) !== value) throw new Error('Original private name changed.');
-  const saved: Array<{ club: string; ciphertext: number[] }> = [];
+  const saved: Array<{ club: string; ciphertext: Uint8Array }> = [];
   for (const club of clubs) {
     active();
-    const ciphertext = Array.from(await encryptPiiText(ctx, clubNamePiiId(club), FIELD, value));
+    const ciphertext = await encryptPiiText(ctx, clubNamePiiId(club), FIELD, value);
     active();
     // One attempt only. The existing receiver is create-only and compares
     // the original bytes in the same no-await segment as the commit.
@@ -166,6 +170,7 @@ export async function refreshPrivateOwnClubNames(
     saved.push({ club, ciphertext });
   }
   for (const { club, ciphertext } of saved) {
+    active();
     const result = await unwrapCandid(actor.read_private_club_name_lifecycle(identity.getPrincipal(), club, [originalBytes]), 'Verify refreshed private name');
     active();
     const row = result[0];
