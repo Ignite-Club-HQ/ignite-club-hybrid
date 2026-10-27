@@ -1616,7 +1616,7 @@ async fn read_guardian_profile_candidates(authority: Principal, child: String, c
 /// never admits a human. References must name this precise original PII caller.
 #[ic_cdk::update]
 async fn read_private_profile_name_authorization(viewer_principal: Principal, subjects: Vec<Principal>, scope: private_name_audience::Scope) -> Outcome<Vec<ProfileSearchResult>> {
-    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1") { return Err("Private name audiences are not released".into()); }
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1") && !(scope.kind == "club" && private_club_name_displays_released()) { return Err("Private name audiences are not released".into()); }
     private_name_audience::validate(viewer_principal, &subjects, &scope)?;
     let service = ic_cdk::api::msg_caller();
     if !service_authorities().contains(&service) { return Err("Configured private-name service required".into()); }
@@ -2029,6 +2029,12 @@ fn valid_display_name(value: &str) -> bool {
 fn secure_name_save_released() -> bool {
     #[cfg(target_arch = "wasm32")]
     { ic_cdk::api::env_var_name_exists("IGNITE_SECURE_ADULT_NAME_SAVE_RELEASE") && ic_cdk::api::env_var_value("IGNITE_SECURE_ADULT_NAME_SAVE_RELEASE") == "1" }
+    #[cfg(not(target_arch = "wasm32"))]
+    { false }
+}
+fn private_club_name_displays_released() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    { ic_cdk::api::env_var_name_exists("IGNITE_PRIVATE_CLUB_NAME_DISPLAY_RELEASE") && ic_cdk::api::env_var_value("IGNITE_PRIVATE_CLUB_NAME_DISPLAY_RELEASE") == "1" }
     #[cfg(not(target_arch = "wasm32"))]
     { false }
 }

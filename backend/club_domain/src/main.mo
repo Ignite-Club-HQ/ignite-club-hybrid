@@ -3744,7 +3744,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // Rehearsal-only identity-service delegation. This is an atomic bounded
   // membership observation, not a public roster or a new readable name index.
   public shared ({ caller }) func read_profile_membership_batch(requester : Principal, club_id : Text, subjects : [Principal], expected : ?Nat) : async { #Ok : ProfileMembership.Batch; #Err : Text } {
-    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1") return #Err("Private profile membership reads are not released");
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != ?"1" and Runtime.envVar<system>("IGNITE_PRIVATE_CLUB_NAME_DISPLAY_RELEASE") != ?"1") return #Err("Private profile membership reads are not released");
     let authority = identityAccessCanister;
     if (authority != ?caller or caller.isAnonymous()) return #Err("Configured identity authority required");
     switch (ProfileMembership.validate(requester, club_id, subjects)) { case (?message) return #Err(message); case null {} };
