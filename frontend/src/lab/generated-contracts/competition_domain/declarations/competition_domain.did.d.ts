@@ -204,6 +204,11 @@ export interface Main {
     { 'Ok' : RoleGrant } |
       { 'Err' : string }
   >,
+  'activate_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -359,6 +364,16 @@ export interface Main {
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
   'finish_email_job' : ActorMethod<
     [string, bigint, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'finish_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'freeze_private_name_preparation' : ActorMethod<
+    [Request],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -792,6 +807,11 @@ export interface Main {
   'read_private_admin_thread_participants' : ActorMethod<
     [Principal, string],
     { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
+  'read_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt__1 } |
       { 'Err' : string }
   >,
   'read_private_name_writer_window' : ActorMethod<

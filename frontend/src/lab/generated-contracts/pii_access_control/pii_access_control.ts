@@ -72,6 +72,13 @@ export interface PrivateNameScope {
     profile_revision: bigint;
 }
 export interface MainInterface {
+    activate_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     add_guardian_relationship(guardian: Principal, child_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -109,6 +116,20 @@ export interface MainInterface {
     export_club_snapshot(club: string): Promise<{
         __kind__: "Ok";
         Ok: Uint8Array;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    finish_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    freeze_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -263,6 +284,13 @@ export interface MainInterface {
             competition?: Principal;
             revision: bigint;
         };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt__1;
     } | {
         __kind__: "Err";
         Err: string;
@@ -450,6 +478,16 @@ export interface pii_access_controlInterface extends MainInterface {
 import type { AuditFilter as _AuditFilter, ClubMediaAuthority as _ClubMediaAuthority, EncryptedPii as _EncryptedPii, PiiDeleteResult as _PiiDeleteResult, Receipt as _Receipt, Receipt__1 as _Receipt__1, Receipt__2 as _Receipt__2 } from "./declarations/pii_access_control.did";
 export class Pii_access_control implements pii_access_controlInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
+    async activate_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.activate_private_name_preparation(arg0);
+        return from_candid_variant_n1(result);
+    }
     async add_guardian_relationship(arg0: Principal, arg1: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -511,6 +549,26 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.export_club_snapshot(arg0);
         return from_candid_variant_n6(result);
+    }
+    async finish_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.finish_private_name_preparation(arg0);
+        return from_candid_variant_n1(result);
+    }
+    async freeze_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.freeze_private_name_preparation(arg0);
+        return from_candid_variant_n1(result);
     }
     async get_club_media_vetkey(arg0: string, arg1: Uint8Array): Promise<{
         __kind__: "Ok";
@@ -743,6 +801,16 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.read_private_media_authority(arg0);
         return from_candid_variant_n20(result);
+    }
+    async read_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt__1;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_private_name_preparation(arg0);
+        return from_candid_variant_n22(result);
     }
     async read_private_name_release_fence(arg0: Request): Promise<{
         __kind__: "Ok";

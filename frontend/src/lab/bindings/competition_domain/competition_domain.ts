@@ -246,6 +246,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    activate_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     addBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -474,6 +481,20 @@ export interface MainInterface {
         Err: string;
     }>;
     finish_email_job(id: string, attempt: bigint, outcome: string, provider_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    finish_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    freeze_private_name_preparation(request: Request): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -1045,6 +1066,13 @@ export interface MainInterface {
     read_private_admin_thread_participants(requester: Principal, competition_id: string): Promise<{
         __kind__: "Ok";
         Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt__1;
     } | {
         __kind__: "Err";
         Err: string;
@@ -1621,6 +1649,16 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.accept_role_link(arg0);
         return from_candid_variant_n6(result);
     }
+    async activate_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.activate_private_name_preparation(arg0);
+        return from_candid_variant_n9(result);
+    }
     async addBulkAccessPrincipal(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1949,6 +1987,26 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.finish_email_job(arg0, arg1, arg2, arg3);
+        return from_candid_variant_n9(result);
+    }
+    async finish_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.finish_private_name_preparation(arg0);
+        return from_candid_variant_n9(result);
+    }
+    async freeze_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.freeze_private_name_preparation(arg0);
         return from_candid_variant_n9(result);
     }
     async get_chat_settings(arg0: string): Promise<{
@@ -2759,6 +2817,16 @@ export class Competition_domain implements competition_domainInterface {
     }> {
         const result = await this.actor.read_private_admin_thread_participants(arg0, arg1);
         return from_candid_variant_n82(result);
+    }
+    async read_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt__1;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_private_name_preparation(arg0);
+        return from_candid_variant_n115(result);
     }
     async read_private_name_writer_window(arg0: Request): Promise<{
         __kind__: "Ok";

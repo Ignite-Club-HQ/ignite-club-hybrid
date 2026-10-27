@@ -39,6 +39,11 @@ export interface EncryptedPii {
   'field_id' : string,
 }
 export interface Main {
+  'activate_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'add_guardian_relationship' : ActorMethod<
     [Principal, string],
     { 'Ok' : null } |
@@ -64,6 +69,16 @@ export interface Main {
   'export_club_snapshot' : ActorMethod<
     [string],
     { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
+  'finish_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'freeze_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'get_club_media_vetkey' : ActorMethod<
@@ -179,6 +194,11 @@ export interface Main {
           'revision' : bigint,
         }
       } |
+      { 'Err' : string }
+  >,
+  'read_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt__1 } |
       { 'Err' : string }
   >,
   'read_private_name_release_fence' : ActorMethod<

@@ -84,13 +84,13 @@ export interface ResidencyPolicy {
   'allowed_profiles' : Array<string>,
   'version' : bigint,
 }
-export type Result = { 'Ok' : [] | [Decision] } |
+export type Result = { 'Ok' : null } |
   { 'Err' : string };
-export type Result_1 = { 'Ok' : [] | [Operator] } |
+export type Result_1 = { 'Ok' : [] | [Decision] } |
   { 'Err' : string };
-export type Result_10 = { 'Ok' : Page } |
+export type Result_10 = { 'Ok' : AuditPage } |
   { 'Err' : string };
-export type Result_11 = { 'Ok' : null } |
+export type Result_11 = { 'Ok' : Page } |
   { 'Err' : string };
 export type Result_12 = { 'Ok' : WriterReceipt } |
   { 'Err' : string };
@@ -104,21 +104,21 @@ export type Result_16 = { 'Ok' : SiteAvailability } |
   { 'Err' : string };
 export type Result_17 = { 'Ok' : Target } |
   { 'Err' : string };
-export type Result_2 = { 'Ok' : [] | [Placement] } |
+export type Result_2 = { 'Ok' : [] | [Operator] } |
   { 'Err' : string };
-export type Result_3 = { 'Ok' : Policy } |
+export type Result_3 = { 'Ok' : [] | [Placement] } |
   { 'Err' : string };
-export type Result_4 = { 'Ok' : [] | [ResidencyAssignment] } |
+export type Result_4 = { 'Ok' : Policy } |
   { 'Err' : string };
-export type Result_5 = { 'Ok' : ResidencyPolicy } |
+export type Result_5 = { 'Ok' : [] | [ResidencyAssignment] } |
   { 'Err' : string };
-export type Result_6 = { 'Ok' : boolean } |
+export type Result_6 = { 'Ok' : ResidencyPolicy } |
   { 'Err' : string };
-export type Result_7 = { 'Ok' : [] | [Target] } |
+export type Result_7 = { 'Ok' : boolean } |
   { 'Err' : string };
-export type Result_8 = { 'Ok' : Operator } |
+export type Result_8 = { 'Ok' : [] | [Target] } |
   { 'Err' : string };
-export type Result_9 = { 'Ok' : AuditPage } |
+export type Result_9 = { 'Ok' : Operator } |
   { 'Err' : string };
 export interface SiteAvailability {
   'version' : bigint,
@@ -148,37 +148,41 @@ export interface WriterRequest {
   'operation_id' : string,
 }
 export interface _SERVICE {
+  'activate_private_name_preparation' : ActorMethod<[WriterRequest], Result>,
   /**
    * Public: remaining cycles (shown in admin settings).
    */
   'cycles_balance' : ActorMethod<[], bigint>,
+  'finish_private_name_preparation' : ActorMethod<[WriterRequest], Result>,
+  'freeze_private_name_preparation' : ActorMethod<[WriterRequest], Result>,
   'get_availability' : ActorMethod<[], Availability>,
-  'get_decision' : ActorMethod<[string], Result>,
-  'get_operator' : ActorMethod<[Principal], Result_1>,
-  'get_placement' : ActorMethod<[string], Result_2>,
-  'get_policy' : ActorMethod<[string], Result_3>,
-  'get_residency' : ActorMethod<[string], Result_4>,
-  'get_residency_policy' : ActorMethod<[string], Result_5>,
-  'get_site_availability' : ActorMethod<[string], Result_6>,
-  'get_target' : ActorMethod<[string], Result_7>,
-  'grant_operator' : ActorMethod<[Principal, Array<OperatorRole>], Result_8>,
-  'list_audit' : ActorMethod<[[] | [bigint], number], Result_9>,
-  'list_placements' : ActorMethod<[[] | [string], number], Result_10>,
+  'get_decision' : ActorMethod<[string], Result_1>,
+  'get_operator' : ActorMethod<[Principal], Result_2>,
+  'get_placement' : ActorMethod<[string], Result_3>,
+  'get_policy' : ActorMethod<[string], Result_4>,
+  'get_residency' : ActorMethod<[string], Result_5>,
+  'get_residency_policy' : ActorMethod<[string], Result_6>,
+  'get_site_availability' : ActorMethod<[string], Result_7>,
+  'get_target' : ActorMethod<[string], Result_8>,
+  'grant_operator' : ActorMethod<[Principal, Array<OperatorRole>], Result_9>,
+  'list_audit' : ActorMethod<[[] | [bigint], number], Result_10>,
+  'list_placements' : ActorMethod<[[] | [string], number], Result_11>,
   /**
    * Public: live memory reading for the admin health page.
    */
   'memory_stats' : ActorMethod<[], MemoryStats>,
-  'open_private_name_writer_window' : ActorMethod<[WriterRequest], Result_11>,
+  'open_private_name_writer_window' : ActorMethod<[WriterRequest], Result>,
+  'read_private_name_preparation' : ActorMethod<[WriterRequest], Result_12>,
   'read_private_name_writer_window' : ActorMethod<[WriterRequest], Result_12>,
-  'revoke_operator' : ActorMethod<[Principal], Result_11>,
-  'seal_private_name_writer_window' : ActorMethod<[WriterRequest], Result_11>,
+  'revoke_operator' : ActorMethod<[Principal], Result>,
+  'seal_private_name_writer_window' : ActorMethod<[WriterRequest], Result>,
   'set_availability' : ActorMethod<[BackendKind, boolean, bigint], Result_13>,
   'set_placement' : ActorMethod<[string, string, Backend, bigint], Result_14>,
-  'set_policy' : ActorMethod<[string, boolean, boolean, bigint], Result_3>,
+  'set_policy' : ActorMethod<[string, boolean, boolean, bigint], Result_4>,
   'set_residency' : ActorMethod<[string, string, string, bigint], Result_15>,
   'set_residency_policy' : ActorMethod<
     [string, Array<string>, bigint],
-    Result_5
+    Result_6
   >,
   'set_site_availability' : ActorMethod<[string, boolean, bigint], Result_16>,
   'set_state' : ActorMethod<[string, PlacementState, bigint], Result_14>,

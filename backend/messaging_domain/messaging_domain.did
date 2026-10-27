@@ -239,6 +239,11 @@ type Message =
  };
 type Main = 
  service {
+   activate_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    addBulkAccessPrincipal: ("principal": principal) ->
     (variant {
        Err: text;
@@ -365,10 +370,20 @@ type Main =
                                          Err: text;
                                          Ok: LinkPreview;
                                        });
+   finish_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    forward_message: (message_id: text, to_conversation_id: text) ->
     (variant {
        Err: text;
        Ok: Message;
+     });
+   freeze_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    generate_chat_recap: (scope_id: text, since_ms: opt nat64) ->
     (variant {
@@ -849,6 +864,11 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
    read_private_name_writer_window: (request: Request) ->
     (variant {
        Err: text;

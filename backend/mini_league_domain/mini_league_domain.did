@@ -164,6 +164,11 @@ type MiniLeague =
  };
 type Main = 
  service {
+   activate_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    add_admin: (mini_league_id: text, user_id: principal) ->
     (variant {
        Err: text;
@@ -262,6 +267,16 @@ type Main =
      }) query;
    filter_visible_leagues: (viewer: principal, candidates: vec MiniLeague) ->
     (vec MiniLeague) composite_query;
+   finish_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   freeze_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    get_availability: (session_id: text, player_id: text) ->
     (variant {
        Err: text;
@@ -551,6 +566,11 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
    read_private_name_writer_window: (request: Request) ->
     (variant {
        Err: text;

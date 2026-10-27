@@ -220,6 +220,13 @@ export interface PinnedMessage {
     message_id: string;
 }
 export interface MainInterface {
+    activate_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     addBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -394,9 +401,23 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    finish_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     forward_message(message_id: string, to_conversation_id: string): Promise<{
         __kind__: "Ok";
         Ok: Message;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    freeze_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -1024,6 +1045,13 @@ export interface MainInterface {
         Err: string;
     }>;
     read_group_opening_configuration(): Promise<Array<[string, string]>>;
+    read_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt__1;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_private_name_writer_window(request: Request): Promise<{
         __kind__: "Ok";
         Ok: Receipt__1;
@@ -1664,6 +1692,16 @@ export interface messaging_domainInterface extends MainInterface {
 import type { Attachment as _Attachment, AttachmentMetadata as _AttachmentMetadata, Batch as _Batch, BroadcastResult as _BroadcastResult, CanisterOutputCertifiedMessages as _CanisterOutputCertifiedMessages, CanisterWsCloseResult as _CanisterWsCloseResult, CanisterWsGetMessagesResult as _CanisterWsGetMessagesResult, CanisterWsMessageResult as _CanisterWsMessageResult, CanisterWsOpenResult as _CanisterWsOpenResult, ChatPhotoReminderResult as _ChatPhotoReminderResult, ChatPhotoReminderRunResult as _ChatPhotoReminderRunResult, ClubDmSettings as _ClubDmSettings, ClubMembership as _ClubMembership, ClubUnreadSummary as _ClubUnreadSummary, CompetitionAdmin as _CompetitionAdmin, ContentReport as _ContentReport, Conversation as _Conversation, DmLink as _DmLink, ForwardRecord as _ForwardRecord, GroupMetadata as _GroupMetadata, GroupRole as _GroupRole, GroupSummary as _GroupSummary, JoinRequest as _JoinRequest, LinkPreview as _LinkPreview, Message as _Message, MessagePage as _MessagePage, MessageWithReactions as _MessageWithReactions, MutePreference as _MutePreference, OnlineUser as _OnlineUser, Page as _Page, PinnedMessage as _PinnedMessage, Poll as _Poll, PollResults as _PollResults, PollVote as _PollVote, Reaction as _Reaction, ReactionSummary as _ReactionSummary, RecapConfig as _RecapConfig, Receipt as _Receipt, Receipt__1 as _Receipt__1, Receipt__2 as _Receipt__2, RecentConversation as _RecentConversation, Reference as _Reference, RoleGrant as _RoleGrant, ScheduledMessage as _ScheduledMessage, Settings as _Settings, State as _State, TypingPing as _TypingPing, TypingUser as _TypingUser, Unread as _Unread, UserMessagingSettings as _UserMessagingSettings, WsAppMessage as _WsAppMessage } from "./declarations/messaging_domain.did";
 export class Messaging_domain implements messaging_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
+    async activate_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.activate_private_name_preparation(arg0);
+        return from_candid_variant_n1(result);
+    }
     async addBulkAccessPrincipal(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1916,6 +1954,16 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.fetch_link_preview(arg0);
         return from_candid_variant_n49(result);
     }
+    async finish_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.finish_private_name_preparation(arg0);
+        return from_candid_variant_n1(result);
+    }
     async forward_message(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
         Ok: Message;
@@ -1925,6 +1973,16 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.forward_message(arg0, arg1);
         return from_candid_variant_n17(result);
+    }
+    async freeze_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.freeze_private_name_preparation(arg0);
+        return from_candid_variant_n1(result);
     }
     async generate_chat_recap(arg0: string, arg1: bigint | null): Promise<{
         __kind__: "Ok";
@@ -2856,6 +2914,16 @@ export class Messaging_domain implements messaging_domainInterface {
     async read_group_opening_configuration(): Promise<Array<[string, string]>> {
         const result = await this.actor.read_group_opening_configuration();
         return result;
+    }
+    async read_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt__1;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_private_name_preparation(arg0);
+        return from_candid_variant_n117(result);
     }
     async read_private_name_writer_window(arg0: Request): Promise<{
         __kind__: "Ok";
