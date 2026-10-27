@@ -303,11 +303,17 @@ export default function EditProfilePage() {
         // Mirror the display name into pii_access_control (pii_id = caller
         // principal text, field_id = "display_name", owner = the user).
         // Strict readback, still no private-reference publication or cutover.
-        const [{ getActiveIcpTarget }, { preparePrivateOwnProfileName }] = await Promise.all([
+        const [{ getActiveIcpTarget }, { preparePrivateOwnProfileName, refreshPrivateOwnClubNames }] = await Promise.all([
           import("@/live/targetRegistry"),
           import("@/live/privateProfileNames"),
         ]);
-        await preparePrivateOwnProfileName({ identity, target: getActiveIcpTarget() }, displayName.trim());
+        const nameContext = { identity, target: getActiveIcpTarget() };
+        await preparePrivateOwnProfileName(nameContext, displayName.trim());
+        await refreshPrivateOwnClubNames(nameContext, displayName.trim(), async () => {
+          const { getLiveMyRoleGrants } = await import('@/live/features/membership');
+          const grants = await getLiveMyRoleGrants(nameContext);
+          return grants.flatMap(grant => grant.club ?? []);
+        });
         // Optional contact email (own PII record, upsert semantics). Powers
         // competition welcome emails for existing members in ICP mode.
         // An unavailable initial email read is not permission to erase it.
