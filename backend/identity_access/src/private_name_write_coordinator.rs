@@ -181,7 +181,11 @@ async fn advance_private_name_write_window(operation_id:String,target:Principal)
         WritePhase::Fencing|WritePhase::Releasing=>{
             if !w.sinks.contains(&target){return Err("Exact original PII sink required".into());}
             let method=if phase==WritePhase::Fencing{"prepare_private_name_release_fence"}else{"complete_private_name_release_fence"};
-            let _=ic_cdk::call::Call::bounded_wait(target,method).with_arg(&w.request).await;
+            let mutation=ic_cdk::call::Call::bounded_wait(target,method).with_arg(&w.request).await;
+            if prepared && phase==WritePhase::Opening {
+                let reply=mutation.map_err(|_|"Preparation activation outcome unknown; retain Opening")?;
+                let result:Outcome<()>=reply.candid().map_err(|_|"Invalid preparation activation reply; retain Opening")?;result?;
+            }
             let reply=ic_cdk::call::Call::bounded_wait(target,"read_private_name_release_fence").with_arg(&w.request).await.map_err(|_|"Private-name sink outcome unknown; retain window")?;
             let receipt:Outcome<SinkReceipt>=reply.candid().map_err(|_|"Invalid private-name sink receipt")?;
             access()?;let mut current=get(&operation_id)?;
