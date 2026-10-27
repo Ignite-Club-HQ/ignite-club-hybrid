@@ -73,12 +73,18 @@ jobs:
         run: node scripts/test-private-name-workflow.mjs
       - name: Verify existing private-name source and deployment protections
         if: (inputs.scope == 'private_name_cleanup' || inputs.scope == 'secure_name_save' || inputs.scope == 'private_club_name_display')
+        # The built-in workflow token cannot read branch protection settings
+        # (GitHub requires Administration: read). Use a dedicated read-only
+        # token; the protection check itself is unchanged.
+        env:
+          PROTECTION_READ_TOKEN: ${{ secrets.PROTECTION_READ_TOKEN }}
         run: |
           node --input-type=module <<'JS'
           import {requireCleanupGithubProtection} from './scripts/private-name-cleanup-release-policy.mjs';
+          if(!process.env.PROTECTION_READ_TOKEN)throw Error('Add repository secret PROTECTION_READ_TOKEN (fine-grained token, this repository only, Administration: read-only); no governor restored');
           const read=async path=>{
-            const r=await fetch('https://api.github.com/repos/'+process.env.GITHUB_REPOSITORY+path,{headers:{Authorization:'Bearer '+process.env.GH_TOKEN,Accept:'application/vnd.github+json'}});
-            if(!r.ok)throw Error('Cleanup protection read refused: '+r.status+'; no governor restored');
+            const r=await fetch('https://api.github.com/repos/'+process.env.GITHUB_REPOSITORY+path,{headers:{Authorization:'Bearer '+process.env.PROTECTION_READ_TOKEN,Accept:'application/vnd.github+json'}});
+            if(!r.ok)throw Error('Cleanup protection read refused: '+r.status+' (check PROTECTION_READ_TOKEN has Administration: read on this repository); no governor restored');
             return r.json();
           };
           if(!process.env.GITHUB_REF?.startsWith('refs/heads/'))throw Error('Protected branch required');
