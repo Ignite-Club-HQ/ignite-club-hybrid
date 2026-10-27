@@ -56,7 +56,6 @@ Disposable two-group acceptance passed: forged/missing approval, normal profile/
 
 This does not supply production pre-inventory drain, complete account/original-authority evidence, protected human-event signer/remote transport, management exclusion or cryptographic preflight. Live conversion stays blocked and nothing was deployed. Ordinary windows elsewhere in this historical document refer to non-conversion rehearsal windows, not the newly reserved exclusive mode.
 
-## Privacy and cost limitations
 ## Signed approval delivery — built, not activated
 
 The manual **Deliver signed name approval (no conversion)** workflow now delivers an original `ignite-private-name-admission-v1` exact-row signature from a SHA-256-pinned file at an exact private-repository commit. It uses the existing governor identity and fixed checked mainnet mapping, independently verifies the owner's public-key signature, verifies the pinned running canister module/sole governor controller, submits only `approve_private_name_conversion`, then checks a consensus receipt digest covering the entire signed body and signature. It never begins a window, changes names, advances a conversion, deploys, signs, or releases locks.
