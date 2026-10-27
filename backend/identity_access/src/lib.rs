@@ -2053,7 +2053,7 @@ async fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcom
 
     let caller = ic_cdk::api::msg_caller();
     let account = account_for_write(caller)?;
-    let account_id = account.id;
+    let account_id = account.id.clone();
     let valid_name = if display_name.starts_with("pii-display-name:") {
         private_profile_reference::valid(&display_name, &account.principals)
     } else { valid_display_name(&display_name) };

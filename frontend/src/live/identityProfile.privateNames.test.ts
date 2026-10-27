@@ -3,10 +3,10 @@ import { Principal } from '@icp-sdk/core/principal';
 import type { Identity } from '@icp-sdk/core/agent';
 import type { IcpTargetConfig } from './targetRegistry';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), dispose: vi.fn(), cache: vi.fn(), rehearsal: vi.fn(), prepare: vi.fn(), refresh: vi.fn(), hydrate: vi.fn(), grants: vi.fn(), evidence: vi.fn(), resolve: vi.fn(), confirm: vi.fn() }));
+const mocks = vi.hoisted(() => ({ authority: vi.fn(), get: vi.fn(), set: vi.fn(), dispose: vi.fn(), cache: vi.fn(), rehearsal: vi.fn(), prepare: vi.fn(), refresh: vi.fn(), hydrate: vi.fn(), grants: vi.fn(), evidence: vi.fn(), resolve: vi.fn(), confirm: vi.fn() }));
 vi.mock('./privateProfileEvidence', () => ({ readPrivateProfileEvidence: mocks.evidence }));
 vi.mock('./privateProfileAuthority', () => ({ createLivePrivateProfileAuthorityResolver: () => mocks.resolve }));
-vi.mock('./identityAccess', () => ({ isLiveIdentityAccessConfigured: () => true, connectLiveIdentityAccessClientWithIdentity: async () => ({ client: { getProfile: mocks.get, setProfile: mocks.set, dispose: mocks.dispose } }) }));
+vi.mock('./identityAccess', () => ({ isLiveIdentityAccessConfigured: () => true, connectLiveIdentityAccessClientWithIdentity: async () => ({ client: { readSecureNameAuthority: mocks.authority, getProfile: mocks.get, setProfile: mocks.set, dispose: mocks.dispose } }) }));
 vi.mock('./identityProfileCache', () => ({ cacheIcpIdentityProfile: mocks.cache, getCachedIcpIdentityProfile: () => null }));
 vi.mock('./privateProfileSearchMode', () => ({ privateProfileSearchRehearsalEnabled: mocks.rehearsal }));
 vi.mock('./privateProfileNames', () => ({ preparePrivateOwnProfileName: mocks.prepare, refreshPrivateOwnClubNames: mocks.refresh, hydratePrivateProfileNames: mocks.hydrate, privateProfileNameReference: (authority: string, subject: string) => `pii-display-name:v1:${authority}:${subject}` }));
@@ -21,6 +21,7 @@ const target = { alias: 'test', host: 'http://localhost:4943', canisterIds: { pi
 const reference = `pii-display-name:v1:${sink}:${subject}`;
 beforeEach(() => {
   vi.resetAllMocks(); mocks.rehearsal.mockReturnValue(true);
+  mocks.authority.mockResolvedValue(Principal.fromText(sink));
   mocks.get.mockResolvedValue({ display_name: reference }); mocks.hydrate.mockResolvedValue([{ display_name: 'Before' }]);
   mocks.prepare.mockResolvedValue(reference); mocks.grants.mockResolvedValue([{ club: ['club-1'] }]);
   mocks.refresh.mockImplementation(async (_ctx, _name, discover) => { await discover(); });
@@ -46,10 +47,31 @@ it('foreign original authority refuses before any profile or private-name mutati
   await expect(saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target)).rejects.toThrow('authority');
   expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.set).not.toHaveBeenCalled();
 });
-it('production saves retain existing behavior with no new name or membership calls', async () => {
+it('production saves publish only a verified encrypted reference without enabling rehearsal or membership writes', async () => {
   mocks.rehearsal.mockReturnValue(false);
   await saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, { ...target, host: 'https://icp-api.io' });
-  expect(mocks.get).not.toHaveBeenCalled(); expect(mocks.set).toHaveBeenCalledWith('After', undefined); expect(mocks.prepare).not.toHaveBeenCalled();
+  expect(mocks.authority).toHaveBeenCalledOnce(); expect(mocks.get).not.toHaveBeenCalled(); expect(mocks.set).toHaveBeenCalledWith(reference, undefined); expect(mocks.prepare).toHaveBeenCalledOnce();
+  expect(mocks.refresh).not.toHaveBeenCalled(); expect(mocks.grants).not.toHaveBeenCalled(); expect(mocks.cache.mock.calls[0][1].displayName).toBeNull();
+});
+it('unreleased production saving never falls back to plaintext or a PII side copy', async () => {
+  mocks.rehearsal.mockReturnValue(false); mocks.authority.mockRejectedValue(Error('Secure personal-name saving is not released'));
+  await expect(saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target)).rejects.toThrow('not released');
+  expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.set).not.toHaveBeenCalled(); expect(mocks.cache).not.toHaveBeenCalled();
+});
+it('operator authority drift refuses before any encrypted or identity write', async () => {
+  mocks.rehearsal.mockReturnValue(false); mocks.authority.mockResolvedValue(Principal.fromText('ryjl3-tyaaa-aaaaa-aaaba-cai'));
+  await expect(saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target)).rejects.toThrow('authority');
+  expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.set).not.toHaveBeenCalled();
+});
+it('failed encrypted readback never publishes a profile or success cache', async () => {
+  mocks.rehearsal.mockReturnValue(false); mocks.prepare.mockRejectedValue(Error('Private profile readback was not confirmed'));
+  await expect(saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target)).rejects.toThrow('readback');
+  expect(mocks.set).not.toHaveBeenCalled(); expect(mocks.cache).not.toHaveBeenCalled();
+});
+it('a mismatched profile account refuses before contacting the name authority', async () => {
+  mocks.rehearsal.mockReturnValue(false);
+  await expect(saveIcpIdentityProfile(identity, sink, { displayName: 'After' }, target)).rejects.toThrow('account');
+  expect(mocks.authority).not.toHaveBeenCalled(); expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.set).not.toHaveBeenCalled();
 });
 it('session retirement after read prevents every save mutation', async () => {
   mocks.get.mockImplementation(async () => { retirePrivateProfileSession(); return { display_name: reference }; });

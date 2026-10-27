@@ -54,13 +54,23 @@ export async function saveIcpIdentityProfile(
     const sessionActive = capturePrivateProfileSession();
     const savedTarget = JSON.stringify(target);
     const caller = identity.getPrincipal().toText();
+    if (principal !== caller) throw Error('Profile save account does not match the signed-in identity.');
     const active = () => {
       sessionActive();
       if (identity.getPrincipal().toText() !== caller || JSON.stringify(target) !== savedTarget) throw Error('Profile save identity or target changed.');
     };
-    // Every shared profile save (including immediate avatar saves) preserves
-    // converted references. This does not enable conversion on production.
-    if (privateProfileSearchRehearsalEnabled()) {
+    // Production requires the authenticated canister capability. Missing or
+    // unreleased capabilities fail closed, never restore plaintext saving.
+    if (!privateProfileSearchRehearsalEnabled()) {
+      active();
+      const authority = (await client.readSecureNameAuthority()).toText();
+      active();
+      if (authority !== target.canisterIds.pii_access_control) throw Error('The original secure name authority is not configured in this app; no name was changed.');
+      const { preparePrivateOwnProfileName } = await import('./privateProfileNames');
+      nameToSave = await preparePrivateOwnProfileName({ identity, target }, input.displayName);
+      active();
+      privateNameMaintained = true;
+    } else {
       if (!isLoopbackRehearsalHost(target.host)) throw Error('Private profile save requires a loopback rehearsal target.');
       active();
       const current = await client.getProfile();
@@ -108,6 +118,7 @@ export async function saveIcpIdentityProfile(
     }
     const canisterProfile = await client.setProfile(nameToSave, input.avatarRef ?? undefined);
     active();
+    if (privateNameMaintained && canisterProfile?.display_name !== nameToSave) throw Error('Secure profile publication was not confirmed; check before retrying.');
     const previous = getCachedIcpIdentityProfile(principal);
     const resolved: IcpIdentityProfile = {
       accountId: principal,

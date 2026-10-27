@@ -15,6 +15,7 @@ export function createIdentityAccessClient(actor: _SERVICE) {
   return {
     whoami: () => call(() => actor.whoami()),
     getProfile: () => call(() => actor.get_profile()),
+    readSecureNameAuthority: () => call(() => actor.read_secure_name_authority()),
     setProfile: (displayName: string, avatarRef?: string) =>
       call(() => actor.set_profile(displayName, avatarRef ? [avatarRef] : [])),
     myRoles: () => call(() => actor.my_roles()),
