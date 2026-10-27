@@ -152,3 +152,35 @@ export function createPrivateNamePiiAdapter(actor,Principal) {
     publicKey:async()=>Array.from(await actor.pii_vetkey_verification_key()),
   };
 }
+
+/** Dormant exact-target lifecycle transport. Authority discovery/exclusion are
+ * verified by the caller, never inferred from a default or browser location. */
+export function createPrivateNameLifecycleAdapter({targets,actors,Principal,assertFence}) {
+  if(!Array.isArray(targets) || !targets.length || targets.length>4096 || !(actors instanceof Map) || typeof Principal?.fromText!=='function' || typeof assertFence!=='function')throw Error('Complete exact lifecycle transport required');
+  const saved=structuredClone(targets),seen=new Set();
+  const targetKey=t=>JSON.stringify([t.sink,t.subject,t.club]);
+  const bounded=b=>Array.isArray(b)&&b.length>0&&b.length<=4096&&b.every(v=>Number.isInteger(v)&&v>=0&&v<=255);
+  for(const t of saved){
+    if(!t || principal(Principal.fromText(t.sink))!==t.sink || principal(Principal.fromText(t.subject))!==t.subject || typeof t.club!=='string' || !t.club || t.club.length>64 || /[\u001f/]/.test(t.club) || !bounded(t.ciphertext) || (t.originalCiphertext!==undefined&&!bounded(t.originalCiphertext)) || seen.has(targetKey(t)) || !actors.has(t.sink))throw Error('Exact lifecycle authority/target required');
+    seen.add(targetKey(t));
+  }
+  const resolve=t=>{
+    const match=saved.find(s=>targetKey(s)===targetKey(t));
+    if(!match || JSON.stringify(match)!==JSON.stringify(t))throw Error('Foreign lifecycle target refused');
+    return {actor:actors.get(match.sink),target:structuredClone(match)};
+  };
+  const guard=async()=>{if(await assertFence(structuredClone(saved))!==true)throw Error('Lifecycle authority/exclusion changed');};
+  const run=async(t,fn)=>{const {actor,target}=resolve(t);await guard();const reply=await fn(actor,target);await guard();return {value:unwrap(reply),target};};
+  return {
+    readState:async t=>{
+      const {value:result,target}=await run(t,(a,s)=>a.read_private_club_name_lifecycle(Principal.fromText(s.subject),s.club,s.originalCiphertext===undefined?[]:[s.originalCiphertext]));
+      if(!Array.isArray(result)||result.length>1)throw Error('Typed lifecycle readback required');
+      if(!result.length)return null;
+      const r=result[0],ciphertext=Array.from(r.ciphertext??[]);
+      if(r.pii_id!==target.subject || r.field_id!=='display_name' || r.master_key_id!==`vetkey-club-names-v1:${target.club}` || !bounded(ciphertext))throw Error('Exact lifecycle ciphertext binding changed');
+      return {scheme:r.master_key_id,ciphertext};
+    },
+    writeSavedReplica:async t=>{if(!bounded(t.originalCiphertext))throw Error('Saved original ciphertext required');await run(t,(a,s)=>a.refresh_private_club_name_lifecycle(Principal.fromText(s.subject),s.club,s.originalCiphertext,s.ciphertext));},
+    purgeExactReplica:async t=>{await run(t,(a,s)=>a.purge_private_club_name_lifecycle(Principal.fromText(s.subject),s.club,s.ciphertext));},
+  };
+}

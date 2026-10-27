@@ -3,7 +3,7 @@
 import {canonical} from './migrate-club-plan.mjs';
 const bytes=v=>Array.isArray(v)&&v.length>0&&v.length<=4096&&v.every(b=>Number.isInteger(b)&&b>=0&&b<=255);
 export async function reconcileNameReplicaLifecycle(plan,{assertEvidence,readJournal,persistJournal,readState,writeSavedReplica,purgeExactReplica}) {
-  if(!plan || !['refresh','purge'].includes(plan.action) || typeof plan.operationId!=='string' || !plan.operationId || !Array.isArray(plan.targets) || !plan.targets.length || plan.targets.length>4096 || [assertEvidence,readJournal,persistJournal,readState,writeSavedReplica,purgeExactReplica].some(fn=>typeof fn!=='function'))throw Error('Exact bounded lifecycle dependencies required');
+  if(!plan || canonical(Object.keys(plan).sort())!==canonical(['action','operationId','targets']) || !['refresh','purge'].includes(plan.action) || typeof plan.operationId!=='string' || !plan.operationId || plan.operationId.length>128 || !Array.isArray(plan.targets) || !plan.targets.length || plan.targets.length>4096 || [assertEvidence,readJournal,persistJournal,readState,writeSavedReplica,purgeExactReplica].some(fn=>typeof fn!=='function'))throw Error('Exact bounded lifecycle dependencies required');
   plan=structuredClone(plan);const ids=new Set();
   for(const t of plan.targets){
     if(!t || canonical(Object.keys(t).sort())!==canonical(['sink','subject','club','ciphertext',...(plan.action==='refresh'?['originalCiphertext']:[])].sort()) || !['sink','subject','club'].every(k=>typeof t[k]==='string'&&t[k].length>0&&t[k].length<=128) || !bytes(t.ciphertext) || (plan.action==='refresh'&&!bytes(t.originalCiphertext)))throw Error('Exact original-authority lifecycle target required');
@@ -11,9 +11,9 @@ export async function reconcileNameReplicaLifecycle(plan,{assertEvidence,readJou
   }
   const guard=async()=>{if(await assertEvidence(structuredClone(plan))!==true)throw Error('Complete lifecycle exclusion/authority evidence required');};
   await guard();let journal=await readJournal();await guard();
-  if(journal && (canonical(journal.plan)!==canonical(plan) || !Array.isArray(journal.receipts) || journal.receipts.length>plan.targets.length))throw Error('Original lifecycle journal differs');
+  if(journal && (canonical(Object.keys(journal).sort())!==canonical(['plan','receipts']) || canonical(journal.plan)!==canonical(plan) || !Array.isArray(journal.receipts) || journal.receipts.length>plan.targets.length))throw Error('Original lifecycle journal differs');
   journal=journal??{plan,receipts:[]};
-  if(new Set(journal.receipts.map(r=>r.index)).size!==journal.receipts.length || journal.receipts.some(r=>!Number.isInteger(r.index)||r.index<0||r.index>=plan.targets.length||!['unknown','verified'].includes(r.phase)))throw Error('Invalid retained lifecycle receipts');
+  if(new Set(journal.receipts.map(r=>r.index)).size!==journal.receipts.length || journal.receipts.some(r=>!r || canonical(Object.keys(r).sort())!==canonical(['index','phase']) || !Number.isInteger(r.index)||r.index<0||r.index>=plan.targets.length||!['unknown','verified'].includes(r.phase)))throw Error('Invalid retained lifecycle receipts');
   const persist=async()=>{await persistJournal(structuredClone(journal));await guard();if(canonical(await readJournal())!==canonical(journal))throw Error('Durable lifecycle intent readback required');await guard();};
   const matches=(state,t)=>plan.action==='purge'?state===null:state && state.scheme===`vetkey-club-names-v1:${t.club}`&&canonical(state.ciphertext)===canonical(t.ciphertext);
   for(let index=0;index<plan.targets.length;index++){

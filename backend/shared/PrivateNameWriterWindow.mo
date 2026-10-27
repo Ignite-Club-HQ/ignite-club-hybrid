@@ -1,12 +1,16 @@
 import Map "mo:core/Map";
 import Principal "mo:core/Principal";
 import Text "mo:core/Text";
+import Blob "mo:core/Blob";
 import Release "PrivateNameReleaseFence";
 
 // A whole-authority rehearsal write window, never a permission grant. Owning
 // methods keep their existing authorization. Identity opens only after every
 // original PII sink is fenced, and may reopen PII only after every writer seals.
 module {
+  // Always counted even while rehearsal authorization is disabled. A fresh
+  // record is instrumentation only, NEVER proof of pre-upgrade quiescence.
+  func ordinaryRequest() : Release.Request { { operation_id = "ordinary:private-name-accounting-v1"; generation = 1; inventory_digest = Blob.fromArray([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]) } };
   public func exclusive(request : Release.Request) : Bool { Text.startsWith(request.operation_id, #text "names:club-name-conversion-") };
   public func preparation(request : Release.Request) : Bool { Text.startsWith(request.operation_id, #text "names:club-name-preparation-") };
   public type Intent = { request : Release.Request; closing : Bool; sealed : Bool; active : Nat };
@@ -34,7 +38,7 @@ module {
         case (?i) {
           if (not preparation(request) or i.request != request) return #Err("Exact preparation receipt required");
           var active = i.active;
-          for ((_, prior) in intents.entries()) { if (prior.request != request and not prior.sealed) active += prior.active };
+          for ((_, prior) in intents.entries()) { if (prior.request != request and (not prior.sealed or prior.request == ordinaryRequest())) active += prior.active };
           #Ok({ request; receiver; closing = i.closing; sealed = i.sealed; active })
         }
       }
@@ -42,6 +46,7 @@ module {
     public func open(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
       if (not authorized(caller)) return #Err("Configured rehearsal identity required");
       if (preparation(request)) return #Err("Use preparation admission");
+      if (request.operation_id == ordinaryRequest().operation_id) return #Err("Reserved ordinary accounting identity");
       if (preparationPending()) return #Err("Preparation lock remains held");
       if (request.operation_id == "" or request.operation_id.size() > 128 or request.generation == 0 or request.inventory_digest.size() != 32) return #Err("Invalid private-name writer request");
       switch (intents.get(request.operation_id)) {
@@ -68,8 +73,16 @@ module {
       intents.add("approved:" # request.operation_id, { request; active = 0; closing = true; sealed = true }); #Ok
     };
     public func enter() : { #Ok : ?Release.Request; #Err : Text } {
-      if (not enabled) return #Ok(null);
       if (preparationPending()) return #Err("Edits locked for private-name preparation");
+      if (not enabled) {
+        for ((_, i) in intents.entries()) { if (exclusive(i.request) and not i.sealed) return #Err("Edits locked for private-name conversion") };
+        let request = ordinaryRequest();
+        let prior = intents.get(request.operation_id) ?? ({ request; closing = false; sealed = true; active = 0 });
+        if (prior.request != request or prior.closing or prior.active >= 4096) return #Err("Ordinary accounting conflict or busy");
+        if (intents.get(request.operation_id) == null and intents.size() >= capacity) return #Err("Ordinary accounting capacity reached");
+        intents.add(request.operation_id, { prior with active = prior.active + 1 });
+        return #Ok(?request)
+      };
       switch (current()) {
         case (?intent) {
           if (exclusive(intent.request)) return #Err("Edits locked for private-name conversion");
@@ -112,6 +125,7 @@ module {
     };
     public func seal(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
       if (not authorized(caller)) return #Err("Configured rehearsal identity required");
+      if (request.operation_id == ordinaryRequest().operation_id) return #Err("Reserved ordinary accounting identity");
       if (preparation(request)) return #Err("Preparation releases only through approved completion");
       switch (intents.get(request.operation_id)) {
         case null #Err("Exact private-name writer intent required");
