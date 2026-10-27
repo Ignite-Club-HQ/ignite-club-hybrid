@@ -121,7 +121,6 @@ async function readNames(ctx: FeatureBackendContext, subjects: string[], field =
 async function boundedRead(ctx: FeatureBackendContext, subjects: string[], active: () => void, audience?: PrivateProfileAudience): Promise<Map<string, string>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let retired = false;
-  const sessionActive = capturePrivateProfileSession();
   const guard = () => {
     if (retired) throw new Error("Private profile read retired.");
     active();
@@ -166,6 +165,7 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
   profiles = profiles.map(profile => ({ ...profile }));
   options = { ...options, ...(options.audience ? { audience: { ...options.audience } } : {}) };
   let retired = false;
+  const sessionActive = capturePrivateProfileSession();
   const identity = ctx.identity;
   const principal = identity.getPrincipal().toText();
   const target = JSON.stringify(ctx.target);
