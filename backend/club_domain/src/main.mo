@@ -777,6 +777,21 @@ persistent actor class Main(governorInit : Principal) = this {
   
     } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
+  /// Owner-approved (2026-10-28) one-time link of the original Group 1 club
+  /// service to the shared account service, used only so private club-name
+  /// displays can confirm membership. Set-once; does not release lifecycle sync.
+  public shared ({ caller }) func link_display_identity_authority(id : Principal) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+    if (not isGovernor(caller) or Principal.isAnonymous(id)) return #Err("Governor and valid identity required");
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_CLUB_NAME_DISPLAY_RELEASE") != ?"1") return #Err("Private club-name displays not released");
+    if (identityAccessCanister == ?id) return #Ok;
+    if (identityAccessCanister != null or identityUnlinkReceipts.size() > 0) return #Err("Identity authority already bound");
+    identityAccessCanister := ?id;
+    bumpMembershipDiscovery();
+    #Ok
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
+  };
   type LinkedAccount = { id : Text; principals : [Principal]; version : Nat64; status : { #Active; #Suspended } };
   public shared ({ caller }) func sync_my_linked_account() : async { #Ok; #Err : Text } {
     let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
