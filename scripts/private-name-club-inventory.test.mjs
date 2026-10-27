@@ -86,4 +86,19 @@ test('generated consensus actor factory constructs actors without calling the ne
   const actors=await createClubInventoryActors(new HttpAgent({host:'https://ic0.app'}),[{group:'g1',canisterId:'rkp4c-7iaaa-aaaaa-aaaca-cai'}]);
   const actor=actors.values().next().value;
   assert.equal(typeof actor.read_membership_source_page,'function');assert.equal(typeof actor.read_has_club_membership,'function');
+  assert.throws(()=>actor.read_has_club_membership('invalid-principal','club'),/Principal|principal/);
+});
+
+test('caller mutation during a held source read cannot change accounts or group coverage',async()=>{
+  const {inputs,deps}=setup(); const original=deps.actors.get('source-1').read_membership_source_page;
+  deps.actors.get('source-1').read_membership_source_page=async(cursor)=>{
+    inputs.accounts[0].subject='outsider'; inputs.sources.pop();
+    return original(cursor);
+  };
+  const report=await collectPrivateNameClubInventory(inputs,deps);
+  assert.equal(report.body.rows[0].subject,'person-1');assert.equal(report.body.sources.length,2);assert.deepEqual(report.body.rows[0].clubs,['club-1','club-2']);
+});
+test('unknown source edge variants never certify a silently incomplete inventory',async()=>{
+  const {inputs,deps}=setup();deps.actors.get('source-1').read_membership_source_page=async()=>({Ok:{revision:8n,scanned:1n,edges:[{NewMembership:{}}],next:[]}});
+  await assert.rejects(collectPrivateNameClubInventory(inputs,deps),/Malformed/);
 });

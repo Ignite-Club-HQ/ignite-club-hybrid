@@ -25,13 +25,24 @@ export async function createClubInventoryActors(agent, sources) {
   const { createRequire } = await import('node:module');
   const require = createRequire(new URL('../frontend/package.json', import.meta.url));
   const { Actor } = require('@icp-sdk/core/agent');
+  const { Principal } = require('@icp-sdk/core/principal');
   const { idlFactory } = await import('../frontend/src/lab/bindings/club_domain/declarations/club_domain.did.js');
-  return new Map(sources.map(source => [source.canisterId, Actor.createActor(idlFactory, { agent, canisterId: source.canisterId })]));
+  return new Map(sources.map(source => {
+    const actor = Actor.createActor(idlFactory, { agent, canisterId: source.canisterId });
+    return [source.canisterId, {
+      read_membership_source_page: cursor => actor.read_membership_source_page(cursor),
+      read_membership_discovery_status: () => actor.read_membership_discovery_status(),
+      read_has_club_membership: (subject, club) => actor.read_has_club_membership(Principal.fromText(subject), club),
+    }];
+  }));
 }
 
 export async function collectPrivateNameClubInventory({ accounts, sources, identityId, operator, deploymentHash, historyRevision, maxCalls = 20000, maxClubs = 10000 }, { actors, assertFence }) {
   if (!Array.isArray(accounts) || accounts.length > 100000 || !Array.isArray(sources) || sources.length === 0 || sources.length > 100 || !text(identityId) || !text(operator) || !/^[a-f0-9]{64}$/.test(deploymentHash) || !Number.isSafeInteger(maxCalls) || maxCalls < 1 || maxCalls > 1000000 || !Number.isSafeInteger(maxClubs) || maxClubs < 1 || maxClubs > 10000 || typeof assertFence !== 'function') throw Error('Complete fenced inventory dependencies required');
   nat(historyRevision);
+  accounts = structuredClone(accounts);
+  sources = structuredClone(sources);
+  actors = new Map(actors);
   const ids = new Set(), subjects = new Set(), accountIds = new Set();
   for (const source of sources) {
     if (!source || Object.keys(source).sort().join(',') !== 'canisterId,group' || !text(source.canisterId) || !/^g[0-9]+$/.test(source.group) || ids.has(source.canisterId) || !actors.has(source.canisterId)) throw Error('Distinct complete source actors required');
@@ -69,7 +80,7 @@ export async function collectPrivateNameClubInventory({ accounts, sources, ident
       if (count > 100n || !Array.isArray(page.edges) || page.edges.length > Number(count) || !Array.isArray(page.next) || page.next.length > 1) throw Error('Invalid bounded source page');
       scanned += Number(count);
       for (const edge of page.edges) {
-        if (!edge || Object.keys(edge).length !== 1) throw Error('Malformed source edge');
+        if (!edge || Object.keys(edge).length !== 1 || !['Club','Role','Parent','Guardian','ChildTeam','Team','Excluded'].includes(Object.keys(edge)[0])) throw Error('Malformed source edge');
         if (!Object.hasOwn(edge, 'Club')) continue; // roles/children never grant access here
         const club = edge.Club;
         if (!club || !text(club.id) || club.id.length > 64 || typeof club.deleted !== 'boolean' || clubs.has(club.id) || ownership.has(club.id)) throw Error('Conflicting or invalid club ownership');
@@ -111,6 +122,7 @@ export async function collectPrivateNameClubInventory({ accounts, sources, ident
 /** Direct local composition: no caller-provided clubs survive. The same held
  * fence must remain valid through encryption; artifacts confer no approval. */
 export async function prepareInventoriedPrivateNameArtifact(input, deps) {
+  input = structuredClone(input);
   const inventory = await collectPrivateNameClubInventory(input, deps);
   const byId = new Map(inventory.body.rows.map(row => [row.accountId, row]));
   const artifact = await preparePrivateNameArtifact({ ...input, inventoryHash: inventory.hash, rows: input.accounts.map(account => ({accountId: account.accountId, subject: account.subject, name: account.name, sink: account.sink, clubs: byId.get(account.accountId).clubs})) }, deps);
