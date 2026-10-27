@@ -154,7 +154,7 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     // Registry mutation cannot silently repin the cleanup authority.
     const router = f.services.shard_router.actor;
     router.setPrincipal(f.governor);
-    f.ok(await router.set_group_accepting('g1', true, await router.version()));
+    f.ok(await router.stop_group_new_placements('g1', 'mainnet', await router.version()));
     expect('Err' in await cleanupReader.read_private_name_cleanup_account(f.owner)).toBe(true);
   }, 120000);
 });
