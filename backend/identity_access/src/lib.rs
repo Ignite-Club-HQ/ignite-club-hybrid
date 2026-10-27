@@ -3516,7 +3516,21 @@ mod tests {
         let stranger = principal(171);
         let foreign = Account { id: account_id(stranger), principals: vec![principal(172)], version: 0, status: AccountStatus::Active };
         put_account(&foreign);
-        assert_eq!(ensure_account(stranger).unwrap_err(), "Account ID collision");
+        // Occupied by another live account: caller gets its own fresh account,
+        // never joins the foreign one, and repeat sign-ins are stable.
+        let fresh = ensure_account(stranger).unwrap();
+        assert_ne!(fresh, foreign.id);
+        assert_eq!(get_account(&foreign.id).unwrap().principals, vec![principal(172)]);
+        assert_eq!(ensure_account(stranger).unwrap(), fresh);
+        deindex_principal(stranger);
+        assert_eq!(ensure_account(stranger).unwrap(), fresh);
+        // Orphaned derived account (no logins left) is reclaimed by its owner.
+        let orphan_owner = principal(173);
+        let orphan_id = ensure_account(orphan_owner).unwrap();
+        let mut orphan = get_account(&orphan_id).unwrap();
+        orphan.principals.clear(); put_account(&orphan); deindex_principal(orphan_owner);
+        assert_eq!(ensure_account(orphan_owner).unwrap(), orphan_id);
+        assert_eq!(get_account(&orphan_id).unwrap().principals, vec![orphan_owner]);
     }
     #[test]
     fn removal_intent_survives_restored_accounts_and_cannot_complete_without_receivers() {
