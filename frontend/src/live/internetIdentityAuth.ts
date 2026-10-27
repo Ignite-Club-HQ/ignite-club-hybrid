@@ -1,6 +1,6 @@
 import type { Identity } from "@icp-sdk/core/agent";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
-import { retirePrivateProfileSession } from './privateProfileSession';
+import { observePrivateProfilePrincipal, retirePrivateProfileSession } from './privateProfileSession';
 // NOTE: icpAgent/piiVetKeys are imported lazily at the call sites below so
 // this module — which sits on the boot path via featureRouter/useAuth — does
 // not drag the ICP agent/candid/vetKeys SDKs into the entry chunk.
@@ -445,6 +445,7 @@ export async function signInWithInternetIdentity(returnTo?: string): Promise<Int
   }
   const principalText = principal.toText();
   await provisionInternetIdentityAccount(identity, principalText, target);
+  observePrivateProfilePrincipal(principalText);
   return { principal: principalText, provider: "internet-identity" };
 }
 
@@ -471,6 +472,7 @@ export async function resumeInternetIdentitySession(): Promise<InternetIdentityS
   if (principal.isAnonymous() || principal.toText() === "2vxsx-fae") return null;
   const principalText = principal.toText();
   await provisionInternetIdentityAccount(identity, principalText, target);
+  observePrivateProfilePrincipal(principalText);
   return { principal: principalText, provider: "internet-identity" };
 }
 
@@ -489,6 +491,7 @@ export async function getCurrentInternetIdentity(): Promise<Identity | null> {
     if (!activeClient.isAuthenticated()) return null;
     const principal = identity.getPrincipal();
     if (principal.isAnonymous() || principal.toText() === "2vxsx-fae") return null;
+    observePrivateProfilePrincipal(principal.toText());
     return identity;
   } catch {
     return null;

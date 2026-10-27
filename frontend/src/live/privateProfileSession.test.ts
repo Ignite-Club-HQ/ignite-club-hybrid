@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { capturePrivateProfileSession, onPrivateProfileSessionRetired, retirePrivateProfileSession } from './privateProfileSession';
+import { capturePrivateProfileSession, observePrivateProfilePrincipal, onPrivateProfileSessionRetired, retirePrivateProfileSession } from './privateProfileSession';
 describe('private disclosure session retirement', () => {
+  it('retires an unchanged old context on principal replacement, not same-account renewal', () => {
+    observePrivateProfilePrincipal('first');
+    const old = capturePrivateProfileSession();
+    observePrivateProfilePrincipal('first');
+    expect(old).not.toThrow();
+    observePrivateProfilePrincipal('second');
+    expect(old).toThrow('session retired');
+  });
   it('retires old reads even when their identity objects have not changed', () => {
     const old = capturePrivateProfileSession();
     old();

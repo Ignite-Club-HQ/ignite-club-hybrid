@@ -60,6 +60,12 @@ describe("ICP media uploader profile resolution", () => {
     expect(mocks.hydrate).toHaveBeenCalledWith(context, [row]);
     expect(mocks.dispose).toHaveBeenCalledOnce();
   });
+  it('withholds private references from generic cache reads without decrypting them', async () => {
+    mocks.getProfilesByIds.mockResolvedValue([{ account_id: caller, display_name: 'pii-display-name:v1:authority:subject', avatar_ref: [] }]);
+    expect(await listLiveProfilesByIds(context, [caller], { hydratePrivateNames: false })).toEqual([{ account_id: caller, display_name: null, avatar_ref: [] }]);
+    expect(mocks.hydrate).not.toHaveBeenCalled();
+    expect(mocks.dispose).toHaveBeenCalledOnce();
+  });
   it.each(['family','competition','league'] as const)('passes exact %s audience through shared profile hydration',async kind=>{
     const row={account_id:caller,display_name:'pii-display-name:v1:authority:subject'};
     mocks.getProfilesByIds.mockResolvedValue([row]); mocks.hydrate.mockResolvedValue([{...row,display_name:'Paul Cranwell'}]);
