@@ -21,6 +21,21 @@ test('missing disposable signer refuses before compilation', () => {
   assert.throws(() => privateNameTestEnvironment({}, 'production', '/tmp/key'), /Disposable signer/);
   assert.throws(() => privateNameTestEnvironment({}, 'a'.repeat(64), ''), /Disposable signer/);
 });
+test('release acceptance compiles production identity with rehearsal disabled and runs club display fixture',()=>{
+  const calls=[];
+  runPrivateNameAcceptance({run:(executable,args,options)=>{
+    calls.push({executable,args,env:{...options.env}});
+    return {status:0,stdout:args[0]==='sources'?'--package core /tmp/core':''};
+  }});
+  const call=calls.find(c=>c.args.includes('src/live/privateClubNameDisplays.replica.test.tsx'));
+  assert.ok(call);
+  assert.equal(call.env.IGNITE_CLUB_DISPLAY_REPLICA,'1');
+  assert.equal(call.env.IGNITE_PRIVATE_PROFILE_READS_REHEARSAL,undefined);
+  const index=calls.indexOf(call),build=calls[index-1];
+  assert.equal(build.executable,'cargo');
+  assert.equal(build.env.IGNITE_PRIVATE_PROFILE_READS_REHEARSAL,undefined);
+  assert.equal(build.args.includes('identity_access'),true);
+});
 test('failed acceptance retains a failed report, deletes fixture signing key and never runs later steps', () => {
   const directory = mkdtempSync(join(tmpdir(), 'name-workflow-rule-'));
   const reportPath = join(directory, 'report.json');

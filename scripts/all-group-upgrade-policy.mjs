@@ -9,6 +9,8 @@ export const SCOPES = Object.freeze({
   app_admin: ['identity_access', 'notification_queue'],
   club_migration: ['club_domain'],
   private_name_cleanup: ['identity_access', 'pii_access_control', 'club_domain'],
+  secure_name_save: ['pii_access_control', 'identity_access'],
+  private_club_name_display: ['pii_access_control', 'club_domain', 'identity_access'],
   team_invites: ['club_domain', 'mini_league_domain'],
   messaging: ['messaging_domain'],
   competition: ['notification_queue', 'club_domain', 'events_domain', 'competition_domain'],
@@ -83,7 +85,7 @@ export function validateJournal(journal, binding) {
     const s=journal.steps.find(s=>s.canisterId===t.canisterId);
     if (!s || ['name','groupId','subnetId','newHash'].some(k=>s[k]!==t[k]) || !/^[a-f0-9]{64}$/.test(s.oldHash ?? '') || !/^[a-f0-9]{64}$/.test(s.settingsHash ?? '') || !['ready','pending','complete'].includes(s.phase)) throw Error('Invalid all-group journal step');
   }
-  if(binding.scope==='private_name_cleanup') {
+  if(['private_name_cleanup','secure_name_save','private_club_name_display'].includes(binding.scope)) {
     const plan=binding.cleanupPlan,rows=journal.cleanupActivation;
     if(!Array.isArray(plan)||plan.length!==binding.targets.length||new Set(plan.map(s=>s.canisterId)).size!==plan.length||plan.some(p=>!binding.targets.some(t=>['canisterId','name','groupId','subnetId','newHash'].every(k=>t[k]===p[k]))||!['oldSettingsHash','newSettingsHash'].every(k=>/^[a-f0-9]{64}$/.test(p[k]??''))))throw Error('Invalid checked cleanup activation plan');
     if(rows!==undefined && (!Array.isArray(rows)||rows.length!==plan.length||plan.some(p=>rows.filter(s=>Object.keys(p).every(k=>s[k]===p[k])&&['ready','pending','complete'].includes(s.phase)).length!==1)))throw Error('Foreign cleanup activation journal');
