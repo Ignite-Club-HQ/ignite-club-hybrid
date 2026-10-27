@@ -94,10 +94,12 @@ try {
   const pinnedRevision = await revision();
 
   // Inventory pinned; now close identity's own writes behind the writer gate.
+  // Settings alone activate the runtime gate; an upgrade would bump the pinned
+  // removal-history revision through post_upgrade.
   await pic.updateCanisterSettings({ canisterId: identity.canisterId, sender: governor, environmentVariables:
     [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }, { name: 'IGNITE_PRIVATE_NAME_WRITER_REHEARSAL', value: '1' }] });
-  await pic.upgradeCanister({ canisterId: identity.canisterId, wasm: rustWasm('identity_access'), sender: governor });
   actor.setPrincipal(governor);
+  await denied(() => actor.read_removal_history_manifest());
 
   // Closed gates: outsider, stale history and writes before any window.
   actor.setPrincipal(outsider); await denied(() => actor.begin_private_name_write_window('go-live', pinnedRevision)); actor.setPrincipal(governor);
