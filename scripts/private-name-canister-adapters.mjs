@@ -32,6 +32,35 @@ export function createPrivateNameCoordinatorAdapter(actor, Principal) {
   };
 }
 
+/** Exact signed backend admission. No signer or approval is manufactured here;
+ * loadApproval must read the original independently protected signed artifact. */
+export function createApprovedNameCoordinatorAdapter(actor,Principal,{loadApproval,assertFence}) {
+  if(typeof loadApproval!=='function' || typeof assertFence!=='function')throw Error('Protected signed admission and exclusion required');
+  const base=createPrivateNameCoordinatorAdapter(actor,Principal);
+  return {...base,begin:async(id,revision)=>{
+    if(await assertFence()!==true)throw Error('Conversion exclusion required');
+    const window=await base.begin(id,revision);
+    const approval=await loadApproval(id,structuredClone(window));
+    if(await assertFence()!==true)throw Error('Conversion exclusion required');
+    unwrap(await actor.approve_private_name_conversion(id,approval));
+    if(await assertFence()!==true)throw Error('Conversion exclusion required');
+    return window;
+  }};
+}
+export function createApprovedNameWriteAdapter(actor,{operationId,rows,assertFence}) {
+  if(!/^club-name-conversion-[a-f0-9]{64}$/.test(operationId) || !Array.isArray(rows) || typeof assertFence!=='function')throw Error('Exact approved operation required');
+  const saved=structuredClone(rows);
+  const guard=async()=>{if(await assertFence()!==true)throw Error('Conversion exclusion required');};
+  const write=async(subject,club)=>{
+    const row=saved.find(r=>r.subject===subject);if(!row || (club!==null && !row.clubs.some(c=>c.id===club)))throw Error('Exact approved row required');
+    await guard();unwrap(await actor.write_approved_private_name(operationId,row.accountId,club===null?[]:[club]));await guard();
+  };
+  return {writeOriginal:subject=>write(subject,null),writeClub:(subject,club)=>write(subject,club),publishReference:async(account,reference)=>{
+    const row=saved.find(r=>r.accountId===account);if(!row || reference!==`pii-display-name:v1:${row.sink}:${row.subject}`)throw Error('Exact approved reference required');
+    await guard();const profile=unwrap(await actor.publish_approved_private_name(operationId,account));await guard();return profile;
+  }};
+}
+
 /** Consensus bounded paging; copying aliases never makes the first alias a
  * complete account identity. Externally verified eligibility remains required. */
 export function createPrivateNameProfileAdapter(actor,{assertFence,maxPages=1000,maxProfiles=100000}={}) {
