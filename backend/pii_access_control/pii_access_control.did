@@ -89,6 +89,11 @@ type Main =
                                       Err: text;
                                       Ok: vec opt blob;
                                     });
+   get_private_profile_club_name_vetkey: (ids: vec text, scope:
+    PrivateNameScope, transport: blob) -> (variant {
+                                             Err: text;
+                                             Ok: blob;
+                                           });
    get_private_profile_name_vetkeys_batch: (ids: vec text, scope:
     PrivateNameScope, transport: blob) ->
     (variant {
@@ -172,6 +177,11 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_private_club_name_preparation: (subject: principal, club: text) ->
+    (variant {
+       Err: text;
+       Ok: EncryptedPii;
+     });
    read_private_media_authority: (club: text) ->
     (variant {
        Err: text;
@@ -196,6 +206,11 @@ type Main =
                                    Err: text;
                                    Ok: EncryptedPii;
                                  });
+   register_private_club_name: (subject: principal, club: text, ciphertext:
+    vec nat8) -> (variant {
+                    Err: text;
+                    Ok: EncryptedPii;
+                  });
    rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
