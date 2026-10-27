@@ -230,6 +230,11 @@ type Main =
              revision: nat;
            };
      });
+   read_private_name_cleanup_absence: (subjects: vec principal, club:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: bool;
+                  });
    read_private_name_preparation: (request: Request) ->
     (variant {
        Err: text;
@@ -341,6 +346,11 @@ type Main =
     (variant {
        Err: text;
        Ok;
+     });
+   verify_secure_profile_name: (subject: principal) ->
+    (variant {
+       Err: text;
+       Ok: bool;
      });
  };
 type EncryptedPii = 
