@@ -58,6 +58,12 @@ export function runPrivateNameAcceptance({ root = resolve(dirname(fileURLToPath(
     command('Compile held-edit drain fixture', moc, ['--package', 'core', join(root, 'backend/club_domain/.mops/core@2.6.1/src'), '--default-persistent-actors', '-o', '/tmp/private-name-preparation-fixture.wasm', 'backend/shared/test/privateNamePreparationFixture.mo']);
     command('Verify in-progress edits remain locked', process.execPath, ['scripts/test-private-name-preparation-drain-replica.mjs'], frontend);
     command('Verify encrypted chat and event name displays', process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--config', 'vitest.legacy.config.mjs', 'src/live/privateNameEdit.replica.test.tsx', 'src/live/identityProfile.privateNames.test.ts', 'src/live/privateProfileNames.test.ts', 'src/live/chatRelationshipProfiles.test.ts', 'src/hooks/usePrivateChatProfiles.test.tsx', 'src/features/events/rsvpDisplayProfiles.test.ts', 'src/live/scheduleMembers.test.ts'], frontend);
+    delete env.IGNITE_PRIVATE_PROFILE_READS_REHEARSAL;
+    delete env.IGNITE_PRIVATE_NAME_APPROVER_PUBLIC_KEY;
+    command('Compile production-only identity without private-name rehearsals', 'cargo', ['build', '--locked', '--release', '--target', 'wasm32-unknown-unknown', '-p', 'identity_access']);
+    env.IGNITE_CLUB_DISPLAY_REPLICA='1';
+    command('Verify production-only secure saves and exact-club display', process.execPath, ['node_modules/vitest/vitest.mjs','run','--config','vitest.legacy.config.mjs','src/live/privateClubNameDisplays.replica.test.tsx'],frontend);
+    delete env.IGNITE_CLUB_DISPLAY_REPLICA;
     command('Verify unchanged ICP production boundaries', process.execPath, ['frontend/scripts/check-icp-guards.mjs']);
     report.passed = true;
     return report;
