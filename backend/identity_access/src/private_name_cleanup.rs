@@ -104,7 +104,20 @@ async fn read_private_name_cleanup_account(subject: Principal) -> Outcome<Cleanu
     super::group_inventory::validate(&inventory,&config.binding,&clubs,&[])?;
     if !clubs.contains(&caller) { return Err("Cleanup club is not registered".into()); }
     let sinks=inventory.groups.iter().flat_map(|g|g.domains.iter().filter(|d|d.domain=="pii_access_control").map(|d|d.canister)).collect::<Vec<_>>();
-    let result=routing(&account,super::get_profile_entry(&account.id),&sinks,revision)?;
+    let mut result=routing(&account,super::get_profile_entry(&account.id),&sinks,revision)?;
+    if !matches!(result.original_authority,OriginalNameAuthority::Existing{..}) {
+        // Plaintext/profileless is not proof that no old replicas exist. Every
+        // registered sink must confirm absence before releasing the club lock.
+        if sinks.is_empty() || sinks.len()>99 { return Err("Complete cleanup sink inventory required".into()); }
+        for sink in &sinks {
+            let reply=ic_cdk::call::Call::bounded_wait(*sink,"read_private_name_cleanup_absence")
+                .with_args(&(account.principals.clone(),Option::<String>::None)).await.map_err(|_|"Cleanup absence unavailable")?;
+            active()?;
+            let absent:Outcome<bool>=reply.candid().map_err(|_|"Invalid cleanup absence")?;
+            if !absent? { return Err("Unresolved name replicas; retain cleanup".into()); }
+        }
+        result.original_authority=OriginalNameAuthority::NoName;
+    }
     active()?; // No await after exact aliases/original reference readback.
     Ok(result)
 }
