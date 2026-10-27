@@ -77,6 +77,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - ICP events atomically commit dates, duties and reminders under caller receipts; consensus supplies audiences, unknown relays stay locked.
 - Vault recovery reads owner-wide intents and exact decrypted hash markers before strict grants/store acknowledgement; unknown outcomes retain locks/cursors. Erasure scrubs shared ancestors without orphaning others. Cleanup needs age/allowance or erasure receipts; backups commit validated pages to writable sinks, retaining Blob fallback where unsupported. Why: prevent guessed recovery, data loss and partial exports.
-- Private names stay rehearsal-only; replicas retain restricted person keys. Use random ciphertext, immutable plans, locked append-only receipts and external fences; live conversion stays blocked. Allow preparation advances; reconcile before release. Preserve session fences. Read scripts/, frontend/, backend/identity_access/AGENTS.md. Why: retain keys/unknown writes; local receipts cannot prove live exclusion.
+- Private names stay rehearsal-only; replicas retain person keys. Use random ciphertext, immutable plans, signed saved approvals, locked receipts and external fences; live conversion stays blocked. Reconcile before release. Preserve session fences. Read scripts/, frontend/, backend/identity_access/AGENTS.md. Why: replica tests/fixture signatures cannot prove live exclusion or complete account authority.
 
 

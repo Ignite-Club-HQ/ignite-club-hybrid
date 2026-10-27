@@ -20,7 +20,7 @@ import {createPrivateNameCoordinatorAdapter,createPrivateNameProfileAdapter,crea
 import {prepareInventoriedPrivateNameArtifact} from '../../scripts/private-name-club-inventory.mjs';
 import {savePrivateNameArtifact,readPrivateNameArtifact} from '../../scripts/private-name-plan-artifact.mjs';
 import {openPreparedExecutionJournal} from '../../scripts/private-name-execution-journal.mjs';
-import {executePreparedPrivateNamePlan} from '../../scripts/private-name-prepared-execution.mjs';
+import {executeSavedApprovedNamePlan} from '../../scripts/private-name-approved-execution.mjs';
 import {encryptName,encryptClubName} from '../../scripts/convert-private-names.mjs';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -245,13 +245,13 @@ try {
   };
   const request={artifact,expectedHash:artifact.hash,approval:await saveApproval('convert')};
   try {
-    await assert.rejects(executePreparedPrivateNamePlan(request,deps),/Injected lost committed club reply/);
+    await assert.rejects(executeSavedApprovedNamePlan({...request,approvalPath:join(directory,'approval-convert'),approvalBinding:approvalBinding('convert')},deps),/Injected lost committed club reply/);
     const operationId=`club-name-conversion-${artifact.hash}`;
     assert.equal((await deps.coordinator.read(operationId)).phase,'Writing');assert.equal(lockHeld,true);
     journal.close();const savedBody=readPrivateNameArtifact(join(directory,'plan'),artifact.hash);
     assert.deepEqual(savedBody,artifact.body);journal=openJournal();deps.journal=journal;
     request.approval=await saveApproval('recover');
-    const report=await executePreparedPrivateNamePlan(request,deps);
+    const report=await executeSavedApprovedNamePlan({...request,approvalPath:join(directory,'approval-recover'),approvalBinding:approvalBinding('recover')},deps);
     assert.equal(report.phase,'Done');assert.equal(report.converted,2);assert.equal(attempts,4);assert.equal(lockHeld,false);
     const finalProfiles=await profileAdapter.listProfiles();assert.ok(finalProfiles.every(p=>p.display_name.startsWith('pii-display-name:v1:')));
     // Real original-key SDK decryption verifies each saved plaintext; club

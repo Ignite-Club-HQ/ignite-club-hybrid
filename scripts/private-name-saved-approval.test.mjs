@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {preparePrivateNameArtifact} from './private-name-plan-artifact.mjs';
 import {prepareSignedNameApproval,verifySavedNameApproval,saveSignedNameApproval,readSavedNameApproval} from './private-name-saved-approval.mjs';
+import {executeSavedApprovedNamePlan} from './private-name-approved-execution.mjs';
 async function fixture(t){
   const dir=mkdtempSync(join(tmpdir(),'name-approval-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const keys=generateKeyPairSync('ed25519');const publicKey=keys.publicKey.export({type:'spki',format:'pem'});
@@ -32,4 +33,9 @@ test('corrupt or interrupted saved approval never overwrites original file',asyn
 });
 test('plaintext/extra envelope properties are rejected',async t=>{
   const s=await fixture(t);assert.throws(()=>verifySavedNameApproval({...s.envelope,body:{...s.envelope.body,name:'Private Name'}},s.binding),/Strict/);
+});
+test('invalid saved approval blocks execution before lock or network activity',async t=>{
+  const s=await fixture(t);writeFileSync(s.path,'invalid',{mode:0o600});let entered=false;
+  await assert.rejects(executeSavedApprovedNamePlan({artifact:s.binding.artifact,expectedHash:s.binding.expectedHash,approvalPath:s.path,approvalBinding:s.binding},{executionLock:{enter:async()=>{entered=true;}}}));
+  assert.equal(entered,false);
 });
