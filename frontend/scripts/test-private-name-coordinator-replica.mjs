@@ -25,6 +25,8 @@ import {encryptName,encryptClubName,CONFIRM_CONVERT,CONFIRM_RECOVER} from '../..
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {prepareSignedNameApproval,saveSignedNameApproval,readSavedNameApproval} from '../../scripts/private-name-saved-approval.mjs';
+import {generateKeyPairSync,sign} from 'node:crypto';
 
 const root = resolve(import.meta.dirname, '../..');
 const p = n => Principal.fromUint8Array(Uint8Array.from([n, 1]));
@@ -164,6 +166,8 @@ try {
   let harnessExclusive=true;
   const profileAdapter=createPrivateNameProfileAdapter(actor,{assertFence:async()=>harnessExclusive});
   const profiles=await profileAdapter.listProfiles();assert.equal(profiles.length,2);
+  assert.ok(profiles.every(r=>r.principals.length===1),'This fixture covers single-alias accounts only');
+  assert.deepEqual(profiles.map(r=>r.principals[0]).sort(),[governor.toText(),outsider.toText()].sort());
   const piiBySink=new Map(groups.map(g=>[g.pii_access_control.canisterId.toText(),createPrivateNamePiiAdapter(g.pii_access_control.actor,Principal)]));
   const sinks=await Promise.all([...piiBySink].map(async([id,pii])=>({id,publicKey:await pii.publicKey()})));
   sinks.sort((a,b)=>a.id.localeCompare(b.id));
@@ -224,21 +228,29 @@ try {
   let attempts=0,lost=true;
   originalPii.writeClub=async(...args)=>{attempts++;const result=await writeClub(...args);if(lost){lost=false;throw Error('Injected lost committed club reply');}return result;};
   const decryptSaved=async(row,sink)=>{
-    const bytes=Uint8Array.from(sink.publicKey),input=new TextEncoder().encode(`${row.subject}\u001fdisplay_name`);
-    // The source comparison is authorized fixture knowledge; decrypt saved
-    // bytes using an actual vetKD key from the original sink after registration.
+    // Fixture-only plaintext comparison: records do not exist before initial
+    // conversion. Actual SDK decryption is independently asserted below.
     const original=profiles.find(p=>p.account_id===row.accountId);assert.ok(original);
     return original.display_name;
   };
   const deps={journal,executionLock:lock,assertExecution:async()=>harnessExclusive,piiBySink,identity:profileAdapter,coordinator:createPrivateNameCoordinatorAdapter(actor,Principal),readBinding:async()=>({...artifact.body,sinks:await Promise.all(sinks.map(async s=>({id:s.id,publicKey:await piiBySink.get(s.id).publicKey()})))}),decryptName:decryptSaved};
-  const request={artifact,expectedHash:artifact.hash,approval:{action:'convert',plan:artifact.hash,approvalScope:'names',confirmation:CONFIRM_CONVERT}};
+  // Disposable signing identity proves envelope binding/reopen, NOT Paul's
+  // real approval, protected signer configuration or production authorization.
+  const approvalKeys=generateKeyPairSync('ed25519'),approvalPublicKey=approvalKeys.publicKey.export({type:'spki',format:'pem'});
+  const approvalBinding=action=>({artifact,expectedHash:artifact.hash,approver:'replica-owner',approvalId:`replica-${action}-event`,action,publicKey:approvalPublicKey});
+  const saveApproval=async action=>{
+    const binding=approvalBinding(action),envelope=await prepareSignedNameApproval(binding,{publicKey:approvalPublicKey,signApprovedEvent:async(_body,bytes)=>sign(null,bytes,approvalKeys.privateKey)});
+    saveSignedNameApproval(join(directory,`approval-${action}`),envelope,binding);
+    return readSavedNameApproval(join(directory,`approval-${action}`),binding);
+  };
+  const request={artifact,expectedHash:artifact.hash,approval:await saveApproval('convert')};
   try {
     await assert.rejects(executePreparedPrivateNamePlan(request,deps),/Injected lost committed club reply/);
     const operationId=`club-name-conversion-${artifact.hash}`;
     assert.equal((await deps.coordinator.read(operationId)).phase,'Writing');assert.equal(lockHeld,true);
     journal.close();const savedBody=readPrivateNameArtifact(join(directory,'plan'),artifact.hash);
     assert.deepEqual(savedBody,artifact.body);journal=openJournal();deps.journal=journal;
-    request.approval={action:'recover',plan:artifact.hash,approvalScope:'names',confirmation:CONFIRM_RECOVER};
+    request.approval=await saveApproval('recover');
     const report=await executePreparedPrivateNamePlan(request,deps);
     assert.equal(report.phase,'Done');assert.equal(report.converted,2);assert.equal(attempts,4);assert.equal(lockHeld,false);
     const finalProfiles=await profileAdapter.listProfiles();assert.ok(finalProfiles.every(p=>p.display_name.startsWith('pii-display-name:v1:')));
@@ -252,6 +264,6 @@ try {
       assert.equal(new TextDecoder().decode(IbeCiphertext.deserialize(Uint8Array.from(row.ciphertext)).decrypt(key)),profiles.find(p=>p.account_id===row.accountId).display_name);
     }
     sink0pre.actor.setPrincipal(governor);
-    console.log('PASS: complete real two-group membership/profile inventory, immutable randomized ciphertext, fresh prepared conversion, disk-reopened committed-reply recovery without replay, exact original/club/profile readbacks and real SDK decryption; 2 sinks/11 writers plus upgrade/stopped-sink recovery. Production exclusivity/approval transport remains blocked.');
+    console.log('PASS: real two-group single-alias fixture profile/membership inventory, immutable randomized ciphertext, signed fixture approvals, fresh prepared conversion, disk-reopened committed-reply recovery without replay, exact original/club/profile readbacks and post-conversion SDK decryption; 2 sinks/11 writers plus upgrade/stopped-sink recovery. Production account completeness, plaintext reconciliation, exclusivity and protected approval transport remain blocked.');
   } finally {journal?.close();harnessExclusive=false;rmSync(directory,{recursive:true,force:true});}
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
