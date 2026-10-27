@@ -186,7 +186,7 @@ export interface Main {
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
   'read_private_club_name_lifecycle' : ActorMethod<
-    [Principal, string],
+    [Principal, string, [] | [Uint8Array]],
     { 'Ok' : [] | [EncryptedPii] } |
       { 'Err' : string }
   >,

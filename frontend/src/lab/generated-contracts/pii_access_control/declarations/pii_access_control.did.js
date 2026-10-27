@@ -254,7 +254,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_private_club_name_lifecycle' : IDL.Func(
-        [IDL.Principal, IDL.Text],
+        [IDL.Principal, IDL.Text, IDL.Opt(IDL.Vec(IDL.Nat8))],
         [IDL.Variant({ 'Ok' : IDL.Opt(EncryptedPii), 'Err' : IDL.Text })],
         [],
       ),
