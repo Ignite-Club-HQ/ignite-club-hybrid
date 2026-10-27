@@ -119,7 +119,7 @@ test('unknown outcomes are retained and stop the run', async () => {
 test('window driver fences sinks before writers and seals before release', async () => {
   const order = [];
   const sinks = ['sink-a', 'sink-b'], writers = ['w1', 'w2', 'w3'];
-  const state = { phase: 'Fencing', prepared: [], opened: [], sealed: [], completed: [] };
+  const state = { phase: 'Fencing', sinks, writers, prepared: [], opened: [], sealed: [], completed: [] };
   const coordinator = {
     begin: async () => ({ ...state }),
     advance: async (op, target) => {
