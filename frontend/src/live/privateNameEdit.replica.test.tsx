@@ -1,4 +1,6 @@
 import { webcrypto } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { IDL } from '@icp-sdk/core/candid';
 import { act, render, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -145,6 +147,28 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     expect(f.ok(await identity.get_profile()).display_name).toBe(reference);
     expect(f.ok(await governorPii.get_encrypted_pii_batch([subject], 'display_name', 'read', 'Verify original retained'))).toHaveLength(1);
     console.log('AFTER (disposable account): membership=false; club-name copies=0; original private name=retained; automatic cleanup completed');
+    // Recreate the disposable membership/copy for a last-role removal, stop
+    // routing, and upgrade the club before resuming the same retained intent.
+    f.ok(await club.restore_member(f.clubId, f.owner));
+    f.ok(await club.add_role_grant(f.owner, f.clubId, 'member', []));
+    await refreshPrivateOwnClubNames(ownerContext as any, afterName, async () => [f.clubId]);
+    await f.pic.stopCanister({ canisterId: f.services.identity_access.canisterId, sender: f.governor });
+    f.ok(await club.remove_role_grant(f.owner, f.clubId, 'member', []));
+    for (let step = 0; step < 10; step++) await f.pic.tick();
+    const held = f.ok(await club.read_private_name_cleanup_pending());
+    expect(held).toHaveLength(1); expect(held[0].submitted).toBe(false);
+    expect(f.ok(await governorPii.read_private_club_name_lifecycle(f.owner, f.clubId, []))).toHaveLength(1);
+    await expect(club.add_role_grant(f.owner, f.clubId, 'member', [])).rejects.toThrow('Name cleanup pending');
+    await f.pic.upgradeCanister({ canisterId: f.services.club_domain.canisterId, sender: f.governor,
+      wasm: readFileSync('../backend/club_domain/.mops/.build/club_domain.wasm'),
+      arg: IDL.encode([IDL.Principal], [f.governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+    expect(f.ok(await club.read_private_name_cleanup_pending())).toEqual(held);
+    await f.pic.startCanister({ canisterId: f.services.identity_access.canisterId, sender: f.governor });
+    f.ok(await club.resume_private_name_cleanup());
+    expect(f.ok(await club.read_private_name_cleanup_pending())).toEqual([]);
+    expect(f.ok(await governorPii.read_private_club_name_lifecycle(f.owner, f.clubId, []))).toEqual([]);
+    expect(f.ok(await identity.get_profile()).display_name).toBe(reference);
+    console.log('RECOVERY (disposable account): last-role cleanup retained through service outage and club upgrade; resumed with original name preserved');
     const governorIdentity = f.connect('identity_access', f.governor).actor;
     // Existing coordinated suspension cannot be bypassed for a fixture.
     expect('Err' in await governorIdentity.set_account_status(routing.account_id, { Suspended: null })).toBe(true);
