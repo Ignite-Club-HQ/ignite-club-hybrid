@@ -34,6 +34,7 @@ async fn read(c: Principal) -> Option<(u64, u64)> {
 }
 
 pub async fn refresh_stale(target: &str) {
+    if crate::private_name_writer_window::enabled() { return; }
     if IN_FLIGHT.with(|f| f.replace(true)) { return; }
     let now = ic_cdk::api::time();
     let stale: Vec<ShardGroup> = crate::GROUPS.with(|m| m.borrow().iter()

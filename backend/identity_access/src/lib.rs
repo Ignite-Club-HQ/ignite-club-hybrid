@@ -1472,7 +1472,6 @@ fn state() -> CoreState {
     STATE.with(|s| decode(s.borrow().get()))
 }
 fn store(value: &CoreState) {
-    private_name_writer_window::require_window();
     STATE.with(|s| s.borrow_mut().set(encode(value)));
 }
 
@@ -1481,7 +1480,6 @@ fn get_account(id: &str) -> Option<Account> {
     ACCOUNTS.with(|m| m.borrow().get(&id.to_string())).map(|b| decode(&b))
 }
 fn put_account(account: &Account) {
-    private_name_writer_window::require_window();
     bump_profile_search_revision();
     ACCOUNTS.with(|m| m.borrow_mut().insert(account.id.clone(), encode(account)));
 }
@@ -4449,6 +4447,10 @@ mod tests {
         }
         let checked_in = include_str!("../identity_access.did");
         let exported = candid_interface();
+        if std::env::var_os("IGNITE_EXPORT_CANDID").is_some() {
+            std::fs::write(concat!(env!("CARGO_MANIFEST_DIR"), "/identity_access.did"), &exported).expect("write candid");
+            return;
+        }
         assert_eq!(
             methods(checked_in),
             methods(&exported),
