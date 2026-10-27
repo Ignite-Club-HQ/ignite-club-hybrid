@@ -19,7 +19,7 @@ assert not gate.canRelease(0, epoch);
 assert not gate.canRelease(epoch, epoch);
 assert gate.prepare(identity, request) == #Ok(false);
 assert gate.prepare(identity, { request with generation = 2 }) == #Err("Immutable private-name fence conflict");
-let second = { request with operation_id = "remove-2"; generation = 2 };
+let second : Fence.Request = { request with operation_id = "remove-2"; generation = 2 };
 assert gate.prepare(identity, second) == #Ok(true); epoch += 1;
 let restored = Fence.Gate(true, ?identity, intents, 2);
 assert restored.blocked();
