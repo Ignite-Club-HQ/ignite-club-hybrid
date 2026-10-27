@@ -11,10 +11,9 @@
 //   recover : resumes the per-account journal with the same plan hash.
 //
 // Safety rules (mirrors migrate-club-bytes.mjs):
-// - Encryption is deterministic (seed = sha256(subject + US + field + US +
-//   name)), so an interrupted account re-encrypts to the SAME ciphertext and
-//   re-registration is idempotent. Plaintext is never persisted.
-// - The stored ciphertext is byte-compared against the deterministic
+// - Randomized ciphertext is journaled before writes and reused verbatim.
+//   Never derive randomness from a guessable plaintext name.
+// - The stored ciphertext is byte-compared against the journaled
 //   encryption BEFORE the reference is published; a mismatch stops the run.
 // - register_pii / convert_profile_name are each retried once with identical
 //   terms; any other unknown outcome is RETAINED in the journal and stops the
@@ -87,18 +86,15 @@ export function buildConversionPlan({ rows, sinks, historyRevision }) {
 }
 
 /**
- * Deterministic IBE encryption to the group's PII public key under identity
- * `subject + U+001F + "display_name"`. The fixed seed makes resume reproduce
- * the identical ciphertext, so re-registration never conflicts.
+ * Randomized IBE encryption; journal encrypted bytes before writing.
  */
 export async function encryptName(publicKey, subject, name) {
   const { DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import(new URL('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js', import.meta.url).href);
-  const seed = createHash('sha256').update(`${subject}${NAME_FIELD}`).update(name).digest();
   return IbeCiphertext.encrypt(
     DerivedPublicKey.deserialize(publicKey),
     IbeIdentity.fromBytes(new TextEncoder().encode(`${subject}${NAME_FIELD}`)),
     new TextEncoder().encode(name),
-    IbeSeed.fromBytes(seed),
+    IbeSeed.random(),
   ).serialize();
 }
 
@@ -110,28 +106,27 @@ export async function encryptClubName(publicKey, club, subject, name) {
   if (!club || club.length > 64 || /[\u001f/]/.test(club)) throw Error('Invalid exact club');
   const { DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import(new URL('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js', import.meta.url).href);
   const input = `clubnames:${club}\u001f${NAME_FIELD}`;
-  const seed = createHash('sha256').update(`${input}\u001f${subject}\u001f`).update(name).digest();
-  return IbeCiphertext.encrypt(DerivedPublicKey.deserialize(publicKey), IbeIdentity.fromBytes(new TextEncoder().encode(input)), new TextEncoder().encode(name), IbeSeed.fromBytes(seed)).serialize();
+  return IbeCiphertext.encrypt(DerivedPublicKey.deserialize(publicKey), IbeIdentity.fromBytes(new TextEncoder().encode(input)), new TextEncoder().encode(name), IbeSeed.random()).serialize();
 }
 
 export async function prepareClubNameCopies(sink, publicKey, row, { pii, journal }) {
   if (!Array.isArray(row.clubs) || row.clubs.length > 100 || new Set(row.clubs).size !== row.clubs.length) throw Error('Bounded distinct exact club inventory required');
   for (const club of [...row.clubs].sort()) {
-    const ciphertext = Array.from(await encryptClubName(publicKey, club, row.subject, row.name));
-    const hash = createHash('sha256').update(Uint8Array.from(ciphertext)).digest('hex');
     const id = `${row.accountId}:club:${club}`;
     const prior = journal.get(id);
+    const ciphertext = prior?.ciphertext ?? Array.from(await encryptClubName(publicKey, club, row.subject, row.name));
+    const hash = createHash('sha256').update(Uint8Array.from(ciphertext)).digest('hex');
     if (prior && (prior.hash !== hash || prior.sink !== sink || prior.subject !== row.subject || prior.club !== club)) throw Error('Club name journal binding changed');
     if (prior?.phase === 'unknown') throw Error('Unknown club name write retained; read back before retrying');
     // Always read completed copies again: stale bytes cannot certify conversion.
     if (!prior) {
-      journal.put(id, { phase: 'unknown', sink, subject: row.subject, club, hash });
+      journal.put(id, { phase: 'unknown', sink, subject: row.subject, club, hash, ciphertext });
       await pii.register_private_club_name(row.subject, club, ciphertext);
-      journal.put(id, { phase: 'registered', sink, subject: row.subject, club, hash });
+      journal.put(id, { phase: 'registered', sink, subject: row.subject, club, hash, ciphertext });
     }
     const stored = await pii.read_private_club_name_preparation(row.subject, club);
     if (stored.master_key_id !== `vetkey-club-names-v1:${club}` || stored.ciphertext.length !== ciphertext.length || ciphertext.some((b, i) => b !== stored.ciphertext[i])) throw Error('Club name ciphertext readback mismatch');
-    journal.put(id, { phase: 'verified', sink, subject: row.subject, club, hash });
+    journal.put(id, { phase: 'verified', sink, subject: row.subject, club, hash, ciphertext });
   }
 }
 
@@ -157,28 +152,30 @@ export async function convertOneAccount(sink, publicKey, row, deps) {
   const { pii, identity, journal } = deps;
   const reference = nameReference(sink, row.subject);
   const prior = journal.get(row.accountId);
+  if (prior && (prior.sink !== sink || prior.subject !== row.subject)) throw Error('Conversion journal binding changed');
   if (prior?.phase === 'converted') return reference;
   if (prior && !['encrypted', 'registered', 'verified'].includes(prior.phase)) {
     throw Error(`Unknown outcome retained for ${row.accountId} at phase ${prior.phase}; reconcile before retrying`);
   }
 
-  const ciphertext = Array.from(await encryptName(publicKey, row.subject, row.name));
+  if (prior && !prior.ciphertext) throw Error('Legacy conversion journal needs reconciliation');
+  const ciphertext = prior?.ciphertext ?? Array.from(await encryptName(publicKey, row.subject, row.name));
   const hash = createHash('sha256').update(Uint8Array.from(ciphertext)).digest('hex');
-  journal.put(row.accountId, { phase: 'encrypted', hash, subject: row.subject, sink });
+  journal.put(row.accountId, { phase: 'encrypted', hash, subject: row.subject, sink, ciphertext });
 
   try {
     await pii.register_pii(row.subject, NAME_FIELD, ciphertext, row.subject);
   } catch {
     await pii.register_pii(row.subject, NAME_FIELD, ciphertext, row.subject); // identical-terms retry only
   }
-  journal.put(row.accountId, { phase: 'registered', hash, subject: row.subject, sink });
+  journal.put(row.accountId, { phase: 'registered', hash, subject: row.subject, sink, ciphertext });
 
   const readback = await pii.get_encrypted_pii_batch([row.subject], NAME_FIELD, 'profile_display', 'conversion readback');
   const stored = readback?.[0]?.ciphertext;
   if (!stored || stored.length !== ciphertext.length || ciphertext.some((b, i) => stored[i] !== b)) {
     throw Error(`Stored ciphertext mismatch for ${row.accountId}; refusing to publish the reference`);
   }
-  journal.put(row.accountId, { phase: 'verified', hash, subject: row.subject, sink });
+  journal.put(row.accountId, { phase: 'verified', hash, subject: row.subject, sink, ciphertext });
 
   if (row.clubs) await prepareClubNameCopies(sink, publicKey, row, { pii, journal });
 
@@ -189,7 +186,7 @@ export async function convertOneAccount(sink, publicKey, row, deps) {
     profile = await identity.convert_profile_name(row.accountId, reference); // idempotent on success
   }
   if (profile?.display_name !== reference) throw Error(`Profile ${row.accountId} did not adopt the exact reference`);
-  journal.put(row.accountId, { phase: 'converted', hash, subject: row.subject, sink });
+  journal.put(row.accountId, { phase: 'converted', hash, subject: row.subject, sink, ciphertext });
   return reference;
 }
 
