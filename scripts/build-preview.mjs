@@ -47,6 +47,11 @@ syncCanisterIds();
 const FALLBACK_GOOGLE_MAPS_BROWSER_KEY = "AIzaSyBmvJph4LmrbtW7skeczzpBIyb9WWzFKo4";
 process.env.IGNITE_LIVE_GOOGLE_MAPS_BROWSER_KEY ||= process.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY || FALLBACK_GOOGLE_MAPS_BROWSER_KEY;
 process.env.IGNITE_LIVE_GIPHY_API_KEY ||= process.env.GIPHY_API_KEY || "";
+// Protected personal names are stored encrypted under each club's key. The
+// display release is live on mainnet for every group, so the published app
+// must ask the canisters for those names; an explicit 0 in .env still turns
+// them off.
+process.env.IGNITE_LIVE_PRIVATE_CLUB_NAME_DISPLAYS ||= "1";
 
 // Last-resort fallback: the connected project's public URL and anon key.
 // Both are browser-safe (the anon key ships in the client bundle anyway) and
