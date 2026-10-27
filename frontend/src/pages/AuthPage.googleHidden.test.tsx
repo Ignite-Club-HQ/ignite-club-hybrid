@@ -14,6 +14,7 @@ const useAuthMock = vi.fn();
 
 vi.mock("@/live/authBackendMode", () => ({
   isIcpAuthAvailable: () => true,
+  isAuthChoiceOverrideOrigin: () => true,
   useIcpAuthScreen: () => false,
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => useAuthMock() }));

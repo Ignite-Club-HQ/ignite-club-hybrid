@@ -17,7 +17,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
 const useAuthMock = vi.fn();
-vi.mock("@/live/authBackendMode", () => ({ isIcpAuthAvailable: () => true, useIcpAuthScreen: () => true }));
+vi.mock("@/live/authBackendMode", () => ({ isIcpAuthAvailable: () => true, isAuthChoiceOverrideOrigin: () => true, useIcpAuthScreen: () => true }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => useAuthMock() }));
 vi.mock("@/hooks/usePasskey", () => ({
   usePasskey: () => ({
