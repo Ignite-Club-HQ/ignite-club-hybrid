@@ -21,6 +21,11 @@ vi.mock('./identityAccess', async () => {
 vi.mock('./featureRouter', () => ({ withFeatureBackend: async (_feature: string, providers: any) => providers.icp(local.context) }));
 vi.mock('./privateProfileSearchMode', () => ({ privateProfileSearchRehearsalEnabled: () => true }));
 vi.mock('./loadBackendRouting', () => ({ isFeatureRoutedToIcp: () => true }));
+// Closed action sheets are outside name-display acceptance and otherwise
+// demand the complete application authentication shell.
+vi.mock('../components/chat/ForwardMessageSheet', () => ({ ForwardMessageSheet: () => null }));
+vi.mock('../components/chat/ReportMessageDialog', () => ({ ReportMessageDialog: () => null }));
+vi.mock('../components/BlockUserDialog', () => ({ BlockUserDialog: () => null }));
 vi.mock('./privateProfileEvidence', () => ({ readPrivateProfileEvidence: async () => ({ disposableOnly: true }) }));
 vi.mock('./privateProfileAuthority', () => ({ createLivePrivateProfileAuthorityResolver: () => async (authority: string) => {
   if (authority !== local.context.target.canisterIds.pii_access_control) throw Error('Foreign fixture authority');
