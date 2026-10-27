@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use ed25519_dalek::{Signature, VerifyingKey};
 use ic_stable_structures::StableBTreeMap;
 use std::cell::RefCell;
-use super::{Outcome,private_name_writer_window::WriterRequest,private_name_write_coordinator::{WriteWindow,WritePhase}};
+use super::{Outcome,Profile,private_name_writer_window::WriterRequest,private_name_write_coordinator::{WriteWindow,WritePhase}};
 #[derive(Clone,Debug,CandidType,Serialize,Deserialize,PartialEq,Eq)]
 pub struct ClubCopy { pub club:String, pub ciphertext:Vec<u8> }
 #[derive(Clone,Debug,CandidType,Serialize,Deserialize,PartialEq,Eq)]
@@ -65,7 +65,7 @@ async fn write_approved_private_name(operation_id:String,account_id:String,club:
     super::private_name_write_coordinator::access()?;require_approval(&operation_id,&super::private_name_write_coordinator::get(&operation_id)?)?;result
 }
 #[ic_cdk::update]
-fn publish_approved_private_name(operation_id:String,account_id:String)->Outcome<super::Profile>{
+fn publish_approved_private_name(operation_id:String,account_id:String)->Outcome<Profile>{
     let(w,r)=approved_row(&operation_id,&account_id)?;let _lease=super::private_name_writer_window::enter_conversion(&w.request)?;
     let reference=format!("pii-display-name:v1:{}:{}",r.sink.to_text(),r.subject.to_text());let existing=super::get_profile_entry(&account_id).ok_or("Exact profile required")?;
     if existing.display_name==reference{return Ok(existing);}
