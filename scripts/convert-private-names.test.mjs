@@ -2,10 +2,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
+import { mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   validateConversionRequest, assertNamesApproval, planConversions, buildConversionPlan,
   encryptName, nameReference, conversionJournal, convertOneAccount, withConversionWindow,
   reconcileConversion, CONFIRM_CONVERT,
+  encryptClubName, prepareClubNameCopies,
 } from './convert-private-names.mjs';
 
 const SINK = 'rkp4c-7iaaa-aaaaa-aaaca-cai';
@@ -54,13 +58,13 @@ test('plan hash binds rows, sinks and history revision', () => {
 
 const require = createRequire(new URL('../frontend/package.json', import.meta.url));
 
-test('encryption is deterministic for resume safety', async () => {
+test('encryption is randomized to prevent offline name guessing', async () => {
   const { DerivedPublicKey, MasterPublicKey } = await import('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js');
   const { Principal } = require('@icp-sdk/core/principal');
   const key = MasterPublicKey.productionKey('key_1').deriveCanisterKey(Principal.fromText(SINK).toUint8Array()).deriveSubKey(new TextEncoder().encode('ignite-pii-v1')).publicKeyBytes();
   const one = await encryptName(key, SUBJECT, 'Paul Cranwell');
   const two = await encryptName(key, SUBJECT, 'Paul Cranwell');
-  assert.deepEqual(Array.from(one), Array.from(two));
+  assert.notDeepEqual(Array.from(one), Array.from(two));
   const other = await encryptName(key, SUBJECT, 'Someone Else');
   assert.notDeepEqual(Array.from(one), Array.from(other));
   assert.ok(DerivedPublicKey.deserialize(key));
@@ -71,7 +75,7 @@ test('nameReference builds the exact v1 binding', () => {
 });
 
 function fakeDeps(overrides = {}) {
-  const journal = conversionJournal('/tmp/nonexistent-conversion-journal.json');
+  const journal = conversionJournal(join(mkdtempSync(join(tmpdir(), 'name-conversion-')), 'journal.json'));
   journal.put('__seed__', { phase: 'seed' }); // ensure file exists path works in-memory
   const stored = new Map();
   const deps = {
@@ -111,7 +115,7 @@ test('ciphertext mismatch refuses to publish the reference', async () => {
 
 test('unknown outcomes are retained and stop the run', async () => {
   const { deps } = fakeDeps();
-  deps.journal.put('acct-3', { phase: 'unknown' });
+  deps.journal.put('acct-3', { phase: 'unknown', sink: SINK, subject: SUBJECT });
   const key = await testKey();
   await assert.rejects(() => convertOneAccount(SINK, key, { accountId: 'acct-3', name: 'A', subject: SUBJECT }, deps), /Unknown outcome retained/);
 });
@@ -175,3 +179,25 @@ async function testKey() {
   const { Principal } = require('@icp-sdk/core/principal');
   return MasterPublicKey.productionKey('key_1').deriveCanisterKey(Principal.fromText(SINK).toUint8Array()).deriveSubKey(new TextEncoder().encode('ignite-pii-v1')).publicKeyBytes();
 }
+
+test('club encryption is randomized and separated from person and other club ciphertext', async () => {
+  const key = await testKey();
+  const one = await encryptClubName(key, 'club-1', SUBJECT, 'Paul');
+  assert.notDeepEqual(one, await encryptClubName(key, 'club-1', SUBJECT, 'Paul'));
+  assert.notDeepEqual(one, await encryptClubName(key, 'club-2', SUBJECT, 'Paul'));
+  assert.notDeepEqual(one, await encryptClubName(key, 'club-1', OWNER, 'Paul'));
+  assert.notDeepEqual(one, await encryptName(key, SUBJECT, 'Paul'));
+});
+test('club inventory changes invalidate the approved conversion plan', () => {
+  const args = { rows: [{accountId: 'one', subject: SUBJECT, name: 'Paul', clubs: ['club-1']}], sinks: [SINK], historyRevision: 1n };
+  assert.notEqual(buildConversionPlan(args).hash, buildConversionPlan({...args, rows: [{...args.rows[0], clubs: ['club-2']}]}).hash);
+});
+test('unknown shared-name writes stay locked and are never replayed', async () => {
+  const entries = new Map(); let attempts = 0;
+  const deps = {journal: {get: id => entries.get(id), put: (id, value) => entries.set(id, value)}, pii: {register_private_club_name: async () => {attempts++; throw Error('lost reply');}}};
+  const row = {accountId: 'copy', subject: SUBJECT, name: 'Paul', clubs: ['club-1']};
+  const key = await testKey();
+  await assert.rejects(prepareClubNameCopies(SINK, key, row, deps), /lost reply/);
+  await assert.rejects(prepareClubNameCopies(SINK, key, row, deps), /Unknown club name/);
+  assert.equal(attempts, 1);
+});

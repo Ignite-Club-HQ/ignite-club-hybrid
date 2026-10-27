@@ -125,6 +125,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'get_private_profile_club_name_vetkey' : IDL.Func(
+        [IDL.Vec(IDL.Text), PrivateNameScope, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        [],
+      ),
     'get_private_profile_name_vetkeys_batch' : IDL.Func(
         [IDL.Vec(IDL.Text), PrivateNameScope, IDL.Vec(IDL.Nat8)],
         [
@@ -228,6 +233,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
         [],
       ),
+    'read_private_club_name_preparation' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],
+        [],
+      ),
     'read_private_media_authority' : IDL.Func(
         [IDL.Text],
         [
@@ -254,6 +264,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'register_pii' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Principal],
+        [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],
+        [],
+      ),
+    'register_private_club_name' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Nat8)],
         [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],
         [],
       ),

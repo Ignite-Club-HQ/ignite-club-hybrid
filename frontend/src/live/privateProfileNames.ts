@@ -2,7 +2,7 @@ import { Principal } from "@icp-sdk/core/principal";
 import { IbeCiphertext } from "@icp-sdk/vetkeys";
 import type { FeatureBackendContext } from "./featureRouter";
 import { connectLivePiiAccessControl } from "./domains";
-import { encryptPiiText, fetchPiiVetKeys } from "./piiVetKeys";
+import { encryptPiiText, fetchPiiVetKeys, fetchClubNameVetKey, clubNamePiiId, CLUB_NAME_SCHEME_PREFIX } from "./piiVetKeys";
 import { unwrapCandid } from "./features/candid";
 import { z } from "zod";
 import type { PrivateProfileAuthorityResolver } from "./privateProfileAuthority";
@@ -86,6 +86,35 @@ export async function preparePrivateOwnProfileName(
   return prepareOwnField(ctx, FIELD, value);
 }
 
+/** Explicit rehearsal preparation only; does not publish a profile reference.
+ * The original person-key record is retained for non-club audiences. */
+export async function preparePrivateOwnClubName(ctx: FeatureBackendContext, club: string, name: string): Promise<void> {
+  const value = name.trim();
+  if (!value || new TextEncoder().encode(value).length > 512) throw new Error('A display name of at most 512 bytes is required.');
+  const piiId = clubNamePiiId(club);
+  const identity = ctx.identity;
+  const principal = canonicalPrincipal(identity.getPrincipal().toText());
+  const target = JSON.stringify(ctx.target);
+  const sessionActive = capturePrivateProfileSession();
+  const active = () => {
+    sessionActive();
+    if (ctx.identity !== identity || identity.getPrincipal().toText() !== principal || JSON.stringify(ctx.target) !== target) throw new Error('Club name preparation changed.');
+  };
+  const ciphertext = await encryptPiiText(ctx, piiId, FIELD, value);
+  active();
+  const { actor } = await connectLivePiiAccessControl(ctx.target, identity);
+  active();
+  const api = actor as unknown as {
+    register_private_club_name: (subject: Principal, club: string, bytes: Uint8Array) => Promise<{ Ok: unknown } | { Err: string }>;
+    read_private_club_name_preparation: (subject: Principal, club: string) => Promise<{ Ok: { ciphertext: number[] | Uint8Array; master_key_id: string } } | { Err: string }>;
+  };
+  await unwrapCandid(api.register_private_club_name(identity.getPrincipal(), club, ciphertext), 'Prepare private club name');
+  active();
+  const row = await unwrapCandid(api.read_private_club_name_preparation(identity.getPrincipal(), club), 'Verify private club name');
+  active();
+  if (row.master_key_id !== `${CLUB_NAME_SCHEME_PREFIX}${club}` || row.ciphertext.length !== ciphertext.length || ciphertext.some((b, i) => row.ciphertext[i] !== b)) throw new Error('Club name preparation readback mismatch.');
+}
+
 async function readNames(ctx: FeatureBackendContext, subjects: string[], field = FIELD, active: () => void = () => {}, audience?: PrivateProfileAudience): Promise<Map<string, string>> {
   active();
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
@@ -100,13 +129,17 @@ async function readNames(ctx: FeatureBackendContext, subjects: string[], field =
   const validRows = rows;
   if (!validRows.length) return new Map();
   if (audience && validRows.length !== subjects.length) throw new Error('Private-name audience did not authorize every candidate.');
-  const keys = await fetchPiiVetKeys(ctx, [...new Set(validRows.map(row => row.pii_id))], field, { fresh: true, assertActive: active, ...(audience ? { audience } : {}) });
-  if (audience && keys.size !== validRows.length) throw new Error('Private-name keys were not authorized.');
+  const clubRows = validRows.filter(row => row.master_key_id?.startsWith('vetkey-club-names-'));
+  if (clubRows.length && (!audience || audience.kind !== 'club' || field !== FIELD || clubRows.some(row => row.master_key_id !== `${CLUB_NAME_SCHEME_PREFIX}${audience.resource}`))) throw new Error('Invalid club name key scope.');
+  const individualRows = validRows.filter(row => !clubRows.includes(row));
+  const keys = individualRows.length ? await fetchPiiVetKeys(ctx, individualRows.map(row => row.pii_id), field, { fresh: true, assertActive: active, ...(audience ? { audience } : {}) }) : new Map();
+  const clubKey = clubRows.length && audience ? await fetchClubNameVetKey(ctx, clubRows.map(row => row.pii_id), audience, active) : undefined;
+  if (audience && keys.size + (clubKey ? clubRows.length : 0) !== validRows.length) throw new Error('Private-name keys were not authorized.');
   active();
   const out = new Map<string, string>();
   const decoder = new TextDecoder("utf-8", { fatal: true });
   for (const row of validRows) {
-    const key = keys.get(row.pii_id);
+    const key = clubRows.includes(row) ? clubKey : keys.get(row.pii_id);
     if (!key) continue;
     try {
       const name = decoder.decode(IbeCiphertext.deserialize(Uint8Array.from(row.ciphertext)).decrypt(key));
@@ -114,6 +147,13 @@ async function readNames(ctx: FeatureBackendContext, subjects: string[], field =
     } catch {
       // A malformed/wrong-key record is never displayed as ciphertext or a ref.
     }
+  }
+  // Even a cached shared key is used only under a fresh exact-subject read.
+  // Repeat after decryption so revoked membership never publishes labels.
+  if (clubRows.length && audience) {
+    const closing = await unwrapCandid(actor.get_private_profile_names_batch(subjects, audience), 'Confirm club name audience');
+    active();
+    if (closing.length !== rows.length || closing.some((row, i) => row.pii_id !== rows[i].pii_id || row.field_id !== field || row.master_key_id !== rows[i].master_key_id || row.ciphertext.length !== rows[i].ciphertext.length || row.ciphertext.some((b, j) => b !== rows[i].ciphertext[j]))) throw new Error('Club name audience or ciphertext changed.');
   }
   return out;
 }

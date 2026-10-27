@@ -203,7 +203,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // The shared photo identity is accessible ONLY through its membership
   // relay. Generic records must never alias it, even with separator injection.
   func reservedMediaIdentity(pii_id : Text, field_id : Text) : Bool {
-    Text.startsWith(pii_id, #text "clubmedia:") or Text.contains(pii_id, #char '\u{1F}') or Text.contains(field_id, #char '\u{1F}')
+    Text.startsWith(pii_id, #text "clubmedia:") or Text.startsWith(pii_id, #text "clubnames:") or Text.startsWith(field_id, #text "club_display_name:") or Text.contains(pii_id, #char '\u{1F}') or Text.contains(field_id, #char '\u{1F}')
   };
 
   // ==================== State ====================
@@ -289,7 +289,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
     let gs = guardian_relationships.filter(func(x) = x.children.any(inG));
     { grants = club_read_grants.filter(func(x) = x.club_id == c);
-      records = pii_records.filter(func(x) = inG(x.pii_id));
+      records = pii_records.filter(func(x) = inG(x.pii_id) and not reservedMediaIdentity(x.pii_id, x.field_id));
       guardians = gs;
       guardian_labels = ?guardianLabels.filter(func(x) = gs.any(func(g) = g.guardian.equal(x.guardian))) }
   };
@@ -692,8 +692,11 @@ persistent actor class Main(governorInit : Principal) = this {
       var out : [EncryptedPii] = [];
       for (id in ids.values()) {
         let r = pii_records.find(func r = r.pii_id == id and r.field_id == "display_name") ?? return #Err("Private name not found");
+        let selected = if (scope.kind == "club") {
+          pii_records.find(func row = row.pii_id == id and row.field_id == clubNameField(scope.resource)) ?? r
+        } else r;
         log_audit(caller, id, "display_name", "private_name_read", true, scope.kind);
-        out := out.concat([{ pii_id = id; field_id = "display_name"; ciphertext = r.ciphertext; nonce = r.nonce; master_key_id = r.master_key_id }]);
+        out := out.concat([{ pii_id = id; field_id = "display_name"; ciphertext = selected.ciphertext; nonce = selected.nonce; master_key_id = selected.master_key_id }]);
       };
       #Ok(out)
     } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
@@ -719,6 +722,68 @@ persistent actor class Main(governorInit : Principal) = this {
       if (epoch != mediaAuthEpoch or first != final or not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name authorization changed");
       for (id in ids.values()) { log_audit(caller, id, "display_name", "private_name_vetkey", true, scope.kind) };
       #Ok(out)
+    } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
+  };
+
+  // ==================== Rehearsal-only club adult-name replicas ====================
+  // Original per-person ciphertext remains for restricted audiences. Club
+  // replicas never enter generic grants, snapshots or key endpoints.
+  func clubNameField(club : Text) : Text { "club_display_name:" # club };
+  func clubNameScheme(club : Text) : Text { "vetkey-club-names-v1:" # club };
+
+  public shared ({ caller }) func register_private_club_name(subject : Principal, club : Text, ciphertext : [Nat8]) : async { #Ok : EncryptedPii; #Err : Text } {
+    if (not privateNamesRehearsal or not validMediaClub(club)) return #Err("Club names are not released or club is invalid");
+    let lease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(e)) return #Err(e) };
+    try {
+      if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
+      try {
+        await admitAccount(caller); auth(caller);
+        if (subject.isAnonymous() or ciphertext.size() == 0 or ciphertext.size() > 4096) return #Err("Invalid adult name replica");
+        if (not isGovernor(caller) and caller != subject) return #Err("Name owner required");
+        let original = pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == "display_name") ?? return #Err("Original private name required");
+        if (original.domain_owner != subject) return #Err("Original name owner changed");
+        let field = clubNameField(club);
+        let record : PiiRecord = { original with field_id = field; ciphertext; nonce = []; master_key_id = clubNameScheme(club); readers = [] };
+        mediaAuthEpoch += 1;
+        pii_records := pii_records.filter(func r = not (r.pii_id == subject.toText() and r.field_id == field)).concat([record]);
+        log_audit(caller, subject.toText(), field, "club_name_register", true, "Rehearsal adult name replica");
+        #Ok({ pii_id = subject.toText(); field_id = "display_name"; ciphertext; nonce = []; master_key_id = record.master_key_id })
+      } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
+    } finally { privateNameWriterGate.leave(lease) }
+  };
+
+  // Owner/governor ciphertext readback only. No shared key is issued here.
+  public shared ({ caller }) func read_private_club_name_preparation(subject : Principal, club : Text) : async { #Ok : EncryptedPii; #Err : Text } {
+    if (not privateNamesRehearsal or not validMediaClub(club)) return #Err("Club names are not released or club is invalid");
+    if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      if (not isGovernor(caller) and caller != subject) return #Err("Name owner required");
+      let r = pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == clubNameField(club)) ?? return #Err("Club name replica not found");
+      if (r.domain_owner != subject) return #Err("Name owner changed");
+      #Ok({ pii_id = subject.toText(); field_id = "display_name"; ciphertext = r.ciphertext; nonce = []; master_key_id = r.master_key_id })
+    } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
+  };
+
+  public shared ({ caller }) func get_private_profile_club_name_vetkey(ids : [Text], scope : PrivateNameScope, transport : Blob) : async { #Ok : Blob; #Err : Text } {
+    let releaseEpoch = private_name_release_epoch;
+    if (scope.kind != "club" or not validMediaClub(scope.resource) or ids.size() == 0 or transport.size() != 48) return #Err("Exact club adult-name audience required");
+    if (not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name release fenced or not configured");
+    if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
+    try {
+      await admitAccount(caller); auth(caller);
+      let epoch = mediaAuthEpoch;
+      let first = await authorizePrivateNames(caller, ids, scope);
+      for (id in ids.values()) {
+        let r = pii_records.find(func r = r.pii_id == id and r.field_id == clubNameField(scope.resource)) ?? return #Err("Club name replica not found");
+        if (r.master_key_id != clubNameScheme(scope.resource) or r.domain_owner.toText() != id) return #Err("Invalid club name replica");
+      };
+      let key = await ManagementCanister.vetKdDeriveKey(ibeIdentity("clubnames:" # scope.resource, "display_name"), vetkdContext(), vetkdKeyId<system>(), transport);
+      await admitAccount(caller);
+      let final = await authorizePrivateNames(caller, ids, scope);
+      if (first != final or epoch != mediaAuthEpoch or not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name authorization changed");
+      log_audit(caller, "clubnames:" # scope.resource, "display_name", "club_name_vetkey", true, scope.kind);
+      #Ok(key)
     } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
   };
 
@@ -904,7 +969,7 @@ persistent actor class Main(governorInit : Principal) = this {
     // Remove existing if any, then append
     mediaAuthEpoch += 1;
     pii_records := Array.filter<PiiRecord>(pii_records, func(r) {
-      not (r.pii_id == pii_id and r.field_id == field_id)
+      not (r.pii_id == pii_id and (r.field_id == field_id or (field_id == "display_name" and Text.startsWith(r.field_id, #text "club_display_name:"))))
     }).concat([record]);
 
     log_audit(caller, pii_id, field_id, "register", true, "PII Registration");
@@ -937,6 +1002,7 @@ persistent actor class Main(governorInit : Principal) = this {
     await admitAccount(caller);
     auth(caller);
     if (pii_ids.size() > 100) return #Err("Batch too large");
+    if (pii_ids.any(func(id) = reservedMediaIdentity(id, field_id))) return #Err("Reserved or invalid PII identity");
     let epoch = mediaAuthEpoch;
     let allowedClubs = await resolveAllowedClubs(caller, pii_ids, field_id);
     let allowedCompetitions = await resolveAllowedCompetitions(caller, pii_ids, field_id);
@@ -1300,6 +1366,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let before = club_read_grants.size();
     mediaAuthEpoch += 1;
     club_read_grants := club_read_grants.filter(func(g) = g.club_id != club_id);
+    pii_records := pii_records.filter(func r = r.field_id != clubNameField(club_id));
     privateMediaAuthorities.remove(club_id);
     // Permanent deletion is not a transfer: neither authority may survive
     // identifier reuse. Existing owner records remain independently owned.
@@ -1333,7 +1400,7 @@ persistent actor class Main(governorInit : Principal) = this {
         // Remove the record (cryptographic erasure)
         mediaAuthEpoch += 1;
         pii_records := Array.filter<PiiRecord>(pii_records, func(rec) {
-          not (rec.pii_id == pii_id and rec.field_id == field_id)
+          not (rec.pii_id == pii_id and (rec.field_id == field_id or (field_id == "display_name" and Text.startsWith(rec.field_id, #text "club_display_name:"))))
         });
 
         let now = now_ns();
