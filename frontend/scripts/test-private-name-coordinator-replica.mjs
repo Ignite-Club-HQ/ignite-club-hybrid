@@ -97,7 +97,8 @@ try {
   // Settings alone activate the runtime gate; an upgrade would bump the pinned
   // removal-history revision through post_upgrade.
   await pic.updateCanisterSettings({ canisterId: identity.canisterId, sender: governor, environmentVariables:
-    [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }, { name: 'IGNITE_PRIVATE_NAME_WRITER_REHEARSAL', value: '1' }] });
+    [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }, { name: 'IGNITE_PRIVATE_NAME_WRITER_REHEARSAL', value: '1' },
+     { name: 'IGNITE_ACCOUNT_SERVICE_IDENTITY', value: identity.canisterId.toText() }] });
   actor.setPrincipal(governor);
   await denied(() => actor.read_removal_history_manifest());
 
