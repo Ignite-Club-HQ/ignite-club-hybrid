@@ -33,9 +33,60 @@ fn cleanup_account(subject: Principal) -> Outcome<Account> {
     Ok(account)
 }
 
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CleanupIntent { pub id: String, pub club: String, pub user: Principal, pub account: Option<CleanupAccount>, pub submitted: bool }
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+struct CleanupProof { intent: CleanupIntent, members: Vec<bool> }
+
+fn verify_removed(proof: &CleanupProof, id: &str, club: &str, account: &CleanupAccount, sink: Principal, subject: Principal) -> Outcome<()> {
+    if proof.intent.id != id || proof.intent.club != club || proof.intent.account.as_ref() != Some(account)
+        || !proof.intent.submitted || !account.principals.contains(&proof.intent.user)
+        || proof.members.len() != account.principals.len() || proof.members.iter().any(|v| *v)
+        || account.original_authority != (OriginalNameAuthority::Existing { sink, subject }) {
+        return Err("Exact retained nonmembership proof required".into());
+    }
+    Ok(())
+}
+
+/// Original PII alone requests authorization; the registered owning club supplies
+/// the retained operation and atomic all-alias nonmembership, not a browser.
+#[ic_cdk::update]
+async fn authorize_private_name_removal(authority: Principal, club: String, subject: Principal, id: String) -> Outcome<CleanupAccount> {
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1") && option_env!("IGNITE_PRIVATE_NAME_CLEANUP_RELEASE") != Some("1") { return Err("Private-name cleanup is not released".into()); }
+    let sink = ic_cdk::api::msg_caller();
+    if !super::service_authorities().contains(&sink) || club.is_empty() || club.len()>128 || id.is_empty() || id.len()>256 { return Err("Exact configured cleanup service required".into()); }
+    let config = super::directory_config()?;
+    let source = config.sources.iter().find(|(_,p)| *p==authority).ok_or("Registered cleanup club required")?.0.clone();
+    let account = cleanup_account(subject)?;
+    let revision = super::profile_search_revision(); let history = super::removal_history_revision();
+    let active = || -> Outcome<()> {
+        if cleanup_account(subject)? != account || revision!=super::profile_search_revision() || history!=super::removal_history_revision()
+            || !config.same_configuration(&super::directory_config()?) { return Err("Cleanup account or authority changed".into()); } Ok(())
+    };
+    let inventory = super::read_registry_pages(&config.binding, active).await?; active()?;
+    let clubs=inventory.groups.iter().flat_map(|g|g.domains.iter().filter(|d|d.domain=="club_domain").map(|d|d.canister)).collect::<Vec<_>>();
+    super::group_inventory::validate(&inventory,&config.binding,&clubs,&[])?;
+    let sinks=inventory.groups.iter().flat_map(|g|g.domains.iter().filter(|d|d.domain=="pii_access_control").map(|d|d.canister)).collect::<Vec<_>>();
+    let expected=routing(&account,super::get_profile_entry(&account.id),&sinks,revision)?;
+    if !clubs.contains(&authority) || expected.original_authority != (OriginalNameAuthority::Existing{sink,subject}) { return Err("Original cleanup authority changed".into()); }
+    let location=ic_cdk::call::Call::bounded_wait(config.binding.registry,"read_hosted_club_assignment")
+        .with_args(&(club.clone(),config.binding.target_alias.clone(),config.binding.registry_revision)).await.map_err(|_|"Cleanup club ownership unavailable")?;
+    active()?;
+    let location:super::membership_transport::Reply<super::membership_locations::Assignment>=location.candid().map_err(|_|"Invalid cleanup club ownership")?;
+    match location { super::membership_transport::Reply::Ok(row)=>super::membership_locations::verify(&club,&source,authority,&row,&config.sources,config.binding.registry_revision)?,
+        super::membership_transport::Reply::Err(e)=>return Err(e) }
+    for _ in 0..2 {
+        let reply=ic_cdk::call::Call::bounded_wait(authority,"read_private_name_removal_proof").with_args(&(id.clone(),)).await.map_err(|_|"Cleanup proof unavailable")?;
+        active()?;
+        let proof:Outcome<CleanupProof>=reply.candid().map_err(|_|"Invalid cleanup proof")?;
+        verify_removed(&proof?,&id,&club,&expected,sink,subject)?;
+    }
+    active()?; Ok(expected)
+}
+
 #[ic_cdk::update]
 async fn read_private_name_cleanup_account(subject: Principal) -> Outcome<CleanupAccount> {
-    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL")!=Some("1") { return Err("Private-name cleanup is not released".into()); }
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL")!=Some("1") && option_env!("IGNITE_PRIVATE_NAME_CLEANUP_RELEASE")!=Some("1") { return Err("Private-name cleanup is not released".into()); }
     let caller=ic_cdk::api::msg_caller();
     let config=super::directory_config()?;
     if caller==Principal::anonymous() || !config.sources.iter().any(|(_,p)|*p==caller) { return Err("Registered cleanup club required".into()); }
@@ -80,5 +131,16 @@ async fn read_private_name_cleanup_account(subject: Principal) -> Outcome<Cleanu
     #[test] fn ambiguous_aliases_and_foreign_profiles_refuse(){
         let a=account();assert!(routing(&Account{principals:vec![a.principals[0];2],..a.clone()},None,&[],0).is_err());
         let mut p=profile(String::new());p.account_id="foreign".into();assert!(routing(&a,Some(p),&[],0).is_err());
+    }
+    #[test] fn removal_requires_every_alias_absent_and_exact_saved_authority(){
+        let a=account();let sink=Principal::from_slice(&[9,1]);let subject=a.principals[1];
+        let saved=routing(&a,Some(profile(format!("pii-display-name:v1:{sink}:{subject}"))),&[sink],11).unwrap();
+        let mut proof=CleanupProof{intent:CleanupIntent{id:"op".into(),club:"club".into(),user:a.principals[0],account:Some(saved.clone()),submitted:true},members:vec![false,false]};
+        assert!(verify_removed(&proof,"op","club",&saved,sink,subject).is_ok());
+        proof.members[1]=true;assert!(verify_removed(&proof,"op","club",&saved,sink,subject).is_err());
+        proof.members=vec![false];assert!(verify_removed(&proof,"op","club",&saved,sink,subject).is_err());
+        proof.members=vec![false,false];assert!(verify_removed(&proof,"other","club",&saved,sink,subject).is_err());
+        assert!(verify_removed(&proof,"op","club",&saved,subject,subject).is_err());
+        proof.intent.submitted=false;assert!(verify_removed(&proof,"op","club",&saved,sink,subject).is_err());
     }
 }

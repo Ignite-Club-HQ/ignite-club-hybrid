@@ -288,6 +288,11 @@ type Receipt =
    receiver: principal;
    request: Request__1;
  };
+type Proof = 
+ record {
+   intent: Intent;
+   members: vec bool;
+ };
 type PromoCode = 
  record {
    access_level: text;
@@ -1843,10 +1848,20 @@ type Main =
              next: opt text;
            };
      });
+   read_private_name_cleanup_pending: () ->
+    (variant {
+       Err: text;
+       Ok: vec Intent;
+     });
    read_private_name_preparation: (request: Request) ->
     (variant {
        Err: text;
        Ok: Receipt__1;
+     });
+   read_private_name_removal_proof: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: Proof;
      });
    read_private_name_writer_window: (request: Request) ->
     (variant {
@@ -2047,6 +2062,10 @@ type Main =
                                   Err: text;
                                   Ok: ClubTeam;
                                 });
+   resume_private_name_cleanup: () -> (variant {
+                                         Err: text;
+                                         Ok: nat;
+                                       });
    retire_media_quota_records: (reservation_cursor: text, usage_cursor:
     text) ->
     (variant {
@@ -2505,6 +2524,14 @@ type InviteMessageDefault =
    club_id: text;
    message: text;
  };
+type Intent = 
+ record {
+   account: opt Account__1;
+   club: text;
+   id: text;
+   submitted: bool;
+   user: principal;
+ };
 type HttpResponse = 
  record {
    body: blob;
@@ -2793,6 +2820,15 @@ type Batch =
    revision: nat;
    subjects: vec principal;
  };
+type Authority = 
+ variant {
+   Existing: record {
+               sink: principal;
+               subject: principal;
+             };
+   NoName;
+   Unresolved;
+ };
 type Acl = 
  record {
    children: vec Child;
@@ -2801,6 +2837,14 @@ type Acl =
    guardians: vec Guardian;
    roles: vec RoleGrant;
    teams: vec Team;
+ };
+type Account__1 = 
+ record {
+   account_id: text;
+   account_version: nat64;
+   original_authority: Authority;
+   principals: vec principal;
+   revision: nat64;
  };
 type AccountRole = 
  record {
