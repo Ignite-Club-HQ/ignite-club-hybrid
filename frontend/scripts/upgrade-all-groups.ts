@@ -26,6 +26,7 @@ import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissio
 import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades, requireCompletedRecovery, galleryAuthorities, verifyCompletedRecovery, normalizePlan } from '../../scripts/all-group-upgrade-policy.mjs';
 import { CLEANUP_RELEASE, cleanupEnvironment, requireCleanupWiring, activateCleanupSettings } from '../../scripts/private-name-cleanup-release-policy.mjs';
 import { isSecureNameScope, secureNameEnvironment, secureNameChangedSettings } from '../../scripts/secure-name-release-policy.mjs';
+import { settlePublishedEvidence } from '../../scripts/all-group-publication.mjs';
 
 const [action, scope, artifacts, pem, directory] = process.argv.slice(2);
 const CHECKED_PLAN = process.env.CHECKED_PLAN ? normalizePlan(process.env.CHECKED_PLAN) : process.env.CHECKED_PLAN;
@@ -183,7 +184,17 @@ const binding={repo,release,scope,...(scope==='full_backend'?{upgradeUnchanged:t
 const planHash=digest(binding);
 const same=journal&&digest(journal.binding)===planHash;
 if(recovery&&!same)throw Error('Live recovery plan differs from the original release; no installs permitted');
-if(journal&&!same)requireSettledPredecessor(journal);
+if(journal&&!same){
+  // A completed release whose main-branch evidence push was reverted by the
+  // two-way sync settles once the exact snapshot files reached main through the
+  // normal edit/sync path. This never replays installs and never pushes to main.
+  if(journal.complete===true&&journal.published!==true&&journal.publication){
+    settlePublishedEvidence(api,process.env.GITHUB_REF,journal);
+    journal.published=true;
+    stored=persistGroup2Journal(api,path,branch,stored,journal,'publication settled');
+  }
+  requireSettledPredecessor(journal);
+}
 const gate=async()=>{
   const current=await registry();
   if(current.configurationRevision!==initial.configurationRevision||groupApprovalConfiguration(current.groups,current.placements)!==configuration)throw Error('Routing configuration drift; stop without replay');
