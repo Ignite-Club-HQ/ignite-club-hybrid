@@ -312,13 +312,13 @@ export default function EditProfilePage() {
         ]);
         const nameContext = { identity, target: getActiveIcpTarget() };
         if (!savedProfile.privateNameMaintained) {
-        await preparePrivateOwnProfileName(nameContext, displayName.trim());
-        saveSessionActive();
-        await refreshPrivateOwnClubNames(nameContext, displayName.trim(), async () => {
-          const { getLiveMyRoleGrants } = await import('@/live/features/membership');
-          const grants = await getLiveMyRoleGrants(nameContext);
-          return grants.flatMap(grant => grant.club ?? []);
-        }, saveSessionActive);
+          await preparePrivateOwnProfileName(nameContext, displayName.trim());
+          saveSessionActive();
+          await refreshPrivateOwnClubNames(nameContext, displayName.trim(), async () => {
+            const { getLiveMyRoleGrants } = await import('@/live/features/membership');
+            const grants = await getLiveMyRoleGrants(nameContext);
+            return grants.flatMap(grant => grant.club ?? []);
+          }, saveSessionActive);
         }
         // Optional contact email (own PII record, upsert semantics). Powers
         // competition welcome emails for existing members in ICP mode.
