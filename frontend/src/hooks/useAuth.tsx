@@ -73,7 +73,7 @@ interface AuthContextType {
    */
   resumingSignIn?: boolean;
   signOut: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: (savedIcpProfile?: IcpIdentityProfile) => Promise<void>;
   refreshUnreadCount: () => Promise<void>;
   clearUnreadCount: () => void;
   decrementUnreadCount: (n: number) => void;
@@ -1641,9 +1641,19 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       setSigningOut(false);
       }
     },
-    refreshProfile: async () => {
+    refreshProfile: async (savedIcpProfile?: IcpIdentityProfile) => {
       if (!principal || signingOutRef.current) return;
-      const requestId = icpProfileRequestRef.current;
+      // A caller-bound acknowledged save already supplies the display profile.
+      // Do not repeat identity/profile/role reads just to leave onboarding.
+      if (savedIcpProfile) {
+        if (savedIcpProfile.accountId !== principal || savedIcpProfile.profileMissing) throw Error('Saved profile does not match the signed-in account.');
+        ++icpProfileRequestRef.current;
+        setIcpProfile(savedIcpProfile);
+        setIcpProfileResolved(true);
+        setIcpProfileError(false);
+        return;
+      }
+      const requestId = ++icpProfileRequestRef.current;
       try {
         const [authMod, { fetchIcpIdentityProfile }] = await Promise.all([
           import("@/live/internetIdentityAuth"),
