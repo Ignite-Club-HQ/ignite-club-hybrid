@@ -111,6 +111,7 @@ fn begin_private_name_preparation(operation_id:String, expected_history_revision
     if let Ok(w)=get(&operation_id){if w.inventory!=candidate{return Err("Immutable preparation inventory conflict".into());}return Ok(w);}
     if pending() || super::private_name_coordination::any_pending() || super::removal_pending() || !super::link_lifecycle().pending.is_empty() || super::DELETION_TICKETS.with(|m|!m.borrow().is_empty()) {return Err("Another authority operation remains unresolved".into());}
     if super::removal_history_revision()!=expected_history_revision || candidate.groups.history_revision!=expected_history_revision || super::group_inventory_binding().as_ref()!=Some(&candidate.groups.binding) || super::supplemental_inventory()!=candidate.supplemental{return Err("Pinned preparation topology required".into());}
+    super::group_inventory::validate_complete(&candidate.groups.snapshot,&candidate.groups.binding,&super::link_lifecycle().authorities,&super::service_authorities(),&candidate.supplemental,&candidate.media)?;
     if JOURNAL.with(|m|m.borrow().len())>=4096{return Err("Private-name write journal capacity reached".into());}
     let generation=GENERATION.with(|m|m.borrow().get().checked_add(1)).ok_or("Private-name write generation exhausted")?;
     let mut w=create(operation_id.clone(),generation,candidate,ic_cdk::api::canister_self())?;
@@ -149,6 +150,10 @@ async fn verify_private_name_preparation(operation_id:String)->Outcome<WriteWind
     // excluding that local observation counter only.
     let mut comparable=inventory.clone();comparable.groups.history_revision=w.inventory.groups.history_revision;
     if current.request!=w.request || current.phase!=WritePhase::AwaitingApproval || comparable!=w.inventory{return Err("Locked preparation topology changed; retain locks".into());}
+    if super::PROFILES.with(|m|m.borrow().len())>4096{return Err("Original profile inspection budget exceeded; retain locks".into());}
+    for p in super::all_profiles(){if p.display_name.starts_with("pii-display-name:"){
+        let parts=p.display_name.split(':').collect::<Vec<_>>();if parts.len()!=4 || parts[1]!="v1" || Principal::from_text(parts[2]).ok().is_none_or(|s|!w.sinks.contains(&s)){return Err("Original name authority omitted; retain locks".into());}
+    }}
     // Fencing is the signed-admission waiting stage; no conversion or release
     // can advance until the exact original signature is retained.
     current.phase=WritePhase::Fencing;save_at(&operation_id,&current);Ok(current)
