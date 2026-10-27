@@ -16,7 +16,7 @@ const PRIVATE_NAME_WRITER_MEMORY: u8 = 12;
 mod private_name_writer_window;
 use private_name_writer_window::{WriterRequest, WriterReceipt};
 #[ic_cdk::update]
-fn open_private_name_writer_window(request: WriterRequest) -> Result<(), String> { private_name_writer_window::open(request) }
+fn open_private_name_writer_window(_request: WriterRequest) -> Result<(), String> { Err("Topology writes remain closed during private-name rehearsal".into()) }
 #[ic_cdk::update]
 fn seal_private_name_writer_window(request: WriterRequest) -> Result<(), String> { private_name_writer_window::seal(request) }
 #[ic_cdk::update]

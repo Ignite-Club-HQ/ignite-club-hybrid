@@ -13,7 +13,7 @@ const PRIVATE_NAME_WRITER_MEMORY: u8 = 26;
 mod private_name_writer_window;
 use private_name_writer_window::{WriterRequest, WriterReceipt};
 #[ic_cdk::update]
-fn open_private_name_writer_window(request: WriterRequest) -> Result<(), String> { private_name_writer_window::open(request) }
+fn open_private_name_writer_window(_request: WriterRequest) -> Result<(), String> { Err("Topology writes remain closed during private-name rehearsal".into()) }
 #[ic_cdk::update]
 fn seal_private_name_writer_window(request: WriterRequest) -> Result<(), String> { private_name_writer_window::seal(request) }
 #[ic_cdk::update]
@@ -1021,8 +1021,6 @@ fn register_group_placement(placement: GroupPlacement, expected_revision: u64) -
 // account IDs, memberships or health receipts. This does not activate routing.
 #[ic_cdk::update]
 fn read_group_registry(target_alias: String) -> Outcome<GroupRegistrySnapshot> {
-    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
-
     let page = read_group_registry_page(target_alias, None, None, 64)?;
     if page.next_cursor.is_some() { return Err("Registry exceeds legacy reply; use read_group_registry_page".into()); }
     Ok(GroupRegistrySnapshot { revision: page.revision, groups: page.groups, placements: page.placements })

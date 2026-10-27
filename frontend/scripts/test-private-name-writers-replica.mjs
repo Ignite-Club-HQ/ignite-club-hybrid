@@ -42,7 +42,9 @@ try {
  for(const [d,idlFactory] of [['shard_router',routerIdl],['placement_registry',placementIdl]]){
   const service=await pic.setupCanister({idlFactory,wasm:resolve(root,`target/wasm32-unknown-unknown/release/${d}.wasm`),sender:governor,controllers:[governor],arg:init,environmentVariables:env});
   service.actor.setPrincipal(governor);
-  await refused(()=>service.actor.set_governor(outsider));
+  await refused(()=>d==='shard_router'?service.actor.set_website_default_club_domain(outsider):service.actor.grant_operator(outsider,[]));
+  service.actor.setPrincipal(identity.canisterId);
+  await refused(()=>service.actor.open_private_name_writer_window({operation_id:'forged-topology-open',generation:1n,inventory_digest:new Uint8Array(32)}));
  }
  const request={operation_id:'names:two-group-window',generation:1n,inventory_digest:new Uint8Array(32).fill(7)};
  const sinks=groups.map(g=>g.pii_access_control);
