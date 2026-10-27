@@ -44,9 +44,11 @@ const VETKEY_BATCH_SIZE = 25;
 
 let verificationKeyCache: { canisterId: string; key: DerivedPublicKey } | null = null;
 const vetKeyCache = new Map<string, VetKey>();
+let clubNameKeyGeneration = 0;
 
 /** Drops all cached key material — call on sign-out / identity switch. */
 export function clearPiiVetKeyCache(): void {
+  clubNameKeyGeneration++;
   verificationKeyCache = null;
   vetKeyCache.clear();
   clubNameKeyCache.clear();
@@ -83,9 +85,10 @@ export async function fetchClubNameVetKey(
   const target = JSON.stringify(ctx.target);
   const scope = { ...audience };
   const subjects = [...ids];
+  const generation = clubNameKeyGeneration;
   const active = () => {
     assertActive();
-    if (ctx.identity !== identity || identity.getPrincipal().toText() !== principal || JSON.stringify(ctx.target) !== target) throw new Error('Club name key context changed.');
+    if (generation !== clubNameKeyGeneration || ctx.identity !== identity || identity.getPrincipal().toText() !== principal || JSON.stringify(ctx.target) !== target) throw new Error('Club name key context changed.');
   };
   active();
   const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, identity);

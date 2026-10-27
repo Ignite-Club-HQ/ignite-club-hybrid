@@ -39,3 +39,13 @@ it('never gives a family or email audience the shared names key', async () => {
   await expect(fetchClubNameVetKey(ctx, ['one'], {...scope, kind: 'family'}, () => {})).rejects.toThrow('audience');
   expect(mocks.derive).not.toHaveBeenCalled();
 });
+it('cache clearing fences a held key even if the caller guard has not retired', async () => {
+  let release: (value: unknown) => void = () => {};
+  mocks.derive.mockImplementation(() => new Promise(resolve => {release = resolve;}));
+  const pending = fetchClubNameVetKey(ctx, ['one'], scope, () => {});
+  const rejected = expect(pending).rejects.toThrow('context changed');
+  await vi.waitFor(() => expect(mocks.derive).toHaveBeenCalledOnce());
+  clearPiiVetKeyCache(); release({Ok: [1]});
+  await rejected;
+  expect(mocks.store).not.toHaveBeenCalled();
+});

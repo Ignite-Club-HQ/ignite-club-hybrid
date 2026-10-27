@@ -22,7 +22,7 @@
 //   remain and every reference must bind an inventoried original PII sink.
 
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { canonical, normalizePlan, normalizeConfirmation, assertMigrationOwner } from './migrate-club-plan.mjs';
 
@@ -133,8 +133,14 @@ export async function prepareClubNameCopies(sink, publicKey, row, { pii, journal
 /** File-backed per-account journal; plaintext names are never persisted. */
 export function conversionJournal(path) {
   let entries = {};
-  try { entries = JSON.parse(readFileSync(path, 'utf8')); } catch { /* first run */ }
-  const flush = () => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, JSON.stringify(entries, null, 2)); };
+  try { entries = JSON.parse(readFileSync(path, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw Error('Conversion journal is unreadable; refuse overwrite'); }
+  const flush = () => {
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    const temporary = `${path}.tmp`;
+    writeFileSync(temporary, JSON.stringify(entries, null, 2), { mode: 0o600 });
+    chmodSync(temporary, 0o600);
+    renameSync(temporary, path);
+  };
   return {
     get: (id) => entries[id],
     put: (id, v) => { entries[id] = { ...entries[id], ...v }; flush(); },
@@ -161,14 +167,14 @@ export async function convertOneAccount(sink, publicKey, row, deps) {
   if (prior && !prior.ciphertext) throw Error('Legacy conversion journal needs reconciliation');
   const ciphertext = prior?.ciphertext ?? Array.from(await encryptName(publicKey, row.subject, row.name));
   const hash = createHash('sha256').update(Uint8Array.from(ciphertext)).digest('hex');
-  journal.put(row.accountId, { phase: 'encrypted', hash, subject: row.subject, sink, ciphertext });
-
-  try {
+  if (prior && prior.hash !== hash) throw Error('Conversion ciphertext journal changed');
+  if (!prior || prior.phase === 'encrypted') {
+    // Persist unknown BEFORE a write; lost replies must never erase existing
+    // club copies by replaying the original record registration.
+    journal.put(row.accountId, { phase: 'unknown', hash, subject: row.subject, sink, ciphertext });
     await pii.register_pii(row.subject, NAME_FIELD, ciphertext, row.subject);
-  } catch {
-    await pii.register_pii(row.subject, NAME_FIELD, ciphertext, row.subject); // identical-terms retry only
+    journal.put(row.accountId, { phase: 'registered', hash, subject: row.subject, sink, ciphertext });
   }
-  journal.put(row.accountId, { phase: 'registered', hash, subject: row.subject, sink, ciphertext });
 
   const readback = await pii.get_encrypted_pii_batch([row.subject], NAME_FIELD, 'profile_display', 'conversion readback');
   const stored = readback?.[0]?.ciphertext;
