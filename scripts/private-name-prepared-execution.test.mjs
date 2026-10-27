@@ -58,6 +58,19 @@ test('saved disk receipts survive restart and settle a committed lost reply with
     assert.equal(journal.get('club:a1:c1').phase,'verified');assert.equal(s.state.phase,'Done');
   } finally {journal.close();rmSync(directory,{recursive:true,force:true});}
 });
+test('restart with saved unknown absent write does not retry or release the retained window',async()=>{
+  const s=await setup(),directory=mkdtempSync(join(tmpdir(),'name-unknown-'));
+  const open=()=>openPreparedExecutionJournal(join(directory,'receipts'),{artifact:s.request.artifact,expectedHash:s.request.expectedHash,assertHeld:()=>true});
+  let journal=open(),attempts=0;s.deps.journal=journal;
+  s.pii.writeOriginal=async()=>{attempts++;throw Error('unknown uncommitted');};
+  try {
+    await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/unknown uncommitted/);journal.close();
+    journal=open();s.deps.journal=journal;s.request.approval.action='recover';s.request.approval.confirmation=CONFIRM_RECOVER;
+    await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/no replay/);
+    assert.equal(attempts,1);assert.equal(s.state.phase,'Writing');assert.equal(s.order.includes('close'),false);
+    assert.equal(s.lock.held,true);assert.equal(journal.get('original:a1').phase,'unknown');
+  } finally {journal.close();rmSync(directory,{recursive:true,force:true});}
+});
 test('partial conversion recovery retains the full original plan and never rewrites completed rows',async()=>{
   const s=await setup();let failed=true;const original=s.pii.writeOriginal;
   s.pii.writeOriginal=async(p,ct)=>{if(p==='person2'&&failed){failed=false;await original(p,ct);throw Error('lost reply');}return original(p,ct);};
