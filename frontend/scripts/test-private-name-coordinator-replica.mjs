@@ -21,7 +21,7 @@ import {prepareInventoriedPrivateNameArtifact} from '../../scripts/private-name-
 import {savePrivateNameArtifact,readPrivateNameArtifact} from '../../scripts/private-name-plan-artifact.mjs';
 import {openPreparedExecutionJournal} from '../../scripts/private-name-execution-journal.mjs';
 import {executePreparedPrivateNamePlan} from '../../scripts/private-name-prepared-execution.mjs';
-import {encryptName,encryptClubName,CONFIRM_CONVERT,CONFIRM_RECOVER} from '../../scripts/convert-private-names.mjs';
+import {encryptName,encryptClubName} from '../../scripts/convert-private-names.mjs';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -161,7 +161,7 @@ try {
   // Exclusion here is harness-owned: no other writers run in this disposable
   // replica. The ordinary writer window itself is NOT production exclusion.
   const sink0pre = groups[0].pii_access_control;
-  const { DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed,EncryptedVetKey,TransportSecretKey } = await import('@icp-sdk/vetkeys');
+  const { DerivedPublicKey, IbeCiphertext,EncryptedVetKey,TransportSecretKey } = await import('@icp-sdk/vetkeys');
   const { createHash } = await import('node:crypto');
   let harnessExclusive=true;
   const profileAdapter=createPrivateNameProfileAdapter(actor,{assertFence:async()=>harnessExclusive});
