@@ -81,7 +81,7 @@ export function buildConversionPlan({ rows, sinks, historyRevision }) {
   const body = {
     kind: 'private-name-conversion', historyRevision: String(historyRevision ?? ''),
     sinks: [...sinks].sort(),
-    rows: rows.map(r => ({ accountId: r.accountId, name: r.name, subject: r.subject })),
+    rows: rows.map(r => ({ accountId: r.accountId, name: r.name, subject: r.subject, ...(r.clubs ? { clubs: [...r.clubs].sort(), clubNameScheme: 'vetkey-club-names-v1' } : {}) })),
   };
   return { body, hash: createHash('sha256').update(canonical(body)).digest('hex') };
 }
@@ -103,6 +103,37 @@ export async function encryptName(publicKey, subject, name) {
 }
 
 export function nameReference(sink, subject) { return `${REF_PREFIX}${sink}:${subject}`; }
+
+/** Explicit destination list supplied by a verified inventory adapter, never
+ * inferred from names/paths. This helper does not approve or execute rollout. */
+export async function encryptClubName(publicKey, club, subject, name) {
+  if (!club || club.length > 64 || /[\u001f/]/.test(club)) throw Error('Invalid exact club');
+  const { DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import(new URL('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js', import.meta.url).href);
+  const input = `clubnames:${club}\u001f${NAME_FIELD}`;
+  const seed = createHash('sha256').update(`${input}\u001f${subject}\u001f`).update(name).digest();
+  return IbeCiphertext.encrypt(DerivedPublicKey.deserialize(publicKey), IbeIdentity.fromBytes(new TextEncoder().encode(input)), new TextEncoder().encode(name), IbeSeed.fromBytes(seed)).serialize();
+}
+
+export async function prepareClubNameCopies(sink, publicKey, row, { pii, journal }) {
+  if (!Array.isArray(row.clubs) || row.clubs.length > 100 || new Set(row.clubs).size !== row.clubs.length) throw Error('Bounded distinct exact club inventory required');
+  for (const club of [...row.clubs].sort()) {
+    const ciphertext = Array.from(await encryptClubName(publicKey, club, row.subject, row.name));
+    const hash = createHash('sha256').update(Uint8Array.from(ciphertext)).digest('hex');
+    const id = `${row.accountId}:club:${club}`;
+    const prior = journal.get(id);
+    if (prior && (prior.hash !== hash || prior.sink !== sink || prior.subject !== row.subject || prior.club !== club)) throw Error('Club name journal binding changed');
+    if (prior?.phase === 'unknown') throw Error('Unknown club name write retained; read back before retrying');
+    // Always read completed copies again: stale bytes cannot certify conversion.
+    if (!prior) {
+      journal.put(id, { phase: 'unknown', sink, subject: row.subject, club, hash });
+      await pii.register_private_club_name(row.subject, club, ciphertext);
+      journal.put(id, { phase: 'registered', sink, subject: row.subject, club, hash });
+    }
+    const stored = await pii.read_private_club_name_preparation(row.subject, club);
+    if (stored.master_key_id !== `vetkey-club-names-v1:${club}` || stored.ciphertext.length !== ciphertext.length || ciphertext.some((b, i) => b !== stored.ciphertext[i])) throw Error('Club name ciphertext readback mismatch');
+    journal.put(id, { phase: 'verified', sink, subject: row.subject, club, hash });
+  }
+}
 
 /** File-backed per-account journal; plaintext names are never persisted. */
 export function conversionJournal(path) {
@@ -148,6 +179,8 @@ export async function convertOneAccount(sink, publicKey, row, deps) {
     throw Error(`Stored ciphertext mismatch for ${row.accountId}; refusing to publish the reference`);
   }
   journal.put(row.accountId, { phase: 'verified', hash, subject: row.subject, sink });
+
+  if (row.clubs) await prepareClubNameCopies(sink, publicKey, row, { pii, journal });
 
   let profile;
   try {

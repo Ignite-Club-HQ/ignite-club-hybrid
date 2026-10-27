@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "./featureRouter";
 
-const mocks = vi.hoisted(() => ({ register: vi.fn(), read: vi.fn(), scopedRead: vi.fn(), keys: vi.fn(), encrypt: vi.fn(), decrypt: vi.fn() }));
+const mocks = vi.hoisted(() => ({ register: vi.fn(), read: vi.fn(), scopedRead: vi.fn(), keys: vi.fn(), clubKey: vi.fn(), encrypt: vi.fn(), decrypt: vi.fn() }));
 vi.mock("./domains", () => ({ connectLivePiiAccessControl: vi.fn(async () => ({ actor: { register_pii: mocks.register, get_encrypted_pii_batch: mocks.read, get_private_profile_names_batch: mocks.scopedRead } })) }));
-vi.mock("./piiVetKeys", () => ({ encryptPiiText: mocks.encrypt, fetchPiiVetKeys: mocks.keys }));
+vi.mock("./piiVetKeys", () => ({ encryptPiiText: mocks.encrypt, fetchPiiVetKeys: mocks.keys, fetchClubNameVetKey: mocks.clubKey, clubNamePiiId: (id: string) => `clubnames:${id}`, CLUB_NAME_SCHEME_PREFIX: 'vetkey-club-names-v1:' }));
 vi.mock("@icp-sdk/vetkeys", () => ({ IbeCiphertext: { deserialize: () => ({ decrypt: mocks.decrypt }) } }));
 
 import { hydratePrivateProfileNames, preparePrivateOwnProfileName, preparePrivateOwnProfileEmail, privateProfileNameReference } from "./privateProfileNames";
@@ -53,6 +53,26 @@ describe("private profile name preparation", () => {
 });
 
 describe("authorized name display", () => {
+  it('uses one shared key for club rows and rechecks the exact ciphertext after decryption', async () => {
+    const audience = { kind: 'club' as const, authority: Principal.fromText(authority), resource: 'club-1', profile_revision: 0n };
+    mocks.scopedRead.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9], master_key_id: 'vetkey-club-names-v1:club-1' }] });
+    mocks.clubKey.mockResolvedValue('club-key');
+    expect((await hydratePrivateProfileNames(ctx, [{ display_name: reference }], { audience }))[0].display_name).toBe('Paul Cranwell');
+    expect(mocks.keys).not.toHaveBeenCalled();
+    expect(mocks.clubKey).toHaveBeenCalledWith(ctx, [subject], audience, expect.any(Function));
+    expect(mocks.scopedRead).toHaveBeenCalledTimes(2);
+  });
+  it('withholds a cached-key name when closing club membership is denied', async () => {
+    const audience = { kind: 'club' as const, authority: Principal.fromText(authority), resource: 'club-1', profile_revision: 0n };
+    mocks.scopedRead.mockResolvedValueOnce({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9], master_key_id: 'vetkey-club-names-v1:club-1' }] }).mockResolvedValueOnce({ Err: 'Membership removed' });
+    mocks.clubKey.mockResolvedValue('cached-club-key');
+    await expect(hydratePrivateProfileNames(ctx, [{ display_name: reference }], { audience })).rejects.toThrow('Membership removed');
+  });
+  it.each(['family', 'competition', 'guardian_search'] as const)('rejects a shared club ciphertext in a %s audience', async kind => {
+    mocks.scopedRead.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9], master_key_id: 'vetkey-club-names-v1:club-1' }] });
+    await expect(hydratePrivateProfileNames(ctx, [{ display_name: reference }], { audience: { kind, authority: Principal.fromText(authority), resource: 'club-1', profile_revision: 0n } })).rejects.toThrow('key scope');
+    expect(mocks.clubKey).not.toHaveBeenCalled();
+  });
   it('rejects a held read when the global session retires with its old context unchanged', async () => {
     let release: (value: unknown) => void = () => {};
     mocks.read.mockImplementation(() => new Promise(resolve => { release = resolve; }));
