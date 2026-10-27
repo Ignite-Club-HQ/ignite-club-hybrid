@@ -44,6 +44,7 @@ export function runPrivateNameAcceptance({ root = resolve(dirname(fileURLToPath(
       command(`Compile disposable ${domain}`, moc, [...sources, '--default-persistent-actors', '--enhanced-migration', 'src/backend/migrations', ...(domain === 'media_blob_store' ? ['--max-stable-pages', '3932160'] : []), '-o', output, 'src/main.mo'], cwd);
     }
     command('Compile disposable identity and registries', 'cargo', ['build', '--locked', '--release', '--target', 'wasm32-unknown-unknown', '-p', 'identity_access', '-p', 'shard_router', '-p', 'placement_registry']);
+    command('Verify exact identity cleanup routing', 'cargo', ['test', '--locked', '-p', 'identity_access', 'private_name_cleanup']);
     const scripts = ['convert-private-names', 'private-name-canister-adapters', 'private-name-club-inventory', 'private-name-plan-artifact', 'private-name-prepared-execution', 'private-name-execution-journal', 'private-name-saved-approval', 'private-name-approval-delivery', 'private-name-verified-preparation', 'private-name-replica-lifecycle', 'private-name-lifecycle-adapter', 'private-name-github-protection'];
     command('Check essential conversion and approval rules', process.execPath, ['--test', ...scripts.map(name => `scripts/${name}.test.mjs`)]);
     const frontend = join(root, 'frontend');
