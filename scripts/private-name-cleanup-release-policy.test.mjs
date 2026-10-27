@@ -55,3 +55,12 @@ test('interrupted settings-only stage is superseded only when pending writes are
   assert.equal(supersedableSettingsStage({...journal,steps:[{phase:'pending'}]},'secure_name_save',()=>true),false);
   assert.equal(supersedableSettingsStage({...journal,modulesComplete:true},'secure_name_save',()=>true),false);
 });
+
+test('display release may link only an empty legacy club identity once', async () => {
+  const { requireCleanupWiring } = await import('./private-name-cleanup-release-policy.mjs');
+  const id = 'identity-x';
+  assert.equal(requireCleanupWiring('club_domain', [['identity_access', '']], id, true), 'link');
+  assert.throws(() => requireCleanupWiring('club_domain', [['identity_access', '']], id, false));
+  assert.throws(() => requireCleanupWiring('club_domain', [['identity_access', 'other']], id, true));
+  assert.equal(requireCleanupWiring('club_domain', [['identity_access', id]], id, true), undefined);
+});

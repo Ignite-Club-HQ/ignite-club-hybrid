@@ -110,6 +110,8 @@ const readConfig=async(t:Target)=>{
   return (Array.isArray(reply)?reply:reply.Ok).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
 };
 const wiring:Record<string,string>={};
+const LEGACY_G1_CLUB='mzzzv-taaaa-aaaal-qxlrq-cai';
+const displayLinks:Target[]=[];
 const legacySettings:Record<string,string>={};
 const identityActor=Actor.createActor<IdentityService>(identityIdl,{agent,canisterId:shared.identity_access});
 const cleanupIdentityEvidence=async()=>{
@@ -149,7 +151,7 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
   const permission=groupPermissionRequirement(t.name,own('club_domain'));
   if(permission)requireRow(permission[0],permission[1]);
   if(t.name==='club_domain'){
-    if(cleanupRelease || secureRelease)requireCleanupWiring(t.name,rows,shared.identity_access);
+    if(cleanupRelease || secureRelease){const legacyDisplay=scope==='private_club_name_display'&&t.groupId==='g1'&&t.canisterId===LEGACY_G1_CLUB;if(requireCleanupWiring(t.name,rows,shared.identity_access,legacyDisplay)==='link')displayLinks.push(t);}
     // The original G1 authority predates group lifecycle wiring. Its empty
     // singleton must be preserved, never configured by an upgrade. Verify
     // disabled settings via controller readback, not a guessed group label.
@@ -291,6 +293,18 @@ for(const t of targets.filter(t=>t.name==='media_metadata')){
   const r=await actor.set_gallery_authorities(Principal.fromText(club),Principal.fromText(vault));
   if('Err'in r)throw Error(`Gallery authority wiring refused for ${t.groupId}: ${r.Err}`);
   journal.galleryAuthorities[t.canisterId]={club,vault,phase:'complete'};await persist();
+}
+// Owner-approved one-time display link of the original Group 1 club service.
+// Set-once and idempotent on the canister; read back before continuing.
+for(const t of displayLinks){
+  const factory=()=>IDL.Service({link_display_identity_authority:IDL.Func([IDL.Principal],[IDL.Variant({Ok:IDL.Null,Err:IDL.Text})],[])});
+  const actor=Actor.createActor(factory,{agent,canisterId:t.canisterId}) as unknown as {link_display_identity_authority(p:Principal):Promise<{Ok:null}|{Err:string}>};
+  await gate();
+  const r=await actor.link_display_identity_authority(Principal.fromText(shared.identity_access));
+  if('Err'in r)throw Error(`Display identity link refused for ${t.groupId}: ${r.Err}`);
+  const rows=await readConfig(t);
+  if(rows.filter(x=>x[0]==='identity_access'&&x[1]===shared.identity_access).length!==1)throw Error('Display identity link readback failed');
+  console.log(`Linked ${t.groupId} club service to the account service for private name displays.`);
 }
 if(journal.publication || journal.published){validateJournal(journal,binding);console.log('Exact saved snapshot retained for publication resume; modules reverified without reinstall.');process.exit(0);}
 // Metadata's ordered page index is a required, idempotent release prerequisite.
