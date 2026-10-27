@@ -3469,6 +3469,19 @@ mod tests {
         assert!(ensure_account(Principal::anonymous()).is_err());
     }
     #[test]
+    fn lost_principal_index_self_heals_only_for_listed_owner() {
+        let owner = principal(170);
+        let id = ensure_account(owner).unwrap();
+        deindex_principal(owner);
+        assert!(account_for(owner).is_err());
+        assert_eq!(ensure_account(owner).unwrap(), id);
+        assert_eq!(account_for(owner).unwrap().id, id);
+        let stranger = principal(171);
+        let foreign = Account { id: account_id(stranger), principals: vec![principal(172)], version: 0, status: AccountStatus::Active };
+        put_account(&foreign);
+        assert_eq!(ensure_account(stranger).unwrap_err(), "Account ID collision");
+    }
+    #[test]
     fn removal_intent_survives_restored_accounts_and_cannot_complete_without_receivers() {
         let (snapshot,binding,clubs)=group_inventory::tests::fixture();
         let p=|v| Principal::from_slice(&[v,1]);
