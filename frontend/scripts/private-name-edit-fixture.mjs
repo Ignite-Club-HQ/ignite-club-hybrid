@@ -42,9 +42,9 @@ export async function createNameEditFixture() {
     const domains = domainNames.map((domain, index) => ({ domain, canister: services[domain]?.canisterId ?? principal(20 + index) }));
     router.actor.setPrincipal(governor);
     let revision = await router.actor.version();
-    revision = ok(await router.actor.register_group({ id: 'g1', target_alias: 'mainnet', domains, photo_store: [], accepting: false, max_clubs: 100, assigned_clubs: 0, heap_budget_bytes: 1000000n, heap_bytes: 0n, min_cycles: 1n, cycles: 0n, observed_at_ns: 0n }, revision));
+    revision = ok(await router.actor.register_group({ id: 'g1', target_alias: 'mainnet', domains, photo_store: [], accepting: true, max_clubs: 100, assigned_clubs: 0, heap_budget_bytes: 1000000n, heap_bytes: 0n, min_cycles: 1n, cycles: 1n, observed_at_ns: BigInt(await pic.getTime()) * 1000000n }, revision));
     revision = ok(await router.actor.register_group_placement({ group_id: 'g1', deployment_id: 'mainnet', deployment_revision: 1n, host: 'https://icp-api.io', network_kind: 'public_mainnet', primary_subnet: subnet, approved_subnets: [subnet], additional_subnets_enabled: false, domains: domains.map(d => ({ ...d, subnet })) }, revision));
-    const assignment = ok(await router.actor.assign_new_club_group(clubId, 'g1', revision));
+    const assignment = ok(await router.actor.assign_new_club_group(clubId, 'mainnet', revision));
     revision = assignment.revision;
     const binding = { registry: router.canisterId, registry_revision: revision, target_alias: 'mainnet', deployment_id: 'mainnet', deployment_revision: 1n, host: 'https://icp-api.io', network_kind: 'public_mainnet' };
     identity.actor.setPrincipal(governor);
