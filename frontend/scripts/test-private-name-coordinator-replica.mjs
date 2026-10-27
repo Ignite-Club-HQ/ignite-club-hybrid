@@ -314,8 +314,8 @@ try {
     await denied(()=>actor.publish_approved_private_name(operationId,artifact.body.rows[0].accountId));
     await pic.upgradeCanister({canisterId:identity.canisterId,wasm:rustWasm('identity_access'),sender:governor});actor.setPrincipal(governor);
     assert.equal((await deps.coordinator.read(operationId)).phase,'Writing');
-    const reopenedEvidence=await inventoryAdapter.listAccounts();assert.equal(reopenedEvidence.rows.length,3);assert.ok(BigInt(reopenedEvidence.revision)>BigInt(lockedAccountEvidence.revision));
-    await denied(()=>actor.read_private_name_account_inventory(operationId,lockedWindow.request,[{phase:0,after:[],revision:BigInt(lockedAccountEvidence.revision)}],100));
+    const reopenedEvidence=await inventoryAdapter.listAccounts();assert.deepEqual(reopenedEvidence,lockedAccountEvidence); // unchanged stable rows survive upgrade
+    await denied(()=>actor.read_private_name_account_inventory(operationId,lockedWindow.request,[{phase:0,after:[],revision:BigInt(lockedAccountEvidence.revision)+1n}],100));
     ok(await actor.approve_private_name_conversion(operationId,admission));
     actor.setPrincipal(outsider);await denied(()=>actor.set_profile('After restart edit',[]));actor.setPrincipal(governor);
     journal.close();const savedBody=readPrivateNameArtifact(join(directory,'plan'),artifact.hash);
@@ -334,6 +334,6 @@ try {
       assert.equal(new TextDecoder().decode(IbeCiphertext.deserialize(Uint8Array.from(row.ciphertext)).decrypt(key)),profiles.find(p=>p.account_id===row.accountId).display_name);
     }
     sink0pre.actor.setPrincipal(governor);
-    console.log('PASS: real two-group signed conversion/recovery plus account-first locked inventory, profileless account retention, ordinary/preapproval/foreign-request denial, full integrity traversal and stale-cursor refusal after upgrade. Production pre-plan freeze/drain, original authority completeness, cryptographic preflight and management exclusion remain blocked.');
+    console.log('PASS: real two-group signed conversion/recovery plus account-first locked inventory, profileless account retention, ordinary/preapproval/foreign-request denial, full integrity traversal, stable evidence through upgrade and wrong-revision cursor refusal. Production pre-plan freeze/drain, original authority completeness, cryptographic preflight and management exclusion remain blocked.');
   } finally {journal?.close();harnessExclusive=false;rmSync(directory,{recursive:true,force:true});}
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
