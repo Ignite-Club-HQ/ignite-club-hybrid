@@ -36,6 +36,7 @@ fn key()->Outcome<VerifyingKey>{
     VerifyingKey::from_bytes(&bytes).map_err(|_|"Invalid immutable conversion signer".into())
 }
 fn get(id:&str)->Outcome<SignedApproval>{APPROVALS.with(|m|m.borrow().get(&id.to_string())).map(|b|super::decode(&b)).ok_or("Signed conversion approval required".into())}
+pub(super) fn has_approval(id:&str)->bool {APPROVALS.with(|m|m.borrow().contains_key(&id.to_string()))}
 fn source_digest(id:&str)->Outcome<Vec<u8>>{let a=super::get_account(id).ok_or("Exact account required")?;let p=super::get_profile_entry(id).ok_or("Exact profile required")?;Ok(Sha256::digest(super::encode(&(a,p))).to_vec())}
 fn approval_bytes(b:&ApprovalBody)->Vec<u8>{
     let mut out=Vec::new();let mut add=|bytes:&[u8]|{out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());out.extend_from_slice(bytes);};

@@ -63,6 +63,7 @@ fn read_private_name_account_inventory(operation_id: String, expected: WriterReq
     super::private_name_write_coordinator::access()?;
     let w = super::private_name_write_coordinator::get(&operation_id)?;
     require_locked(&w)?;
+    if super::private_name_writer_window::preparation(&w.request) && super::private_name_conversion_approval::has_approval(&operation_id){return Err("Preparation inventory closed after signed admission".into());}
     if expected != w.request || limit == 0 || limit > 100 { return Err("Exact bounded account inventory required".into()); }
     if super::removal_pending() || !super::link_lifecycle().pending.is_empty() || super::DELETION_TICKETS.with(|m| !m.borrow().is_empty()) {
         return Err("Account lifecycle remains unresolved".into());

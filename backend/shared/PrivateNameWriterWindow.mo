@@ -41,6 +41,7 @@ module {
     };
     public func open(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
       if (not authorized(caller)) return #Err("Configured rehearsal identity required");
+      if (preparation(request)) return #Err("Use preparation admission");
       if (preparationPending()) return #Err("Preparation lock remains held");
       if (request.operation_id == "" or request.operation_id.size() > 128 or request.generation == 0 or request.inventory_digest.size() != 32) return #Err("Invalid private-name writer request");
       switch (intents.get(request.operation_id)) {

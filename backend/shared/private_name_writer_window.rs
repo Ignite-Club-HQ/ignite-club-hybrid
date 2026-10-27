@@ -56,6 +56,7 @@ fn approved_key(request:&WriterRequest)->String{format!("approved:{}",request.op
 pub fn activate_preparation(request:WriterRequest)->Result<(),String>{
     authorize()?;let r=preparation_receipt_local(request.clone())?;
     if r.closing||r.sealed||r.active!=candid::Nat::from(0u8){return Err("Exact drained preparation required".into());}
+    if INTENTS.with(|m|m.borrow().get(&approved_key(&request))).is_none() && INTENTS.with(|m|m.borrow().len())>=4096{return Err("Preparation activation capacity reached".into());}
     INTENTS.with(|m|m.borrow_mut().insert(approved_key(&request),crate::encode(&WriterIntent{request,closing:true,sealed:true,active:0})));Ok(())
 }
 pub fn finish_preparation(request: WriterRequest) -> Result<(),String> {
@@ -66,6 +67,7 @@ pub fn finish_preparation(request: WriterRequest) -> Result<(),String> {
 }
 pub fn open(request: WriterRequest) -> Result<(),String> {
     authorize()?;
+    if preparation(&request){return Err("Use preparation admission".into());}
     if preparation_pending(){return Err("Preparation lock remains held".into());}
     if request.operation_id.is_empty() || request.operation_id.len()>128 || request.generation==0 || request.inventory_digest.len()!=32 {return Err("Invalid private-name writer request".into());}
     if let Ok(i)=load(&request.operation_id) {

@@ -75,6 +75,7 @@ impl WriteWindow {
 #[ic_cdk::update]
 async fn begin_private_name_write_window(operation_id:String,expected_history_revision:u64)->Outcome<WriteWindow>{
     access()?;
+    if operation_id.starts_with("club-name-preparation-"){return Err("Use independent preparation admission".into());}
     if let Ok(w)=get(&operation_id){return Ok(w);}
     if pending()||super::private_name_coordination::any_pending(){return Err("Another private-name operation remains unresolved".into());}
     if JOURNAL.with(|m|m.borrow().len())>=4096{return Err("Private-name write journal capacity reached".into());}
@@ -96,6 +97,10 @@ async fn begin_private_name_write_window(operation_id:String,expected_history_re
     GENERATION.with(|m|m.borrow_mut().set(generation));JOURNAL.with(|m|m.borrow_mut().insert(operation_id,super::encode(&w)));Ok(w)
 }
 fn save_at(id:&str,w:&WriteWindow){JOURNAL.with(|m|m.borrow_mut().insert(id.to_string(),super::encode(w)));}
+#[ic_cdk::update]
+async fn read_private_name_preparation_topology()->Outcome<RemovalInventory>{
+    access()?;super::read_removal_inventory_evidence(super::removal_history_revision()).await
+}
 /// The candidate topology is not account/club data evidence. Close local
 /// admission synchronously, retain the operation, then freeze every candidate
 /// writer before collecting the verified topology under those locks.
@@ -139,7 +144,11 @@ async fn verify_private_name_preparation(operation_id:String)->Outcome<WriteWind
     if !super::private_name_writer_window::preparation(&w.request) || w.phase!=WritePhase::AwaitingApproval{return Err("Every preparation writer must drain first".into());}
     let inventory=super::read_removal_inventory_evidence(super::removal_history_revision()).await?;
     access()?;let mut current=get(&operation_id)?;
-    if current.request!=w.request || current.phase!=WritePhase::AwaitingApproval || inventory!=w.inventory{return Err("Locked preparation topology changed; retain locks".into());}
+    // An identity upgrade advances history but does not change locked source
+    // rows. Do not repin registry/topology; compare the entire retained evidence
+    // excluding that local observation counter only.
+    let mut comparable=inventory.clone();comparable.groups.history_revision=w.inventory.groups.history_revision;
+    if current.request!=w.request || current.phase!=WritePhase::AwaitingApproval || comparable!=w.inventory{return Err("Locked preparation topology changed; retain locks".into());}
     // Fencing is the signed-admission waiting stage; no conversion or release
     // can advance until the exact original signature is retained.
     current.phase=WritePhase::Fencing;save_at(&operation_id,&current);Ok(current)
