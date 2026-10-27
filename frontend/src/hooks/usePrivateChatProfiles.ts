@@ -15,8 +15,10 @@ export function usePrivateChatProfiles(conversationId: string | undefined, viewe
     if (!enabled || !conversationId || !viewerId || !ids.length) return;
     let controller: AbortController | undefined;
     let disposed = false;
+    const retire = () => { controller?.abort(); setSnapshot(undefined); };
     const refresh = async () => {
       controller?.abort();
+      if (disposed || document.visibilityState === 'hidden') { retire(); return; }
       const current = new AbortController();
       controller = current;
       // Each visibility refresh rechecks the exact authority, not a device copy.
@@ -34,9 +36,17 @@ export function usePrivateChatProfiles(conversationId: string | undefined, viewe
       }
     };
     void refresh();
-    const visible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    const visible = () => { if (document.visibilityState === 'visible') void refresh(); else retire(); };
+    const pageHidden = () => retire();
     document.addEventListener('visibilitychange', visible);
-    return () => { disposed = true; controller?.abort(); document.removeEventListener('visibilitychange', visible); };
+    window.addEventListener('pagehide', pageHidden);
+    window.addEventListener('pageshow', visible);
+    return () => {
+      disposed = true; controller?.abort();
+      document.removeEventListener('visibilitychange', visible);
+      window.removeEventListener('pagehide', pageHidden);
+      window.removeEventListener('pageshow', visible);
+    };
   }, [conversationId, viewerId, idsKey, enabled, scopeKey, kind, broadcastMessageId, directClubId]);
   return useCallback((id: string) => snapshot?.key === scopeKey ? snapshot.profiles.get(id) ?? null : null, [snapshot, scopeKey]);
 }

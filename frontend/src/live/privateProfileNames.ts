@@ -157,12 +157,16 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
   profiles: readonly T[],
   options: { signal?: AbortSignal; resolveAuthority?: PrivateProfileAuthorityResolver; audience?: PrivateProfileAudience } = {},
 ): Promise<Array<Omit<T, "display_name"> & { display_name: string | null }>> {
+  // Retain the exact rows whose references were authorized. A caller changing
+  // its array during an await must not attach a retained name to another row.
+  profiles = profiles.map(profile => ({ ...profile }));
   options = { ...options, ...(options.audience ? { audience: { ...options.audience } } : {}) };
+  let retired = false;
   const identity = ctx.identity;
   const principal = identity.getPrincipal().toText();
   const target = JSON.stringify(ctx.target);
   const active = () => {
-    if (options.signal?.aborted || ctx.identity !== identity || identity.getPrincipal().toText() !== principal || JSON.stringify(ctx.target) !== target) {
+    if (retired || options.signal?.aborted || ctx.identity !== identity || identity.getPrincipal().toText() !== principal || JSON.stringify(ctx.target) !== target) {
       throw new Error("Private profile read cancelled or changed.");
     }
   };
@@ -190,23 +194,32 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
   });
   // A global two-request ceiling, not two requests per group. Original-key
   // routes are checked again after all encryption/service awaits.
-  const leases = new Map<string, Awaited<ReturnType<PrivateProfileAuthorityResolver>>>();
+  const leases = new Map<string, Promise<Awaited<ReturnType<PrivateProfileAuthorityResolver>>>>();
+  const routeGuards = new Map<string, () => void>();
   const readJob = async ({ authority, subjects }: typeof jobs[number]) => {
     try {
       active();
-      let lease = leases.get(authority);
-      if (!lease) {
+      let pendingLease = leases.get(authority);
+      if (!pendingLease) {
         const resolve = options.resolveAuthority;
-        lease = resolve ? await boundedAuthorityCheck(() => resolve(authority)) : { context: ctx, confirm: async () => {} };
-        active();
-        if (lease.context.identity !== identity || lease.context.target.host !== ctx.target.host || lease.context.target.networkKind !== ctx.target.networkKind || lease.context.target.canisterIds.pii_access_control !== authority) throw new Error("Invalid original private profile route.");
-        leases.set(authority, lease);
+        pendingLease = (async () => {
+          const lease = resolve ? await boundedAuthorityCheck(() => resolve(authority)) : { context: ctx, confirm: async () => {} };
+          active();
+          if (lease.context.identity !== identity || lease.context.target.host !== ctx.target.host || lease.context.target.networkKind !== ctx.target.networkKind || lease.context.target.canisterIds.pii_access_control !== authority) throw new Error("Invalid original private profile route.");
+          const routeTarget = JSON.stringify(lease.context.target);
+          routeGuards.set(authority, () => {
+            active();
+            if (lease.context.identity !== identity || JSON.stringify(lease.context.target) !== routeTarget) throw new Error("Original private profile route changed.");
+          });
+          return lease;
+        })();
+        leases.set(authority, pendingLease);
       }
+      const lease = await pendingLease;
       const route = lease.context;
-      const routeTarget = JSON.stringify(route.target);
       const routeActive = () => {
         active();
-        if (route.identity !== identity || JSON.stringify(route.target) !== routeTarget) throw new Error("Original private profile route changed.");
+        routeGuards.get(authority)?.();
       };
       const part = await boundedRead(route, subjects, routeActive, options.audience);
       if (options.audience && part.size !== subjects.length) throw new Error('Private-name audience is incomplete or unavailable.');
@@ -216,9 +229,22 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
       names.set(authority, group);
     } catch (error) { if (options.audience) throw error; /* Display-only reads remain neutral. */ }
   };
-  for (let start = 0; start < jobs.length; start += 2) await Promise.all(jobs.slice(start, start + 2).map(readJob));
-  for (const [authority, lease] of leases) {
-    try { active(); await boundedAuthorityCheck(lease.confirm); active(); } catch (error) { if (options.audience) throw error; names.delete(authority); }
+  try {
+    for (let start = 0; start < jobs.length; start += 2) await Promise.all(jobs.slice(start, start + 2).map(readJob));
+    for (const [authority, pendingLease] of leases) {
+      try {
+        const lease = await pendingLease;
+        active(); routeGuards.get(authority)?.();
+        await boundedAuthorityCheck(lease.confirm);
+        active(); routeGuards.get(authority)?.();
+      } catch (error) { if (options.audience) throw error; names.delete(authority); }
+    }
+  } catch (error) {
+    // A refused parallel batch retires sibling work before its late reply can
+    // start fresh key derivations or contribute to a replacement request.
+    retired = true;
+    names.clear();
+    throw error;
   }
   active();
   if (options.audience && references.some(ref => ref === null || (ref && !names.get(ref.authority)?.has(ref.subject)))) throw new Error('Private-name authority is unverified or unavailable.');

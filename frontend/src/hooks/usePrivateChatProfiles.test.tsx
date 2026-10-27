@@ -6,6 +6,33 @@ vi.mock('@/live/chatRelationshipProfiles', () => ({ readChatRelationshipProfiles
 import { usePrivateChatProfiles } from './usePrivateChatProfiles';
 beforeEach(() => { vi.resetAllMocks(); });
 describe('mounted private chat name lifetime', () => {
+  it('aborts pending names on backgrounding and ignores their late reply', async () => {
+    let finish: (value: unknown) => void = () => {};
+    mocks.read.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValueOnce(new Map([['person', { id: 'person', display_name: 'Reauthorized' }]]));
+    const hook = renderHook(() => usePrivateChatProfiles('chat', 'viewer', ['person'], true));
+    await waitFor(() => expect(mocks.read).toHaveBeenCalledOnce());
+    act(() => { window.dispatchEvent(new Event('pagehide')); });
+    expect(mocks.read.mock.calls[0][3].aborted).toBe(true);
+    await act(async () => finish(new Map([['person', { id: 'person', display_name: 'Retired' }]])));
+    expect(hook.result.current('person')).toBeNull();
+    act(() => { window.dispatchEvent(new Event('pageshow')); });
+    await waitFor(() => expect(hook.result.current('person')?.display_name).toBe('Reauthorized'));
+  });
+  it('clears disclosed names while hidden and requires new authorization on return', async () => {
+    mocks.read.mockResolvedValueOnce(new Map([['person', { id: 'person', display_name: 'Allowed' }]])).mockRejectedValueOnce(new Error('Removed'));
+    const hook = renderHook(() => usePrivateChatProfiles('chat', 'viewer', ['person'], true));
+    await waitFor(() => expect(hook.result.current('person')?.display_name).toBe('Allowed'));
+    const state = vi.spyOn(document, 'visibilityState', 'get');
+    try {
+      state.mockReturnValue('hidden');
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+      expect(hook.result.current('person')).toBeNull();
+      state.mockReturnValue('visible');
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+      await waitFor(() => expect(mocks.read).toHaveBeenCalledTimes(2));
+      expect(hook.result.current('person')).toBeNull();
+    } finally { state.mockRestore(); }
+  });
   it('refreshes unanswered DM names when its known shared club arrives and drops them on club change', async () => {
     mocks.direct.mockResolvedValueOnce(new Map())
       .mockResolvedValueOnce(new Map([['person', { id: 'person', display_name: 'Club name' }]]))
