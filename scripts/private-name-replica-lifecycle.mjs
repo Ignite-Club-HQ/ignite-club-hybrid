@@ -21,6 +21,7 @@ export async function removeMemberAndReconcileNames(plan, deps) {
   await guard(); let journal=await deps.readJournal(); await guard();
   if (journal && (canonical(Object.keys(journal).sort())!==canonical(['accounts','lifecycle','plan','receipts']) || canonical(journal.plan)!==canonical(plan) || canonical(journal.accounts)!==canonical(accounts) || !Array.isArray(journal.receipts) || journal.receipts.length>aliases.length || new Set(journal.receipts.map(r=>r.index)).size!==journal.receipts.length || journal.receipts.some(r=>!r || canonical(Object.keys(r).sort())!==canonical(['index','phase']) || !Number.isInteger(r.index) || r.index<0 || r.index>=aliases.length || !['unknown','verified'].includes(r.phase)))) throw Error('Original removal journal differs');
   journal=journal??{plan,accounts,receipts:[],lifecycle:null};
+  validateLifecycleJournal(plan,journal.lifecycle);
   const persist=async()=>{await deps.persistJournal(structuredClone(journal));await guard();if(canonical(await deps.readJournal())!==canonical(journal))throw Error('Durable removal intent readback required');await guard();};
   // Do not remove membership if a supplied saved replica already changed.
   // Confirmed absence is harmless; denied/foreign/newer rows fail closed.
@@ -92,14 +93,17 @@ function validateLifecyclePlan(plan,{assertEvidence,readJournal,persistJournal,r
     const id=canonical([t.sink,t.subject,t.club]);if(ids.has(id))throw Error('Duplicate lifecycle target');ids.add(id);
   }
 }
+function validateLifecycleJournal(plan,journal){
+  if(journal!==null && (canonical(Object.keys(journal).sort())!==canonical(['plan','receipts']) || canonical(journal.plan)!==canonical(plan) || !Array.isArray(journal.receipts) || journal.receipts.length>plan.targets.length))throw Error('Original lifecycle journal differs');
+  if(journal && (new Set(journal.receipts.map(r=>r.index)).size!==journal.receipts.length || journal.receipts.some(r=>!r || canonical(Object.keys(r).sort())!==canonical(['index','phase']) || !Number.isInteger(r.index)||r.index<0||r.index>=plan.targets.length||!['unknown','verified'].includes(r.phase))))throw Error('Invalid retained lifecycle receipts');
+}
 export async function reconcileNameReplicaLifecycle(plan,{assertEvidence,readJournal,persistJournal,readState,writeSavedReplica,purgeExactReplica}) {
   validateLifecyclePlan(plan,{assertEvidence,readJournal,persistJournal,readState,writeSavedReplica,purgeExactReplica});
   plan=structuredClone(plan);
   const guard=async()=>{if(await assertEvidence(structuredClone(plan))!==true)throw Error('Complete lifecycle exclusion/authority evidence required');};
   await guard();let journal=await readJournal();await guard();
-  if(journal && (canonical(Object.keys(journal).sort())!==canonical(['plan','receipts']) || canonical(journal.plan)!==canonical(plan) || !Array.isArray(journal.receipts) || journal.receipts.length>plan.targets.length))throw Error('Original lifecycle journal differs');
+  validateLifecycleJournal(plan,journal??null);
   journal=journal??{plan,receipts:[]};
-  if(new Set(journal.receipts.map(r=>r.index)).size!==journal.receipts.length || journal.receipts.some(r=>!r || canonical(Object.keys(r).sort())!==canonical(['index','phase']) || !Number.isInteger(r.index)||r.index<0||r.index>=plan.targets.length||!['unknown','verified'].includes(r.phase)))throw Error('Invalid retained lifecycle receipts');
   const persist=async()=>{await persistJournal(structuredClone(journal));await guard();if(canonical(await readJournal())!==canonical(journal))throw Error('Durable lifecycle intent readback required');await guard();};
   const matches=(state,t)=>plan.action==='purge'?state===null:state && state.scheme===`vetkey-club-names-v1:${t.club}`&&canonical(state.ciphertext)===canonical(t.ciphertext);
   for(let index=0;index<plan.targets.length;index++){
