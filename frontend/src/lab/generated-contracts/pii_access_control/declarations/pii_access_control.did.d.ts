@@ -211,6 +211,11 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'read_private_name_cleanup_absence' : ActorMethod<
+    [Array<Principal>, [] | [string]],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
   'read_private_name_preparation' : ActorMethod<
     [Request],
     { 'Ok' : Receipt__2 } |

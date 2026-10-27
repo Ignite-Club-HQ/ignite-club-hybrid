@@ -80,7 +80,7 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     expect(f.ok(await cleanupReader.read_private_name_cleanup_account(f.outsider)).original_authority).toEqual({ NoName: null });
     const viewerIdentity = f.connect('identity_access', f.viewer).actor;
     f.ok(await viewerIdentity.set_profile('Unconverted person', []));
-    expect(f.ok(await cleanupReader.read_private_name_cleanup_account(f.viewer)).original_authority).toEqual({ Unresolved: null });
+    expect(f.ok(await cleanupReader.read_private_name_cleanup_account(f.viewer)).original_authority).toEqual({ NoName: null });
     local.context = viewerContext;
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const msg = { id: f.message.id, text: f.message.text, image_url: null, created_at: new Date().toISOString(), author_id: subject, group_id: f.conversationId, reply_to_id: null };
@@ -123,17 +123,27 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     const audience = { kind: 'club', authority: f.services.club_domain.canisterId, resource: f.clubId, profile_revision: 0n };
     expect('Err' in await denied.get_private_profile_names_batch([subject], audience)).toBe(true);
     event.unmount(); chat.unmount(); queryClient.clear();
+    await f.pic.upgradeCanister({canisterId:f.services.identity_access.canisterId,sender:f.governor,wasm:readFileSync('../target/private-name-cleanup/wasm32-unknown-unknown/release/identity_access.wasm'),arg:IDL.encode([IDL.Record({governor:IDL.Principal})],[{governor:f.governor}])});
+    // Disable private read/conversion rehearsal on the real disposable sinks.
+    // Automatic cleanup must work under its separate production switch only.
+    await f.pic.updateCanisterSettings({ canisterId:f.services.club_domain.canisterId,sender:f.governor,environmentVariables:[{name:'IGNITE_PRIVATE_NAME_CLEANUP_RELEASE',value:'1'}] });
+    await f.pic.upgradeCanister({ canisterId:f.services.club_domain.canisterId,sender:f.governor,wasm:readFileSync('../backend/club_domain/.mops/.build/club_domain.wasm'),arg:IDL.encode([IDL.Principal],[f.governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]} });
+    const releasePiiSettings=[{name:'IGNITE_PRIVATE_NAME_CLEANUP_RELEASE',value:'1'},{name:'IGNITE_PRIVATE_PROFILE_IDENTITY',value:f.services.identity_access.canisterId.toText()},{name:'VETKD_KEY_NAME',value:'key_1'}];
+    await f.pic.updateCanisterSettings({canisterId:f.services.pii_access_control.canisterId,sender:f.governor,environmentVariables:releasePiiSettings});
+    await f.pic.upgradeCanister({canisterId:f.services.pii_access_control.canisterId,sender:f.governor,wasm:readFileSync('../backend/pii_access_control/.mops/.build/pii_access_control.wasm'),arg:IDL.encode([IDL.Principal],[f.governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]} });
     // Ordinary authorized removal, not the operator helper, persists an intent
     // and automatically invokes the original PII receiver as the club itself.
     const club = f.connect('club_domain', f.governor).actor;
     const governorPii = f.connect('pii_access_control', f.governor).actor;
     expect(await club.read_has_club_membership(f.owner, f.clubId)).toBe(true);
-    expect(f.ok(await governorPii.read_private_club_name_lifecycle(f.owner, f.clubId, []))).toHaveLength(1);
+    expect('Err' in await governorPii.read_private_club_name_lifecycle(f.owner,f.clubId,[])).toBe(true);
+    const cleanupPii=f.connect('pii_access_control',f.services.identity_access.canisterId).actor;
+    expect(f.ok(await cleanupPii.read_private_name_cleanup_absence([f.owner],[f.clubId]))).toBe(false);
     // Removing one role must preserve names while another role grants access.
     f.ok(await club.add_role_grant(f.owner, f.clubId, 'coach', []));
     f.ok(await club.remove_role_grant(f.owner, f.clubId, 'coach', []));
     expect(f.ok(await club.read_private_name_cleanup_pending())).toEqual([]);
-    expect(f.ok(await governorPii.read_private_club_name_lifecycle(f.owner, f.clubId, []))).toHaveLength(1);
+    expect(f.ok(await cleanupPii.read_private_name_cleanup_absence([f.owner],[f.clubId]))).toBe(false);
     expect('Err' in await denied.purge_removed_private_club_name('forged', f.clubId, f.owner)).toBe(true);
     console.log('BEFORE (disposable account): membership=true; club-name copies=1; original private name=retained');
     f.ok(await club.remove_member(f.clubId, f.owner));
@@ -143,7 +153,7 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     }
     expect(f.ok(await club.read_private_name_cleanup_pending())).toEqual([]);
     expect(await club.read_has_club_membership(f.owner, f.clubId)).toBe(false);
-    expect(f.ok(await governorPii.read_private_club_name_lifecycle(f.owner, f.clubId, []))).toEqual([]);
+    expect(f.ok(await cleanupPii.read_private_name_cleanup_absence([f.owner],[f.clubId]))).toBe(true);
     expect(f.ok(await identity.get_profile()).display_name).toBe(reference);
     expect(f.ok(await governorPii.get_encrypted_pii_batch([subject], 'display_name', 'read', 'Verify original retained'))).toHaveLength(1);
     console.log('AFTER (disposable account): membership=false; club-name copies=0; original private name=retained; automatic cleanup completed');
@@ -151,13 +161,20 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     // routing, and upgrade the club before resuming the same retained intent.
     f.ok(await club.restore_member(f.clubId, f.owner));
     f.ok(await club.add_role_grant(f.owner, f.clubId, 'member', []));
+    await f.pic.updateCanisterSettings({canisterId:f.services.pii_access_control.canisterId,sender:f.governor,environmentVariables:[...releasePiiSettings,{name:'IGNITE_PRIVATE_PROFILE_READS_REHEARSAL',value:'1'}]});
+    await f.pic.upgradeCanister({canisterId:f.services.pii_access_control.canisterId,sender:f.governor,wasm:readFileSync('../backend/pii_access_control/.mops/.build/pii_access_control.wasm'),arg:IDL.encode([IDL.Principal],[f.governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]} });
     await refreshPrivateOwnClubNames(ownerContext as any, afterName, async () => [f.clubId]);
+    await f.pic.updateCanisterSettings({canisterId:f.services.pii_access_control.canisterId,sender:f.governor,environmentVariables:releasePiiSettings});
+    await f.pic.upgradeCanister({canisterId:f.services.pii_access_control.canisterId,sender:f.governor,wasm:readFileSync('../backend/pii_access_control/.mops/.build/pii_access_control.wasm'),arg:IDL.encode([IDL.Principal],[f.governor]),upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]} });
     await f.pic.stopCanister({ canisterId: f.services.identity_access.canisterId, sender: f.governor });
     f.ok(await club.remove_role_grant(f.owner, f.clubId, 'member', []));
     for (let step = 0; step < 10; step++) await f.pic.tick();
     const held = f.ok(await club.read_private_name_cleanup_pending());
     expect(held).toHaveLength(1); expect(held[0].submitted).toBe(false);
-    expect(f.ok(await governorPii.read_private_club_name_lifecycle(f.owner, f.clubId, []))).toHaveLength(1);
+    expect(f.ok(await cleanupPii.read_private_name_cleanup_absence([f.owner],[f.clubId]))).toBe(false);
+    const identityClub=f.connect('club_domain',f.services.identity_access.canisterId).actor;
+    expect('Err' in await identityClub.revoke_linked_principal(routing.account_id,f.owner,routing.account_version)).toBe(true);
+    expect(f.ok(await club.read_private_name_cleanup_pending())).toEqual(held);
     await expect(club.add_role_grant(f.owner, f.clubId, 'member', [])).rejects.toThrow('Name cleanup pending');
     await f.pic.upgradeCanister({ canisterId: f.services.club_domain.canisterId, sender: f.governor,
       wasm: readFileSync('../backend/club_domain/.mops/.build/club_domain.wasm'),
@@ -166,12 +183,19 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     await f.pic.startCanister({ canisterId: f.services.identity_access.canisterId, sender: f.governor });
     f.ok(await club.resume_private_name_cleanup());
     expect(f.ok(await club.read_private_name_cleanup_pending())).toEqual([]);
-    expect(f.ok(await governorPii.read_private_club_name_lifecycle(f.owner, f.clubId, []))).toEqual([]);
+    expect(f.ok(await cleanupPii.read_private_name_cleanup_absence([f.owner],[f.clubId]))).toBe(true);
     expect(f.ok(await identity.get_profile()).display_name).toBe(reference);
     console.log('RECOVERY (disposable account): last-role cleanup retained through service outage and club upgrade; resumed with original name preserved');
+    // Ordinary unconverted names have no replicas; authoritative all-sink
+    // absence settles the no-op instead of locking every membership forever.
+    f.ok(await club.remove_member(f.clubId,f.viewer));
+    for(let step=0;step<60;step++){await f.pic.tick();if(f.ok(await club.read_private_name_cleanup_pending()).length===0)break;}
+    expect(f.ok(await club.read_private_name_cleanup_pending())).toEqual([]);
+    expect(f.ok(await viewerIdentity.get_profile()).display_name).toBe('Unconverted person');
     const governorIdentity = f.connect('identity_access', f.governor).actor;
-    // Existing coordinated suspension cannot be bypassed for a fixture.
-    expect('Err' in await governorIdentity.set_account_status(routing.account_id, { Suspended: null })).toBe(true);
+    // Cleanup-only identity uses ordinary production status semantics; no
+    // private-name conversion/read rehearsal was activated by its upgrade.
+    f.ok(await governorIdentity.set_account_status(routing.account_id, { Suspended: null }));
     const retainedRouting = f.ok(await cleanupReader.read_private_name_cleanup_account(f.owner));
     expect(retainedRouting.principals.map((p: any) => p.toText())).toEqual([subject]);
     expect(retainedRouting.original_authority).toEqual(routing.original_authority);

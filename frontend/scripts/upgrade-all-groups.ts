@@ -13,6 +13,8 @@ import type { _SERVICE } from '../src/lab/bindings/shard_router/declarations/sha
 import { idlFactory as placementIdl } from '../src/lab/bindings/placement_registry/declarations/placement_registry.did.js';
 import { idlFactory as migrationIdl } from '../src/lab/bindings/migration_coordinator/declarations/migration_coordinator.did.js';
 import { idlFactory as workloadIdl } from '../src/lab/bindings/secret_workload_identity/declarations/secret_workload_identity.did.js';
+import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
+import type { _SERVICE as IdentityService } from '../src/lab/bindings/identity_access/declarations/identity_access.did';
 import type { _SERVICE as PlacementService } from '../src/lab/bindings/placement_registry/declarations/placement_registry.did';
 import type { _SERVICE as MigrationService } from '../src/lab/bindings/migration_coordinator/declarations/migration_coordinator.did';
 import type { _SERVICE as WorkloadService } from '../src/lab/bindings/secret_workload_identity/declarations/secret_workload_identity.did';
@@ -22,10 +24,12 @@ import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/gr
 import { placementOperatorEvidenceIdl, normalizePlacementOperatorEvidence } from '../../scripts/placement-upgrade-evidence.mjs';
 import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement } from '../../scripts/all-group-wiring-policy.mjs';
 import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades, requireCompletedRecovery, galleryAuthorities, verifyCompletedRecovery, normalizePlan } from '../../scripts/all-group-upgrade-policy.mjs';
+import { CLEANUP_RELEASE, cleanupEnvironment, requireCleanupWiring, activateCleanupSettings } from '../../scripts/private-name-cleanup-release-policy.mjs';
 
 const [action, scope, artifacts, pem, directory] = process.argv.slice(2);
 const CHECKED_PLAN = process.env.CHECKED_PLAN ? normalizePlan(process.env.CHECKED_PLAN) : process.env.CHECKED_PLAN;
 const services = validateRequest(action, scope, process.env.CONFIRMATION, CHECKED_PLAN);
+const cleanupRelease = scope === 'private_name_cleanup';
 if (!artifacts || !pem || !directory) throw Error('Artifacts, existing key and report directory required');
 const root = new URL('../../', import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), 'utf8'));
@@ -84,7 +88,12 @@ const observe=async(t:Target)=>{
   const subnet=certified.get('subnet') as {subnetId?:Principal}|undefined;
   const actual={moduleHash:Buffer.from(status.module_hash[0]??[]).toString('hex'),controllers:status.settings.controllers.map((p:Principal)=>p.toText()),running:'running' in status.status,cycles:status.cycles,subnetId:String(subnet?.subnetId??''),environment:status.settings.environment_variables};
   verifyUpgradeStatus(t,actual,GROUP2_GOVERNOR);
-  return {moduleHash:actual.moduleHash,settingsHash:digest({...status.settings,controllers:actual.controllers,environment_variables:[...actual.environment].sort((a,b)=>a.name.localeCompare(b.name))}),cycles:String(actual.cycles),legacyLifecycleDisabled:legacyClubLifecycleDisabled(actual.environment)};
+  const settings={...status.settings,controllers:actual.controllers,environment_variables:[...actual.environment].sort((a,b)=>a.name.localeCompare(b.name))};
+  const rawSettingsHash=digest(settings);
+  let cleanupSettingsHash:string|undefined;
+  if(cleanupRelease) cleanupSettingsHash=digest({...settings,environment_variables:cleanupEnvironment(actual.environment,t.name)});
+  const normalized=cleanupRelease?{...settings,environment_variables:settings.environment_variables.filter((r:{name:string})=>r.name!==CLEANUP_RELEASE)}:settings;
+  return {moduleHash:actual.moduleHash,settingsHash:digest(normalized),rawSettingsHash,cleanupSettingsHash,cycles:String(actual.cycles),legacyLifecycleDisabled:legacyClubLifecycleDisabled(actual.environment)};
 };
 const readConfig=async(t:Target)=>{
   const rows=IDL.Vec(IDL.Tuple(IDL.Text,IDL.Text));
@@ -96,6 +105,17 @@ const readConfig=async(t:Target)=>{
 };
 const wiring:Record<string,string>={};
 const legacySettings:Record<string,string>={};
+const identityActor=Actor.createActor<IdentityService>(identityIdl,{agent,canisterId:shared.identity_access});
+const cleanupIdentityEvidence=async()=>{
+  const r=await identityActor.read_membership_directory_configuration();
+  if('Err'in r)throw Error('Cleanup identity directory configuration unavailable; no settings changed');
+  const c=r.Ok;
+  const b=c.binding;
+  const expected=inventory.groups.map((g:{id:string;services:{name:string;canisterId:string}[]})=>[g.id,g.services.find(s=>s.name==='club_domain')?.canisterId]);
+  if(!c.enabled || b.registry.toText()!==shared.shard_router || b.registry_revision!==initial.configurationRevision || b.target_alias!=='mainnet'||b.deployment_id!=='mainnet'||b.host!=='https://icp-api.io'||b.network_kind!=='public_mainnet'||c.sources.length!==expected.length||expected.some(([id,cid])=>c.sources.filter(([group,p])=>group===id&&p.toText()===cid).length!==1))throw Error('Cleanup requires existing complete matching identity directory; do not repin or reconfigure');
+  return c;
+};
+if(cleanupRelease)wiring[shared.identity_access]=digest(await cleanupIdentityEvidence());
 const readSharedEvidence=async(t:Target)=>{
   if(t.name==='shard_router')return router.read_group_opening_configuration();
   if(t.name==='placement_registry'){
@@ -123,6 +143,7 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
   const permission=groupPermissionRequirement(t.name,own('club_domain'));
   if(permission)requireRow(permission[0],permission[1]);
   if(t.name==='club_domain'){
+    if(cleanupRelease)requireCleanupWiring(t.name,rows,shared.identity_access);
     // The original G1 authority predates group lifecycle wiring. Its empty
     // singleton must be preserved, never configured by an upgrade. Verify
     // disabled settings via controller readback, not a guessed group label.
@@ -143,7 +164,17 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
   }
   wiring[t.canisterId]=digest(rows);
 }
-const binding={repo,release,scope,...(scope==='full_backend'?{upgradeUnchanged:true}:{}),governor:GROUP2_GOVERNOR,host:'https://icp-api.io',router:shared.shard_router,configurationRevision:String(initial.configurationRevision),configuration,targets,pii:inventory.pii,wiring};
+const observations=[];
+for(const t of targets)observations.push({...t,...await observe(t)});
+const freshCleanupPlan=cleanupRelease?observations.map(s=>({canisterId:s.canisterId,name:s.name,groupId:s.groupId,subnetId:s.subnetId,newHash:s.newHash,oldSettingsHash:s.rawSettingsHash,newSettingsHash:s.cleanupSettingsHash})):undefined;
+const retainedCleanupPlan=cleanupRelease&&journal?.binding?.release===release&&journal?.binding?.scope===scope?journal.binding.cleanupPlan:undefined;
+const cleanupPlan=retainedCleanupPlan??freshCleanupPlan;
+if(cleanupRelease && (!Array.isArray(cleanupPlan)||cleanupPlan.length!==targets.length||targets.some(t=>{
+  const matches=cleanupPlan.filter((s:any)=>s.canisterId===t.canisterId&&s.name===t.name&&s.groupId===t.groupId&&s.subnetId===t.subnetId&&s.newHash===t.newHash);
+  const observed=observations.find(o=>o.canisterId===t.canisterId);
+  return matches.length!==1||!observed||matches[0].newSettingsHash!==observed.cleanupSettingsHash||![matches[0].oldSettingsHash,matches[0].newSettingsHash].includes(observed.rawSettingsHash);
+})))throw Error('Foreign cleanup activation plan or settings drift');
+const binding={repo,release,scope,...(scope==='full_backend'?{upgradeUnchanged:true}:{}),...(cleanupRelease?{cleanupPlan}:{}),governor:GROUP2_GOVERNOR,host:'https://icp-api.io',router:shared.shard_router,configurationRevision:String(initial.configurationRevision),configuration,targets,pii:inventory.pii,wiring};
 const planHash=digest(binding);
 const same=journal&&digest(journal.binding)===planHash;
 if(recovery&&!same)throw Error('Live recovery plan differs from the original release; no installs permitted');
@@ -155,6 +186,7 @@ const gate=async()=>{
   for(const t of targets.filter(t=>t.groupId!=='shared'))if(digest(await readConfig(t))!==wiring[t.canisterId])throw Error('Original wiring changed; stop');
   for(const t of targets.filter(t=>Object.hasOwn(legacySettings,t.canisterId))){const status=await observe(t);if(!status.legacyLifecycleDisabled||status.settingsHash!==legacySettings[t.canisterId])throw Error('Legacy lifecycle settings changed; stop without rewiring');}
   for(const t of targets.filter(t=>t.groupId==='shared'&&t.name!=='identity_access'))if(digest(await readSharedEvidence(t))!==wiring[t.canisterId])throw Error('Shared infrastructure configuration changed; stop without replay');
+  if(cleanupRelease&&digest(await cleanupIdentityEvidence())!==wiring[shared.identity_access])throw Error('Cleanup identity configuration changed; retain release intent');
 };
 const keyGate=(groupId:string,phase:string)=>{
   const mapping=join(directory,`${groupId}-pii.json`), receipt=join(directory,`${groupId}-original-key.json`);
@@ -163,8 +195,17 @@ const keyGate=(groupId:string,phase:string)=>{
   if(r.status!==0)throw Error('Original photo-key verification failed');
   return JSON.parse(readFileSync(receipt,'utf8'));
 };
-const observations=[];
-for(const t of targets)observations.push({...t,...await observe(t)});
+if(cleanupRelease) {
+  // PII identity is a protected existing setting, not an upgrade-time setter.
+  // The helper never invents it; the live check below requires it exactly.
+  for(const t of targets.filter(t=>t.name==='pii_access_control')) {
+    const cid=Principal.fromText(t.canisterId);
+    const mgmt=Actor.createActor(mgmtIdl,{agent,canisterId:'aaaaa-aa',effectiveCanisterId:cid} as Parameters<typeof Actor.createActor>[1]) as unknown as {canister_status(a:{canister_id:Principal}):Promise<any>};
+    const s=await mgmt.canister_status({canister_id:cid});
+    const rows=s.settings.environment_variables.filter((r:{name:string})=>r.name==='IGNITE_PRIVATE_PROFILE_IDENTITY');
+    if(rows.length!==1 || rows[0].value!==shared.identity_access)throw Error('Cleanup requires existing exact PII identity setting; no automatic authority changes');
+  }
+}
 if(same){validateJournal(journal,binding);for(const k of journal.keys)writeFileSync(join(directory,`${k.groupId}-original-key.json`),JSON.stringify(k.receipt));}
 else journal=null;
 await gate();
@@ -192,10 +233,30 @@ if(recovery){
   journal.recovery=recovery.recovery;
 }
 await persist();await verifyKeys();
+if(cleanupRelease) {
+  // Motoko release switches are transient upgrade-time reads. Settings are
+  // retained first; only the ordered verified module upgrades activate them.
+  // Identity and all PII receivers precede every club trigger.
+  journal.cleanupActivation??=cleanupPlan.map((s:any)=>({...s,phase:'ready'}));
+  if(journal.cleanupActivation.length!==targets.length || cleanupPlan.some((p:any)=>journal.cleanupActivation.filter((s:any)=>Object.keys(p).every(k=>s[k]===p[k])&&['ready','pending','complete'].includes(s.phase)).length!==1))throw Error('Foreign cleanup activation journal');
+  await persist();
+  if(recovery && journal.cleanupActivation.some((s:any)=>s.phase!=='complete'))throw Error('Recovery cannot activate settings');
+  await activateCleanupSettings(journal.cleanupActivation,{gate,observe,persist,update:async(t:Target)=>{
+    const cid=Principal.fromText(t.canisterId);
+    const mgmt=Actor.createActor(mgmtIdl,{agent,canisterId:'aaaaa-aa',effectiveCanisterId:cid} as Parameters<typeof Actor.createActor>[1]) as unknown as {canister_status(a:{canister_id:Principal}):Promise<any>};
+    const s=await mgmt.canister_status({canister_id:cid});
+    // Never serialize or print environment values, which may contain secrets.
+    const factory=()=>IDL.Service({update_settings:IDL.Func([IDL.Record({canister_id:IDL.Principal,settings:IDL.Record({environment_variables:IDL.Opt(IDL.Vec(IDL.Record({name:IDL.Text,value:IDL.Text})))})})],[],[])});
+    const writer=Actor.createActor(factory,{agent,canisterId:'aaaaa-aa',effectiveCanisterId:cid} as Parameters<typeof Actor.createActor>[1]) as unknown as {update_settings(a:unknown):Promise<void>};
+    await writer.update_settings({canister_id:cid,settings:{environment_variables:[cleanupEnvironment(s.settings.environment_variables,t.name)]}});
+  }});
+}
 // Installation completion is not release completion; backfill/snapshot must also pass.
 const moduleJournal={...journal,complete:false};
-if(!recovery)await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend',gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
+if(!recovery)await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend'||cleanupRelease,gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
   if(recovery)throw Error('Recovery cannot install any module');
+  // Each club's trigger is upgraded only after identity and all PII receivers.
+  // Settings are protected/read back above and sampled again by executeUpgrades.
   const r=spawnSync('icp',installArgs(t,resolve(artifacts,t.name)),{cwd:directory,stdio:'inherit'});
   if(r.status!==0)throw Error('Install reply failed/unknown; pending journal retained, no replay');
 }});

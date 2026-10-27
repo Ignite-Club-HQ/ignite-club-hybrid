@@ -1,6 +1,16 @@
 # Club-key adult names
 
-Local implementation only. No production conversion, rollout, permissions or email policy changed.
+Local implementation and verified disposable acceptance. Paul approved cleanup deployment/activation; no production workflow, conversion, removal or email policy change has run.
+
+## Cleanup-only release — 27 October, 06:50 UTC
+
+Use **Upgrade backend (all mainnet groups)** with scope **private_name_cleanup**, action **check** first. This targets shared identity once, every group's PII receiver, then every group's club trigger; it never upgrades the router/photo stores, rewires services, converts names or removes a member. Upgrade uses the existing confirmation and checked-plan safeguards. Cleanup runtime settings preserve all existing values and retain an exact old/new-settings intent before one write; unknown writes read back without replay. Motoko reads the release switch on upgrade, so receivers precede club triggers. Identity is compiled explicitly with only cleanup released, independently of private-read/conversion rehearsal.
+
+Release-only disposable acceptance passes: automatic member and last-role removal, original-name retention, remaining-role preservation, outage/upgrade recovery, linked-principal and rejoin refusal while held, and authoritative all-sink absence for unconverted names. Full isolated runner passes 186 script and 129 frontend tests plus exact routing checks; release policy tests and workflow validation pass.
+
+**Verified external blockers:** GitHub still has the previous workflow pending normal project sync. Its `group-2-admin-controls` environment has no reviewers or branch restriction and permits administrator bypass; main reports no branch protection. Cleanup preflight now refuses these conditions before restoring governor credentials. Existing exact club/PII identity wiring and complete identity directory configuration must pass read-only live preflight; they are not silently configured by an upgrade. No deployment is claimed. Do not overwrite any secret or enable broader rehearsal settings.
+
+Paul is Giddy Goat's only member and has not approved removing himself. Live before/after demonstration requires a separately authorized test member; cleanup approval is not conversion approval.
 
 ## Current essential status — 27 October, automatic removal acceptance
 

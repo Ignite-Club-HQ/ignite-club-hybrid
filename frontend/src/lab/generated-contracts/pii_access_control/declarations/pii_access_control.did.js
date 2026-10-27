@@ -289,6 +289,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_private_name_cleanup_absence' : IDL.Func(
+        [IDL.Vec(IDL.Principal), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        [],
+      ),
     'read_private_name_preparation' : IDL.Func(
         [Request],
         [IDL.Variant({ 'Ok' : Receipt__2, 'Err' : IDL.Text })],

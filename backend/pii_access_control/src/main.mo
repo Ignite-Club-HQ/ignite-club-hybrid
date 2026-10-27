@@ -739,6 +739,13 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not cleanupReleased) return null;
     switch (privateNamesIdentity) { case null null; case (?id) { let p = Principal.fromText(id); if (p.isAnonymous() or p == Principal.fromText("aaaaa-aa")) null else ?p } }
   };
+  // Identity checks every registered sink before declaring an unconverted
+  // account a cleanup no-op. This reveals no names or ciphertext.
+  public shared ({ caller }) func read_private_name_cleanup_absence(subjects : [Principal], club : ?Text) : async { #Ok : Bool; #Err : Text } {
+    if (cleanupVerifier() != ?caller or caller.isAnonymous() or subjects.size() == 0 or subjects.size() > 8) return #Err("Configured cleanup identity required");
+    switch (club) { case (?c) { if (not validMediaClub(c)) return #Err("Exact cleanup club required") }; case null {} };
+    #Ok(not pii_records.any(func r = subjects.any(func p = r.pii_id == p.toText()) and (switch (club) { case (?c) r.field_id == clubNameField(c); case null Text.startsWith(r.field_id, #text "club_display_name:") })))
+  };
   public shared ({ caller }) func read_removed_private_club_name_receipt(id : Text, club : Text, subject : Principal) : async { #Ok : ?PrivateNameCleanup.Receipt; #Err : Text } {
     if (cleanupVerifier() == null or caller.isAnonymous() or id.size() > 256) return #Err("Approved cleanup configuration required");
     switch (private_name_cleanup_receipts.get(cleanupReceiptKey(caller, id))) {
