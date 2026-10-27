@@ -2,6 +2,14 @@
 
 Local implementation only. No production conversion, rollout, permissions or email policy changed.
 
+## Current continuation — governed delivery and original-name provenance
+
+The dormant governed-delivery composition now binds the receipt stream to the signed preparation operation and requires a newly retained first intent before submitting. An identical intent observed during a competing claim is recovery-only. Existing exact canister approvals are adopted as separate unknown and verified events without submission. Focused tests cover concurrent predecessor races, no-op competing claims, interrupted intent/approval/verified acknowledgements, incomplete storage and changed artifacts. The delivery workflow runs these checks but retains its pre-credential blocker; no real governed store or live transport is provisioned.
+
+Preparation for already-referenced personal names now requires an exact authorized original-record read, SDK ciphertext validation and original plaintext comparison. It preserves those original randomized bytes rather than regenerating them, then rechecks the exact record before returning the ciphertext-only plan. Wrong subject/field/scheme, malformed bytes, missing/refused source, changed authority evidence and closing original drift refuse preparation. Plaintext accounts still require independently verified historical sink/alias mapping; no first-alias or placement inference was added.
+
+Production remains unchanged. Legacy-drain and continuous management exclusion evidence, complete historical authority mapping, live lifecycle hooks, governed service provision/admission, protected GitHub configuration, signed-in timing/cost acceptance and separate deployment/conversion approvals still block rollout.
+
 ## Combined safeguards batch — latest acceptance
 
 Ordinary instrumented Motoko/Rust writers now retain bounded leases even when rehearsal authorization is disabled, using one reserved sealed record in the existing stable intent map. Preparation receipts include these outstanding callbacks, and existing preparation/conversion locks still reject ordinary admission after a rehearsal-mode change. Generic open/seal cannot claim or close the reserved record. This adds accounting without a stable schema migration, **not a verified activation baseline**: callbacks admitted by older uninstrumented modules remain externally unresolved, and no production baseline certificate or activation is manufactured.
