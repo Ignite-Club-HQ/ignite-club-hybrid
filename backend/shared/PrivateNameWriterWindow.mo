@@ -1,5 +1,6 @@
 import Map "mo:core/Map";
 import Principal "mo:core/Principal";
+import Text "mo:core/Text";
 import Release "PrivateNameReleaseFence";
 
 // A whole-authority rehearsal write window, never a permission grant. Owning
