@@ -37,6 +37,10 @@ syncCanisterIds();
 const FALLBACK_GOOGLE_MAPS_BROWSER_KEY = "AIzaSyBmvJph4LmrbtW7skeczzpBIyb9WWzFKo4";
 process.env.IGNITE_LIVE_GOOGLE_MAPS_BROWSER_KEY ||= process.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY || FALLBACK_GOOGLE_MAPS_BROWSER_KEY;
 process.env.IGNITE_LIVE_GIPHY_API_KEY ||= process.env.GIPHY_API_KEY || "";
+// Protected personal names are stored encrypted under each club's key. The
+// display release is live on mainnet for every group, so the preview must ask
+// the canisters for those names; an explicit 0 in .env still turns them off.
+process.env.IGNITE_LIVE_PRIVATE_CLUB_NAME_DISPLAYS ||= "1";
 
 // Install (only if package-lock changed), serialized with the platform install
 // step so two `npm ci` runs can never overlap and corrupt node_modules.
