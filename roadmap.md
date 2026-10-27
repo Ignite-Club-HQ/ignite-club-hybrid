@@ -1,3 +1,8 @@
+## Private-club display release check — 27 October 2026, 20:13 UTC
+- [ ] Correct the missing display verifier setting using the pinned secure-save identity; reject foreign authorities and preserve unrelated settings.
+- [ ] Verify the approved original Group 1 display link survives final release checks without permitting unrelated wiring changes.
+- [ ] Run focused release regressions; live release and real Internet Identity acceptance remain separate.
+
 ## All-group release publication fix — 27 October 2026
 - [x] Diagnosed run 40474669083 (scope full_backend, 53m): on-chain upgrade completed (modulesComplete, all phases complete, signing material removed); only the evidence-publish step failed. Root cause: the workflow pushed the evidence commit straight to main and the Lovable two-way sync reverted main to f86b6f98, so the second verification saw the publication commit gone.
 - [x] Landed the release's three verified snapshot files (deploy/groups/g2/general-opening.json, deploy/mainnet/backend-release.json, frontend/src/live/generated/routingGates.ts) into the project byte-exact from the receipts journal, digest-checked against snapshotFilesHash 22340dfb; Lovable sync carries them to main.
