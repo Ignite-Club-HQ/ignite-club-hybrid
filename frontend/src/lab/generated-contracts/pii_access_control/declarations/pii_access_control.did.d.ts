@@ -191,6 +191,11 @@ export interface Main {
     { 'Ok' : Receipt__1 } |
       { 'Err' : string }
   >,
+  'register_conversion_name' : ActorMethod<
+    [Request, Principal, [] | [string], Uint8Array],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'register_pii' : ActorMethod<
     [string, string, Uint8Array, Principal],
     { 'Ok' : EncryptedPii } |

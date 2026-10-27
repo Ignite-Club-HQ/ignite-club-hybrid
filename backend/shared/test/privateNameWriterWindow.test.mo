@@ -44,3 +44,17 @@ switch (recovered.receipt(owner, third, outsider)) { case (#Ok(r)) { assert r.cl
 recovered.leave(held);
 switch (recovered.receipt(owner, third, outsider)) { case (#Ok(r)) { assert r.closing and r.sealed and r.active == 0 }; case _ assert false };
 assert recovered.open(owner, { request with operation_id = "window-4"; generation = 4 : Nat64 }) == #Ok;
+let conversion = { request with operation_id = "names:club-name-conversion-locked"; generation = 5 : Nat64 };
+let lockedState = Map.empty<Text, Writer.Intent>();
+let locked = Writer.Gate(true, ?owner, lockedState, 3);
+assert locked.open(owner, conversion) == #Ok;
+assert locked.enter() == #Err("Edits locked for private-name conversion");
+assert locked.enterConversion(outsider, conversion) == #Err("Approved conversion coordinator required");
+assert locked.enterConversion(owner, { conversion with generation = 6 : Nat64 }) == #Err("Exact open conversion window required");
+let conversionLease = switch (locked.enterConversion(owner, conversion)) { case (#Ok(key)) key; case _ { assert false; null } };
+let interrupted = Writer.Gate(true, ?owner, lockedState, 3);
+assert interrupted.enter() == #Err("Edits locked for private-name conversion");
+assert interrupted.seal(owner, conversion) == #Ok;
+assert interrupted.enterConversion(owner, conversion) == #Err("Exact open conversion window required");
+interrupted.leave(conversionLease);
+switch (interrupted.receipt(owner, conversion, owner)) { case (#Ok(r)) { assert r.sealed and r.active == 0 }; case _ assert false };

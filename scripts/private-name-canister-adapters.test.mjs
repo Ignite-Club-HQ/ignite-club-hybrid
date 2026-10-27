@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createPrivateNameCoordinatorAdapter,createPrivateNameProfileAdapter,createPrivateNamePiiAdapter} from './private-name-canister-adapters.mjs';
+import {createPrivateNameCoordinatorAdapter,createPrivateNameProfileAdapter,createPrivateNamePiiAdapter,createApprovedNameWriteAdapter,createApprovedNameCoordinatorAdapter} from './private-name-canister-adapters.mjs';
 const p=text=>({toText:()=>text});
 const window={phase:{Fencing:null},sinks:[p('sink')],writers:[p('writer')],opened:[{receiver:p('writer')}],sealed:[],completed:[]};
 test('generated coordinator converts principals and preserves revisions above JS safe integer',async()=>{
@@ -33,4 +33,14 @@ test('PII adapter rejects wrong original fields and preserves exact club ciphert
   const record={pii_id:'person',field_id:'display_name',ciphertext:Uint8Array.from([4]),master_key_id:'vetkey-club-names-v1:club'};
   const adapter=createPrivateNamePiiAdapter({get_encrypted_pii_batch:async()=>({Ok:[{...record,field_id:'email'}]}),read_private_club_name_preparation:async(subject,club)=>{assert.equal(subject.toText(),'person');assert.equal(club,'club');return {Ok:record};}},{fromText:p});
   await assert.rejects(adapter.readOriginal('person'),/binding/);assert.deepEqual((await adapter.readClub('person','club')).ciphertext,[4]);
+});
+test('approved writes reject foreign subject/club/reference before transport',async()=>{
+  let calls=0;const adapter=createApprovedNameWriteAdapter({write_approved_private_name:async()=>{calls++;return {Ok:null};}},{operationId:`club-name-conversion-${'a'.repeat(64)}`,rows:[{accountId:'a',subject:'person',sink:'pii',clubs:[{id:'club'}]}],assertFence:async()=>true});
+  await assert.rejects(adapter.writeOriginal('other'),/row/);await assert.rejects(adapter.writeClub('person','foreign'),/row/);await assert.rejects(adapter.publishReference('a','foreign'),/reference/);assert.equal(calls,0);
+  await adapter.writeOriginal('person');await adapter.writeClub('person','club');assert.equal(calls,2);
+});
+test('backend signed approval refusal prevents any conversion advance',async()=>{
+  const actor={begin_private_name_write_window:async()=>({Ok:window}),approve_private_name_conversion:async()=>({Err:'invalid signature'})};
+  const adapter=createApprovedNameCoordinatorAdapter(actor,{fromText:p},{loadApproval:async()=>({signature:[]}),assertFence:async()=>true});
+  await assert.rejects(adapter.begin('operation','1'),/refused/);
 });

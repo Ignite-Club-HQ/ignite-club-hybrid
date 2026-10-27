@@ -30,6 +30,7 @@ fn authorize() -> Result<(), String> {
 fn load(id: &str) -> Result<WriterIntent, String> { INTENTS.with(|m| m.borrow().get(&id.to_string())).map(|b|crate::decode(&b)).ok_or("Exact private-name writer intent required".into()) }
 fn save(i: &WriterIntent) { INTENTS.with(|m|m.borrow_mut().insert(i.request.operation_id.clone(),crate::encode(i))); }
 fn current() -> Option<WriterIntent> { INTENTS.with(|m|m.borrow().iter().map(|e|crate::decode::<WriterIntent>(&e.value())).find(|i|!i.sealed)) }
+pub fn exclusive(request: &WriterRequest) -> bool { request.operation_id.starts_with("names:club-name-conversion-") }
 pub fn open(request: WriterRequest) -> Result<(),String> {
     authorize()?;
     if request.operation_id.is_empty() || request.operation_id.len()>128 || request.generation==0 || request.inventory_digest.len()!=32 {return Err("Invalid private-name writer request".into());}
@@ -56,7 +57,15 @@ pub struct Lease(Option<WriterRequest>);
 pub fn enter() -> Result<Lease,String> {
     if !enabled(){return Ok(Lease(None));}
     let mut i=current().ok_or("Coordinated private-name write window required")?;
+    if exclusive(&i.request){return Err("Edits locked for private-name conversion".into());}
     if i.closing||i.active>=4096{return Err("Private-name writer closing or busy".into());}
+    i.active+=1;save(&i);Ok(Lease(Some(i.request)))
+}
+// Internal identity publication uses this only after exact signed-row checks.
+pub fn enter_conversion(request: &WriterRequest) -> Result<Lease,String> {
+    if !enabled() || !exclusive(request){return Err("Approved conversion window required".into());}
+    let mut i=current().ok_or("Exact open conversion window required")?;
+    if i.request!=*request || i.closing || i.active>=4096{return Err("Exact open conversion window required".into());}
     i.active+=1;save(&i);Ok(Lease(Some(i.request)))
 }
 impl Drop for Lease {
@@ -64,4 +73,4 @@ impl Drop for Lease {
         if let Some(ref request)=self.0 {if let Ok(mut i)=load(&request.operation_id){if i.request==*request&&i.active>0{i.active-=1;if i.closing&&i.active==0{i.sealed=true;}save(&i);}}}
     }
 }
-pub fn require_window() { if enabled() && current().is_none_or(|i|i.closing) {ic_cdk::trap("Coordinated private-name write window required");} }
+pub fn require_window() { if enabled() && current().is_none_or(|i|i.closing || exclusive(&i.request)) {ic_cdk::trap("Coordinated ordinary private-name write window required");} }

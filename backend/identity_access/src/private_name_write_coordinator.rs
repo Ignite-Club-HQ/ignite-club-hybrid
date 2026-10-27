@@ -23,9 +23,9 @@ thread_local! {
     static JOURNAL: RefCell<StableBTreeMap<String,Vec<u8>,super::Memory>> = RefCell::new(StableBTreeMap::init(super::memory(28)));
     static GENERATION: RefCell<StableCell<u64,super::Memory>> = RefCell::new(StableCell::init(super::memory(29),0));
 }
-fn get(id:&str)->Outcome<WriteWindow>{JOURNAL.with(|m|m.borrow().get(&id.to_string())).map(|b|super::decode(&b)).ok_or("Exact private-name write window required".into())}
+pub(super) fn get(id:&str)->Outcome<WriteWindow>{JOURNAL.with(|m|m.borrow().get(&id.to_string())).map(|b|super::decode(&b)).ok_or("Exact private-name write window required".into())}
 pub(super) fn pending()->bool{JOURNAL.with(|m|m.borrow().iter().any(|e|super::decode::<WriteWindow>(&e.value()).phase!=WritePhase::Done))}
-fn access()->Outcome<()> {
+pub(super) fn access()->Outcome<()> {
     if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL")!=Some("1") || !super::private_name_writer_window::enabled() || !super::account_group_rehearsal_enabled(){return Err("All-writer private-name rehearsal required".into());}
     super::require_governor(&super::state(),ic_cdk::api::msg_caller())
 }
@@ -100,12 +100,19 @@ fn read_private_name_write_window(operation_id:String)->Outcome<WriteWindow>{acc
 #[ic_cdk::update]
 fn close_private_name_write_window(operation_id:String)->Outcome<WriteWindow>{
     access()?;let mut w=get(&operation_id)?;
+    if super::private_name_writer_window::exclusive(&w.request){super::private_name_conversion_approval::complete(&operation_id,&w)?;}
     if w.phase==WritePhase::Writing{w.phase=WritePhase::Closing;save_at(&operation_id,&w);}
     else if w.phase!=WritePhase::Closing&&w.phase!=WritePhase::Releasing&&w.phase!=WritePhase::Done{return Err("All writers must be opened before closing".into());}Ok(w)
 }
 #[ic_cdk::update]
 async fn advance_private_name_write_window(operation_id:String,target:Principal)->Outcome<WriteWindow>{
     access()?;let w=get(&operation_id)?;
+    // Reserved conversion IDs cannot open writers or release sinks through
+    // the generic coordinator without the retained exact signature.
+    if super::private_name_writer_window::exclusive(&w.request) {
+        super::private_name_conversion_approval::require_approval(&operation_id,&w)?;
+        if matches!(w.phase,WritePhase::Closing|WritePhase::Releasing|WritePhase::Done){super::private_name_conversion_approval::complete(&operation_id,&w)?;}
+    }
     let phase=w.phase.clone();
     match phase {
         WritePhase::Fencing|WritePhase::Releasing=>{

@@ -281,6 +281,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    register_conversion_name(request: Request, subject: Principal, club: string | null, ciphertext: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     register_pii(pii_id: string, field_id: string, ciphertext: Uint8Array, domain_owner: Principal): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
@@ -757,6 +764,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.read_private_name_writer_window(arg0);
         return from_candid_variant_n22(result);
     }
+    async register_conversion_name(arg0: Request, arg1: Principal, arg2: string | null, arg3: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.register_conversion_name(arg0, arg1, to_candid_opt_n23(arg2), arg3);
+        return from_candid_variant_n1(result);
+    }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
@@ -864,7 +881,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_club_media_authority(arg0, to_candid_opt_n23(arg1), arg2, arg3);
+        const result = await this.actor.set_club_media_authority(arg0, to_candid_opt_n24(arg1), arg2, arg3);
         return from_candid_variant_n15(result);
     }
     async set_competition_domain_canister(arg0: Principal): Promise<{
@@ -888,7 +905,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_private_media_authority(arg0, to_candid_opt_n23(arg1), arg2, arg3);
+        const result = await this.actor.set_private_media_authority(arg0, to_candid_opt_n24(arg1), arg2, arg3);
         return from_candid_variant_n20(result);
     }
     async set_transfer_fence(arg0: string, arg1: boolean): Promise<{
@@ -1231,7 +1248,10 @@ function from_candid_vec_n9(value: Array<[] | [Uint8Array]>): Array<Uint8Array |
 function to_candid_AuditFilter_n2(value: AuditFilter): _AuditFilter {
     return to_candid_record_n3(value);
 }
-function to_candid_opt_n23(value: Principal | null): [] | [Principal] {
+function to_candid_opt_n23(value: string | null): [] | [string] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n24(value: Principal | null): [] | [Principal] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n3(value: {

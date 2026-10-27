@@ -262,6 +262,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
         [],
       ),
+    'register_conversion_name' : IDL.Func(
+        [Request, IDL.Principal, IDL.Opt(IDL.Text), IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'register_pii' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Principal],
         [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],

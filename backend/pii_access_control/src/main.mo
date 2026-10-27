@@ -731,6 +731,32 @@ persistent actor class Main(governorInit : Principal) = this {
   func clubNameField(club : Text) : Text { "club_display_name:" # club };
   func clubNameScheme(club : Text) : Text { "vetkey-club-names-v1:" # club };
 
+  // Only identity's signed exact-row relay can enter this window. Public
+  // register_pii/register_private_club_name remain ordinary locked writers.
+  public shared ({ caller }) func register_conversion_name(request : PrivateNameReleaseFence.Request, subject : Principal, club : ?Text, ciphertext : [Nat8]) : async { #Ok; #Err : Text } {
+    if (not privateNamesRehearsal) return #Err("Private-name conversion is not released");
+    let lease = switch (privateNameWriterGate.enterConversion(caller, request)) { case (#Ok(key)) key; case (#Err(e)) return #Err(e) };
+    try {
+      if (subject.isAnonymous() or subject == Principal.fromText("aaaaa-aa") or ciphertext.size() == 0 or ciphertext.size() > 4096) return #Err("Invalid approved name ciphertext");
+      let id = subject.toText();
+      let field = switch (club) { case null "display_name"; case (?c) { if (not validMediaClub(c)) return #Err("Invalid approved club"); clubNameField(c) } };
+      let prior = pii_records.find(func r = r.pii_id == id and r.field_id == field);
+      switch (prior) { case (?r) { if (r.ciphertext != ciphertext or r.domain_owner != subject) return #Err("Existing name ciphertext differs; retain conversion lock"); return #Ok }; case null {} };
+      let original = switch (club) {
+        case null null;
+        case (?_) { let r = pii_records.find(func r = r.pii_id == id and r.field_id == "display_name") ?? return #Err("Original private name required"); if (r.domain_owner != subject) return #Err("Original name owner changed"); ?r }
+      };
+      let scheme = switch (club) { case null vetkeySchemeId(); case (?c) clubNameScheme(c) };
+      let record : PiiRecord = switch (original) {
+        case (?r) { { r with field_id = field; ciphertext; nonce = []; master_key_id = scheme; readers = [] } };
+        case null { { pii_id = id; field_id = field; ciphertext; nonce = []; master_key_id = scheme; created_at = now_ns(); last_accessed = now_ns(); access_count = 0; domain_owner = subject; readers = [] } }
+      };
+      mediaAuthEpoch += 1;
+      pii_records := pii_records.concat([record]);
+      #Ok
+    } finally { privateNameWriterGate.leave(lease) }
+  };
+
   public shared ({ caller }) func register_private_club_name(subject : Principal, club : Text, ciphertext : [Nat8]) : async { #Ok : EncryptedPii; #Err : Text } {
     if (not privateNamesRehearsal or not validMediaClub(club)) return #Err("Club names are not released or club is invalid");
     let lease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(e)) return #Err(e) };
