@@ -51,26 +51,79 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export type result_site_availability = {
+export interface MemoryStats {
+    memory_bytes: bigint;
+    stable_bytes: bigint;
+    heap_bytes: bigint;
+}
+export type Result_2 = {
     __kind__: "Ok";
-    Ok: site_availability;
+    Ok: Placement | null;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export type result_target = {
+export interface Operator {
+    user: Principal;
+    roles: Array<OperatorRole>;
+}
+export type Result_13 = {
     __kind__: "Ok";
-    Ok: target;
+    Ok: Availability;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export interface site_availability {
+export type Result_17 = {
+    __kind__: "Ok";
+    Ok: Target;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface SiteAvailability {
     version: bigint;
     enabled: boolean;
     site_id: string;
 }
-export interface audit_event {
+export interface Init {
+    governor: Principal;
+}
+export type Result_5 = {
+    __kind__: "Ok";
+    Ok: ResidencyPolicy;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_16 = {
+    __kind__: "Ok";
+    Ok: SiteAvailability;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface ResidencyAssignment {
+    version: bigint;
+    target_alias: string;
+    club_id: string;
+    profile: string;
+}
+export type Result_1 = {
+    __kind__: "Ok";
+    Ok: Operator | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_11 = {
+    __kind__: "Ok";
+    Ok: null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface AuditEvent {
     id: bigint;
     action: string;
     at_ns: bigint;
@@ -79,63 +132,33 @@ export interface audit_event {
     caller: Principal;
     club_id?: string;
 }
-export interface decision {
-    writable: boolean;
-    placement: placement;
-    country_allowed: boolean;
-    backend_enabled: boolean;
-    reason: string;
+export type Result_4 = {
+    __kind__: "Ok";
+    Ok: ResidencyAssignment | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface Page {
+    placements: Array<Placement>;
+    next?: string;
+    registry_version: bigint;
 }
-export type result_opt_residency = {
+export type Result_7 = {
     __kind__: "Ok";
-    Ok: residency_assignment | null;
+    Ok: Target | null;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export type result_residency = {
+export type Result_14 = {
     __kind__: "Ok";
-    Ok: residency_assignment;
+    Ok: Placement;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export interface placement {
-    country: string;
-    version: bigint;
-    state: placement_state;
-    club_id: string;
-    backend: backend;
-}
-export type result_audit_page = {
-    __kind__: "Ok";
-    Ok: audit_page;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type result_page = {
-    __kind__: "Ok";
-    Ok: page;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type result_decision = {
-    __kind__: "Ok";
-    Ok: decision | null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type result_unit = {
-    __kind__: "Ok";
-    Ok: null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type backend = {
+export type Backend = {
     __kind__: "Icp";
     Icp: {
         canister: Principal;
@@ -146,90 +169,62 @@ export type backend = {
         environment: string;
     };
 };
-export interface residency_assignment {
+export interface Availability {
+    icp_enabled: boolean;
     version: bigint;
-    target_alias: string;
-    club_id: string;
-    profile: string;
+    supabase_enabled: boolean;
 }
-export interface init {
-    governor: Principal;
-}
-export type result_residency_policy = {
-    __kind__: "Ok";
-    Ok: residency_policy;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface residency_policy {
+export interface Placement {
     country: string;
-    allowed_profiles: Array<string>;
     version: bigint;
+    state: PlacementState;
+    club_id: string;
+    backend: Backend;
 }
-export type result_policy = {
-    __kind__: "Ok";
-    Ok: policy;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface audit_page {
-    next?: bigint;
-    events: Array<audit_event>;
-}
-export type result_placement = {
-    __kind__: "Ok";
-    Ok: placement;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type result_opt_target = {
-    __kind__: "Ok";
-    Ok: target | null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface page {
-    placements: Array<placement>;
-    next?: string;
-    registry_version: bigint;
-}
-export type result_bool = {
+export type Result_6 = {
     __kind__: "Ok";
     Ok: boolean;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export type result_availability = {
-    __kind__: "Ok";
-    Ok: availability;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type result_operator = {
-    __kind__: "Ok";
-    Ok: operator_record;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface operator_record {
-    user: Principal;
-    roles: Array<operator_role>;
+export interface WriterReceipt {
+    active: bigint;
+    request: WriterRequest;
+    sealed: boolean;
+    closing: boolean;
+    receiver: Principal;
 }
-export type result_opt_placement = {
+export interface ResidencyPolicy {
+    country: string;
+    allowed_profiles: Array<string>;
+    version: bigint;
+}
+export type Result_12 = {
     __kind__: "Ok";
-    Ok: placement | null;
+    Ok: WriterReceipt;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export interface target {
+export interface Policy {
+    country: string;
+    icp_enabled: boolean;
+    version: bigint;
+    supabase_enabled: boolean;
+}
+export type Result_9 = {
+    __kind__: "Ok";
+    Ok: AuditPage;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface AuditPage {
+    next?: bigint;
+    events: Array<AuditEvent>;
+}
+export interface Target {
     alias: string;
     deployment_class: string;
     healthy: boolean;
@@ -237,31 +232,67 @@ export interface target {
     enabled: boolean;
     site_id?: string;
     profile: string;
-    backend: backend;
+    backend: Backend;
 }
-export interface availability {
-    icp_enabled: boolean;
-    version: bigint;
-    supabase_enabled: boolean;
+export type Result = {
+    __kind__: "Ok";
+    Ok: Decision | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_10 = {
+    __kind__: "Ok";
+    Ok: Page;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_3 = {
+    __kind__: "Ok";
+    Ok: Policy;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface WriterRequest {
+    inventory_digest: Uint8Array;
+    generation: bigint;
+    operation_id: string;
 }
-export interface policy {
-    country: string;
-    icp_enabled: boolean;
-    version: bigint;
-    supabase_enabled: boolean;
+export type Result_15 = {
+    __kind__: "Ok";
+    Ok: ResidencyAssignment;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_8 = {
+    __kind__: "Ok";
+    Ok: Operator;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface Decision {
+    writable: boolean;
+    placement: Placement;
+    country_allowed: boolean;
+    backend_enabled: boolean;
+    reason: string;
 }
-export enum backend_kind {
+export enum BackendKind {
     Icp = "Icp",
     Supabase = "Supabase"
 }
-export enum operator_role {
+export enum OperatorRole {
     Auditor = "Auditor",
     PlacementAdmin = "PlacementAdmin",
     SecurityAdmin = "SecurityAdmin",
     InfrastructureAdmin = "InfrastructureAdmin",
     MigrationOperator = "MigrationOperator"
 }
-export enum placement_state {
+export enum PlacementState {
     Blocked = "Blocked",
     Active = "Active",
     ReadOnly = "ReadOnly",
@@ -269,201 +300,268 @@ export enum placement_state {
 }
 export interface placement_registryInterface {
     cycles_balance(): Promise<bigint>;
-    get_availability(): Promise<availability>;
-    get_decision(arg0: string): Promise<result_decision>;
-    get_operator(arg0: Principal): Promise<result_operator>;
-    get_placement(arg0: string): Promise<result_opt_placement>;
-    get_policy(arg0: string): Promise<result_policy>;
-    get_residency(arg0: string): Promise<result_opt_residency>;
-    get_residency_policy(arg0: string): Promise<result_residency_policy>;
-    get_site_availability(arg0: string): Promise<result_bool>;
-    get_target(arg0: string): Promise<result_opt_target>;
-    grant_operator(arg0: Principal, arg1: Array<operator_role>): Promise<result_operator>;
-    list_audit(arg0: bigint | null, arg1: number): Promise<result_audit_page>;
-    list_placements(arg0: string | null, arg1: number): Promise<result_page>;
-    memory_stats(): Promise<{
-        memory_bytes: bigint;
-        stable_bytes: bigint;
-        heap_bytes: bigint;
-    }>;
-    revoke_operator(arg0: Principal): Promise<result_unit>;
-    set_availability(arg0: backend_kind, arg1: boolean, arg2: bigint): Promise<result_availability>;
-    set_placement(arg0: string, arg1: string, arg2: backend, arg3: bigint): Promise<result_placement>;
-    set_policy(arg0: string, arg1: boolean, arg2: boolean, arg3: bigint): Promise<result_policy>;
-    set_residency(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<result_residency>;
-    set_residency_policy(arg0: string, arg1: Array<string>, arg2: bigint): Promise<result_residency_policy>;
-    set_site_availability(arg0: string, arg1: boolean, arg2: bigint): Promise<result_site_availability>;
-    set_state(arg0: string, arg1: placement_state, arg2: bigint): Promise<result_placement>;
-    set_target(arg0: string, arg1: string | null, arg2: string, arg3: backend, arg4: string, arg5: boolean, arg6: bigint): Promise<result_target>;
-    set_target_health(arg0: string, arg1: boolean, arg2: bigint): Promise<result_target>;
+    get_availability(): Promise<Availability>;
+    get_decision(arg0: string): Promise<Result>;
+    get_operator(arg0: Principal): Promise<Result_1>;
+    get_placement(arg0: string): Promise<Result_2>;
+    get_policy(arg0: string): Promise<Result_3>;
+    get_residency(arg0: string): Promise<Result_4>;
+    get_residency_policy(arg0: string): Promise<Result_5>;
+    get_site_availability(arg0: string): Promise<Result_6>;
+    get_target(arg0: string): Promise<Result_7>;
+    grant_operator(arg0: Principal, arg1: Array<OperatorRole>): Promise<Result_8>;
+    list_audit(arg0: bigint | null, arg1: number): Promise<Result_9>;
+    list_placements(arg0: string | null, arg1: number): Promise<Result_10>;
+    memory_stats(): Promise<MemoryStats>;
+    open_private_name_writer_window(arg0: WriterRequest): Promise<Result_11>;
+    read_private_name_writer_window(arg0: WriterRequest): Promise<Result_12>;
+    revoke_operator(arg0: Principal): Promise<Result_11>;
+    seal_private_name_writer_window(arg0: WriterRequest): Promise<Result_11>;
+    set_availability(arg0: BackendKind, arg1: boolean, arg2: bigint): Promise<Result_13>;
+    set_placement(arg0: string, arg1: string, arg2: Backend, arg3: bigint): Promise<Result_14>;
+    set_policy(arg0: string, arg1: boolean, arg2: boolean, arg3: bigint): Promise<Result_3>;
+    set_residency(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<Result_15>;
+    set_residency_policy(arg0: string, arg1: Array<string>, arg2: bigint): Promise<Result_5>;
+    set_site_availability(arg0: string, arg1: boolean, arg2: bigint): Promise<Result_16>;
+    set_state(arg0: string, arg1: PlacementState, arg2: bigint): Promise<Result_14>;
+    set_target(arg0: string, arg1: string | null, arg2: string, arg3: Backend, arg4: string, arg5: boolean, arg6: bigint): Promise<Result_17>;
+    set_target_health(arg0: string, arg1: boolean, arg2: bigint): Promise<Result_17>;
     version(): Promise<bigint>;
 }
-import type { audit_event as _audit_event, audit_page as _audit_page, availability as _availability, backend as _backend, backend_kind as _backend_kind, decision as _decision, operator_record as _operator_record, operator_role as _operator_role, page as _page, placement as _placement, placement_state as _placement_state, policy as _policy, residency_assignment as _residency_assignment, residency_policy as _residency_policy, result_audit_page as _result_audit_page, result_availability as _result_availability, result_bool as _result_bool, result_decision as _result_decision, result_operator as _result_operator, result_opt_placement as _result_opt_placement, result_opt_residency as _result_opt_residency, result_opt_target as _result_opt_target, result_page as _result_page, result_placement as _result_placement, result_policy as _result_policy, result_residency as _result_residency, result_residency_policy as _result_residency_policy, result_site_availability as _result_site_availability, result_target as _result_target, result_unit as _result_unit, site_availability as _site_availability, target as _target } from "./declarations/placement_registry.did";
+import type { AuditEvent as _AuditEvent, AuditPage as _AuditPage, Availability as _Availability, Backend as _Backend, BackendKind as _BackendKind, Decision as _Decision, Operator as _Operator, OperatorRole as _OperatorRole, Page as _Page, Placement as _Placement, PlacementState as _PlacementState, Policy as _Policy, ResidencyAssignment as _ResidencyAssignment, ResidencyPolicy as _ResidencyPolicy, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_16 as _Result_16, Result_17 as _Result_17, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, SiteAvailability as _SiteAvailability, Target as _Target, WriterReceipt as _WriterReceipt } from "./declarations/placement_registry.did";
 export class Placement_registry implements placement_registryInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async cycles_balance(): Promise<bigint> {
         const result = await this.actor.cycles_balance();
         return result;
     }
-    async get_availability(): Promise<availability> {
+    async get_availability(): Promise<Availability> {
         const result = await this.actor.get_availability();
         return result;
     }
-    async get_decision(arg0: string): Promise<result_decision> {
+    async get_decision(arg0: string): Promise<Result> {
         const result = await this.actor.get_decision(arg0);
-        return from_candid_result_decision_n1(result);
+        return from_candid_Result_n1(result);
     }
-    async get_operator(arg0: Principal): Promise<result_operator> {
+    async get_operator(arg0: Principal): Promise<Result_1> {
         const result = await this.actor.get_operator(arg0);
-        return from_candid_result_operator_n12(result);
+        return from_candid_Result_1_n12(result);
     }
-    async get_placement(arg0: string): Promise<result_opt_placement> {
+    async get_placement(arg0: string): Promise<Result_2> {
         const result = await this.actor.get_placement(arg0);
-        return from_candid_result_opt_placement_n19(result);
+        return from_candid_Result_2_n20(result);
     }
-    async get_policy(arg0: string): Promise<result_policy> {
+    async get_policy(arg0: string): Promise<Result_3> {
         const result = await this.actor.get_policy(arg0);
-        return from_candid_result_policy_n22(result);
+        return from_candid_Result_3_n23(result);
     }
-    async get_residency(arg0: string): Promise<result_opt_residency> {
+    async get_residency(arg0: string): Promise<Result_4> {
         const result = await this.actor.get_residency(arg0);
-        return from_candid_result_opt_residency_n24(result);
+        return from_candid_Result_4_n25(result);
     }
-    async get_residency_policy(arg0: string): Promise<result_residency_policy> {
+    async get_residency_policy(arg0: string): Promise<Result_5> {
         const result = await this.actor.get_residency_policy(arg0);
-        return from_candid_result_residency_policy_n27(result);
+        return from_candid_Result_5_n28(result);
     }
-    async get_site_availability(arg0: string): Promise<result_bool> {
+    async get_site_availability(arg0: string): Promise<Result_6> {
         const result = await this.actor.get_site_availability(arg0);
-        return from_candid_result_bool_n29(result);
+        return from_candid_Result_6_n30(result);
     }
-    async get_target(arg0: string): Promise<result_opt_target> {
+    async get_target(arg0: string): Promise<Result_7> {
         const result = await this.actor.get_target(arg0);
-        return from_candid_result_opt_target_n31(result);
+        return from_candid_Result_7_n32(result);
     }
-    async grant_operator(arg0: Principal, arg1: Array<operator_role>): Promise<result_operator> {
-        const result = await this.actor.grant_operator(arg0, to_candid_vec_n37(arg1));
-        return from_candid_result_operator_n12(result);
+    async grant_operator(arg0: Principal, arg1: Array<OperatorRole>): Promise<Result_8> {
+        const result = await this.actor.grant_operator(arg0, to_candid_vec_n38(arg1));
+        return from_candid_Result_8_n41(result);
     }
-    async list_audit(arg0: bigint | null, arg1: number): Promise<result_audit_page> {
-        const result = await this.actor.list_audit(to_candid_opt_n40(arg0), arg1);
-        return from_candid_result_audit_page_n41(result);
+    async list_audit(arg0: bigint | null, arg1: number): Promise<Result_9> {
+        const result = await this.actor.list_audit(to_candid_opt_n43(arg0), arg1);
+        return from_candid_Result_9_n44(result);
     }
-    async list_placements(arg0: string | null, arg1: number): Promise<result_page> {
-        const result = await this.actor.list_placements(to_candid_opt_n49(arg0), arg1);
-        return from_candid_result_page_n50(result);
+    async list_placements(arg0: string | null, arg1: number): Promise<Result_10> {
+        const result = await this.actor.list_placements(to_candid_opt_n52(arg0), arg1);
+        return from_candid_Result_10_n53(result);
     }
-    async memory_stats(): Promise<{
-        memory_bytes: bigint;
-        stable_bytes: bigint;
-        heap_bytes: bigint;
-    }> {
+    async memory_stats(): Promise<MemoryStats> {
         const result = await this.actor.memory_stats();
         return result;
     }
-    async revoke_operator(arg0: Principal): Promise<result_unit> {
+    async open_private_name_writer_window(arg0: WriterRequest): Promise<Result_11> {
+        const result = await this.actor.open_private_name_writer_window(arg0);
+        return from_candid_Result_11_n58(result);
+    }
+    async read_private_name_writer_window(arg0: WriterRequest): Promise<Result_12> {
+        const result = await this.actor.read_private_name_writer_window(arg0);
+        return from_candid_Result_12_n60(result);
+    }
+    async revoke_operator(arg0: Principal): Promise<Result_11> {
         const result = await this.actor.revoke_operator(arg0);
-        return from_candid_result_unit_n55(result);
+        return from_candid_Result_11_n58(result);
     }
-    async set_availability(arg0: backend_kind, arg1: boolean, arg2: bigint): Promise<result_availability> {
-        const result = await this.actor.set_availability(to_candid_backend_kind_n57(arg0), arg1, arg2);
-        return from_candid_result_availability_n59(result);
+    async seal_private_name_writer_window(arg0: WriterRequest): Promise<Result_11> {
+        const result = await this.actor.seal_private_name_writer_window(arg0);
+        return from_candid_Result_11_n58(result);
     }
-    async set_placement(arg0: string, arg1: string, arg2: backend, arg3: bigint): Promise<result_placement> {
-        const result = await this.actor.set_placement(arg0, arg1, to_candid_backend_n61(arg2), arg3);
-        return from_candid_result_placement_n63(result);
+    async set_availability(arg0: BackendKind, arg1: boolean, arg2: bigint): Promise<Result_13> {
+        const result = await this.actor.set_availability(to_candid_BackendKind_n62(arg0), arg1, arg2);
+        return from_candid_Result_13_n64(result);
     }
-    async set_policy(arg0: string, arg1: boolean, arg2: boolean, arg3: bigint): Promise<result_policy> {
+    async set_placement(arg0: string, arg1: string, arg2: Backend, arg3: bigint): Promise<Result_14> {
+        const result = await this.actor.set_placement(arg0, arg1, to_candid_Backend_n66(arg2), arg3);
+        return from_candid_Result_14_n68(result);
+    }
+    async set_policy(arg0: string, arg1: boolean, arg2: boolean, arg3: bigint): Promise<Result_3> {
         const result = await this.actor.set_policy(arg0, arg1, arg2, arg3);
-        return from_candid_result_policy_n22(result);
+        return from_candid_Result_3_n23(result);
     }
-    async set_residency(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<result_residency> {
+    async set_residency(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<Result_15> {
         const result = await this.actor.set_residency(arg0, arg1, arg2, arg3);
-        return from_candid_result_residency_n65(result);
+        return from_candid_Result_15_n70(result);
     }
-    async set_residency_policy(arg0: string, arg1: Array<string>, arg2: bigint): Promise<result_residency_policy> {
+    async set_residency_policy(arg0: string, arg1: Array<string>, arg2: bigint): Promise<Result_5> {
         const result = await this.actor.set_residency_policy(arg0, arg1, arg2);
-        return from_candid_result_residency_policy_n27(result);
+        return from_candid_Result_5_n28(result);
     }
-    async set_site_availability(arg0: string, arg1: boolean, arg2: bigint): Promise<result_site_availability> {
+    async set_site_availability(arg0: string, arg1: boolean, arg2: bigint): Promise<Result_16> {
         const result = await this.actor.set_site_availability(arg0, arg1, arg2);
-        return from_candid_result_site_availability_n67(result);
+        return from_candid_Result_16_n72(result);
     }
-    async set_state(arg0: string, arg1: placement_state, arg2: bigint): Promise<result_placement> {
-        const result = await this.actor.set_state(arg0, to_candid_placement_state_n69(arg1), arg2);
-        return from_candid_result_placement_n63(result);
+    async set_state(arg0: string, arg1: PlacementState, arg2: bigint): Promise<Result_14> {
+        const result = await this.actor.set_state(arg0, to_candid_PlacementState_n74(arg1), arg2);
+        return from_candid_Result_14_n68(result);
     }
-    async set_target(arg0: string, arg1: string | null, arg2: string, arg3: backend, arg4: string, arg5: boolean, arg6: bigint): Promise<result_target> {
-        const result = await this.actor.set_target(arg0, to_candid_opt_n49(arg1), arg2, to_candid_backend_n61(arg3), arg4, arg5, arg6);
-        return from_candid_result_target_n71(result);
+    async set_target(arg0: string, arg1: string | null, arg2: string, arg3: Backend, arg4: string, arg5: boolean, arg6: bigint): Promise<Result_17> {
+        const result = await this.actor.set_target(arg0, to_candid_opt_n52(arg1), arg2, to_candid_Backend_n66(arg3), arg4, arg5, arg6);
+        return from_candid_Result_17_n76(result);
     }
-    async set_target_health(arg0: string, arg1: boolean, arg2: bigint): Promise<result_target> {
+    async set_target_health(arg0: string, arg1: boolean, arg2: bigint): Promise<Result_17> {
         const result = await this.actor.set_target_health(arg0, arg1, arg2);
-        return from_candid_result_target_n71(result);
+        return from_candid_Result_17_n76(result);
     }
     async version(): Promise<bigint> {
         const result = await this.actor.version();
         return result;
     }
 }
-function from_candid_audit_event_n47(value: _audit_event): audit_event {
-    return from_candid_record_n48(value);
+function from_candid_AuditEvent_n50(value: _AuditEvent): AuditEvent {
+    return from_candid_record_n51(value);
 }
-function from_candid_audit_page_n43(value: _audit_page): audit_page {
-    return from_candid_record_n44(value);
+function from_candid_AuditPage_n46(value: _AuditPage): AuditPage {
+    return from_candid_record_n47(value);
 }
-function from_candid_backend_n10(value: _backend): backend {
+function from_candid_Backend_n10(value: _Backend): Backend {
     return from_candid_variant_n11(value);
 }
-function from_candid_decision_n4(value: _decision): decision {
+function from_candid_Decision_n4(value: _Decision): Decision {
     return from_candid_record_n5(value);
 }
-function from_candid_operator_record_n14(value: _operator_record): operator_record {
-    return from_candid_record_n15(value);
+function from_candid_OperatorRole_n18(value: _OperatorRole): OperatorRole {
+    return from_candid_variant_n19(value);
 }
-function from_candid_operator_role_n17(value: _operator_role): operator_role {
-    return from_candid_variant_n18(value);
+function from_candid_Operator_n15(value: _Operator): Operator {
+    return from_candid_record_n16(value);
 }
-function from_candid_opt_n21(value: [] | [_placement]): placement | null {
-    return value.length === 0 ? null : from_candid_placement_n6(value[0]);
+function from_candid_Page_n55(value: _Page): Page {
+    return from_candid_record_n56(value);
 }
-function from_candid_opt_n26(value: [] | [_residency_assignment]): residency_assignment | null {
-    return value.length === 0 ? null : value[0];
-}
-function from_candid_opt_n3(value: [] | [_decision]): decision | null {
-    return value.length === 0 ? null : from_candid_decision_n4(value[0]);
-}
-function from_candid_opt_n33(value: [] | [_target]): target | null {
-    return value.length === 0 ? null : from_candid_target_n34(value[0]);
-}
-function from_candid_opt_n36(value: [] | [string]): string | null {
-    return value.length === 0 ? null : value[0];
-}
-function from_candid_opt_n45(value: [] | [bigint]): bigint | null {
-    return value.length === 0 ? null : value[0];
-}
-function from_candid_page_n52(value: _page): page {
-    return from_candid_record_n53(value);
-}
-function from_candid_placement_n6(value: _placement): placement {
-    return from_candid_record_n7(value);
-}
-function from_candid_placement_state_n8(value: _placement_state): placement_state {
+function from_candid_PlacementState_n8(value: _PlacementState): PlacementState {
     return from_candid_variant_n9(value);
 }
-function from_candid_record_n15(value: {
+function from_candid_Placement_n6(value: _Placement): Placement {
+    return from_candid_record_n7(value);
+}
+function from_candid_Result_10_n53(value: _Result_10): Result_10 {
+    return from_candid_variant_n54(value);
+}
+function from_candid_Result_11_n58(value: _Result_11): Result_11 {
+    return from_candid_variant_n59(value);
+}
+function from_candid_Result_12_n60(value: _Result_12): Result_12 {
+    return from_candid_variant_n61(value);
+}
+function from_candid_Result_13_n64(value: _Result_13): Result_13 {
+    return from_candid_variant_n65(value);
+}
+function from_candid_Result_14_n68(value: _Result_14): Result_14 {
+    return from_candid_variant_n69(value);
+}
+function from_candid_Result_15_n70(value: _Result_15): Result_15 {
+    return from_candid_variant_n71(value);
+}
+function from_candid_Result_16_n72(value: _Result_16): Result_16 {
+    return from_candid_variant_n73(value);
+}
+function from_candid_Result_17_n76(value: _Result_17): Result_17 {
+    return from_candid_variant_n77(value);
+}
+function from_candid_Result_1_n12(value: _Result_1): Result_1 {
+    return from_candid_variant_n13(value);
+}
+function from_candid_Result_2_n20(value: _Result_2): Result_2 {
+    return from_candid_variant_n21(value);
+}
+function from_candid_Result_3_n23(value: _Result_3): Result_3 {
+    return from_candid_variant_n24(value);
+}
+function from_candid_Result_4_n25(value: _Result_4): Result_4 {
+    return from_candid_variant_n26(value);
+}
+function from_candid_Result_5_n28(value: _Result_5): Result_5 {
+    return from_candid_variant_n29(value);
+}
+function from_candid_Result_6_n30(value: _Result_6): Result_6 {
+    return from_candid_variant_n31(value);
+}
+function from_candid_Result_7_n32(value: _Result_7): Result_7 {
+    return from_candid_variant_n33(value);
+}
+function from_candid_Result_8_n41(value: _Result_8): Result_8 {
+    return from_candid_variant_n42(value);
+}
+function from_candid_Result_9_n44(value: _Result_9): Result_9 {
+    return from_candid_variant_n45(value);
+}
+function from_candid_Result_n1(value: _Result): Result {
+    return from_candid_variant_n2(value);
+}
+function from_candid_Target_n35(value: _Target): Target {
+    return from_candid_record_n36(value);
+}
+function from_candid_opt_n14(value: [] | [_Operator]): Operator | null {
+    return value.length === 0 ? null : from_candid_Operator_n15(value[0]);
+}
+function from_candid_opt_n22(value: [] | [_Placement]): Placement | null {
+    return value.length === 0 ? null : from_candid_Placement_n6(value[0]);
+}
+function from_candid_opt_n27(value: [] | [_ResidencyAssignment]): ResidencyAssignment | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n3(value: [] | [_Decision]): Decision | null {
+    return value.length === 0 ? null : from_candid_Decision_n4(value[0]);
+}
+function from_candid_opt_n34(value: [] | [_Target]): Target | null {
+    return value.length === 0 ? null : from_candid_Target_n35(value[0]);
+}
+function from_candid_opt_n37(value: [] | [string]): string | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n48(value: [] | [bigint]): bigint | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_record_n16(value: {
     user: Principal;
-    roles: Array<_operator_role>;
+    roles: Array<_OperatorRole>;
 }): {
     user: Principal;
-    roles: Array<operator_role>;
+    roles: Array<OperatorRole>;
 } {
     return {
         user: value.user,
-        roles: from_candid_vec_n16(value.roles)
+        roles: from_candid_vec_n17(value.roles)
     };
 }
-function from_candid_record_n35(value: {
+function from_candid_record_n36(value: {
     alias: string;
     deployment_class: string;
     healthy: boolean;
@@ -471,7 +569,7 @@ function from_candid_record_n35(value: {
     enabled: boolean;
     site_id: [] | [string];
     profile: string;
-    backend: _backend;
+    backend: _Backend;
 }): {
     alias: string;
     deployment_class: string;
@@ -480,7 +578,7 @@ function from_candid_record_n35(value: {
     enabled: boolean;
     site_id?: string;
     profile: string;
-    backend: backend;
+    backend: Backend;
 } {
     return {
         alias: value.alias,
@@ -488,24 +586,45 @@ function from_candid_record_n35(value: {
         healthy: value.healthy,
         version: value.version,
         enabled: value.enabled,
-        site_id: record_opt_to_undefined(from_candid_opt_n36(value.site_id)),
+        site_id: record_opt_to_undefined(from_candid_opt_n37(value.site_id)),
         profile: value.profile,
-        backend: from_candid_backend_n10(value.backend)
+        backend: from_candid_Backend_n10(value.backend)
     };
 }
-function from_candid_record_n44(value: {
+function from_candid_record_n47(value: {
     next: [] | [bigint];
-    events: Array<_audit_event>;
+    events: Array<_AuditEvent>;
 }): {
     next?: bigint;
-    events: Array<audit_event>;
+    events: Array<AuditEvent>;
 } {
     return {
-        next: record_opt_to_undefined(from_candid_opt_n45(value.next)),
-        events: from_candid_vec_n46(value.events)
+        next: record_opt_to_undefined(from_candid_opt_n48(value.next)),
+        events: from_candid_vec_n49(value.events)
     };
 }
-function from_candid_record_n48(value: {
+function from_candid_record_n5(value: {
+    writable: boolean;
+    placement: _Placement;
+    country_allowed: boolean;
+    backend_enabled: boolean;
+    reason: string;
+}): {
+    writable: boolean;
+    placement: Placement;
+    country_allowed: boolean;
+    backend_enabled: boolean;
+    reason: string;
+} {
+    return {
+        writable: value.writable,
+        placement: from_candid_Placement_n6(value.placement),
+        country_allowed: value.country_allowed,
+        backend_enabled: value.backend_enabled,
+        reason: value.reason
+    };
+}
+function from_candid_record_n51(value: {
     id: bigint;
     action: string;
     at_ns: bigint;
@@ -529,116 +648,44 @@ function from_candid_record_n48(value: {
         registry_version: value.registry_version,
         detail: value.detail,
         caller: value.caller,
-        club_id: record_opt_to_undefined(from_candid_opt_n36(value.club_id))
+        club_id: record_opt_to_undefined(from_candid_opt_n37(value.club_id))
     };
 }
-function from_candid_record_n5(value: {
-    writable: boolean;
-    placement: _placement;
-    country_allowed: boolean;
-    backend_enabled: boolean;
-    reason: string;
-}): {
-    writable: boolean;
-    placement: placement;
-    country_allowed: boolean;
-    backend_enabled: boolean;
-    reason: string;
-} {
-    return {
-        writable: value.writable,
-        placement: from_candid_placement_n6(value.placement),
-        country_allowed: value.country_allowed,
-        backend_enabled: value.backend_enabled,
-        reason: value.reason
-    };
-}
-function from_candid_record_n53(value: {
-    placements: Array<_placement>;
+function from_candid_record_n56(value: {
+    placements: Array<_Placement>;
     next: [] | [string];
     registry_version: bigint;
 }): {
-    placements: Array<placement>;
+    placements: Array<Placement>;
     next?: string;
     registry_version: bigint;
 } {
     return {
-        placements: from_candid_vec_n54(value.placements),
-        next: record_opt_to_undefined(from_candid_opt_n36(value.next)),
+        placements: from_candid_vec_n57(value.placements),
+        next: record_opt_to_undefined(from_candid_opt_n37(value.next)),
         registry_version: value.registry_version
     };
 }
 function from_candid_record_n7(value: {
     country: string;
     version: bigint;
-    state: _placement_state;
+    state: _PlacementState;
     club_id: string;
-    backend: _backend;
+    backend: _Backend;
 }): {
     country: string;
     version: bigint;
-    state: placement_state;
+    state: PlacementState;
     club_id: string;
-    backend: backend;
+    backend: Backend;
 } {
     return {
         country: value.country,
         version: value.version,
-        state: from_candid_placement_state_n8(value.state),
+        state: from_candid_PlacementState_n8(value.state),
         club_id: value.club_id,
-        backend: from_candid_backend_n10(value.backend)
+        backend: from_candid_Backend_n10(value.backend)
     };
-}
-function from_candid_result_audit_page_n41(value: _result_audit_page): result_audit_page {
-    return from_candid_variant_n42(value);
-}
-function from_candid_result_availability_n59(value: _result_availability): result_availability {
-    return from_candid_variant_n60(value);
-}
-function from_candid_result_bool_n29(value: _result_bool): result_bool {
-    return from_candid_variant_n30(value);
-}
-function from_candid_result_decision_n1(value: _result_decision): result_decision {
-    return from_candid_variant_n2(value);
-}
-function from_candid_result_operator_n12(value: _result_operator): result_operator {
-    return from_candid_variant_n13(value);
-}
-function from_candid_result_opt_placement_n19(value: _result_opt_placement): result_opt_placement {
-    return from_candid_variant_n20(value);
-}
-function from_candid_result_opt_residency_n24(value: _result_opt_residency): result_opt_residency {
-    return from_candid_variant_n25(value);
-}
-function from_candid_result_opt_target_n31(value: _result_opt_target): result_opt_target {
-    return from_candid_variant_n32(value);
-}
-function from_candid_result_page_n50(value: _result_page): result_page {
-    return from_candid_variant_n51(value);
-}
-function from_candid_result_placement_n63(value: _result_placement): result_placement {
-    return from_candid_variant_n64(value);
-}
-function from_candid_result_policy_n22(value: _result_policy): result_policy {
-    return from_candid_variant_n23(value);
-}
-function from_candid_result_residency_n65(value: _result_residency): result_residency {
-    return from_candid_variant_n66(value);
-}
-function from_candid_result_residency_policy_n27(value: _result_residency_policy): result_residency_policy {
-    return from_candid_variant_n28(value);
-}
-function from_candid_result_site_availability_n67(value: _result_site_availability): result_site_availability {
-    return from_candid_variant_n68(value);
-}
-function from_candid_result_target_n71(value: _result_target): result_target {
-    return from_candid_variant_n72(value);
-}
-function from_candid_result_unit_n55(value: _result_unit): result_unit {
-    return from_candid_variant_n56(value);
-}
-function from_candid_target_n34(value: _target): target {
-    return from_candid_record_n35(value);
 }
 function from_candid_variant_n11(value: {
     Icp: {
@@ -668,25 +715,25 @@ function from_candid_variant_n11(value: {
     } : value;
 }
 function from_candid_variant_n13(value: {
-    Ok: _operator_record;
+    Ok: [] | [_Operator];
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: operator_record;
+    Ok: Operator | null;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_operator_record_n14(value.Ok)
+        Ok: from_candid_opt_n14(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n18(value: {
+function from_candid_variant_n19(value: {
     Auditor: null;
 } | {
     PlacementAdmin: null;
@@ -696,16 +743,16 @@ function from_candid_variant_n18(value: {
     InfrastructureAdmin: null;
 } | {
     MigrationOperator: null;
-}): operator_role {
-    return "Auditor" in value ? operator_role.Auditor : "PlacementAdmin" in value ? operator_role.PlacementAdmin : "SecurityAdmin" in value ? operator_role.SecurityAdmin : "InfrastructureAdmin" in value ? operator_role.InfrastructureAdmin : "MigrationOperator" in value ? operator_role.MigrationOperator : value;
+}): OperatorRole {
+    return "Auditor" in value ? OperatorRole.Auditor : "PlacementAdmin" in value ? OperatorRole.PlacementAdmin : "SecurityAdmin" in value ? OperatorRole.SecurityAdmin : "InfrastructureAdmin" in value ? OperatorRole.InfrastructureAdmin : "MigrationOperator" in value ? OperatorRole.MigrationOperator : value;
 }
 function from_candid_variant_n2(value: {
-    Ok: [] | [_decision];
+    Ok: [] | [_Decision];
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: decision | null;
+    Ok: Decision | null;
 } | {
     __kind__: "Err";
     Err: string;
@@ -718,70 +765,32 @@ function from_candid_variant_n2(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n20(value: {
-    Ok: [] | [_placement];
+function from_candid_variant_n21(value: {
+    Ok: [] | [_Placement];
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: placement | null;
+    Ok: Placement | null;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n21(value.Ok)
+        Ok: from_candid_opt_n22(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n23(value: {
-    Ok: _policy;
+function from_candid_variant_n24(value: {
+    Ok: _Policy;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: policy;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n25(value: {
-    Ok: [] | [_residency_assignment];
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: residency_assignment | null;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_opt_n26(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n28(value: {
-    Ok: _residency_policy;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: residency_policy;
+    Ok: Policy;
 } | {
     __kind__: "Err";
     Err: string;
@@ -794,7 +803,45 @@ function from_candid_variant_n28(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n30(value: {
+function from_candid_variant_n26(value: {
+    Ok: [] | [_ResidencyAssignment];
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: ResidencyAssignment | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_opt_n27(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n29(value: {
+    Ok: _ResidencyPolicy;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: ResidencyPolicy;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n31(value: {
     Ok: boolean;
 } | {
     Err: string;
@@ -813,64 +860,83 @@ function from_candid_variant_n30(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n32(value: {
-    Ok: [] | [_target];
+function from_candid_variant_n33(value: {
+    Ok: [] | [_Target];
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: target | null;
+    Ok: Target | null;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n33(value.Ok)
+        Ok: from_candid_opt_n34(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
 function from_candid_variant_n42(value: {
-    Ok: _audit_page;
+    Ok: _Operator;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: audit_page;
+    Ok: Operator;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_audit_page_n43(value.Ok)
+        Ok: from_candid_Operator_n15(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n51(value: {
-    Ok: _page;
+function from_candid_variant_n45(value: {
+    Ok: _AuditPage;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: page;
+    Ok: AuditPage;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_page_n52(value.Ok)
+        Ok: from_candid_AuditPage_n46(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n56(value: {
+function from_candid_variant_n54(value: {
+    Ok: _Page;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Page;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_Page_n55(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n59(value: {
     Ok: null;
 } | {
     Err: string;
@@ -889,13 +955,13 @@ function from_candid_variant_n56(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n60(value: {
-    Ok: _availability;
+function from_candid_variant_n61(value: {
+    Ok: _WriterReceipt;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: availability;
+    Ok: WriterReceipt;
 } | {
     __kind__: "Err";
     Err: string;
@@ -908,32 +974,13 @@ function from_candid_variant_n60(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n64(value: {
-    Ok: _placement;
+function from_candid_variant_n65(value: {
+    Ok: _Availability;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: placement;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_placement_n6(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n66(value: {
-    Ok: _residency_assignment;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: residency_assignment;
+    Ok: Availability;
 } | {
     __kind__: "Err";
     Err: string;
@@ -946,13 +993,32 @@ function from_candid_variant_n66(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n68(value: {
-    Ok: _site_availability;
+function from_candid_variant_n69(value: {
+    Ok: _Placement;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: site_availability;
+    Ok: Placement;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_Placement_n6(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n71(value: {
+    Ok: _ResidencyAssignment;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: ResidencyAssignment;
 } | {
     __kind__: "Err";
     Err: string;
@@ -965,20 +1031,39 @@ function from_candid_variant_n68(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n72(value: {
-    Ok: _target;
+function from_candid_variant_n73(value: {
+    Ok: _SiteAvailability;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: target;
+    Ok: SiteAvailability;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_target_n34(value.Ok)
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n77(value: {
+    Ok: _Target;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Target;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_Target_n35(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -992,37 +1077,37 @@ function from_candid_variant_n9(value: {
     ReadOnly: null;
 } | {
     MigrationRequired: null;
-}): placement_state {
-    return "Blocked" in value ? placement_state.Blocked : "Active" in value ? placement_state.Active : "ReadOnly" in value ? placement_state.ReadOnly : "MigrationRequired" in value ? placement_state.MigrationRequired : value;
+}): PlacementState {
+    return "Blocked" in value ? PlacementState.Blocked : "Active" in value ? PlacementState.Active : "ReadOnly" in value ? PlacementState.ReadOnly : "MigrationRequired" in value ? PlacementState.MigrationRequired : value;
 }
-function from_candid_vec_n16(value: Array<_operator_role>): Array<operator_role> {
-    return value.map((x)=>from_candid_operator_role_n17(x));
+function from_candid_vec_n17(value: Array<_OperatorRole>): Array<OperatorRole> {
+    return value.map((x)=>from_candid_OperatorRole_n18(x));
 }
-function from_candid_vec_n46(value: Array<_audit_event>): Array<audit_event> {
-    return value.map((x)=>from_candid_audit_event_n47(x));
+function from_candid_vec_n49(value: Array<_AuditEvent>): Array<AuditEvent> {
+    return value.map((x)=>from_candid_AuditEvent_n50(x));
 }
-function from_candid_vec_n54(value: Array<_placement>): Array<placement> {
-    return value.map((x)=>from_candid_placement_n6(x));
+function from_candid_vec_n57(value: Array<_Placement>): Array<Placement> {
+    return value.map((x)=>from_candid_Placement_n6(x));
 }
-function to_candid_backend_kind_n57(value: backend_kind): _backend_kind {
-    return to_candid_variant_n58(value);
+function to_candid_BackendKind_n62(value: BackendKind): _BackendKind {
+    return to_candid_variant_n63(value);
 }
-function to_candid_backend_n61(value: backend): _backend {
-    return to_candid_variant_n62(value);
+function to_candid_Backend_n66(value: Backend): _Backend {
+    return to_candid_variant_n67(value);
 }
-function to_candid_operator_role_n38(value: operator_role): _operator_role {
-    return to_candid_variant_n39(value);
+function to_candid_OperatorRole_n39(value: OperatorRole): _OperatorRole {
+    return to_candid_variant_n40(value);
 }
-function to_candid_opt_n40(value: bigint | null): [] | [bigint] {
+function to_candid_PlacementState_n74(value: PlacementState): _PlacementState {
+    return to_candid_variant_n75(value);
+}
+function to_candid_opt_n43(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n49(value: string | null): [] | [string] {
+function to_candid_opt_n52(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_placement_state_n69(value: placement_state): _placement_state {
-    return to_candid_variant_n70(value);
-}
-function to_candid_variant_n39(value: operator_role): {
+function to_candid_variant_n40(value: OperatorRole): {
     Auditor: null;
 } | {
     PlacementAdmin: null;
@@ -1033,30 +1118,30 @@ function to_candid_variant_n39(value: operator_role): {
 } | {
     MigrationOperator: null;
 } {
-    return value == operator_role.Auditor ? {
+    return value == OperatorRole.Auditor ? {
         Auditor: null
-    } : value == operator_role.PlacementAdmin ? {
+    } : value == OperatorRole.PlacementAdmin ? {
         PlacementAdmin: null
-    } : value == operator_role.SecurityAdmin ? {
+    } : value == OperatorRole.SecurityAdmin ? {
         SecurityAdmin: null
-    } : value == operator_role.InfrastructureAdmin ? {
+    } : value == OperatorRole.InfrastructureAdmin ? {
         InfrastructureAdmin: null
-    } : value == operator_role.MigrationOperator ? {
+    } : value == OperatorRole.MigrationOperator ? {
         MigrationOperator: null
     } : value;
 }
-function to_candid_variant_n58(value: backend_kind): {
+function to_candid_variant_n63(value: BackendKind): {
     Icp: null;
 } | {
     Supabase: null;
 } {
-    return value == backend_kind.Icp ? {
+    return value == BackendKind.Icp ? {
         Icp: null
-    } : value == backend_kind.Supabase ? {
+    } : value == BackendKind.Supabase ? {
         Supabase: null
     } : value;
 }
-function to_candid_variant_n62(value: {
+function to_candid_variant_n67(value: {
     __kind__: "Icp";
     Icp: {
         canister: Principal;
@@ -1081,7 +1166,7 @@ function to_candid_variant_n62(value: {
         Supabase: value.Supabase
     } : value;
 }
-function to_candid_variant_n70(value: placement_state): {
+function to_candid_variant_n75(value: PlacementState): {
     Blocked: null;
 } | {
     Active: null;
@@ -1090,18 +1175,18 @@ function to_candid_variant_n70(value: placement_state): {
 } | {
     MigrationRequired: null;
 } {
-    return value == placement_state.Blocked ? {
+    return value == PlacementState.Blocked ? {
         Blocked: null
-    } : value == placement_state.Active ? {
+    } : value == PlacementState.Active ? {
         Active: null
-    } : value == placement_state.ReadOnly ? {
+    } : value == PlacementState.ReadOnly ? {
         ReadOnly: null
-    } : value == placement_state.MigrationRequired ? {
+    } : value == PlacementState.MigrationRequired ? {
         MigrationRequired: null
     } : value;
 }
-function to_candid_vec_n37(value: Array<operator_role>): Array<_operator_role> {
-    return value.map((x)=>to_candid_operator_role_n38(x));
+function to_candid_vec_n38(value: Array<OperatorRole>): Array<_OperatorRole> {
+    return value.map((x)=>to_candid_OperatorRole_n39(x));
 }
 export interface CreateActorOptions {
     agent?: Agent;

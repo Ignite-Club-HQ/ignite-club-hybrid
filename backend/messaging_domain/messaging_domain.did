@@ -64,7 +64,7 @@ type State =
    pollVotes: vec PollVote;
    polls: vec Poll;
    reactions: vec Reaction;
-   receipts: vec Receipt__1;
+   receipts: vec Receipt__2;
    roles: vec RoleGrant;
    scheduledMessages: vec ScheduledMessage;
    schema: nat32;
@@ -96,12 +96,18 @@ type RoleGrant =
    team_id: opt text;
    user: principal;
  };
-type Request = 
+type Request__1 = 
  record {
    account_id: text;
    generation: nat64;
    inventory_digest: blob;
    subjects: vec principal;
+ };
+type Request = 
+ record {
+   generation: nat64;
+   inventory_digest: blob;
+   operation_id: text;
  };
 type Reference = 
  record {
@@ -118,18 +124,26 @@ type RecentConversation =
    last_message_at_ms: opt nat64;
    last_message_sequence: nat64;
  };
-type Receipt__1 = 
+type Receipt__2 = 
  record {
    conversation_id: text;
    message_id: text;
    read: bool;
    user: principal;
  };
+type Receipt__1 = 
+ record {
+   active: nat;
+   closing: bool;
+   receiver: principal;
+   request: Request;
+   sealed: bool;
+ };
 type Receipt = 
  record {
    outstanding: nat;
    receiver: principal;
-   request: Request;
+   request: Request__1;
  };
 type RecapConfig = 
  record {
@@ -465,7 +479,7 @@ type Main =
    list_broadcast_message_readers: (message_ids: vec text) ->
     (variant {
        Err: text;
-       Ok: vec Receipt__1;
+       Ok: vec Receipt__2;
      });
    list_club_admin_threads: (club_id: text) ->
     (vec record {
@@ -558,7 +572,7 @@ type Main =
    list_read_receipts: (conversation_id: text) ->
     (variant {
        Err: text;
-       Ok: vec Receipt__1;
+       Ok: vec Receipt__2;
      });
    list_typing: (conversation_id: text) ->
     (variant {
@@ -568,7 +582,7 @@ type Main =
    mark_read: (conversation_id: text, message_id: text) ->
     (variant {
        Err: text;
-       Ok: Receipt__1;
+       Ok: Receipt__2;
      });
    memory_stats: () ->
     (record {
@@ -602,15 +616,21 @@ type Main =
           reactions: vec Reaction;
         };
      });
+   open_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    pin_message: (conversation_id: text, message_id: text) ->
     (variant {
        Err: text;
        Ok: PinnedMessage;
      });
-   prepare_account_removal: (request: Request) -> (variant {
-                                                     Err: text;
-                                                     Ok;
-                                                   });
+   prepare_account_removal: (request: Request__1) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    presence_heartbeat: (platform: opt text) -> (variant {
                                                   Err: text;
                                                   Ok;
@@ -755,7 +775,7 @@ type Main =
    read_account_list_read_receipts: (conversation_id: text) ->
     (variant {
        Err: text;
-       Ok: vec Receipt__1;
+       Ok: vec Receipt__2;
      });
    read_account_list_typing: (conversation_id: text) ->
     (variant {
@@ -793,7 +813,7 @@ type Main =
                  Err: text;
                  Ok: vec RecentConversation;
                });
-   read_account_removal_drain: (request: Request) ->
+   read_account_removal_drain: (request: Request__1) ->
     (variant {
        Err: text;
        Ok: Receipt;
@@ -829,6 +849,11 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
    read_profile_broadcast_batch: (requester: principal, message_id: text,
     subjects: vec principal, expected: opt nat) ->
     (variant {
@@ -918,10 +943,15 @@ type Main =
    run_chat_photo_gallery_reminders: (now_ms: nat64, window_start_hours:
     nat32, window_end_hours: nat32, cooldown_days: nat32) ->
     (ChatPhotoReminderResult);
-   seal_account_removal: (request: Request) ->
+   seal_account_removal: (request: Request__1) ->
     (variant {
        Err: text;
        Ok: Receipt;
+     });
+   seal_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    search_messages: (conversation_id: text, needle: text, limit: nat16) ->
     (variant {

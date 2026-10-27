@@ -156,11 +156,13 @@ export type Result_20 = { 'Ok' : [] | [OwnerOpening] } |
   { 'Err' : string };
 export type Result_21 = { 'Ok' : boolean } |
   { 'Err' : string };
-export type Result_22 = { 'Ok' : PublicGroupPage } |
+export type Result_22 = { 'Ok' : WriterReceipt } |
   { 'Err' : string };
-export type Result_23 = { 'Ok' : [] | [RoutingApproval] } |
+export type Result_23 = { 'Ok' : PublicGroupPage } |
   { 'Err' : string };
-export type Result_24 = { 'Ok' : RoutingApproval } |
+export type Result_24 = { 'Ok' : [] | [RoutingApproval] } |
+  { 'Err' : string };
+export type Result_25 = { 'Ok' : RoutingApproval } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : AssignDomainResult } |
   { 'Err' : string };
@@ -219,6 +221,18 @@ export interface ShardGroup {
   'min_cycles' : bigint,
   'heap_bytes' : bigint,
 }
+export interface WriterReceipt {
+  'active' : bigint,
+  'request' : WriterRequest,
+  'sealed' : boolean,
+  'closing' : boolean,
+  'receiver' : Principal,
+}
+export interface WriterRequest {
+  'inventory_digest' : Uint8Array,
+  'generation' : bigint,
+  'operation_id' : string,
+}
 export interface _SERVICE {
   'abort_domain_migration' : ActorMethod<[string, string, bigint], Result>,
   'abort_migration' : ActorMethod<[string, bigint], Result>,
@@ -259,7 +273,7 @@ export interface _SERVICE {
   'get_migration' : ActorMethod<[string], Result_11>,
   'get_route' : ActorMethod<[string], Result_12>,
   /**
-   * Public club-website resolver: 307 to the owning group's club_domain /club.
+   * Public club-website resolver: redirects /club?id=..&scope=.. to the owning group.
    */
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'list_groups' : ActorMethod<[], Result_13>,
@@ -273,6 +287,7 @@ export interface _SERVICE {
    * global admission, membership, recovery release or general accepting status.
    */
   'open_owner_test_group' : ActorMethod<[OwnerOpeningApproval], Result_15>,
+  'open_private_name_writer_window' : ActorMethod<[WriterRequest], Result_7>,
   /**
    * Any signed-in user creating a club asks for its group here; the router picks
    * the healthiest accepting group. Capped per principal; retries are free.
@@ -316,24 +331,25 @@ export interface _SERVICE {
    * the complete group inventory, even when they have no test-club membership.
    */
   'read_owner_test_deletion_required' : ActorMethod<[string], Result_21>,
+  'read_private_name_writer_window' : ActorMethod<[WriterRequest], Result_22>,
   /**
    * Anonymous infrastructure discovery only: never memberships, placements,
    * controller details or a grant to read/write any destination resource.
    */
   'read_public_group_targets' : ActorMethod<
     [string, [] | [bigint], [] | [string], number],
-    Result_22
+    Result_23
   >,
   /**
    * Consensus read for signed-in clients; infrastructure metadata only.
    */
-  'read_routing_approval' : ActorMethod<[string], Result_23>,
+  'read_routing_approval' : ActorMethod<[string], Result_24>,
   'record_group_health' : ActorMethod<[string, bigint, bigint, bigint], Result>,
   /**
    * Governor-only. Binds the exact configuration revision and approved digest;
    * any later group/placement/policy change makes clients fail closed again.
    */
-  'record_routing_approval' : ActorMethod<[RoutingApproval, bigint], Result_24>,
+  'record_routing_approval' : ActorMethod<[RoutingApproval, bigint], Result_25>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
   'register_group_placement' : ActorMethod<[GroupPlacement, bigint], Result>,
   'release_deletion_lock' : ActorMethod<[string, bigint], Result_7>,
@@ -341,9 +357,10 @@ export interface _SERVICE {
     [string, string, string, bigint],
     Result
   >,
+  'seal_private_name_writer_window' : ActorMethod<[WriterRequest], Result_7>,
   'set_deletion_authority' : ActorMethod<[Principal], Result_7>,
   /**
-   * Governor-only fallback club_domain for clubs without a group assignment.
+   * Governor-only: club_domain serving clubs that have no group assignment.
    */
   'set_website_default_club_domain' : ActorMethod<[Principal], Result_7>,
   /**

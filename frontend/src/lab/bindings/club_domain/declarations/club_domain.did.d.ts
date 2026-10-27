@@ -1166,13 +1166,18 @@ export interface Main {
       { 'Err' : string }
   >,
   'mutate' : ActorMethod<
-    [Request__1],
+    [Request__2],
     { 'Ok' : Mutation } |
       { 'Err' : string }
   >,
   'my_role_grants' : ActorMethod<[], Array<RoleGrant>>,
-  'prepare_account_removal' : ActorMethod<
+  'open_private_name_writer_window' : ActorMethod<
     [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'prepare_account_removal' : ActorMethod<
+    [Request__1],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -1505,7 +1510,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_account_removal_drain' : ActorMethod<
-    [Request],
+    [Request__1],
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
@@ -1636,6 +1641,11 @@ export interface Main {
           'acl_revision' : bigint,
         }
       } |
+      { 'Err' : string }
+  >,
+  'read_private_name_writer_window' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt__1 } |
       { 'Err' : string }
   >,
   'read_profile_candidates' : ActorMethod<
@@ -1979,8 +1989,13 @@ export interface Main {
   >,
   'schema' : ActorMethod<[], string>,
   'seal_account_removal' : ActorMethod<
-    [Request],
+    [Request__1],
     { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
+  'seal_private_name_writer_window' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'send_fee_reminders' : ActorMethod<
@@ -2468,7 +2483,14 @@ export interface PromoCode {
 }
 export interface Receipt {
   'outstanding' : bigint,
+  'request' : Request__1,
+  'receiver' : Principal,
+}
+export interface Receipt__1 {
+  'active' : bigint,
   'request' : Request,
+  'sealed' : boolean,
+  'closing' : boolean,
   'receiver' : Principal,
 }
 export interface Reference {
@@ -2491,12 +2513,17 @@ export interface RemovedMember {
   'removed_by' : Principal,
 }
 export interface Request {
+  'inventory_digest' : Uint8Array,
+  'generation' : bigint,
+  'operation_id' : string,
+}
+export interface Request__1 {
   'account_id' : string,
   'inventory_digest' : Uint8Array,
   'subjects' : Array<Principal>,
   'generation' : bigint,
 }
-export interface Request__1 {
+export interface Request__2 {
   'request_id' : string,
   'club' : string,
   'operation' : Operation__1,

@@ -1541,3 +1541,13 @@ fn memory_stats() -> MemoryStats {
 ic_cdk::export_candid!();
 
 pub fn candid_interface() -> String { __export_service() }
+
+#[cfg(test)]
+mod private_writer_contract_export {
+    #[test]
+    fn export_contract_when_requested() {
+        if std::env::var_os("IGNITE_EXPORT_CANDID").is_some() {
+            std::fs::write(concat!(env!("CARGO_MANIFEST_DIR"), "/shard_router.did"), super::__export_service()).expect("write candid");
+        }
+    }
+}

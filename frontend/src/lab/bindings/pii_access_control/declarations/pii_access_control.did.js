@@ -25,13 +25,13 @@ export const idlFactory = ({ IDL }) => {
     'field_id' : IDL.Text,
     'purpose' : IDL.Text,
   });
-  const Request__1 = IDL.Record({
+  const Request = IDL.Record({
     'inventory_digest' : IDL.Vec(IDL.Nat8),
     'generation' : IDL.Nat64,
     'operation_id' : IDL.Text,
   });
-  const Receipt__1 = IDL.Record({
-    'request' : Request__1,
+  const Receipt__2 = IDL.Record({
+    'request' : Request,
     'completed' : IDL.Bool,
     'release_epoch' : IDL.Nat,
     'receiver' : IDL.Principal,
@@ -53,7 +53,7 @@ export const idlFactory = ({ IDL }) => {
     'authority' : IDL.Principal,
     'profile_revision' : IDL.Nat64,
   });
-  const Request = IDL.Record({
+  const Request__1 = IDL.Record({
     'account_id' : IDL.Text,
     'inventory_digest' : IDL.Vec(IDL.Nat8),
     'subjects' : IDL.Vec(IDL.Principal),
@@ -61,13 +61,20 @@ export const idlFactory = ({ IDL }) => {
   });
   const Receipt = IDL.Record({
     'outstanding' : IDL.Nat,
-    'request' : Request,
+    'request' : Request__1,
     'receiver' : IDL.Principal,
   });
   const ClubMediaAuthority = IDL.Record({
     'move_id' : IDL.Text,
     'authority' : IDL.Opt(IDL.Principal),
     'revision' : IDL.Nat,
+  });
+  const Receipt__1 = IDL.Record({
+    'active' : IDL.Nat,
+    'request' : Request,
+    'sealed' : IDL.Bool,
+    'closing' : IDL.Bool,
+    'receiver' : IDL.Principal,
   });
   const Main = IDL.Service({
     'add_guardian_relationship' : IDL.Func(
@@ -78,8 +85,8 @@ export const idlFactory = ({ IDL }) => {
     'audit_access' : IDL.Func([AuditFilter], [IDL.Vec(AuditRecord)], ['query']),
     'club_media_lock_version' : IDL.Func([], [IDL.Nat], ['query']),
     'complete_private_name_release_fence' : IDL.Func(
-        [Request__1],
-        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__2, 'Err' : IDL.Text })],
         [],
       ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
@@ -174,15 +181,20 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Text)],
         ['composite_query'],
       ),
-    'pii_vetkey_verification_key' : IDL.Func([], [IDL.Vec(IDL.Nat8)], []),
-    'prepare_account_removal' : IDL.Func(
+    'open_private_name_writer_window' : IDL.Func(
         [Request],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
-    'prepare_private_name_release_fence' : IDL.Func(
+    'pii_vetkey_verification_key' : IDL.Func([], [IDL.Vec(IDL.Nat8)], []),
+    'prepare_account_removal' : IDL.Func(
         [Request__1],
-        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'prepare_private_name_release_fence' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__2, 'Err' : IDL.Text })],
         [],
       ),
     'purge_club_grants' : IDL.Func(
@@ -202,7 +214,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_account_my_guardian_children' : IDL.Func([], [IDL.Vec(IDL.Text)], []),
     'read_account_removal_drain' : IDL.Func(
-        [Request],
+        [Request__1],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
@@ -231,7 +243,12 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_private_name_release_fence' : IDL.Func(
-        [Request__1],
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__2, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_private_name_writer_window' : IDL.Func(
+        [Request],
         [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
         [],
       ),
@@ -266,8 +283,13 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'seal_account_removal' : IDL.Func(
-        [Request],
+        [Request__1],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'seal_private_name_writer_window' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_domain_canister' : IDL.Func(

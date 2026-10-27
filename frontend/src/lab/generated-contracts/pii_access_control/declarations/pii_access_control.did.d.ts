@@ -47,8 +47,8 @@ export interface Main {
   'audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
   'club_media_lock_version' : ActorMethod<[], bigint>,
   'complete_private_name_release_fence' : ActorMethod<
-    [Request__1],
-    { 'Ok' : Receipt__1 } |
+    [Request],
+    { 'Ok' : Receipt__2 } |
       { 'Err' : string }
   >,
   /**
@@ -121,15 +121,20 @@ export interface Main {
       { 'err' : string }
   >,
   'my_guardian_children' : ActorMethod<[], Array<string>>,
-  'pii_vetkey_verification_key' : ActorMethod<[], Uint8Array>,
-  'prepare_account_removal' : ActorMethod<
+  'open_private_name_writer_window' : ActorMethod<
     [Request],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'prepare_private_name_release_fence' : ActorMethod<
+  'pii_vetkey_verification_key' : ActorMethod<[], Uint8Array>,
+  'prepare_account_removal' : ActorMethod<
     [Request__1],
-    { 'Ok' : Receipt__1 } |
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'prepare_private_name_release_fence' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt__2 } |
       { 'Err' : string }
   >,
   'purge_club_grants' : ActorMethod<
@@ -145,7 +150,7 @@ export interface Main {
   'read_account_audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
   'read_account_my_guardian_children' : ActorMethod<[], Array<string>>,
   'read_account_removal_drain' : ActorMethod<
-    [Request],
+    [Request__1],
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
@@ -167,7 +172,12 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_private_name_release_fence' : ActorMethod<
-    [Request__1],
+    [Request],
+    { 'Ok' : Receipt__2 } |
+      { 'Err' : string }
+  >,
+  'read_private_name_writer_window' : ActorMethod<
+    [Request],
     { 'Ok' : Receipt__1 } |
       { 'Err' : string }
   >,
@@ -202,8 +212,13 @@ export interface Main {
       { 'Err' : string }
   >,
   'seal_account_removal' : ActorMethod<
-    [Request],
+    [Request__1],
     { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
+  'seal_private_name_writer_window' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_club_domain_canister' : ActorMethod<
@@ -255,25 +270,32 @@ export interface PrivateNameScope {
 }
 export interface Receipt {
   'outstanding' : bigint,
-  'request' : Request,
+  'request' : Request__1,
   'receiver' : Principal,
 }
 export interface Receipt__1 {
-  'request' : Request__1,
+  'active' : bigint,
+  'request' : Request,
+  'sealed' : boolean,
+  'closing' : boolean,
+  'receiver' : Principal,
+}
+export interface Receipt__2 {
+  'request' : Request,
   'completed' : boolean,
   'release_epoch' : bigint,
   'receiver' : Principal,
 }
 export interface Request {
+  'inventory_digest' : Uint8Array,
+  'generation' : bigint,
+  'operation_id' : string,
+}
+export interface Request__1 {
   'account_id' : string,
   'inventory_digest' : Uint8Array,
   'subjects' : Array<Principal>,
   'generation' : bigint,
-}
-export interface Request__1 {
-  'inventory_digest' : Uint8Array,
-  'generation' : bigint,
-  'operation_id' : string,
 }
 export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;

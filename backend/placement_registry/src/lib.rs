@@ -1097,3 +1097,13 @@ fn memory_stats() -> MemoryStats {
 }
 
 ic_cdk::export_candid!();
+
+#[cfg(test)]
+mod private_writer_contract_export {
+    #[test]
+    fn export_contract_when_requested() {
+        if std::env::var_os("IGNITE_EXPORT_CANDID").is_some() {
+            std::fs::write(concat!(env!("CARGO_MANIFEST_DIR"), "/placement_registry.did"), super::__export_service()).expect("write candid");
+        }
+    }
+}

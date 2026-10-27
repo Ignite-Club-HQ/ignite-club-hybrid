@@ -372,7 +372,14 @@ export interface MainInterface {
     }>;
     my_availability(): Promise<Array<MiniLeagueSessionAvailability>>;
     my_leagues(): Promise<Array<MiniLeague>>;
-    prepare_account_removal(request: Request): Promise<{
+    open_private_name_writer_window(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    prepare_account_removal(request: Request__1): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -519,7 +526,7 @@ export interface MainInterface {
     }>;
     read_account_my_availability(): Promise<Array<MiniLeagueSessionAvailability>>;
     read_account_my_leagues(): Promise<Array<MiniLeague>>;
-    read_account_removal_drain(request: Request): Promise<{
+    read_account_removal_drain(request: Request__1): Promise<{
         __kind__: "Ok";
         Ok: Receipt;
     } | {
@@ -541,6 +548,13 @@ export interface MainInterface {
         Err: string;
     }>;
     read_group_opening_configuration(): Promise<Array<[string, string]>>;
+    read_private_name_writer_window(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt__1;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     read_profile_audience_batch(requester: Principal, id: string, subjects: Array<Principal>, expected: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -589,9 +603,16 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    seal_account_removal(request: Request): Promise<{
+    seal_account_removal(request: Request__1): Promise<{
         __kind__: "Ok";
         Ok: Receipt;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    seal_private_name_writer_window(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -707,6 +728,13 @@ export interface MiniLeagueInvite {
     created_at_ms: bigint;
     label_text?: string;
 }
+export interface Receipt__1 {
+    active: bigint;
+    request: Request;
+    sealed: boolean;
+    closing: boolean;
+    receiver: Principal;
+}
 export interface MiniLeagueSession {
     id: string;
     status: string;
@@ -724,14 +752,13 @@ export interface MiniLeagueSession {
     session_date: string;
 }
 export interface Request {
-    account_id: string;
     inventory_digest: Uint8Array;
-    subjects: Array<Principal>;
     generation: bigint;
+    operation_id: string;
 }
 export interface Receipt {
     outstanding: bigint;
-    request: Request;
+    request: Request__1;
     receiver: Principal;
 }
 export interface MiniLeaguePlayer {
@@ -763,6 +790,12 @@ export interface PublicMiniLeagueSummary {
     id: string;
     name: string;
     club_id: string;
+}
+export interface Request__1 {
+    account_id: string;
+    inventory_digest: Uint8Array;
+    subjects: Array<Principal>;
+    generation: bigint;
 }
 export interface MiniLeagueGroup {
     id: string;
@@ -797,15 +830,6 @@ export interface ClaimedInvite {
     mini_league_id: string;
     club_id: string;
 }
-export interface MiniLeagueJoinLink {
-    token: string;
-    mini_league_id: string;
-    revoked: boolean;
-    role: string;
-    created_by: Principal;
-    created_at_ms: bigint;
-    revision: bigint;
-}
 export interface MiniLeagueGroupDuty {
     id: string;
     status: string;
@@ -818,9 +842,18 @@ export interface MiniLeagueGroupDuty {
     group_id: string;
     points?: number;
 }
+export interface MiniLeagueJoinLink {
+    token: string;
+    mini_league_id: string;
+    revoked: boolean;
+    role: string;
+    created_by: Principal;
+    created_at_ms: bigint;
+    revision: bigint;
+}
 export interface mini_league_domainInterface extends MainInterface {
 }
-import type { ClaimedInvite as _ClaimedInvite, MiniLeague as _MiniLeague, MiniLeagueAdmin as _MiniLeagueAdmin, MiniLeagueGroup as _MiniLeagueGroup, MiniLeagueGroupDuty as _MiniLeagueGroupDuty, MiniLeagueGroupPlayer as _MiniLeagueGroupPlayer, MiniLeagueInvite as _MiniLeagueInvite, MiniLeagueJoinLink as _MiniLeagueJoinLink, MiniLeagueNewsAudience as _MiniLeagueNewsAudience, MiniLeaguePlayer as _MiniLeaguePlayer, MiniLeagueSession as _MiniLeagueSession, MiniLeagueSessionAvailability as _MiniLeagueSessionAvailability, PlayerGuardianStatus as _PlayerGuardianStatus, Receipt as _Receipt } from "./declarations/mini_league_domain.did";
+import type { ClaimedInvite as _ClaimedInvite, MiniLeague as _MiniLeague, MiniLeagueAdmin as _MiniLeagueAdmin, MiniLeagueGroup as _MiniLeagueGroup, MiniLeagueGroupDuty as _MiniLeagueGroupDuty, MiniLeagueGroupPlayer as _MiniLeagueGroupPlayer, MiniLeagueInvite as _MiniLeagueInvite, MiniLeagueJoinLink as _MiniLeagueJoinLink, MiniLeagueNewsAudience as _MiniLeagueNewsAudience, MiniLeaguePlayer as _MiniLeaguePlayer, MiniLeagueSession as _MiniLeagueSession, MiniLeagueSessionAvailability as _MiniLeagueSessionAvailability, PlayerGuardianStatus as _PlayerGuardianStatus, Receipt as _Receipt, Receipt__1 as _Receipt__1 } from "./declarations/mini_league_domain.did";
 export class Mini_league_domain implements mini_league_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async add_admin(arg0: string, arg1: Principal): Promise<{
@@ -1278,7 +1311,17 @@ export class Mini_league_domain implements mini_league_domainInterface {
         const result = await this.actor.my_leagues();
         return from_candid_vec_n39(result);
     }
-    async prepare_account_removal(arg0: Request): Promise<{
+    async open_private_name_writer_window(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.open_private_name_writer_window(arg0);
+        return from_candid_variant_n34(result);
+    }
+    async prepare_account_removal(arg0: Request__1): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -1497,7 +1540,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         const result = await this.actor.read_account_my_leagues();
         return from_candid_vec_n39(result);
     }
-    async read_account_removal_drain(arg0: Request): Promise<{
+    async read_account_removal_drain(arg0: Request__1): Promise<{
         __kind__: "Ok";
         Ok: Receipt;
     } | {
@@ -1540,6 +1583,16 @@ export class Mini_league_domain implements mini_league_domainInterface {
         const result = await this.actor.read_group_opening_configuration();
         return result;
     }
+    async read_private_name_writer_window(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt__1;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_private_name_writer_window(arg0);
+        return from_candid_variant_n76(result);
+    }
     async read_profile_audience_batch(arg0: Principal, arg1: string, arg2: Array<Principal>, arg3: bigint | null): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -1553,8 +1606,8 @@ export class Mini_league_domain implements mini_league_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.read_profile_audience_batch(arg0, arg1, arg2, to_candid_opt_n76(arg3));
-        return from_candid_variant_n77(result);
+        const result = await this.actor.read_profile_audience_batch(arg0, arg1, arg2, to_candid_opt_n77(arg3));
+        return from_candid_variant_n78(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -1564,7 +1617,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n78(result);
+        return from_candid_variant_n79(result);
     }
     async remove_admin(arg0: string, arg1: Principal): Promise<{
         __kind__: "Ok";
@@ -1606,7 +1659,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         const result = await this.actor.rotate_mini_league_join_link(arg0, arg1);
         return from_candid_variant_n33(result);
     }
-    async seal_account_removal(arg0: Request): Promise<{
+    async seal_account_removal(arg0: Request__1): Promise<{
         __kind__: "Ok";
         Ok: Receipt;
     } | {
@@ -1616,6 +1669,16 @@ export class Mini_league_domain implements mini_league_domainInterface {
         const result = await this.actor.seal_account_removal(arg0);
         return from_candid_variant_n70(result);
     }
+    async seal_private_name_writer_window(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.seal_private_name_writer_window(arg0);
+        return from_candid_variant_n34(result);
+    }
     async set_availability(arg0: string, arg1: string, arg2: string): Promise<{
         __kind__: "Ok";
         Ok: MiniLeagueSessionAvailability;
@@ -1624,7 +1687,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_availability(arg0, arg1, arg2);
-        return from_candid_variant_n79(result);
+        return from_candid_variant_n80(result);
     }
     async set_club_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -2799,7 +2862,26 @@ function from_candid_variant_n73(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n77(value: {
+function from_candid_variant_n76(value: {
+    Ok: _Receipt__1;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Receipt__1;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n78(value: {
     Ok: {
         requester: Principal;
         members: Array<boolean>;
@@ -2830,7 +2912,7 @@ function from_candid_variant_n77(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n78(value: {
+function from_candid_variant_n79(value: {
     ok: bigint;
 } | {
     err: string;
@@ -2849,7 +2931,7 @@ function from_candid_variant_n78(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n79(value: {
+function from_candid_variant_n80(value: {
     Ok: _MiniLeagueSessionAvailability;
 } | {
     Err: string;
@@ -2916,7 +2998,7 @@ function to_candid_opt_n5(value: string | null): [] | [string] {
 function to_candid_opt_n6(value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n76(value: bigint | null): [] | [bigint] {
+function to_candid_opt_n77(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n38(value: {

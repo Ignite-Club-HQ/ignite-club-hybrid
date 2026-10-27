@@ -592,7 +592,7 @@ export const idlFactory = ({ IDL }) => {
     'Remove' : IDL.Record({ 'id' : IDL.Text }),
     'Reorder' : IDL.Record({ 'first' : IDL.Text, 'second' : IDL.Text }),
   });
-  const Request__1 = IDL.Record({
+  const Request__2 = IDL.Record({
     'request_id' : IDL.Text,
     'club' : IDL.Text,
     'operation' : Operation__1,
@@ -603,6 +603,11 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat64,
   });
   const Request = IDL.Record({
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'generation' : IDL.Nat64,
+    'operation_id' : IDL.Text,
+  });
+  const Request__1 = IDL.Record({
     'account_id' : IDL.Text,
     'inventory_digest' : IDL.Vec(IDL.Nat8),
     'subjects' : IDL.Vec(IDL.Principal),
@@ -624,7 +629,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Receipt = IDL.Record({
     'outstanding' : IDL.Nat,
-    'request' : Request,
+    'request' : Request__1,
     'receiver' : IDL.Principal,
   });
   const Reference = IDL.Record({
@@ -667,6 +672,13 @@ export const idlFactory = ({ IDL }) => {
     'scanned' : IDL.Nat,
     'edges' : IDL.Vec(Edge),
     'revision' : IDL.Nat,
+  });
+  const Receipt__1 = IDL.Record({
+    'active' : IDL.Nat,
+    'request' : Request,
+    'sealed' : IDL.Bool,
+    'closing' : IDL.Bool,
+    'receiver' : IDL.Principal,
   });
   const Cursor = IDL.Record({
     'offset' : IDL.Nat,
@@ -1748,13 +1760,18 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'mutate' : IDL.Func(
-        [Request__1],
+        [Request__2],
         [IDL.Variant({ 'Ok' : Mutation, 'Err' : IDL.Text })],
         [],
       ),
     'my_role_grants' : IDL.Func([], [IDL.Vec(RoleGrant)], ['query']),
-    'prepare_account_removal' : IDL.Func(
+    'open_private_name_writer_window' : IDL.Func(
         [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'prepare_account_removal' : IDL.Func(
+        [Request__1],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -2162,7 +2179,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_account_removal_drain' : IDL.Func(
-        [Request],
+        [Request__1],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
@@ -2354,6 +2371,11 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        [],
+      ),
+    'read_private_name_writer_window' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
         [],
       ),
     'read_profile_candidates' : IDL.Func(
@@ -2728,8 +2750,13 @@ export const idlFactory = ({ IDL }) => {
       ),
     'schema' : IDL.Func([], [IDL.Text], ['query']),
     'seal_account_removal' : IDL.Func(
-        [Request],
+        [Request__1],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'seal_private_name_writer_window' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'send_fee_reminders' : IDL.Func(
