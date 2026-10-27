@@ -52,7 +52,7 @@ test('plan hash binds rows, sinks and history revision', () => {
   assert.notEqual(buildConversionPlan({ rows: [], sinks: [SINK], historyRevision: 7n }).hash, a.hash);
 });
 
-const require = createRequire(import.meta.url);
+const require = createRequire(new URL('../frontend/package.json', import.meta.url));
 
 test('encryption is deterministic for resume safety', async () => {
   const { DerivedPublicKey, MasterPublicKey } = await import('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js');
