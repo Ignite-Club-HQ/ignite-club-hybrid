@@ -2,6 +2,16 @@
 
 Local implementation only. No production conversion, rollout, permissions or email policy changed.
 
+## Account coverage acceptance — 27 October
+
+The new governor-only rehearsal account-inventory endpoint scans stable accounts in pages of at most 100, then performs a separate bounded profile-integrity traversal before a client can accept completion. Accounts without profiles or clubs are retained; suspended status, exact account version and every alias survive. Dangling profiles, invalid alias ownership, unresolved account lifecycle, request drift and changed profile revision refuse the result. Existing original references resolve sink/subject only when the subject is an alias and the sink is included; plaintext names remain explicitly unresolved rather than assuming the first alias or current placement owns them. The optional-profile digest is separate from the existing signed source-digest format.
+
+The generated adapter preserves this evidence and requires the terminal validation pass. Enriched club inventories check every alias for every active club without short-circuiting, retain status/version/profile-presence/source-digest/sink evidence without plaintext, and bind that manifest through the ciphertext plan's inventory hash. Subject-only local fixture compatibility remains, but does not establish complete production accounts.
+
+Exclusive writer opening now refuses any nonzero active receipt. The account endpoint additionally requires all exact exclusive-window zero-active opening acknowledgements. This is **not** a pre-plan freeze: the existing exact-plan approval must precede opening, and newly initialized counters do not certify prior callbacks. A separate preparation identity with continuously retained admission/drain evidence, full original-authority resolution, cryptographic preflight and external management exclusion remain required. No production switch or approval requirement was relaxed.
+
+Acceptance: 84 focused JavaScript tests, 173 identity unit tests, generated-contract parity across 17 contracts and ICP guards pass. The real two-group PocketIC run proves signed conversion and lost-reply recovery with profileless account retention, preapproval/ordinary-window/foreign-request inventory refusal, terminal profile traversal, unchanged evidence through upgrade and wrong-revision cursor refusal. It does not measure signed-in mainnet loading/costs or prove production pre-plan exclusion.
+
 - Adult names have an original person-key record for family, guardian search, competition, league, direct and broadcast audiences.
 - Optional club replicas encrypt to `clubnames:<club_id> + U+001F + display_name` under the original PII canister's unchanged `ignite-pii-v1` context. SDK IBE randomness is independent for each encrypted value.
 - The replica is stored as `club_display_name:<club_id>` with `vetkey-club-names-v1:<club_id>` metadata. Generic record writes, reads, key derivation and snapshot imports reject this reserved namespace. Snapshot export excludes these replicas.
