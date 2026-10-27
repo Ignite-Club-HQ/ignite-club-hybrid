@@ -734,8 +734,9 @@ persistent actor class Main(governorInit : Principal) = this {
   func clubNameScheme(club : Text) : Text { "vetkey-club-names-v1:" # club };
 
   func cleanupReceiptKey(caller : Principal, id : Text) : Text { caller.toText() # "\u{1f}" # id };
+  transient let cleanupReleased = Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_REHEARSAL") == ?"1" or Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_RELEASE") == ?"1";
   func cleanupVerifier() : ?Principal {
-    if (Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_REHEARSAL") != ?"1" and Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_RELEASE") != ?"1") return null;
+    if (not cleanupReleased) return null;
     switch (privateNamesIdentity) { case null null; case (?id) { let p = Principal.fromText(id); if (p.isAnonymous() or p == Principal.fromText("aaaaa-aa")) null else ?p } }
   };
   public shared ({ caller }) func read_removed_private_club_name_receipt(id : Text, club : Text, subject : Principal) : async { #Ok : ?PrivateNameCleanup.Receipt; #Err : Text } {
