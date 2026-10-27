@@ -46,7 +46,14 @@ module {
       switch (request) {
         case null {};
         case (?key) { switch (intents.get(key.operation_id)) {
-          case (?intent) { if (intent.request == key and intent.active > 0) intents.add(key.operation_id, { intent with active = intent.active - 1 }) };
+          case (?intent) {
+            if (intent.request == key and intent.active > 0) {
+              let active = intent.active - 1;
+              // A window interrupted while closing still seals once its last
+              // retained callback finishes; the lock is never stranded.
+              intents.add(key.operation_id, { intent with active; sealed = intent.sealed or (intent.closing and active == 0) })
+            }
+          };
           case null {}
         } }
       }
