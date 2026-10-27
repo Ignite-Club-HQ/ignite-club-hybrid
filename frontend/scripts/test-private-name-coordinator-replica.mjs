@@ -334,6 +334,49 @@ try {
       assert.equal(new TextDecoder().decode(IbeCiphertext.deserialize(Uint8Array.from(row.ciphertext)).decrypt(key)),profiles.find(p=>p.account_id===row.accountId).display_name);
     }
     sink0pre.actor.setPrincipal(governor);
+    // Independent preparation starts BEFORE a plan signature exists. The
+    // candidate topology is re-read only after every writer is frozen/drained.
+    const preparationId='club-name-preparation-owner-test';
+    const candidate=ok(await actor.read_private_name_preparation_topology());
+    let prep=ok(await actor.begin_private_name_preparation(preparationId,candidate.groups.history_revision,candidate));
+    assert.equal(phaseOf(prep),'Preparing');assert.equal(prep.writers.length,13);
+    actor.setPrincipal(outsider);await denied(()=>actor.set_profile('Before approval',[]));actor.setPrincipal(governor);
+    await denied(()=>actor.verify_private_name_preparation(preparationId));
+    await denied(()=>actor.read_private_name_account_inventory(preparationId,prep.request,[],100));
+    // Wrong caller and unsigned conversion writes cannot activate preparation.
+    sink0pre.actor.setPrincipal(governor);await denied(()=>sink0pre.actor.activate_private_name_preparation(prep.request));
+    for(const target of prep.writers)prep=ok(await actor.advance_private_name_preparation(preparationId,target));
+    assert.equal(phaseOf(prep),'AwaitingApproval');
+    await denied(()=>groups[0].club_domain.actor.set_identity_access_canister(outsider));
+    await denied(()=>router.actor.set_website_default_club_domain(outsider));
+    placement.actor.setPrincipal(governor);await denied(()=>placement.actor.open_private_name_writer_window(prep.request));
+    await pic.upgradeCanister({canisterId:identity.canisterId,wasm:rustWasm('identity_access'),sender:governor});actor.setPrincipal(governor);
+    prep=ok(await actor.read_private_name_write_window(preparationId));assert.equal(phaseOf(prep),'AwaitingApproval');
+    prep=ok(await actor.verify_private_name_preparation(preparationId));assert.equal(phaseOf(prep),'Fencing');
+    const prepInventory=createPrivateNameAccountInventoryAdapter(actor,{operationId:preparationId,request:prep.request,assertFence:async()=>true});
+    assert.equal((await prepInventory.listAccounts()).rows.length,3);
+    const preparedBody={kind:'ignite-private-name-preparation-admission-v2',approval_id:'fixture-preparation-owner',identity:identity.canisterId,operator:governor,request:prep.request,plan_hash:artifact.hash,
+      rows:await Promise.all(artifact.body.rows.map(async r=>({account_id:r.accountId,subject:Principal.fromText(r.subject),sink:Principal.fromText(r.sink),source_digest:Array.from(ok(await actor.read_private_name_source_digest(r.accountId))),ciphertext:r.ciphertext,clubs:r.clubs.map(c=>({club:c.id,ciphertext:c.ciphertext}))})))};
+    const jsonPrepared={...preparedBody,identity:preparedBody.identity.toText(),operator:preparedBody.operator.toText(),request:{...preparedBody.request,generation:String(preparedBody.request.generation),inventory_digest:Array.from(preparedBody.request.inventory_digest)},rows:preparedBody.rows.map(r=>({...r,subject:r.subject.toText(),sink:r.sink.toText()}))};
+    const preparedApproval={body:preparedBody,signature:Array.from(sign(null,admissionBytes(jsonPrepared),fixtureSigningKey))};
+    await denied(()=>actor.approve_private_name_conversion(preparationId,{...preparedApproval,signature:Array(64).fill(0)}));
+    await denied(()=>actor.advance_private_name_write_window(preparationId,prep.sinks[0]));
+    sink0pre.actor.setPrincipal(identity.canisterId);await denied(()=>sink0pre.actor.register_conversion_name(prep.request,outsider,[],[1]));sink0pre.actor.setPrincipal(governor);
+    ok(await actor.approve_private_name_conversion(preparationId,preparedApproval));
+    await assert.rejects(prepInventory.listAccounts(),/refused/);
+    for(const sink of prep.sinks)prep=ok(await actor.advance_private_name_write_window(preparationId,sink));
+    assert.equal(phaseOf(prep),'Opening');
+    for(const target of prep.writers)prep=ok(await actor.advance_private_name_write_window(preparationId,target));
+    assert.equal(phaseOf(prep),'Writing');
+    actor.setPrincipal(outsider);await denied(()=>actor.set_profile('After signed admission',[]));actor.setPrincipal(governor);
+    for(const r of preparedBody.rows){ok(await actor.write_approved_private_name(preparationId,r.account_id,[]));for(const c of r.clubs)ok(await actor.write_approved_private_name(preparationId,r.account_id,[c.club]));ok(await actor.publish_approved_private_name(preparationId,r.account_id));}
+    prep=ok(await actor.close_private_name_write_window(preparationId));
+    for(const target of prep.writers)prep=ok(await actor.advance_private_name_write_window(preparationId,target));
+    assert.equal(phaseOf(prep),'Releasing');
+    for(const sink of prep.sinks)prep=ok(await actor.advance_private_name_write_window(preparationId,sink));
+    assert.equal(phaseOf(prep),'Done');
+    await denied(()=>actor.begin_private_name_preparation(preparationId,candidate.groups.history_revision,{...candidate,supplemental:[]}));
+    console.log('PASS: independent pre-signature preparation locks all 13 two-group account/club/PII/chat/competition/registry participants; unsigned writes/management edits refused, locks survive upgrade, exact signed same-request activation completes without an ordinary-write gap.');
     console.log('PASS: real two-group signed conversion/recovery plus account-first locked inventory, profileless account retention, ordinary/preapproval/foreign-request denial, full integrity traversal, stable evidence through upgrade and wrong-revision cursor refusal. Production pre-plan freeze/drain, original authority completeness, cryptographic preflight and management exclusion remain blocked.');
   } finally {journal?.close();harnessExclusive=false;rmSync(directory,{recursive:true,force:true});}
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
