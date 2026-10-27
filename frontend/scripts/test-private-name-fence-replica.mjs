@@ -44,13 +44,12 @@ try {
   const first = { operation_id: 'outsider', generation: 1n, inventory_digest: Array(32).fill(7) };
   assert.ok('Err' in await pii.actor.prepare_private_name_release_fence(first));
   pii.actor.setPrincipal(viewer);
-  await pic.stopAutoProgress();
   for (const method of ['get_private_profile_names_batch', 'get_private_profile_name_vetkeys_batch']) {
     identity.actor.setPrincipal(owner); await identity.actor.hold_on(2n);
     const transport = TransportSecretKey.random();
     const args = method.includes('vetkeys') ? [[subject.toText()], scope, transport.publicKeyBytes()] : [[subject.toText()], scope];
-    const call = pic.getDeferredActor(idlFactory, pii.canisterId); call.setPrincipal(viewer);
-    const pending = await call[method](...args);
+    const signature = idlFactory({ IDL })._fields.find(([name]) => name === method)?.[1]; assert.ok(signature);
+    const pending = await pic.client.submitCall({ canisterId: pii.canisterId, sender: viewer, method, payload: new Uint8Array(IDL.encode(signature.argTypes, args)) });
     for (let n = 0; n < 200 && !await identity.actor.is_held(); n++) await pic.tick();
     assert.equal(await identity.actor.is_held(), true, 'Final identity reply is genuinely held');
     const request = { operation_id: method, generation: 2n, inventory_digest: Array(32).fill(8) };
@@ -58,11 +57,10 @@ try {
     const completed = ok(await identity.actor.fence(request, true)); assert.equal(completed.completed, true);
     assert.ok(completed.release_epoch > fenced.release_epoch);
     await identity.actor.release();
-    const result = await pending();
+    const result = IDL.decode(signature.retTypes, (await pic.client.awaitCall(pending)).body)[0];
     assert.ok('Err' in result, 'Prepare/reopen ABA rejects an old final reply for both ciphertext and keys');
     assert.ok('Err' in await identity.actor.fence(request, false), 'Delayed prepare cannot revive completed operation');
   }
-  await pic.startAutoProgress();
   await decrypt();
   const a = { operation_id: 'upgrade-active', generation: 3n, inventory_digest: Array(32).fill(9) };
   const b = { operation_id: 'concurrent', generation: 4n, inventory_digest: Array(32).fill(10) };
