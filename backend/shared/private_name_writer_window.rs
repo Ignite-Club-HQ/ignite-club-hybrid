@@ -103,7 +103,10 @@ pub fn receipt(request: WriterRequest) -> Result<WriterReceipt,String> {
 pub struct Lease(Option<WriterRequest>);
 pub fn enter() -> Result<Lease,String> {
     if preparation_pending(){return Err("Edits locked for private-name preparation".into());}
-    if !enabled(){return track_ordinary();}
+    if !enabled(){
+        if INTENTS.with(|m|m.borrow().iter().any(|e|{let i:WriterIntent=crate::decode(&e.value());exclusive(&i.request)&&!i.sealed})){return Err("Edits locked for private-name conversion".into());}
+        return track_ordinary();
+    }
     let mut i=current().ok_or("Coordinated private-name write window required")?;
     if exclusive(&i.request){return Err("Edits locked for private-name conversion".into());}
     if i.closing||i.active>=4096{return Err("Private-name writer closing or busy".into());}

@@ -75,6 +75,7 @@ module {
     public func enter() : { #Ok : ?Release.Request; #Err : Text } {
       if (preparationPending()) return #Err("Edits locked for private-name preparation");
       if (not enabled) {
+        for ((_, i) in intents.entries()) { if (exclusive(i.request) and not i.sealed) return #Err("Edits locked for private-name conversion") };
         let request = ordinaryRequest();
         let prior = intents.get(request.operation_id) ?? ({ request; closing = false; sealed = true; active = 0 });
         if (prior.request != request or prior.closing or prior.active >= 4096) return #Err("Ordinary accounting conflict or busy");
