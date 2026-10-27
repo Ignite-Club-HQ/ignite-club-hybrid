@@ -15,7 +15,7 @@ export async function verifyNameApprovalGithubSetup({repository,sourceCommit,sou
   const protect=async(branch,source)=>{
     const p=await read(`branches/${encodeURIComponent(branch)}/protection`);
     if(p?.enforce_admins?.enabled!==true || p.allow_force_pushes?.enabled!==false || p.allow_deletions?.enabled!==false)throw Error('Administrator enforcement and no rewind/deletion required');
-    if(source && (p.required_pull_request_reviews?.required_approving_review_count<1 || p.required_pull_request_reviews?.dismiss_stale_reviews!==true || p.required_pull_request_reviews?.require_last_push_approval!==true))throw Error('Reviewed source protection required');
+    if(source && (!Number.isSafeInteger(p.required_pull_request_reviews?.required_approving_review_count) || p.required_pull_request_reviews.required_approving_review_count<1 || p.required_pull_request_reviews?.dismiss_stale_reviews!==true || p.required_pull_request_reviews?.require_last_push_approval!==true))throw Error('Reviewed source protection required');
     // Ordinary descendant commits can replace receipts too. Do not certify
     // append-only semantics from no-force flags: require the branch locked.
     if(!source && p.lock_branch?.enabled!==true)throw Error('Receipt branch is not immutable; ordinary replacement remains possible');

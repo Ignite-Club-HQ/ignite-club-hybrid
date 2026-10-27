@@ -1,0 +1,9 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {prepareVerifiedPrivateNameArtifact} from './private-name-verified-preparation.mjs';
+// Early refusals require neither a mainnet key nor any key derivation.
+const input=()=>({identityId:'identity',operator:'operator',deploymentHash:'a'.repeat(64),inventoryHash:'b'.repeat(64),historyRevision:'1',sinks:[{id:'pii',publicKey:[1]}],rows:[{accountId:'a',subject:'person',sink:'pii',name:'Paul Cranwell',clubs:['club']}]});
+const accounts=()=>({request:{operation_id:'names:club-name-preparation-test',generation:1n,inventory_digest:Array(32).fill(1)},revision:'1',rows:[{accountId:'a',principals:['person'],version:'1',status:'Active',sourceDigest:Array(32).fill(2),profile:{display_name:'Paul Cranwell'},originalAuthority:{kind:'Unresolved'}}]});
+test('missing account coverage cannot return an approval-ready artifact',async()=>{await assert.rejects(prepareVerifiedPrivateNameArtifact(input(),{accounts:undefined}),/Complete authenticated/);});
+test('unverified baseline or management exclusion refuses before resolving or decrypting',async()=>{let calls=0;await assert.rejects(prepareVerifiedPrivateNameArtifact(input(),{accounts:accounts(),assertEvidence:async()=>false,resolveAuthority:async()=>{calls++;},decryptCiphertext:async()=>{calls++;}}),/Verified baseline/);assert.equal(calls,0);});
+test('malformed public keys refuse before any authority or crypto adapter',async()=>{let calls=0;await assert.rejects(prepareVerifiedPrivateNameArtifact(input(),{accounts:accounts(),assertEvidence:async()=>true,resolveAuthority:async()=>{calls++;},decryptCiphertext:async()=>{calls++;}}),/Invalid original PII public key/);assert.equal(calls,0);});

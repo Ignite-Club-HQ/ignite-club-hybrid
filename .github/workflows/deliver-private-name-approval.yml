@@ -43,6 +43,9 @@ jobs:
       IDENTITY_APPROVAL_MODULE_HASH: ${{ vars.IDENTITY_APPROVAL_MODULE_HASH }}
       PRIVATE_NAME_APPROVER_PUBLIC_KEY: ${{ vars.PRIVATE_NAME_APPROVER_PUBLIC_KEY }}
       PRIVATE_NAME_APPROVAL_RECEIPTS_BRANCH: ${{ vars.PRIVATE_NAME_APPROVAL_RECEIPTS_BRANCH }}
+      PRIVATE_NAME_APPROVAL_REVIEWER_ID: ${{ vars.PRIVATE_NAME_APPROVAL_REVIEWER_ID }}
+      PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_COMMIT: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_COMMIT }}
+      PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_REF: ${{ vars.PRIVATE_NAME_APPROVAL_DELIVERY_SOURCE_REF }}
       OPERATOR_PEM_PATH: ${{ runner.temp }}/name-approval-operator.pem
       REPORT_PATH: ${{ runner.temp }}/name-approval-report.json
     steps:
@@ -75,7 +78,11 @@ jobs:
           node scripts/ensure-frontend-deps.mjs
           npx --yes tsx@4.21.0 --version
       - name: Test delivery-only safeguards
-        run: node --test scripts/private-name-approval-delivery.test.mjs
+        run: node --test scripts/private-name-approval-delivery.test.mjs scripts/private-name-github-protection.test.mjs
+      - name: Verify actual GitHub protections before restoring governor credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-private-name-github-setup.mjs
       - name: Restore existing delivery governor, not the approval signer
         env:
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
