@@ -9,7 +9,7 @@ import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/d
 import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declarations/shard_router.did.js';
 import { idlFactory as messagingIdl } from '../src/lab/bindings/messaging_domain/declarations/messaging_domain.did.js';
 
-export async function createNameEditFixture() {
+export async function createNameEditFixture({ clubDisplayReleaseOnly = false } = {}) {
   const root = resolve(import.meta.dirname, '../..');
   const principal = n => Principal.fromUint8Array(Uint8Array.from([n, 1]));
   const governor = principal(1), owner = principal(3), viewer = principal(2), outsider = principal(4);
@@ -57,6 +57,17 @@ export async function createNameEditFixture() {
     const group = ok(await messaging.actor.create_group_with_roles(clubId, [], 'Acceptance chat', 'group', [[governor, 'owner'], [owner, 'member'], [viewer, 'member']]));
     messaging.actor.setPrincipal(owner);
     const message = ok(await messaging.actor.send_message(group.conversation_id, 'Name-edit acceptance message', 'name-edit-1', [], []));
+    if (clubDisplayReleaseOnly) {
+      const display = { name: 'IGNITE_PRIVATE_CLUB_NAME_DISPLAY_RELEASE', value: '1' };
+      const save = { name: 'IGNITE_SECURE_ADULT_NAME_SAVE_RELEASE', value: '1' };
+      await pic.updateCanisterSettings({canisterId:identity.canisterId,sender:governor,environmentVariables:[display,save,{name:'IGNITE_SECURE_ADULT_NAME_PII',value:pii.canisterId.toText()}]});
+      await pic.updateCanisterSettings({canisterId:club.canisterId,sender:governor,environmentVariables:[display]});
+      await pic.upgradeCanister({canisterId:club.canisterId,sender:governor,wasm:resolve(root,'backend/club_domain/.mops/.build/club_domain.wasm'),arg,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+      await pic.updateCanisterSettings({canisterId:pii.canisterId,sender:governor,environmentVariables:[display,save,{name:'IGNITE_PRIVATE_PROFILE_IDENTITY',value:identity.canisterId.toText()},{name:'IGNITE_SECURE_ADULT_NAME_IDENTITY',value:identity.canisterId.toText()},{name:'VETKD_KEY_NAME',value:'key_1'}]});
+      await pic.upgradeCanister({canisterId:pii.canisterId,sender:governor,wasm:resolve(root,'backend/pii_access_control/.mops/.build/pii_access_control.wasm'),arg,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+      await pic.updateCanisterSettings({canisterId:messaging.canisterId,sender:governor,environmentVariables:[]});
+      await pic.upgradeCanister({canisterId:messaging.canisterId,sender:governor,wasm:resolve(root,'backend/messaging_domain/.mops/.build/messaging_domain.wasm'),arg,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+    }
     const factories = { club_domain: clubIdl, pii_access_control: piiIdl, messaging_domain: messagingIdl, identity_access: identityIdl };
     const counters = { clubUnlocks: 0 };
     const connect = (domain, user) => {
