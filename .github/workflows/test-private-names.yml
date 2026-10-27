@@ -14,9 +14,9 @@ jobs:
   acceptance:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      NAME_TEST_REPORT_PATH: ${{ runner.temp }}/private-name-test-report.json
     steps:
+      - name: Set isolated report location
+        run: echo "NAME_TEST_REPORT_PATH=$RUNNER_TEMP/private-name-test-report.json" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
