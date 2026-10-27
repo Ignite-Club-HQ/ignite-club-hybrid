@@ -62,7 +62,7 @@ impl WriteWindow {
         let rows=if completed{&mut self.completed}else{&mut self.prepared};
         if !rows.iter().any(|p|p.receiver==target){rows.push(r);}
         if completed&&rows.len()==self.sinks.len(){self.phase=WritePhase::Done;}
-        if !completed&&rows.len()==self.sinks.len(){self.phase=WritePhase::Opening;}Ok(())
+        if !completed&&rows.len()==self.sinks.len(){self.phase=WritePhase::Opening;if super::private_name_writer_window::preparation(&self.request){self.opened.clear();}}Ok(())
     }
     fn merge_writer(&mut self,target:Principal,r:WriterReceipt,sealed:bool)->Outcome<()> {
         self.writer_receipt(target,&r,sealed)?;
@@ -182,7 +182,6 @@ async fn advance_private_name_write_window(operation_id:String,target:Principal)
             let reply=ic_cdk::call::Call::bounded_wait(target,reader).with_arg(&w.request).await.map_err(|_|"Private-name writer outcome unknown; retain window")?;
             let receipt:Outcome<WriterReceipt>=reply.candid().map_err(|_|"Invalid private-name writer receipt")?;
             access()?;let mut current=get(&operation_id)?;
-            if prepared && phase==WritePhase::Opening && current.phase==WritePhase::Opening && current.opened.len()==current.writers.len(){current.opened.clear();}
             current.merge_writer(target,receipt?,phase==WritePhase::Closing)?;save_at(&operation_id,&current);Ok(current)
         },
         WritePhase::Done=>Ok(w),
