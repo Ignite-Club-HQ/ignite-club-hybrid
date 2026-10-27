@@ -35,6 +35,7 @@ try {
   const init = IDL.encode([IDL.Record({ governor: IDL.Principal })], [{ governor }]);
   const identity = await pic.setupCanister({ idlFactory: identityIdl, wasm: rustWasm('identity_access'), sender: governor, controllers: [governor], arg: init });
   identity.actor.setPrincipal(governor); ok(await identity.actor.register_account());
+  ok(await identity.actor.set_profile('Governor', []));
   // A plaintext-named account awaiting conversion, created before the gate closes.
   identity.actor.setPrincipal(outsider);
   const convertee = ok(await identity.actor.register_account());
