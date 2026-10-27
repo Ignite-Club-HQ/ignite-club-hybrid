@@ -37,5 +37,26 @@ persistent actor class Identity(owner : Principal, viewer : Principal, subject :
     } = actor(id.toText());
     if (complete) await (with timeout = 10) sink.complete_private_name_release_fence(request)
     else await (with timeout = 10) sink.prepare_private_name_release_fence(request)
+  };
+  public shared ({ caller }) func fence_lost_reply(request : Fence.Request, complete : Bool) : async { #Ok : Fence.Receipt; #Err : Text } {
+    if (caller != owner) return #Err("Test owner required");
+    let result = await this.fence_as_owner(request, complete);
+    switch (result) { case (#Err(e)) #Err(e); case (#Ok(_)) #Err("Simulated acknowledgement loss after receiver commit") }
+  };
+  public shared ({ caller }) func fence_as_owner(request : Fence.Request, complete : Bool) : async { #Ok : Fence.Receipt; #Err : Text } {
+    if (caller != Principal.fromActor(this)) return #Err("Local test call required");
+    let id = switch (pii) { case (?id) id; case null return #Err("Test PII missing") };
+    let sink : actor {
+      prepare_private_name_release_fence : shared Fence.Request -> async { #Ok : Fence.Receipt; #Err : Text };
+      complete_private_name_release_fence : shared Fence.Request -> async { #Ok : Fence.Receipt; #Err : Text }
+    } = actor(id.toText());
+    if (complete) await (with timeout = 10) sink.complete_private_name_release_fence(request)
+    else await (with timeout = 10) sink.prepare_private_name_release_fence(request)
+  };
+  public shared ({ caller }) func receipt(request : Fence.Request) : async { #Ok : Fence.Receipt; #Err : Text } {
+    if (caller != owner) return #Err("Test owner required");
+    let id = switch (pii) { case (?id) id; case null return #Err("Test PII missing") };
+    let sink : actor { read_private_name_release_fence : shared Fence.Request -> async { #Ok : Fence.Receipt; #Err : Text } } = actor(id.toText());
+    await (with timeout = 10) sink.read_private_name_release_fence(request)
   }
 }

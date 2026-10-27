@@ -14,6 +14,8 @@ const identityIdl = ({ IDL }) => IDL.Service({
   configure: IDL.Func([IDL.Principal], [], []), hold_on: IDL.Func([IDL.Nat], [], []),
   is_held: IDL.Func([], [IDL.Bool], ['query']), release: IDL.Func([], [], []),
   fence: IDL.Func([requestType, IDL.Bool], [IDL.Variant({ Ok: receiptType, Err: IDL.Text })], []),
+  fence_lost_reply: IDL.Func([requestType, IDL.Bool], [IDL.Variant({ Ok: receiptType, Err: IDL.Text })], []),
+  receipt: IDL.Func([requestType], [IDL.Variant({ Ok: receiptType, Err: IDL.Text })], []),
 });
 const ok = result => { assert.ok('Ok' in result, result.Err); return result.Ok; };
 const server = await PocketIcServer.start({ binPath: process.env.POCKET_IC_BIN });
@@ -45,14 +47,15 @@ try {
   assert.ok('Err' in await pii.actor.prepare_private_name_release_fence(first));
   pii.actor.setPrincipal(viewer);
   for (const method of ['get_private_profile_names_batch', 'get_private_profile_name_vetkeys_batch']) {
-    identity.actor.setPrincipal(owner); await identity.actor.hold_on(2n);
+   for (const reply of [1n, 2n]) {
+    identity.actor.setPrincipal(owner); await identity.actor.hold_on(reply);
     const transport = TransportSecretKey.random();
     const args = method.includes('vetkeys') ? [[subject.toText()], scope, transport.publicKeyBytes()] : [[subject.toText()], scope];
     const signature = idlFactory({ IDL })._fields.find(([name]) => name === method)?.[1]; assert.ok(signature);
     const pending = await pic.client.submitCall({ canisterId: pii.canisterId, sender: viewer, method, payload: new Uint8Array(IDL.encode(signature.argTypes, args)) });
     for (let n = 0; n < 200 && !await identity.actor.is_held(); n++) await pic.tick();
     assert.equal(await identity.actor.is_held(), true, 'Final identity reply is genuinely held');
-    const request = { operation_id: method, generation: 2n, inventory_digest: Array(32).fill(8) };
+    const request = { operation_id: `${method}-${reply}`, generation: 2n, inventory_digest: Array(32).fill(8) };
     const fenced = ok(await identity.actor.fence(request, false)); assert.equal(fenced.completed, false);
     const completed = ok(await identity.actor.fence(request, true)); assert.equal(completed.completed, true);
     assert.ok(completed.release_epoch > fenced.release_epoch);
@@ -60,7 +63,19 @@ try {
     const result = IDL.decode(signature.retTypes, (await pic.client.awaitCall(pending)).body)[0];
     assert.ok('Err' in result, 'Prepare/reopen ABA rejects an old final reply for both ciphertext and keys');
     assert.ok('Err' in await identity.actor.fence(request, false), 'Delayed prepare cannot revive completed operation');
+   }
   }
+  await decrypt();
+  const uncertain = { operation_id: 'lost-ack', generation: 5n, inventory_digest: Array(32).fill(11) };
+  assert.ok('Err' in await identity.actor.fence_lost_reply(uncertain, false));
+  const observed = ok(await identity.actor.receipt(uncertain)); assert.equal(observed.completed, false);
+  assert.ok('Err' in await pii.actor.get_private_profile_names_batch([subject.toText()], scope), 'Unknown prepare retains the committed fence');
+  const retried = ok(await identity.actor.fence(uncertain, false)); assert.equal(retried.release_epoch, observed.release_epoch);
+  assert.ok('Err' in await identity.actor.fence_lost_reply(uncertain, true));
+  const closed = ok(await identity.actor.receipt(uncertain)); assert.equal(closed.completed, true);
+  assert.equal(ok(await identity.actor.fence(uncertain, true)).release_epoch, closed.release_epoch);
+  assert.ok('Err' in await identity.actor.fence(uncertain, false));
+  assert.ok('Err' in await identity.actor.receipt({ ...uncertain, generation: 6n }));
   await decrypt();
   const a = { operation_id: 'upgrade-active', generation: 3n, inventory_digest: Array(32).fill(9) };
   const b = { operation_id: 'concurrent', generation: 4n, inventory_digest: Array(32).fill(10) };
