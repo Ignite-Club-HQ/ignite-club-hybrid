@@ -41,7 +41,7 @@ import { observeChatElementHeight } from "@/lib/chatScrollActivity";
 import { scrollMessageIntoLowerThird } from "@/lib/scrollMessageIntoLowerThird";
 import { cacheProfiles, fetchProfilesWithCache, getProfileFromCache, selectCachedProfilesByIds } from "@/lib/profileCache";
 import { claimFirstBubbleHint } from "@/hooks/useChatActionsOnboarding";
-import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 
@@ -340,7 +340,7 @@ export const GroupChatMessageRow = memo(function GroupChatMessageRow({
   }, []);
 
   const profile = getProfile(msg.author_id);
-  const privateNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const privateNames = privateClubNameDisplaysEnabled() && isFeatureRoutedToIcp("messaging");
   const displayName = profile?.display_name || (privateNames ? null : msg.author?.display_name) || (privateNames ? "Member" : "Loading...");
   const avatarUrl = profile?.avatar_url || (privateNames ? null : msg.author?.avatar_url) || undefined;
   const frontierReaders = readFrontier[msg.id] || [];
@@ -888,7 +888,7 @@ function GroupReactionsDialog({
   onClose: () => void;
   onChangeType: (type: string) => void;
 }) {
-  const privateNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const privateNames = privateClubNameDisplaysEnabled() && isFeatureRoutedToIcp("messaging");
   const initialUsers = (() => {
     const seeded: Array<{ id: string; display_name: string | null }> = [];
     for (const id of allUserIds) {

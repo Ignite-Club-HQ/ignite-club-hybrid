@@ -11,13 +11,13 @@ import {
 } from "@/live/features/messaging";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getCachedTeam } from "@/lib/clubTeamCache";
-import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
 
 export const ICP_TEAM_MESSAGES_PER_PAGE = 30;
 
 /** Maps canister rows into the shared team chat message shape (newest first). */
 export async function mapLiveTeamRows(ctx: any, teamId: string, rows: any[], onReady?: (rows: any[]) => void): Promise<any[]> {
-  const privateNames = privateProfileSearchRehearsalEnabled();
+  const privateNames = privateClubNameDisplaysEnabled();
   const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
   if (onReady) {
     const profiles = privateNames ? new Map() : getProfilesFromCache(authorIds).cached;

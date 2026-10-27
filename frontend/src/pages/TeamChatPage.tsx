@@ -105,7 +105,7 @@ import { fetchProfilesWithCache, fetchSingleProfileWithCache, getProfilesFromCac
 import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
 import { useChatProfileWorkset } from "@/hooks/useChatProfileWorkset";
-import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { queueMessage } from "@/lib/messageQueue";
 import { getCachedMessages, cacheMessages, shouldRefetchMessages } from "@/lib/messageCache";
@@ -855,7 +855,7 @@ export default function TeamChatPage() {
   const authorIds = useMemo(() => {
     return [...new Set((localMessages || []).flatMap(m => [m.author_id, ...(m.reactions ?? []).map(r => r.user_id)]).filter(Boolean))];
   }, [localMessages]);
-  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const privateChatNames = privateClubNameDisplaysEnabled() && isFeatureRoutedToIcp("messaging");
   const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
   const privateWorkset = useChatProfileWorkset(localMessages ?? [], teamId, user?.id);
   const getPrivateProfile = usePrivateChatProfiles(teamId, user?.id, privateWorkset.ids, privateChatNames);
