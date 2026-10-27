@@ -172,6 +172,11 @@ export interface LinkPreview {
   'image' : [] | [string],
 }
 export interface Main {
+  'activate_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -282,9 +287,19 @@ export interface Main {
     { 'Ok' : LinkPreview } |
       { 'Err' : string }
   >,
+  'finish_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'forward_message' : ActorMethod<
     [string, string],
     { 'Ok' : Message } |
+      { 'Err' : string }
+  >,
+  'freeze_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'generate_chat_recap' : ActorMethod<
@@ -759,6 +774,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt__1 } |
+      { 'Err' : string }
+  >,
   'read_private_name_writer_window' : ActorMethod<
     [Request],
     { 'Ok' : Receipt__1 } |

@@ -9,6 +9,11 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
+  const Request = IDL.Record({
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'generation' : IDL.Nat64,
+    'operation_id' : IDL.Text,
+  });
   const AuditFilter = IDL.Record({
     'opt_from_ts' : IDL.Opt(IDL.Nat64),
     'opt_to_ts' : IDL.Opt(IDL.Nat64),
@@ -24,11 +29,6 @@ export const idlFactory = ({ IDL }) => {
     'timestamp' : IDL.Nat64,
     'field_id' : IDL.Text,
     'purpose' : IDL.Text,
-  });
-  const Request = IDL.Record({
-    'inventory_digest' : IDL.Vec(IDL.Nat8),
-    'generation' : IDL.Nat64,
-    'operation_id' : IDL.Text,
   });
   const Receipt__2 = IDL.Record({
     'request' : Request,
@@ -77,6 +77,11 @@ export const idlFactory = ({ IDL }) => {
     'receiver' : IDL.Principal,
   });
   const Main = IDL.Service({
+    'activate_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'add_guardian_relationship' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -104,6 +109,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'finish_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'freeze_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
       ),
     'get_club_media_vetkey' : IDL.Func(
         [IDL.Text, IDL.Vec(IDL.Nat8)],
@@ -250,6 +265,11 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        [],
+      ),
+    'read_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
         [],
       ),
     'read_private_name_release_fence' : IDL.Func(

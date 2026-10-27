@@ -205,6 +205,11 @@ type Main =
                                          Err: text;
                                          Ok: RoleGrant;
                                        });
+   activate_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    addBulkAccessPrincipal: ("principal": principal) ->
     (variant {
        Err: text;
@@ -376,6 +381,16 @@ type Main =
                 Err: text;
                 Ok;
               });
+   finish_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   freeze_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    get_chat_settings: (competition_id: text) ->
     (variant {
        Err: text;
@@ -813,6 +828,11 @@ type Main =
                                 Err: text;
                                 Ok: vec principal;
                               });
+   read_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
    read_private_name_writer_window: (request: Request) ->
     (variant {
        Err: text;

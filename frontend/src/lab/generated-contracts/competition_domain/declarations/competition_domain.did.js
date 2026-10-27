@@ -26,6 +26,11 @@ export const idlFactory = ({ IDL }) => {
     'team_id' : IDL.Opt(IDL.Text),
     'competition_id' : IDL.Text,
   });
+  const Request = IDL.Record({
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'generation' : IDL.Nat64,
+    'operation_id' : IDL.Text,
+  });
   const EoiSubmission = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
@@ -298,11 +303,6 @@ export const idlFactory = ({ IDL }) => {
     'competition_id' : IDL.Text,
     'club_id' : IDL.Text,
   });
-  const Request = IDL.Record({
-    'inventory_digest' : IDL.Vec(IDL.Nat8),
-    'generation' : IDL.Nat64,
-    'operation_id' : IDL.Text,
-  });
   const Request__1 = IDL.Record({
     'account_id' : IDL.Text,
     'inventory_digest' : IDL.Vec(IDL.Nat8),
@@ -368,6 +368,11 @@ export const idlFactory = ({ IDL }) => {
     'accept_role_link' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : RoleGrant, 'Err' : IDL.Text })],
+        [],
+      ),
+    'activate_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'addBulkAccessPrincipal' : IDL.Func(
@@ -569,6 +574,16 @@ export const idlFactory = ({ IDL }) => {
       ),
     'finish_email_job' : IDL.Func(
         [IDL.Text, IDL.Nat, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'finish_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'freeze_private_name_preparation' : IDL.Func(
+        [Request],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -1080,6 +1095,11 @@ export const idlFactory = ({ IDL }) => {
     'read_private_admin_thread_participants' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
         [],
       ),
     'read_private_name_writer_window' : IDL.Func(

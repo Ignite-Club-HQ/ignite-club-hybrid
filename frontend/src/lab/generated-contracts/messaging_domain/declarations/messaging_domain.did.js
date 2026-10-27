@@ -9,6 +9,11 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
+  const Request = IDL.Record({
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'generation' : IDL.Nat64,
+    'operation_id' : IDL.Text,
+  });
   const GroupMetadata = IDL.Record({
     'deleted' : IDL.Bool,
     'members' : IDL.Vec(IDL.Principal),
@@ -264,11 +269,6 @@ export const idlFactory = ({ IDL }) => {
     'kind' : IDL.Text,
     'count' : IDL.Nat64,
   });
-  const Request = IDL.Record({
-    'inventory_digest' : IDL.Vec(IDL.Nat8),
-    'generation' : IDL.Nat64,
-    'operation_id' : IDL.Text,
-  });
   const Request__1 = IDL.Record({
     'account_id' : IDL.Text,
     'inventory_digest' : IDL.Vec(IDL.Nat8),
@@ -391,6 +391,11 @@ export const idlFactory = ({ IDL }) => {
     'Err' : IDL.Text,
   });
   const Main = IDL.Service({
+    'activate_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -536,9 +541,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : LinkPreview, 'Err' : IDL.Text })],
         [],
       ),
+    'finish_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'forward_message' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
+        [],
+      ),
+    'freeze_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'generate_chat_recap' : IDL.Func(
@@ -1103,6 +1118,11 @@ export const idlFactory = ({ IDL }) => {
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
+    'read_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
         [],
       ),
     'read_private_name_writer_window' : IDL.Func(

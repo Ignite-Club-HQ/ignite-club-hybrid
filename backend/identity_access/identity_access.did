@@ -375,11 +375,11 @@ type Result_30 = variant { Ok : vec PrincipalEligibility; Err : text };
 type Result_31 = variant { Ok : PrincipalEligibility; Err : text };
 type Result_32 = variant { Ok : AccountInventoryPage; Err : text };
 type Result_33 = variant { Ok : opt ApprovalReceipt; Err : text };
-type Result_34 = variant { Ok : blob; Err : text };
-type Result_35 = variant { Ok : WriterReceipt; Err : text };
-type Result_36 = variant { Ok : RemovalHistoryManifest; Err : text };
-type Result_37 = variant { Ok : RemovalHistoryPage; Err : text };
-type Result_38 = variant { Ok : RemovalInventory; Err : text };
+type Result_34 = variant { Ok : WriterReceipt; Err : text };
+type Result_35 = variant { Ok : RemovalInventory; Err : text };
+type Result_36 = variant { Ok : blob; Err : text };
+type Result_37 = variant { Ok : RemovalHistoryManifest; Err : text };
+type Result_38 = variant { Ok : RemovalHistoryPage; Err : text };
 type Result_39 = variant { Ok : DirectoryCleanup; Err : text };
 type Result_4 = variant { Ok : OwnershipProgress; Err : text };
 type Result_40 = variant { Ok : Entitlement; Err : text };
@@ -481,6 +481,8 @@ type WritePhase = variant {
   Closing;
   Fencing;
   Writing;
+  Preparing;
+  AwaitingApproval;
 };
 type WriteWindow = record {
   opened : vec WriterReceipt;
@@ -500,10 +502,16 @@ type WriterReceipt = record {
   closing : bool;
   receiver : principal;
 };
+type WriterRequest = record {
+  inventory_digest : blob;
+  generation : nat64;
+  operation_id : text;
+};
 service : (Init) -> {
   accept_link : (nat64) -> (Result);
   access : (opt text, opt text, opt text) -> (Result_1) query;
   access_scoped : (opt text, opt text, opt text, opt text) -> (Result_1) query;
+  activate_private_name_preparation : (WriterRequest) -> (Result_2);
   // Governor-only: grants an additional verifier principal permitted to call
   // `set_entitlement` directly (e.g. a trusted server-side receipt verifier
   // identity, once one is established).
@@ -516,6 +524,7 @@ service : (Init) -> {
   // One exact source and one bounded unit per invocation; retries preserve
   // requests/publications. Governor-only until live worker acceptance passes.
   advance_membership_directory_source : (text) -> (Result_5);
+  advance_private_name_preparation : (text, principal) -> (Result_6);
   advance_private_name_write_window : (text, principal) -> (Result_6);
   approve_private_name_conversion : (text, SignedApproval) -> (Result_2);
   // Governor-only production repair. Derive readers from the pinned router,
@@ -527,6 +536,12 @@ service : (Init) -> {
   authorize_group_admission : (text, Binding) -> (Result_2);
   begin_account_removal : (text, nat64) -> (Result_7);
   begin_link : (principal) -> (Result_8);
+  // The candidate topology is not account/club data evidence. Close local
+  // admission synchronously, retain the operation, then freeze every candidate
+  // writer before collecting the verified topology under those locks.
+  begin_private_name_preparation : (text, nat64, RemovalInventory) -> (
+      Result_6,
+    );
   begin_private_name_suspension : (text, text, nat64) -> (Result_9);
   begin_private_name_write_window : (text, nat64) -> (Result_6);
   bind_external_site : (text, text, text) -> (Result_10);
@@ -558,6 +573,8 @@ service : (Init) -> {
   enable_membership_directory : (text) -> (Result_12);
   erase_account : (text) -> (Result_2);
   export_state : () -> (Result_15) query;
+  finish_private_name_preparation : (Request_1) -> (Result_2);
+  freeze_private_name_preparation : (Request_1) -> (Result_2);
   get_external_bindings : (text) -> (Result_16) query;
   // The caller's own entitlement records (active and expired).
   get_my_entitlements : () -> (Result_17) query;
@@ -638,10 +655,12 @@ service : (Init) -> {
       nat16,
     ) -> (Result_32);
   read_private_name_conversion_approval : (text) -> (Result_33);
-  read_private_name_source_digest : (text) -> (Result_34);
+  read_private_name_preparation : (Request_1) -> (Result_34);
+  read_private_name_preparation_topology : () -> (Result_35);
+  read_private_name_source_digest : (text) -> (Result_36);
   read_private_name_suspension : (text) -> (Result_9);
   read_private_name_write_window : (text) -> (Result_6);
-  read_private_name_writer_window : (Request_1) -> (Result_35);
+  read_private_name_writer_window : (Request_1) -> (Result_34);
   // Service-delegated name permission only. Registry placement authenticates
   // both the ORIGINAL PII caller and owning audience service; location alone
   // never admits a human. References must name this precise original PII caller.
@@ -652,11 +671,11 @@ service : (Init) -> {
     ) -> (Result_23);
   // Local-only consensus recovery evidence. Reader lists/club receipts are NOT
   // a complete deployment inventory or an in-flight drain acknowledgement.
-  read_removal_history_manifest : () -> (Result_36);
+  read_removal_history_manifest : () -> (Result_37);
   read_removal_history_page : (nat64, RemovalHistoryCursor, nat16) -> (
-      Result_37,
+      Result_38,
     );
-  read_removal_inventory_evidence : (nat64) -> (Result_38);
+  read_removal_inventory_evidence : (nat64) -> (Result_35);
   // Subject-bound consensus ownership read; never implicitly registers an account.
   read_service_account : (principal) -> (Result);
   reclaim_membership_directory : () -> (Result_39);
@@ -741,6 +760,7 @@ service : (Init) -> {
   // Fresh, authenticated full-inventory seal verification. This does not erase
   // data, release registry locks, restore histories or activate a group.
   verify_account_removal_seals : (text) -> (Result_44);
+  verify_private_name_preparation : (text) -> (Result_6);
   whoami : () -> (Result) query;
   write_approved_private_name : (text, text, opt text) -> (Result_2);
 }

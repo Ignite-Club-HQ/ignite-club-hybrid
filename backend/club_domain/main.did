@@ -232,19 +232,25 @@ type Reservation =
    store: principal;
    token: text;
  };
-type Request__1 = 
+type Request__2 = 
  record {
    club: text;
    expected_revision: nat64;
    operation: Operation__1;
    request_id: text;
  };
-type Request = 
+type Request__1 = 
  record {
    account_id: text;
    generation: nat64;
    inventory_digest: blob;
    subjects: vec principal;
+ };
+type Request = 
+ record {
+   generation: nat64;
+   inventory_digest: blob;
+   operation_id: text;
  };
 type RemovedMember = 
  record {
@@ -252,6 +258,13 @@ type RemovedMember =
    removed_at_ms: nat64;
    removed_by: principal;
    user: principal;
+ };
+type Registration = 
+ record {
+   email_hint: text;
+   expires_ms: nat64;
+   source_user: text;
+   token_hash: text;
  };
 type Reference = 
  record {
@@ -261,11 +274,19 @@ type Reference =
    store: opt text;
    url: text;
  };
+type Receipt__1 = 
+ record {
+   active: nat;
+   closing: bool;
+   receiver: principal;
+   request: Request;
+   sealed: bool;
+ };
 type Receipt = 
  record {
    outstanding: nat;
    receiver: principal;
-   request: Request;
+   request: Request__1;
  };
 type PromoCode = 
  record {
@@ -354,19 +375,26 @@ type ParentInvite =
    invited_by: principal;
    team_id: opt text;
  };
-type Page__1 = 
+type Page__2 = 
  record {
    next: opt nat;
    references: vec Reference;
    revision: nat;
    scanned: nat;
  };
-type Page = 
+type Page__1 = 
  record {
    edges: vec Edge;
+   next: opt Cursor__1;
+   revision: nat;
+   scanned: nat;
+ };
+type Page = 
+ record {
    next: opt Cursor;
    revision: nat;
    scanned: nat;
+   subjects: vec principal;
  };
 type Operation__1 = 
  variant {
@@ -493,6 +521,11 @@ type Main =
                                            Err: text;
                                            Ok;
                                          });
+   activate_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    add_role_grant: (user: principal, club: text, role: text, team:
     opt text) -> (variant {
                     Err: text;
@@ -766,6 +799,11 @@ type Main =
                                  Ok;
                                });
    execute: (input: text) -> (Result__2) query;
+   export_account_claims: (club: text, offset: nat, limit: nat) ->
+    (variant {
+       Err: text;
+       Ok: vec Claimed;
+     }) query;
    export_acl: () -> (variant {
                         Err: text;
                         Ok: Config;
@@ -798,6 +836,11 @@ type Main =
                 Err: text;
                 Ok;
               });
+   finish_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    free_usage_counters: (club_id: text) ->
     (variant {
        Err: text;
@@ -813,6 +856,11 @@ type Main =
                                                Err: text;
                                                Ok: nat64;
                                              });
+   freeze_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    getApiDoc: () -> (text) query;
    get_app_config: (key: text) -> (opt text) query;
    get_club_branding: (club_id: text) ->
@@ -1317,15 +1365,21 @@ type Main =
                              Err: text;
                              Ok: SeasonTeamAssignment;
                            });
-   mutate: (req: Request__1) -> (variant {
+   mutate: (req: Request__2) -> (variant {
                                    Err: text;
                                    Ok: Mutation;
                                  });
    my_role_grants: () -> (vec RoleGrant) query;
-   prepare_account_removal: (request: Request) -> (variant {
-                                                     Err: text;
-                                                     Ok;
-                                                   });
+   open_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   prepare_account_removal: (request: Request__1) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    prepare_deleted_retained_media: (token: text, entry: Object) ->
     (Result__1);
    prepare_media_quota_reservation: (store: principal, token: text, club_id:
@@ -1652,7 +1706,7 @@ type Main =
        Err: text;
        Ok: opt text;
      });
-   read_account_removal_drain: (request: Request) ->
+   read_account_removal_drain: (request: Request__1) ->
     (variant {
        Err: text;
        Ok: Receipt;
@@ -1664,7 +1718,7 @@ type Main =
    read_club_media_references: (club: text, offset: nat, expected:
     opt nat) -> (variant {
                    Err: text;
-                   Ok: Page__1;
+                   Ok: Page__2;
                  });
    read_club_retained_media_bytes: (club_id: text) ->
     (variant {
@@ -1681,10 +1735,10 @@ type Main =
        is_member: bool;
      }) query;
    read_directory_membership_source_page: (binding: Binding, cursor:
-    opt Cursor) -> (variant {
-                      Err: text;
-                      Ok: Page;
-                    });
+    opt Cursor__1) -> (variant {
+                         Err: text;
+                         Ok: Page__1;
+                       });
    read_directory_membership_status: (binding: Binding) ->
     (variant {
        Err: text;
@@ -1766,10 +1820,10 @@ type Main =
              revision: nat;
            };
      });
-   read_membership_source_page: (cursor: opt Cursor) ->
+   read_membership_source_page: (cursor: opt Cursor__1) ->
     (variant {
        Err: text;
-       Ok: Page;
+       Ok: Page__1;
      });
    read_my_club_memberships: (offset: nat, limit: nat16) ->
     (variant {
@@ -1789,6 +1843,38 @@ type Main =
              next: opt text;
            };
      });
+   read_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
+   read_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
+   read_profile_candidates: (club_id: text, cursor: opt Cursor) ->
+    (variant {
+       Err: text;
+       Ok: Page;
+     });
+   read_profile_family_batch: (requester: principal, child_id: text,
+    subjects: vec principal, expected: opt nat) ->
+    (variant {
+       Err: text;
+       Ok: Batch;
+     });
+   read_profile_membership_batch: (requester: principal, club_id: text,
+    subjects: vec principal, expected: opt nat) ->
+    (variant {
+       Err: text;
+       Ok: Batch;
+     });
+   read_profile_remote_revision: (subjects: vec principal, expected:
+    opt nat) -> (variant {
+                   Err: text;
+                   Ok: nat;
+                 });
    read_removal_media_registry: () ->
     (variant {
        Err: text;
@@ -1821,6 +1907,11 @@ type Main =
                                        Err: text;
                                        Ok;
                                      });
+   redeem_account_claim: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: record {club_id: text;};
+     });
    /// Redeems a storage promo code for a club. Returns the new add-on total (GB).
    redeem_club_storage_promo_code: (code: text, club_id: text) ->
     (variant {
@@ -1834,6 +1925,11 @@ type Main =
                 Err: text;
                 Ok: nat64;
               });
+   register_account_claims: (club: text, rows: vec Registration) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     });
    register_media_quota_store: (store: principal) ->
     (variant {
        Err: text;
@@ -2069,10 +2165,15 @@ type Main =
        Ok: TeamSubscription;
      });
    schema: () -> (text) query;
-   seal_account_removal: (request: Request) ->
+   seal_account_removal: (request: Request__1) ->
     (variant {
        Err: text;
        Ok: Receipt;
+     });
+   seal_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    send_fee_reminders: (club_id: text, payment_period: text, payment_type:
     text, message: text) -> (variant {
@@ -2486,9 +2587,15 @@ type Draft =
    title: text;
    url: text;
  };
-type Cursor = 
+type Cursor__1 = 
  record {
    nested: nat;
+   offset: nat;
+   phase: nat;
+   revision: nat;
+ };
+type Cursor = 
+ record {
    offset: nat;
    phase: nat;
    revision: nat;
@@ -2641,6 +2748,12 @@ type ClassEnrolment =
    term_id: text;
    updated_at_ms: nat64;
  };
+type Claimed = 
+ record {
+   claimed_ms: nat64;
+   "principal": principal;
+   source_user: text;
+ };
 type Child = 
  record {
    club_id: opt text;
@@ -2671,6 +2784,14 @@ type Binding =
    identity: principal;
    inventory_digest: blob;
    router: principal;
+ };
+type Batch = 
+ record {
+   club: text;
+   members: vec bool;
+   requester: principal;
+   revision: nat;
+   subjects: vec principal;
  };
 type Acl = 
  record {

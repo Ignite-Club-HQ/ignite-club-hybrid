@@ -36,6 +36,7 @@ fn key()->Outcome<VerifyingKey>{
     VerifyingKey::from_bytes(&bytes).map_err(|_|"Invalid immutable conversion signer".into())
 }
 fn get(id:&str)->Outcome<SignedApproval>{APPROVALS.with(|m|m.borrow().get(&id.to_string())).map(|b|super::decode(&b)).ok_or("Signed conversion approval required".into())}
+pub(super) fn has_approval(id:&str)->bool {APPROVALS.with(|m|m.borrow().contains_key(&id.to_string()))}
 fn source_digest(id:&str)->Outcome<Vec<u8>>{let a=super::get_account(id).ok_or("Exact account required")?;let p=super::get_profile_entry(id).ok_or("Exact profile required")?;Ok(Sha256::digest(super::encode(&(a,p))).to_vec())}
 fn approval_bytes(b:&ApprovalBody)->Vec<u8>{
     let mut out=Vec::new();let mut add=|bytes:&[u8]|{out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());out.extend_from_slice(bytes);};
@@ -46,9 +47,10 @@ fn approval_bytes(b:&ApprovalBody)->Vec<u8>{
 }
 fn validate(a:&SignedApproval,w:&WriteWindow,operator:Principal,identity:Principal,k:&VerifyingKey)->Outcome<()>{
     let b=&a.body;
-    if b.kind!="ignite-private-name-admission-v1" || b.approval_id.is_empty() || b.approval_id.len()>128 || b.identity!=identity || b.operator!=operator || b.request!=w.request
+    let prep=super::private_name_writer_window::preparation(&w.request);
+    if b.kind!=if prep{"ignite-private-name-preparation-admission-v2"}else{"ignite-private-name-admission-v1"} || b.approval_id.is_empty() || b.approval_id.len()>128 || b.identity!=identity || b.operator!=operator || b.request!=w.request
         || b.plan_hash.len()!=64 || !b.plan_hash.bytes().all(|c|c.is_ascii_digit()||(b'a'..=b'f').contains(&c))
-        || b.request.operation_id!=format!("names:club-name-conversion-{}",b.plan_hash) || b.rows.is_empty() || b.rows.len()>4096{return Err("Exact signed conversion binding required".into());}
+        || (!prep && b.request.operation_id!=format!("names:club-name-conversion-{}",b.plan_hash)) || b.rows.is_empty() || b.rows.len()>4096{return Err("Exact signed conversion binding required".into());}
     let bytes=approval_bytes(b);
     if bytes.len()>32*1024*1024{return Err("Approval byte budget exceeded".into());}
     let signature=Signature::from_slice(&a.signature).map_err(|_|"Signed conversion approval required")?;
@@ -80,6 +82,7 @@ fn approve_private_name_conversion(operation_id:String,approval:SignedApproval)-
     validate(&approval,&w,ic_cdk::api::msg_caller(),ic_cdk::api::canister_self(),&key()?)?;
     if let Ok(prior)=get(&operation_id){if prior!=approval{return Err("Original signed approval is immutable".into());}return Ok(());}
     if w.phase!=WritePhase::Fencing{return Err("Approval required before conversion opens".into());}
+    if super::private_name_writer_window::preparation(&w.request) && (w.opened.len()!=w.writers.len() || w.opened.iter().any(|r|r.request!=w.request||r.closing||r.sealed||r.active!=candid::Nat::from(0u8))){return Err("Every preparation participant must drain before signed admission".into());}
     for row in &approval.body.rows{if source_digest(&row.account_id)?!=row.source_digest{return Err("Approved name source changed".into());}if !super::get_account(&row.account_id).ok_or("Exact account required")?.principals.contains(&row.subject){return Err("Approved alias changed".into());}}
     APPROVALS.with(|m|m.borrow_mut().insert(operation_id,super::encode(&approval)));Ok(())
 }

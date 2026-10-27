@@ -319,6 +319,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    activate_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     add_role_grant(user: Principal, club: string, role: string, team: string | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -757,6 +764,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    finish_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     free_usage_counters(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -772,6 +786,13 @@ export interface MainInterface {
     freeze_club(club: string, rev: bigint): Promise<{
         __kind__: "Ok";
         Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    freeze_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -2049,6 +2070,13 @@ export interface MainInterface {
             next?: string;
             acl_revision: bigint;
         };
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    read_private_name_preparation(request: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt__1;
     } | {
         __kind__: "Err";
         Err: string;
@@ -3594,6 +3622,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.activate_media_retained_quota();
         return from_candid_variant_n17(result);
     }
+    async activate_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.activate_private_name_preparation(arg0);
+        return from_candid_variant_n17(result);
+    }
     async add_role_grant(arg0: Principal, arg1: string, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -4222,6 +4260,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.finish_email_job(arg0, arg1, arg2, arg3);
         return from_candid_variant_n17(result);
     }
+    async finish_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.finish_private_name_preparation(arg0);
+        return from_candid_variant_n17(result);
+    }
     async free_usage_counters(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -4246,6 +4294,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.freeze_club(arg0, arg1);
         return from_candid_variant_n130(result);
+    }
+    async freeze_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.freeze_private_name_preparation(arg0);
+        return from_candid_variant_n17(result);
     }
     async getApiDoc(): Promise<string> {
         const result = await this.actor.getApiDoc();
@@ -6129,6 +6187,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.read_my_club_memberships_indexed(to_candid_opt_n18(arg0), arg1);
         return from_candid_variant_n301(result);
+    }
+    async read_private_name_preparation(arg0: Request): Promise<{
+        __kind__: "Ok";
+        Ok: Receipt__1;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.read_private_name_preparation(arg0);
+        return from_candid_variant_n303(result);
     }
     async read_private_name_writer_window(arg0: Request): Promise<{
         __kind__: "Ok";

@@ -46,6 +46,11 @@ type PiiDeleteResult =
  };
 type Main = 
  service {
+   activate_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    add_guardian_relationship: (guardian: principal, child_id: text) ->
     (variant {
        Err: text;
@@ -74,6 +79,16 @@ type Main =
        Err: text;
        Ok: blob;
      }) query;
+   finish_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   freeze_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    get_club_media_vetkey: (club_id: text, transport_public_key: blob) ->
     (variant {
        Err: text;
@@ -190,6 +205,11 @@ type Main =
              move_id: text;
              revision: nat;
            };
+     });
+   read_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
      });
    read_private_name_release_fence: (request: Request) ->
     (variant {

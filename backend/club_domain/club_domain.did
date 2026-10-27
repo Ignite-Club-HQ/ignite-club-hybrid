@@ -521,6 +521,11 @@ type Main =
                                            Err: text;
                                            Ok;
                                          });
+   activate_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    add_role_grant: (user: principal, club: text, role: text, team:
     opt text) -> (variant {
                     Err: text;
@@ -831,6 +836,11 @@ type Main =
                 Err: text;
                 Ok;
               });
+   finish_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    free_usage_counters: (club_id: text) ->
     (variant {
        Err: text;
@@ -846,6 +856,11 @@ type Main =
                                                Err: text;
                                                Ok: nat64;
                                              });
+   freeze_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    getApiDoc: () -> (text) query;
    get_app_config: (key: text) -> (opt text) query;
    get_club_branding: (club_id: text) ->
@@ -1827,6 +1842,11 @@ type Main =
              clubs: vec text;
              next: opt text;
            };
+     });
+   read_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
      });
    read_private_name_writer_window: (request: Request) ->
     (variant {

@@ -41,7 +41,7 @@ function content(file:any,max:number){
 }
 if((await github('')).private!==true)throw Error('Signed private-name artifacts require a private repository');
 const artifact=content(await github(`contents/${artifactPath}?ref=${artifactCommit}`),1500000);
-verifyAdmissionArtifact(artifact,binding); // before agent or any canister operation
+const verifiedArtifact=verifyAdmissionArtifact(artifact,binding); // before agent or any canister operation
 await github(`git/ref/heads/${branch}`); // require a pre-provisioned receipts branch
 const protection=await github(`branches/${encodeURIComponent(branch)}/protection`);
 if(protection.enforce_admins?.enabled!==true || protection.allow_force_pushes?.enabled!==false || protection.allow_deletions?.enabled!==false)throw Error('Receipt branch must enforce administrator protection and prohibit rewinds/deletion');
@@ -49,7 +49,9 @@ const agent=await HttpAgent.create({host:'https://icp-api.io',identity:operatorI
 const actor=Actor.createActor(idlFactory,{agent,canisterId:identityId}) as any;
 const ok=(r:any)=>{if(!r || !('Ok'in r) || 'Err'in r)throw Error('Approval canister refused; blocker remains locked');return r.Ok;};
 const management=Actor.createActor(({IDL:I})=>I.Service({canister_status:I.Func([I.Record({canister_id:I.Principal})],[I.Record({status:I.Variant({running:I.Null,stopped:I.Null,stopping:I.Null}),module_hash:I.Opt(I.Vec(I.Nat8)),settings:I.Record({controllers:I.Vec(I.Principal)})})],[])}),{agent,canisterId:'aaaaa-aa',effectiveCanisterId:identityId}) as any;
-const receiptPath=`private-name-approval-delivery/${planHash}.json`;
+// An independent preparation ID may receive only one original delivery
+// intent, even when a different signed plan/artifact is subsequently offered.
+const receiptPath=`private-name-approval-delivery/${createHash('sha256').update(verifiedArtifact.operationId).digest('hex')}.json`;
 let stored:any=null;
 let observedHead='';
 let lastCommit='';

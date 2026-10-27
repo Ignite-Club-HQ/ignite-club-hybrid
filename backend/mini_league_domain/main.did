@@ -1,15 +1,29 @@
-type Request = 
+type Request__1 = 
  record {
    account_id: text;
    generation: nat64;
    inventory_digest: blob;
    subjects: vec principal;
  };
+type Request = 
+ record {
+   generation: nat64;
+   inventory_digest: blob;
+   operation_id: text;
+ };
+type Receipt__1 = 
+ record {
+   active: nat;
+   closing: bool;
+   receiver: principal;
+   request: Request;
+   sealed: bool;
+ };
 type Receipt = 
  record {
    outstanding: nat;
    receiver: principal;
-   request: Request;
+   request: Request__1;
  };
 type PublicMiniLeagueSummary = 
  record {
@@ -150,6 +164,11 @@ type MiniLeague =
  };
 type Main = 
  service {
+   activate_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    add_admin: (mini_league_id: text, user_id: principal) ->
     (variant {
        Err: text;
@@ -248,6 +267,16 @@ type Main =
      }) query;
    filter_visible_leagues: (viewer: principal, candidates: vec MiniLeague) ->
     (vec MiniLeague) composite_query;
+   finish_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   freeze_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    get_availability: (session_id: text, player_id: text) ->
     (variant {
        Err: text;
@@ -394,10 +423,16 @@ type Main =
      }) query;
    my_availability: () -> (vec MiniLeagueSessionAvailability) composite_query;
    my_leagues: () -> (vec MiniLeague) composite_query;
-   prepare_account_removal: (request: Request) -> (variant {
-                                                     Err: text;
-                                                     Ok;
-                                                   });
+   open_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   prepare_account_removal: (request: Request__1) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    purge_club_snapshot: (club: text) -> (variant {
                                            Err: text;
                                            Ok: nat;
@@ -506,7 +541,7 @@ type Main =
      });
    read_account_my_availability: () -> (vec MiniLeagueSessionAvailability);
    read_account_my_leagues: () -> (vec MiniLeague);
-   read_account_removal_drain: (request: Request) ->
+   read_account_removal_drain: (request: Request__1) ->
     (variant {
        Err: text;
        Ok: Receipt;
@@ -531,6 +566,29 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_private_name_preparation: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
+   read_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
+   read_profile_audience_batch: (requester: principal, id: text, subjects:
+    vec principal, expected: opt nat) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          club: text;
+          members: vec bool;
+          requester: principal;
+          revision: nat;
+          subjects: vec principal;
+        };
+     });
    rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
@@ -555,10 +613,15 @@ type Main =
        Err: text;
        Ok: MiniLeagueJoinLink;
      });
-   seal_account_removal: (request: Request) ->
+   seal_account_removal: (request: Request__1) ->
     (variant {
        Err: text;
        Ok: Receipt;
+     });
+   seal_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    set_availability: (session_id: text, player_id: text, status: text) ->
     (variant {

@@ -8,9 +8,10 @@ use std::{cell::RefCell, collections::BTreeSet};
 use sha2::{Digest, Sha256};
 use super::{Outcome, private_name_writer_window::{WriterRequest,WriterReceipt}};
 use super::private_name_coordination::Receipt as SinkReceipt;
+use super::group_inventory::RemovalInventory;
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
-pub enum WritePhase { Fencing, Opening, Writing, Closing, Releasing, Done }
+pub enum WritePhase { Preparing, AwaitingApproval, Fencing, Opening, Writing, Closing, Releasing, Done }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WriteWindow {
     pub request: WriterRequest, pub phase: WritePhase,
@@ -61,7 +62,7 @@ impl WriteWindow {
         let rows=if completed{&mut self.completed}else{&mut self.prepared};
         if !rows.iter().any(|p|p.receiver==target){rows.push(r);}
         if completed&&rows.len()==self.sinks.len(){self.phase=WritePhase::Done;}
-        if !completed&&rows.len()==self.sinks.len(){self.phase=WritePhase::Opening;}Ok(())
+        if !completed&&rows.len()==self.sinks.len(){self.phase=WritePhase::Opening;if super::private_name_writer_window::preparation(&self.request){self.opened.clear();}}Ok(())
     }
     fn merge_writer(&mut self,target:Principal,r:WriterReceipt,sealed:bool)->Outcome<()> {
         self.writer_receipt(target,&r,sealed)?;
@@ -74,6 +75,7 @@ impl WriteWindow {
 #[ic_cdk::update]
 async fn begin_private_name_write_window(operation_id:String,expected_history_revision:u64)->Outcome<WriteWindow>{
     access()?;
+    if operation_id.starts_with("club-name-preparation-"){return Err("Use independent preparation admission".into());}
     if let Ok(w)=get(&operation_id){return Ok(w);}
     if pending()||super::private_name_coordination::any_pending(){return Err("Another private-name operation remains unresolved".into());}
     if JOURNAL.with(|m|m.borrow().len())>=4096{return Err("Private-name write journal capacity reached".into());}
@@ -96,11 +98,72 @@ async fn begin_private_name_write_window(operation_id:String,expected_history_re
 }
 fn save_at(id:&str,w:&WriteWindow){JOURNAL.with(|m|m.borrow_mut().insert(id.to_string(),super::encode(w)));}
 #[ic_cdk::update]
+async fn read_private_name_preparation_topology()->Outcome<RemovalInventory>{
+    access()?;super::read_removal_inventory_evidence(super::removal_history_revision()).await
+}
+/// The candidate topology is not account/club data evidence. Close local
+/// admission synchronously, retain the operation, then freeze every candidate
+/// writer before collecting the verified topology under those locks.
+#[ic_cdk::update]
+fn begin_private_name_preparation(operation_id:String, expected_history_revision:u64, candidate:RemovalInventory)->Outcome<WriteWindow>{
+    access()?;
+    if !operation_id.starts_with("club-name-preparation-") || operation_id.len()>100{return Err("Independent preparation identity required".into());}
+    if let Ok(w)=get(&operation_id){if w.inventory!=candidate{return Err("Immutable preparation inventory conflict".into());}return Ok(w);}
+    if pending() || super::private_name_coordination::any_pending() || super::removal_pending() || !super::link_lifecycle().pending.is_empty() || super::DELETION_TICKETS.with(|m|!m.borrow().is_empty()) {return Err("Another authority operation remains unresolved".into());}
+    if super::removal_history_revision()!=expected_history_revision || candidate.groups.history_revision!=expected_history_revision || super::group_inventory_binding().as_ref()!=Some(&candidate.groups.binding) || super::supplemental_inventory()!=candidate.supplemental{return Err("Pinned preparation topology required".into());}
+    super::group_inventory::validate_complete(&candidate.groups.snapshot,&candidate.groups.binding,&super::link_lifecycle().authorities,&super::service_authorities(),&candidate.supplemental,&candidate.media)?;
+    if JOURNAL.with(|m|m.borrow().len())>=4096{return Err("Private-name write journal capacity reached".into());}
+    let generation=GENERATION.with(|m|m.borrow().get().checked_add(1)).ok_or("Private-name write generation exhausted")?;
+    let mut w=create(operation_id.clone(),generation,candidate,ic_cdk::api::canister_self())?;
+    let mut participants=w.writers.iter().copied().collect::<BTreeSet<_>>();
+    participants.insert(w.inventory.groups.binding.registry);
+    for d in &w.inventory.supplemental{if d.domain=="placement_registry"{participants.insert(d.canister);}}
+    if participants.len()>256{return Err("Preparation participant budget exceeded".into());}w.writers=participants.into_iter().collect();
+    w.phase=WritePhase::Preparing;
+    super::private_name_writer_window::freeze_local(w.request.clone())?;
+    GENERATION.with(|m|m.borrow_mut().set(generation));save_at(&operation_id,&w);Ok(w)
+}
+#[ic_cdk::update]
+async fn advance_private_name_preparation(operation_id:String,target:Principal)->Outcome<WriteWindow>{
+    access()?;let w=get(&operation_id)?;
+    if !super::private_name_writer_window::preparation(&w.request) || w.phase!=WritePhase::Preparing || !w.writers.contains(&target){return Err("Exact preparing writer required".into());}
+    let receipt=if target==ic_cdk::api::canister_self(){super::private_name_writer_window::preparation_receipt_local(w.request.clone())?}else{
+        let _=ic_cdk::call::Call::bounded_wait(target,"freeze_private_name_preparation").with_arg(&w.request).await;
+        let reply=ic_cdk::call::Call::bounded_wait(target,"read_private_name_preparation").with_arg(&w.request).await.map_err(|_|"Preparation outcome unknown; retain locks")?;
+        let result:Outcome<WriterReceipt>=reply.candid().map_err(|_|"Invalid preparation receipt")?;result?
+    };
+    access()?;let mut current=get(&operation_id)?;
+    if current.request!=w.request || current.phase!=WritePhase::Preparing || receipt.receiver!=target || receipt.request!=w.request || receipt.closing || receipt.sealed || receipt.active!=candid::Nat::from(0u8){return Err("Preparation writer has not drained; retain locks".into());}
+    if !current.opened.iter().any(|r|r.receiver==target){current.opened.push(receipt);}
+    // AwaitingApproval still retains every receiver's preparation intent.
+    if current.opened.len()==current.writers.len(){current.phase=WritePhase::AwaitingApproval;}
+    save_at(&operation_id,&current);Ok(current)
+}
+#[ic_cdk::update]
+async fn verify_private_name_preparation(operation_id:String)->Outcome<WriteWindow>{
+    access()?;let w=get(&operation_id)?;
+    if !super::private_name_writer_window::preparation(&w.request) || w.phase!=WritePhase::AwaitingApproval{return Err("Every preparation writer must drain first".into());}
+    let inventory=super::read_removal_inventory_evidence(super::removal_history_revision()).await?;
+    access()?;let mut current=get(&operation_id)?;
+    // An identity upgrade advances history but does not change locked source
+    // rows. Do not repin registry/topology; compare the entire retained evidence
+    // excluding that local observation counter only.
+    let mut comparable=inventory.clone();comparable.groups.history_revision=w.inventory.groups.history_revision;
+    if current.request!=w.request || current.phase!=WritePhase::AwaitingApproval || comparable!=w.inventory{return Err("Locked preparation topology changed; retain locks".into());}
+    if super::PROFILES.with(|m|m.borrow().len())>4096{return Err("Original profile inspection budget exceeded; retain locks".into());}
+    for p in super::all_profiles(){if p.display_name.starts_with("pii-display-name:"){
+        let parts=p.display_name.split(':').collect::<Vec<_>>();if parts.len()!=4 || parts[1]!="v1" || Principal::from_text(parts[2]).ok().is_none_or(|s|!w.sinks.contains(&s)){return Err("Original name authority omitted; retain locks".into());}
+    }}
+    // Fencing is the signed-admission waiting stage; no conversion or release
+    // can advance until the exact original signature is retained.
+    current.phase=WritePhase::Fencing;save_at(&operation_id,&current);Ok(current)
+}
+#[ic_cdk::update]
 fn read_private_name_write_window(operation_id:String)->Outcome<WriteWindow>{access()?;get(&operation_id)}
 #[ic_cdk::update]
 fn close_private_name_write_window(operation_id:String)->Outcome<WriteWindow>{
     access()?;let mut w=get(&operation_id)?;
-    if super::private_name_writer_window::exclusive(&w.request){super::private_name_conversion_approval::complete(&operation_id,&w)?;}
+    if super::private_name_writer_window::exclusive(&w.request)||super::private_name_writer_window::preparation(&w.request){super::private_name_conversion_approval::complete(&operation_id,&w)?;}
     if w.phase==WritePhase::Writing{w.phase=WritePhase::Closing;save_at(&operation_id,&w);}
     else if w.phase!=WritePhase::Closing&&w.phase!=WritePhase::Releasing&&w.phase!=WritePhase::Done{return Err("All writers must be opened before closing".into());}Ok(w)
 }
@@ -109,7 +172,7 @@ async fn advance_private_name_write_window(operation_id:String,target:Principal)
     access()?;let w=get(&operation_id)?;
     // Reserved conversion IDs cannot open writers or release sinks through
     // the generic coordinator without the retained exact signature.
-    if super::private_name_writer_window::exclusive(&w.request) {
+    if super::private_name_writer_window::exclusive(&w.request)||super::private_name_writer_window::preparation(&w.request) {
         super::private_name_conversion_approval::require_approval(&operation_id,&w)?;
         if matches!(w.phase,WritePhase::Closing|WritePhase::Releasing|WritePhase::Done){super::private_name_conversion_approval::complete(&operation_id,&w)?;}
     }
@@ -126,15 +189,22 @@ async fn advance_private_name_write_window(operation_id:String,target:Principal)
         },
         WritePhase::Opening|WritePhase::Closing=>{
             if !w.writers.contains(&target){return Err("Exact participating writer required".into());}
-            let method=if phase==WritePhase::Opening{"open_private_name_writer_window"}else{"seal_private_name_writer_window"};
-            let _=ic_cdk::call::Call::bounded_wait(target,method).with_arg(&w.request).await;
-            let reply=ic_cdk::call::Call::bounded_wait(target,"read_private_name_writer_window").with_arg(&w.request).await.map_err(|_|"Private-name writer outcome unknown; retain window")?;
+            let prepared=super::private_name_writer_window::preparation(&w.request);
+            let method=if phase==WritePhase::Opening && prepared{"activate_private_name_preparation"}else if phase==WritePhase::Opening{"open_private_name_writer_window"}else if prepared{"finish_private_name_preparation"}else{"seal_private_name_writer_window"};
+            let mutation=ic_cdk::call::Call::bounded_wait(target,method).with_arg(&w.request).await;
+            if prepared && phase==WritePhase::Opening {
+                let reply=mutation.map_err(|_|"Preparation activation outcome unknown; retain Opening")?;
+                let result:Outcome<()>=reply.candid().map_err(|_|"Invalid preparation activation reply; retain Opening")?;result?;
+            }
+            let reader=if prepared{"read_private_name_preparation"}else{"read_private_name_writer_window"};
+            let reply=ic_cdk::call::Call::bounded_wait(target,reader).with_arg(&w.request).await.map_err(|_|"Private-name writer outcome unknown; retain window")?;
             let receipt:Outcome<WriterReceipt>=reply.candid().map_err(|_|"Invalid private-name writer receipt")?;
             access()?;let mut current=get(&operation_id)?;
             current.merge_writer(target,receipt?,phase==WritePhase::Closing)?;save_at(&operation_id,&current);Ok(current)
         },
         WritePhase::Done=>Ok(w),
         WritePhase::Writing=>Err("Use authorized owning-service mutations, then close the window".into()),
+        WritePhase::Preparing|WritePhase::AwaitingApproval=>Err("Complete preparation locks and locked topology verification first".into()),
     }
 }
 

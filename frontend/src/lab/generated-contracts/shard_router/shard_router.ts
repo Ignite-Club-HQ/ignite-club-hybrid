@@ -72,7 +72,7 @@ export interface MemoryStats {
 }
 export type Result_2 = {
     __kind__: "Ok";
-    Ok: AssignResult;
+    Ok: null;
 } | {
     __kind__: "Err";
     Err: string;
@@ -149,14 +149,14 @@ export interface AssignResult {
 }
 export type Result_3 = {
     __kind__: "Ok";
-    Ok: AssignDomainResult;
+    Ok: AssignResult;
 } | {
     __kind__: "Err";
     Err: string;
 };
 export type Result_4 = {
     __kind__: "Ok";
-    Ok: GroupAssignment;
+    Ok: AssignDomainResult;
 } | {
     __kind__: "Err";
     Err: string;
@@ -168,7 +168,7 @@ export interface Page {
 }
 export type Result_5 = {
     __kind__: "Ok";
-    Ok: DomainMigration;
+    Ok: GroupAssignment;
 } | {
     __kind__: "Err";
     Err: string;
@@ -208,7 +208,7 @@ export type Result_24 = {
 };
 export type Result_7 = {
     __kind__: "Ok";
-    Ok: null;
+    Ok: Migration;
 } | {
     __kind__: "Err";
     Err: string;
@@ -235,7 +235,7 @@ export interface GroupPlacement {
 }
 export type Result_6 = {
     __kind__: "Ok";
-    Ok: Migration;
+    Ok: DomainMigration;
 } | {
     __kind__: "Err";
     Err: string;
@@ -419,16 +419,19 @@ export interface shard_routerInterface {
     abort_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result>;
     abort_migration(arg0: string, arg1: bigint): Promise<Result>;
     acquire_deletion_lock(arg0: string, arg1: bigint): Promise<Result_1>;
-    assign(arg0: AssignRequest): Promise<Result_2>;
-    assign_domain(arg0: AssignDomainRequest): Promise<Result_3>;
-    assign_new_club_group(arg0: string, arg1: string, arg2: bigint): Promise<Result_4>;
-    begin_domain_migration(arg0: string, arg1: string, arg2: Principal, arg3: bigint): Promise<Result_5>;
-    begin_migration(arg0: string, arg1: Principal, arg2: bigint): Promise<Result_6>;
-    commit_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result_3>;
-    commit_migration(arg0: string, arg1: bigint): Promise<Result_2>;
-    configure_group_media_growth(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint): Promise<Result_7>;
-    configure_store_media_growth(arg0: string, arg1: Principal, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint, arg6: bigint): Promise<Result_7>;
+    activate_private_name_preparation(arg0: WriterRequest): Promise<Result_2>;
+    assign(arg0: AssignRequest): Promise<Result_3>;
+    assign_domain(arg0: AssignDomainRequest): Promise<Result_4>;
+    assign_new_club_group(arg0: string, arg1: string, arg2: bigint): Promise<Result_5>;
+    begin_domain_migration(arg0: string, arg1: string, arg2: Principal, arg3: bigint): Promise<Result_6>;
+    begin_migration(arg0: string, arg1: Principal, arg2: bigint): Promise<Result_7>;
+    commit_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result_4>;
+    commit_migration(arg0: string, arg1: bigint): Promise<Result_3>;
+    configure_group_media_growth(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint): Promise<Result_2>;
+    configure_store_media_growth(arg0: string, arg1: Principal, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint, arg6: bigint): Promise<Result_2>;
     cycles_balance(): Promise<bigint>;
+    finish_private_name_preparation(arg0: WriterRequest): Promise<Result_2>;
+    freeze_private_name_preparation(arg0: WriterRequest): Promise<Result_2>;
     get_domain_migration(arg0: string, arg1: string): Promise<Result_8>;
     get_domain_route(arg0: string, arg1: string): Promise<Result_9>;
     get_group_assignment(arg0: string): Promise<Result_10>;
@@ -439,17 +442,18 @@ export interface shard_routerInterface {
     list_routes(arg0: string | null, arg1: number): Promise<Result_14>;
     memory_stats(): Promise<MemoryStats>;
     open_owner_test_group(arg0: OwnerOpeningApproval): Promise<Result_15>;
-    open_private_name_writer_window(arg0: WriterRequest): Promise<Result_7>;
-    place_my_new_club(arg0: string, arg1: string): Promise<Result_4>;
+    open_private_name_writer_window(arg0: WriterRequest): Promise<Result_2>;
+    place_my_new_club(arg0: string, arg1: string): Promise<Result_5>;
     read_group_opening_configuration(): Promise<Result_16>;
     read_group_registry(arg0: string): Promise<Result_17>;
     read_group_registry_page(arg0: string, arg1: bigint | null, arg2: string | null, arg3: number): Promise<Result_18>;
-    read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_4>;
+    read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_5>;
     read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_19>;
-    read_my_new_club_placement(arg0: string, arg1: string, arg2: bigint): Promise<Result_4>;
+    read_my_new_club_placement(arg0: string, arg1: string, arg2: bigint): Promise<Result_5>;
     read_my_owner_test_opening(arg0: string): Promise<Result_20>;
     read_new_club_creation_authorized(arg0: Principal, arg1: string, arg2: string, arg3: string): Promise<Result_21>;
     read_owner_test_deletion_required(arg0: string): Promise<Result_21>;
+    read_private_name_preparation(arg0: WriterRequest): Promise<Result_22>;
     read_private_name_writer_window(arg0: WriterRequest): Promise<Result_22>;
     read_public_group_targets(arg0: string, arg1: bigint | null, arg2: string | null, arg3: number): Promise<Result_23>;
     read_routing_approval(arg0: string): Promise<Result_24>;
@@ -457,11 +461,11 @@ export interface shard_routerInterface {
     record_routing_approval(arg0: RoutingApproval, arg1: bigint): Promise<Result_25>;
     register_group(arg0: ShardGroup, arg1: bigint): Promise<Result>;
     register_group_placement(arg0: GroupPlacement, arg1: bigint): Promise<Result>;
-    release_deletion_lock(arg0: string, arg1: bigint): Promise<Result_7>;
+    release_deletion_lock(arg0: string, arg1: bigint): Promise<Result_2>;
     reserve_group_media_growth(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<Result>;
-    seal_private_name_writer_window(arg0: WriterRequest): Promise<Result_7>;
-    set_deletion_authority(arg0: Principal): Promise<Result_7>;
-    set_website_default_club_domain(arg0: Principal): Promise<Result_7>;
+    seal_private_name_writer_window(arg0: WriterRequest): Promise<Result_2>;
+    set_deletion_authority(arg0: Principal): Promise<Result_2>;
+    set_website_default_club_domain(arg0: Principal): Promise<Result_2>;
     stop_group_new_placements(arg0: string, arg1: string, arg2: bigint): Promise<Result>;
     stop_owner_test_group(arg0: string, arg1: bigint): Promise<Result_15>;
     version(): Promise<bigint>;
@@ -481,45 +485,57 @@ export class Shard_router implements shard_routerInterface {
         const result = await this.actor.acquire_deletion_lock(arg0, arg1);
         return from_candid_Result_1_n3(result);
     }
-    async assign(arg0: AssignRequest): Promise<Result_2> {
-        const result = await this.actor.assign(arg0);
+    async activate_private_name_preparation(arg0: WriterRequest): Promise<Result_2> {
+        const result = await this.actor.activate_private_name_preparation(arg0);
         return from_candid_Result_2_n5(result);
     }
-    async assign_domain(arg0: AssignDomainRequest): Promise<Result_3> {
-        const result = await this.actor.assign_domain(arg0);
+    async assign(arg0: AssignRequest): Promise<Result_3> {
+        const result = await this.actor.assign(arg0);
         return from_candid_Result_3_n7(result);
     }
-    async assign_new_club_group(arg0: string, arg1: string, arg2: bigint): Promise<Result_4> {
-        const result = await this.actor.assign_new_club_group(arg0, arg1, arg2);
+    async assign_domain(arg0: AssignDomainRequest): Promise<Result_4> {
+        const result = await this.actor.assign_domain(arg0);
         return from_candid_Result_4_n9(result);
     }
-    async begin_domain_migration(arg0: string, arg1: string, arg2: Principal, arg3: bigint): Promise<Result_5> {
-        const result = await this.actor.begin_domain_migration(arg0, arg1, arg2, arg3);
+    async assign_new_club_group(arg0: string, arg1: string, arg2: bigint): Promise<Result_5> {
+        const result = await this.actor.assign_new_club_group(arg0, arg1, arg2);
         return from_candid_Result_5_n11(result);
     }
-    async begin_migration(arg0: string, arg1: Principal, arg2: bigint): Promise<Result_6> {
-        const result = await this.actor.begin_migration(arg0, arg1, arg2);
+    async begin_domain_migration(arg0: string, arg1: string, arg2: Principal, arg3: bigint): Promise<Result_6> {
+        const result = await this.actor.begin_domain_migration(arg0, arg1, arg2, arg3);
         return from_candid_Result_6_n13(result);
     }
-    async commit_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result_3> {
+    async begin_migration(arg0: string, arg1: Principal, arg2: bigint): Promise<Result_7> {
+        const result = await this.actor.begin_migration(arg0, arg1, arg2);
+        return from_candid_Result_7_n15(result);
+    }
+    async commit_domain_migration(arg0: string, arg1: string, arg2: bigint): Promise<Result_4> {
         const result = await this.actor.commit_domain_migration(arg0, arg1, arg2);
+        return from_candid_Result_4_n9(result);
+    }
+    async commit_migration(arg0: string, arg1: bigint): Promise<Result_3> {
+        const result = await this.actor.commit_migration(arg0, arg1);
         return from_candid_Result_3_n7(result);
     }
-    async commit_migration(arg0: string, arg1: bigint): Promise<Result_2> {
-        const result = await this.actor.commit_migration(arg0, arg1);
+    async configure_group_media_growth(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint): Promise<Result_2> {
+        const result = await this.actor.configure_group_media_growth(arg0, arg1, arg2, arg3, arg4, arg5);
         return from_candid_Result_2_n5(result);
     }
-    async configure_group_media_growth(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint): Promise<Result_7> {
-        const result = await this.actor.configure_group_media_growth(arg0, arg1, arg2, arg3, arg4, arg5);
-        return from_candid_Result_7_n15(result);
-    }
-    async configure_store_media_growth(arg0: string, arg1: Principal, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint, arg6: bigint): Promise<Result_7> {
+    async configure_store_media_growth(arg0: string, arg1: Principal, arg2: bigint, arg3: bigint, arg4: Array<[string, bigint]>, arg5: bigint, arg6: bigint): Promise<Result_2> {
         const result = await this.actor.configure_store_media_growth(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
-        return from_candid_Result_7_n15(result);
+        return from_candid_Result_2_n5(result);
     }
     async cycles_balance(): Promise<bigint> {
         const result = await this.actor.cycles_balance();
         return result;
+    }
+    async finish_private_name_preparation(arg0: WriterRequest): Promise<Result_2> {
+        const result = await this.actor.finish_private_name_preparation(arg0);
+        return from_candid_Result_2_n5(result);
+    }
+    async freeze_private_name_preparation(arg0: WriterRequest): Promise<Result_2> {
+        const result = await this.actor.freeze_private_name_preparation(arg0);
+        return from_candid_Result_2_n5(result);
     }
     async get_domain_migration(arg0: string, arg1: string): Promise<Result_8> {
         const result = await this.actor.get_domain_migration(arg0, arg1);
@@ -561,13 +577,13 @@ export class Shard_router implements shard_routerInterface {
         const result = await this.actor.open_owner_test_group(to_candid_OwnerOpeningApproval_n44(arg0));
         return from_candid_Result_15_n48(result);
     }
-    async open_private_name_writer_window(arg0: WriterRequest): Promise<Result_7> {
+    async open_private_name_writer_window(arg0: WriterRequest): Promise<Result_2> {
         const result = await this.actor.open_private_name_writer_window(arg0);
-        return from_candid_Result_7_n15(result);
+        return from_candid_Result_2_n5(result);
     }
-    async place_my_new_club(arg0: string, arg1: string): Promise<Result_4> {
+    async place_my_new_club(arg0: string, arg1: string): Promise<Result_5> {
         const result = await this.actor.place_my_new_club(arg0, arg1);
-        return from_candid_Result_4_n9(result);
+        return from_candid_Result_5_n11(result);
     }
     async read_group_opening_configuration(): Promise<Result_16> {
         const result = await this.actor.read_group_opening_configuration();
@@ -581,17 +597,17 @@ export class Shard_router implements shard_routerInterface {
         const result = await this.actor.read_group_registry_page(arg0, to_candid_opt_n60(arg1), to_candid_opt_n38(arg2), arg3);
         return from_candid_Result_18_n61(result);
     }
-    async read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_4> {
+    async read_hosted_club_assignment(arg0: string, arg1: string, arg2: bigint): Promise<Result_5> {
         const result = await this.actor.read_hosted_club_assignment(arg0, arg1, arg2);
-        return from_candid_Result_4_n9(result);
+        return from_candid_Result_5_n11(result);
     }
     async read_my_group_assignments(arg0: Array<string>, arg1: string, arg2: bigint): Promise<Result_19> {
         const result = await this.actor.read_my_group_assignments(arg0, arg1, arg2);
         return from_candid_Result_19_n66(result);
     }
-    async read_my_new_club_placement(arg0: string, arg1: string, arg2: bigint): Promise<Result_4> {
+    async read_my_new_club_placement(arg0: string, arg1: string, arg2: bigint): Promise<Result_5> {
         const result = await this.actor.read_my_new_club_placement(arg0, arg1, arg2);
-        return from_candid_Result_4_n9(result);
+        return from_candid_Result_5_n11(result);
     }
     async read_my_owner_test_opening(arg0: string): Promise<Result_20> {
         const result = await this.actor.read_my_owner_test_opening(arg0);
@@ -604,6 +620,10 @@ export class Shard_router implements shard_routerInterface {
     async read_owner_test_deletion_required(arg0: string): Promise<Result_21> {
         const result = await this.actor.read_owner_test_deletion_required(arg0);
         return from_candid_Result_21_n71(result);
+    }
+    async read_private_name_preparation(arg0: WriterRequest): Promise<Result_22> {
+        const result = await this.actor.read_private_name_preparation(arg0);
+        return from_candid_Result_22_n73(result);
     }
     async read_private_name_writer_window(arg0: WriterRequest): Promise<Result_22> {
         const result = await this.actor.read_private_name_writer_window(arg0);
@@ -633,25 +653,25 @@ export class Shard_router implements shard_routerInterface {
         const result = await this.actor.register_group_placement(arg0, arg1);
         return from_candid_Result_n1(result);
     }
-    async release_deletion_lock(arg0: string, arg1: bigint): Promise<Result_7> {
+    async release_deletion_lock(arg0: string, arg1: bigint): Promise<Result_2> {
         const result = await this.actor.release_deletion_lock(arg0, arg1);
-        return from_candid_Result_7_n15(result);
+        return from_candid_Result_2_n5(result);
     }
     async reserve_group_media_growth(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<Result> {
         const result = await this.actor.reserve_group_media_growth(arg0, arg1, arg2, arg3);
         return from_candid_Result_n1(result);
     }
-    async seal_private_name_writer_window(arg0: WriterRequest): Promise<Result_7> {
+    async seal_private_name_writer_window(arg0: WriterRequest): Promise<Result_2> {
         const result = await this.actor.seal_private_name_writer_window(arg0);
-        return from_candid_Result_7_n15(result);
+        return from_candid_Result_2_n5(result);
     }
-    async set_deletion_authority(arg0: Principal): Promise<Result_7> {
+    async set_deletion_authority(arg0: Principal): Promise<Result_2> {
         const result = await this.actor.set_deletion_authority(arg0);
-        return from_candid_Result_7_n15(result);
+        return from_candid_Result_2_n5(result);
     }
-    async set_website_default_club_domain(arg0: Principal): Promise<Result_7> {
+    async set_website_default_club_domain(arg0: Principal): Promise<Result_2> {
         const result = await this.actor.set_website_default_club_domain(arg0);
-        return from_candid_Result_7_n15(result);
+        return from_candid_Result_2_n5(result);
     }
     async stop_group_new_placements(arg0: string, arg1: string, arg2: bigint): Promise<Result> {
         const result = await this.actor.stop_group_new_placements(arg0, arg1, arg2);
@@ -943,6 +963,25 @@ function from_candid_record_n78(value: {
     };
 }
 function from_candid_variant_n10(value: {
+    Ok: _AssignDomainResult;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: AssignDomainResult;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n12(value: {
     Ok: _GroupAssignment;
 } | {
     Err: string;
@@ -961,7 +1000,7 @@ function from_candid_variant_n10(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n12(value: {
+function from_candid_variant_n14(value: {
     Ok: _DomainMigration;
 } | {
     Err: string;
@@ -980,32 +1019,13 @@ function from_candid_variant_n12(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n14(value: {
+function from_candid_variant_n16(value: {
     Ok: _Migration;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
     Ok: Migration;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n16(value: {
-    Ok: null;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: null;
 } | {
     __kind__: "Err";
     Err: string;
@@ -1247,12 +1267,12 @@ function from_candid_variant_n57(value: {
     } : value;
 }
 function from_candid_variant_n6(value: {
-    Ok: _AssignResult;
+    Ok: null;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: AssignResult;
+    Ok: null;
 } | {
     __kind__: "Err";
     Err: string;
@@ -1380,12 +1400,12 @@ function from_candid_variant_n76(value: {
     } : value;
 }
 function from_candid_variant_n8(value: {
-    Ok: _AssignDomainResult;
+    Ok: _AssignResult;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: AssignDomainResult;
+    Ok: AssignResult;
 } | {
     __kind__: "Err";
     Err: string;

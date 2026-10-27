@@ -14,6 +14,14 @@ const PRIVATE_NAME_WRITER_MEMORY: u8 = 30;
 mod private_name_writer_window;
 use private_name_writer_window::{WriterRequest, WriterReceipt};
 #[ic_cdk::update]
+fn freeze_private_name_preparation(request: WriterRequest) -> Result<(), String> { private_name_writer_window::freeze(request) }
+#[ic_cdk::update]
+fn read_private_name_preparation(request: WriterRequest) -> Result<WriterReceipt, String> { private_name_writer_window::preparation_receipt(request) }
+#[ic_cdk::update]
+fn finish_private_name_preparation(request: WriterRequest) -> Result<(), String> { private_name_writer_window::finish_preparation(request) }
+#[ic_cdk::update]
+fn activate_private_name_preparation(request: WriterRequest) -> Result<(), String> { private_name_writer_window::activate_preparation(request) }
+#[ic_cdk::update]
 fn open_private_name_writer_window(request: WriterRequest) -> Result<(), String> { private_name_writer_window::open(request) }
 #[ic_cdk::update]
 fn seal_private_name_writer_window(request: WriterRequest) -> Result<(), String> { private_name_writer_window::seal(request) }
@@ -48,6 +56,7 @@ use private_name_conversion_approval::{SignedApproval,ApprovalReceipt};
 mod private_name_coordination;
 mod private_name_write_coordinator;
 use private_name_write_coordinator::WriteWindow;
+use group_inventory::RemovalInventory;
 use private_name_coordination::Intent;
 use private_name_conversion::{ConversionPage, ConversionProfileRow};
 mod private_profile_reference;

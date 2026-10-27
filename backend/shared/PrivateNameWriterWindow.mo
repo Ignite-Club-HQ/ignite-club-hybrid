@@ -8,6 +8,7 @@ import Release "PrivateNameReleaseFence";
 // original PII sink is fenced, and may reopen PII only after every writer seals.
 module {
   public func exclusive(request : Release.Request) : Bool { Text.startsWith(request.operation_id, #text "names:club-name-conversion-") };
+  public func preparation(request : Release.Request) : Bool { Text.startsWith(request.operation_id, #text "names:club-name-preparation-") };
   public type Intent = { request : Release.Request; closing : Bool; sealed : Bool; active : Nat };
   public type Receipt = { request : Release.Request; receiver : Principal; closing : Bool; sealed : Bool; active : Nat };
   public class Gate(enabled : Bool, authority : ?Principal, intents : Map.Map<Text, Intent>, capacity : Nat) {
@@ -16,8 +17,32 @@ module {
       for ((_, intent) in intents.entries()) { if (not intent.sealed) return ?intent };
       null
     };
+    func preparationPending() : Bool { for ((_, i) in intents.entries()) { if (preparation(i.request) and not i.sealed) return true }; false };
+    public func freeze(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
+      if (not authorized(caller)) return #Err("Configured rehearsal identity required");
+      if (not preparation(request) or request.operation_id.size() > 128 or request.generation == 0 or request.inventory_digest.size() != 32) return #Err("Exact preparation request required");
+      switch (intents.get(request.operation_id)) { case (?i) { if (i.request != request or i.closing or i.sealed) return #Err("Immutable preparation conflict"); return #Ok }; case null {} };
+      if (preparationPending() or intents.size() >= capacity) return #Err("Preparation remains unresolved or capacity reached");
+      for ((_, i) in intents.entries()) { if (not i.sealed and exclusive(i.request)) return #Err("Conversion remains unresolved") };
+      for ((id, i) in intents.entries()) { if (not i.sealed) intents.add(id, { i with closing = true; sealed = i.active == 0 }) };
+      intents.add(request.operation_id, { request; closing = false; sealed = false; active = 0 }); #Ok
+    };
+    public func preparationReceipt(caller : Principal, request : Release.Request, receiver : Principal) : { #Ok : Receipt; #Err : Text } {
+      if (not authorized(caller)) return #Err("Configured rehearsal identity required");
+      switch (intents.get(request.operation_id)) {
+        case null #Err("Exact preparation receipt required");
+        case (?i) {
+          if (not preparation(request) or i.request != request) return #Err("Exact preparation receipt required");
+          var active = i.active;
+          for ((_, prior) in intents.entries()) { if (prior.request != request and not prior.sealed) active += prior.active };
+          #Ok({ request; receiver; closing = i.closing; sealed = i.sealed; active })
+        }
+      }
+    };
     public func open(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
       if (not authorized(caller)) return #Err("Configured rehearsal identity required");
+      if (preparation(request)) return #Err("Use preparation admission");
+      if (preparationPending()) return #Err("Preparation lock remains held");
       if (request.operation_id == "" or request.operation_id.size() > 128 or request.generation == 0 or request.inventory_digest.size() != 32) return #Err("Invalid private-name writer request");
       switch (intents.get(request.operation_id)) {
         case (?prior) {
@@ -32,8 +57,19 @@ module {
       intents.add(request.operation_id, { request; closing = false; sealed = false; active = 0 });
       #Ok
     };
+    public func finishPreparation(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
+      if (intents.get("approved:" # request.operation_id) == null) return #Err("Signed preparation activation required");
+      switch (preparationReceipt(caller, request, caller)) { case (#Err(e)) return #Err(e); case (#Ok(r)) { if (r.active != 0) return #Err("Preparation work remains unresolved") } };
+      switch (intents.get(request.operation_id)) { case null #Err("Exact preparation receipt required"); case (?i) { intents.add(request.operation_id, { i with closing = true; sealed = true }); #Ok } }
+    };
+    public func activatePreparation(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
+      switch (preparationReceipt(caller, request, caller)) { case (#Err(e)) return #Err(e); case (#Ok(r)) { if (r.active != 0 or r.closing or r.sealed) return #Err("Exact drained preparation required") } };
+      if (intents.get("approved:" # request.operation_id) == null and intents.size() >= capacity) return #Err("Preparation activation capacity reached");
+      intents.add("approved:" # request.operation_id, { request; active = 0; closing = true; sealed = true }); #Ok
+    };
     public func enter() : { #Ok : ?Release.Request; #Err : Text } {
       if (not enabled) return #Ok(null);
+      if (preparationPending()) return #Err("Edits locked for private-name preparation");
       switch (current()) {
         case (?intent) {
           if (exclusive(intent.request)) return #Err("Edits locked for private-name conversion");
@@ -47,8 +83,9 @@ module {
     // Only the configured coordinator can submit exact approved conversion
     // mutations. Ordinary governor/owner methods never receive this lease.
     public func enterConversion(caller : Principal, request : Release.Request) : { #Ok : ?Release.Request; #Err : Text } {
-      if (not authorized(caller) or not exclusive(request)) return #Err("Approved conversion coordinator required");
-      switch (current()) {
+      if (not authorized(caller) or not (exclusive(request) or preparation(request))) return #Err("Approved conversion coordinator required");
+      if (preparation(request) and intents.get("approved:" # request.operation_id) == null) return #Err("Signed preparation activation required");
+      switch (if (preparation(request)) intents.get(request.operation_id) else current()) {
         case (?intent) {
           if (intent.request != request or intent.closing or intent.active >= 4096) return #Err("Exact open conversion window required");
           intents.add(request.operation_id, { intent with active = intent.active + 1 });
@@ -75,6 +112,7 @@ module {
     };
     public func seal(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
       if (not authorized(caller)) return #Err("Configured rehearsal identity required");
+      if (preparation(request)) return #Err("Preparation releases only through approved completion");
       switch (intents.get(request.operation_id)) {
         case null #Err("Exact private-name writer intent required");
         case (?intent) {

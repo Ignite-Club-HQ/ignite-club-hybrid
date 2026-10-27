@@ -327,6 +327,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'activate_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'add_role_grant' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
@@ -654,6 +659,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'finish_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'free_usage_counters' : ActorMethod<
     [string],
     {
@@ -669,6 +679,11 @@ export interface Main {
   'freeze_club' : ActorMethod<
     [string, bigint],
     { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'freeze_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'getApiDoc' : ActorMethod<[], string>,
@@ -1641,6 +1656,11 @@ export interface Main {
           'acl_revision' : bigint,
         }
       } |
+      { 'Err' : string }
+  >,
+  'read_private_name_preparation' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt__1 } |
       { 'Err' : string }
   >,
   'read_private_name_writer_window' : ActorMethod<

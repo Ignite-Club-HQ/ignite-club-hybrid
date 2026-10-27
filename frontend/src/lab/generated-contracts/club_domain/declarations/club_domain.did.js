@@ -71,6 +71,11 @@ export const idlFactory = ({ IDL }) => {
     'identity' : IDL.Principal,
     'router' : IDL.Principal,
   });
+  const Request = IDL.Record({
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'generation' : IDL.Nat64,
+    'operation_id' : IDL.Text,
+  });
   const SeasonTeamAssignment = IDL.Record({
     'season_id' : IDL.Text,
     'added_at_ms' : IDL.Nat64,
@@ -602,11 +607,6 @@ export const idlFactory = ({ IDL }) => {
     'link' : IDL.Opt(Link),
     'revision' : IDL.Nat64,
   });
-  const Request = IDL.Record({
-    'inventory_digest' : IDL.Vec(IDL.Nat8),
-    'generation' : IDL.Nat64,
-    'operation_id' : IDL.Text,
-  });
   const Request__1 = IDL.Record({
     'account_id' : IDL.Text,
     'inventory_digest' : IDL.Vec(IDL.Nat8),
@@ -747,6 +747,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'activate_media_retained_quota' : IDL.Func(
         [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'activate_private_name_preparation' : IDL.Func(
+        [Request],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -1136,6 +1141,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'finish_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'free_usage_counters' : IDL.Func(
         [IDL.Text],
         [
@@ -1154,6 +1164,11 @@ export const idlFactory = ({ IDL }) => {
     'freeze_club' : IDL.Func(
         [IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
+        [],
+      ),
+    'freeze_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'getApiDoc' : IDL.Func([], [IDL.Text], ['query']),
@@ -2371,6 +2386,11 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        [],
+      ),
+    'read_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
         [],
       ),
     'read_private_name_writer_window' : IDL.Func(

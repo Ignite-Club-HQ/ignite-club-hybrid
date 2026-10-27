@@ -443,15 +443,15 @@ export type Result_32 = { 'Ok' : AccountInventoryPage } |
   { 'Err' : string };
 export type Result_33 = { 'Ok' : [] | [ApprovalReceipt] } |
   { 'Err' : string };
-export type Result_34 = { 'Ok' : Uint8Array } |
+export type Result_34 = { 'Ok' : WriterReceipt } |
   { 'Err' : string };
-export type Result_35 = { 'Ok' : WriterReceipt } |
+export type Result_35 = { 'Ok' : RemovalInventory } |
   { 'Err' : string };
-export type Result_36 = { 'Ok' : RemovalHistoryManifest } |
+export type Result_36 = { 'Ok' : Uint8Array } |
   { 'Err' : string };
-export type Result_37 = { 'Ok' : RemovalHistoryPage } |
+export type Result_37 = { 'Ok' : RemovalHistoryManifest } |
   { 'Err' : string };
-export type Result_38 = { 'Ok' : RemovalInventory } |
+export type Result_38 = { 'Ok' : RemovalHistoryPage } |
   { 'Err' : string };
 export type Result_39 = { 'Ok' : DirectoryCleanup } |
   { 'Err' : string };
@@ -583,7 +583,9 @@ export type WritePhase = { 'Opening' : null } |
   { 'Releasing' : null } |
   { 'Closing' : null } |
   { 'Fencing' : null } |
-  { 'Writing' : null };
+  { 'Writing' : null } |
+  { 'Preparing' : null } |
+  { 'AwaitingApproval' : null };
 export interface WriteWindow {
   'opened' : Array<WriterReceipt>,
   'request' : Request_1,
@@ -602,6 +604,11 @@ export interface WriterReceipt {
   'closing' : boolean,
   'receiver' : Principal,
 }
+export interface WriterRequest {
+  'inventory_digest' : Uint8Array,
+  'generation' : bigint,
+  'operation_id' : string,
+}
 export interface _SERVICE {
   'accept_link' : ActorMethod<[bigint], Result>,
   'access' : ActorMethod<
@@ -612,6 +619,7 @@ export interface _SERVICE {
     [[] | [string], [] | [string], [] | [string], [] | [string]],
     Result_1
   >,
+  'activate_private_name_preparation' : ActorMethod<[WriterRequest], Result_2>,
   /**
    * Governor-only: grants an additional verifier principal permitted to call
    * `set_entitlement` directly (e.g. a trusted server-side receipt verifier
@@ -633,6 +641,10 @@ export interface _SERVICE {
    * requests/publications. Governor-only until live worker acceptance passes.
    */
   'advance_membership_directory_source' : ActorMethod<[string], Result_5>,
+  'advance_private_name_preparation' : ActorMethod<
+    [string, Principal],
+    Result_6
+  >,
   'advance_private_name_write_window' : ActorMethod<
     [string, Principal],
     Result_6
@@ -654,6 +666,15 @@ export interface _SERVICE {
   'authorize_group_admission' : ActorMethod<[string, Binding], Result_2>,
   'begin_account_removal' : ActorMethod<[string, bigint], Result_7>,
   'begin_link' : ActorMethod<[Principal], Result_8>,
+  /**
+   * The candidate topology is not account/club data evidence. Close local
+   * admission synchronously, retain the operation, then freeze every candidate
+   * writer before collecting the verified topology under those locks.
+   */
+  'begin_private_name_preparation' : ActorMethod<
+    [string, bigint, RemovalInventory],
+    Result_6
+  >,
   'begin_private_name_suspension' : ActorMethod<
     [string, string, bigint],
     Result_9
@@ -702,6 +723,8 @@ export interface _SERVICE {
   'enable_membership_directory' : ActorMethod<[string], Result_12>,
   'erase_account' : ActorMethod<[string], Result_2>,
   'export_state' : ActorMethod<[], Result_15>,
+  'finish_private_name_preparation' : ActorMethod<[Request_1], Result_2>,
+  'freeze_private_name_preparation' : ActorMethod<[Request_1], Result_2>,
   'get_external_bindings' : ActorMethod<[string], Result_16>,
   /**
    * The caller's own entitlement records (active and expired).
@@ -849,10 +872,12 @@ export interface _SERVICE {
     Result_32
   >,
   'read_private_name_conversion_approval' : ActorMethod<[string], Result_33>,
-  'read_private_name_source_digest' : ActorMethod<[string], Result_34>,
+  'read_private_name_preparation' : ActorMethod<[Request_1], Result_34>,
+  'read_private_name_preparation_topology' : ActorMethod<[], Result_35>,
+  'read_private_name_source_digest' : ActorMethod<[string], Result_36>,
   'read_private_name_suspension' : ActorMethod<[string], Result_9>,
   'read_private_name_write_window' : ActorMethod<[string], Result_6>,
-  'read_private_name_writer_window' : ActorMethod<[Request_1], Result_35>,
+  'read_private_name_writer_window' : ActorMethod<[Request_1], Result_34>,
   /**
    * Service-delegated name permission only. Registry placement authenticates
    * both the ORIGINAL PII caller and owning audience service; location alone
@@ -866,12 +891,12 @@ export interface _SERVICE {
    * Local-only consensus recovery evidence. Reader lists/club receipts are NOT
    * a complete deployment inventory or an in-flight drain acknowledgement.
    */
-  'read_removal_history_manifest' : ActorMethod<[], Result_36>,
+  'read_removal_history_manifest' : ActorMethod<[], Result_37>,
   'read_removal_history_page' : ActorMethod<
     [bigint, RemovalHistoryCursor, number],
-    Result_37
+    Result_38
   >,
-  'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_38>,
+  'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_35>,
   /**
    * Subject-bound consensus ownership read; never implicitly registers an account.
    */
@@ -1009,6 +1034,7 @@ export interface _SERVICE {
    * data, release registry locks, restore histories or activate a group.
    */
   'verify_account_removal_seals' : ActorMethod<[string], Result_44>,
+  'verify_private_name_preparation' : ActorMethod<[string], Result_6>,
   'whoami' : ActorMethod<[], Result>,
   'write_approved_private_name' : ActorMethod<
     [string, string, [] | [string]],

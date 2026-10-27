@@ -150,7 +150,7 @@ export type Result_18 = { 'Ok' : GroupRegistryPage } |
   { 'Err' : string };
 export type Result_19 = { 'Ok' : Array<GroupAssignment> } |
   { 'Err' : string };
-export type Result_2 = { 'Ok' : AssignResult } |
+export type Result_2 = { 'Ok' : null } |
   { 'Err' : string };
 export type Result_20 = { 'Ok' : [] | [OwnerOpening] } |
   { 'Err' : string };
@@ -164,15 +164,15 @@ export type Result_24 = { 'Ok' : [] | [RoutingApproval] } |
   { 'Err' : string };
 export type Result_25 = { 'Ok' : RoutingApproval } |
   { 'Err' : string };
-export type Result_3 = { 'Ok' : AssignDomainResult } |
+export type Result_3 = { 'Ok' : AssignResult } |
   { 'Err' : string };
-export type Result_4 = { 'Ok' : GroupAssignment } |
+export type Result_4 = { 'Ok' : AssignDomainResult } |
   { 'Err' : string };
-export type Result_5 = { 'Ok' : DomainMigration } |
+export type Result_5 = { 'Ok' : GroupAssignment } |
   { 'Err' : string };
-export type Result_6 = { 'Ok' : Migration } |
+export type Result_6 = { 'Ok' : DomainMigration } |
   { 'Err' : string };
-export type Result_7 = { 'Ok' : null } |
+export type Result_7 = { 'Ok' : Migration } |
   { 'Err' : string };
 export type Result_8 = { 'Ok' : [] | [DomainMigration] } |
   { 'Err' : string };
@@ -237,19 +237,20 @@ export interface _SERVICE {
   'abort_domain_migration' : ActorMethod<[string, string, bigint], Result>,
   'abort_migration' : ActorMethod<[string, bigint], Result>,
   'acquire_deletion_lock' : ActorMethod<[string, bigint], Result_1>,
-  'assign' : ActorMethod<[AssignRequest], Result_2>,
-  'assign_domain' : ActorMethod<[AssignDomainRequest], Result_3>,
-  'assign_new_club_group' : ActorMethod<[string, string, bigint], Result_4>,
+  'activate_private_name_preparation' : ActorMethod<[WriterRequest], Result_2>,
+  'assign' : ActorMethod<[AssignRequest], Result_3>,
+  'assign_domain' : ActorMethod<[AssignDomainRequest], Result_4>,
+  'assign_new_club_group' : ActorMethod<[string, string, bigint], Result_5>,
   'begin_domain_migration' : ActorMethod<
     [string, string, Principal, bigint],
-    Result_5
+    Result_6
   >,
-  'begin_migration' : ActorMethod<[string, Principal, bigint], Result_6>,
-  'commit_domain_migration' : ActorMethod<[string, string, bigint], Result_3>,
-  'commit_migration' : ActorMethod<[string, bigint], Result_2>,
+  'begin_migration' : ActorMethod<[string, Principal, bigint], Result_7>,
+  'commit_domain_migration' : ActorMethod<[string, string, bigint], Result_4>,
+  'commit_migration' : ActorMethod<[string, bigint], Result_3>,
   'configure_group_media_growth' : ActorMethod<
     [string, bigint, bigint, bigint, Array<[string, bigint]>, bigint],
-    Result_7
+    Result_2
   >,
   'configure_store_media_growth' : ActorMethod<
     [
@@ -261,12 +262,14 @@ export interface _SERVICE {
       bigint,
       bigint,
     ],
-    Result_7
+    Result_2
   >,
   /**
    * Public: remaining cycles (shown in admin settings).
    */
   'cycles_balance' : ActorMethod<[], bigint>,
+  'finish_private_name_preparation' : ActorMethod<[WriterRequest], Result_2>,
+  'freeze_private_name_preparation' : ActorMethod<[WriterRequest], Result_2>,
   'get_domain_migration' : ActorMethod<[string, string], Result_8>,
   'get_domain_route' : ActorMethod<[string, string], Result_9>,
   'get_group_assignment' : ActorMethod<[string], Result_10>,
@@ -287,12 +290,12 @@ export interface _SERVICE {
    * global admission, membership, recovery release or general accepting status.
    */
   'open_owner_test_group' : ActorMethod<[OwnerOpeningApproval], Result_15>,
-  'open_private_name_writer_window' : ActorMethod<[WriterRequest], Result_7>,
+  'open_private_name_writer_window' : ActorMethod<[WriterRequest], Result_2>,
   /**
    * Any signed-in user creating a club asks for its group here; the router picks
    * the healthiest accepting group. Capped per principal; retries are free.
    */
-  'place_my_new_club' : ActorMethod<[string, string], Result_4>,
+  'place_my_new_club' : ActorMethod<[string, string], Result_5>,
   'read_group_opening_configuration' : ActorMethod<[], Result_16>,
   'read_group_registry' : ActorMethod<[string], Result_17>,
   'read_group_registry_page' : ActorMethod<
@@ -301,7 +304,7 @@ export interface _SERVICE {
   >,
   'read_hosted_club_assignment' : ActorMethod<
     [string, string, bigint],
-    Result_4
+    Result_5
   >,
   'read_my_group_assignments' : ActorMethod<
     [Array<string>, string, bigint],
@@ -312,7 +315,7 @@ export interface _SERVICE {
    */
   'read_my_new_club_placement' : ActorMethod<
     [string, string, bigint],
-    Result_4
+    Result_5
   >,
   /**
    * Caller-scoped consensus discovery, including after stopping new placements.
@@ -331,6 +334,7 @@ export interface _SERVICE {
    * the complete group inventory, even when they have no test-club membership.
    */
   'read_owner_test_deletion_required' : ActorMethod<[string], Result_21>,
+  'read_private_name_preparation' : ActorMethod<[WriterRequest], Result_22>,
   'read_private_name_writer_window' : ActorMethod<[WriterRequest], Result_22>,
   /**
    * Anonymous infrastructure discovery only: never memberships, placements,
@@ -352,17 +356,17 @@ export interface _SERVICE {
   'record_routing_approval' : ActorMethod<[RoutingApproval, bigint], Result_25>,
   'register_group' : ActorMethod<[ShardGroup, bigint], Result>,
   'register_group_placement' : ActorMethod<[GroupPlacement, bigint], Result>,
-  'release_deletion_lock' : ActorMethod<[string, bigint], Result_7>,
+  'release_deletion_lock' : ActorMethod<[string, bigint], Result_2>,
   'reserve_group_media_growth' : ActorMethod<
     [string, string, string, bigint],
     Result
   >,
-  'seal_private_name_writer_window' : ActorMethod<[WriterRequest], Result_7>,
-  'set_deletion_authority' : ActorMethod<[Principal], Result_7>,
+  'seal_private_name_writer_window' : ActorMethod<[WriterRequest], Result_2>,
+  'set_deletion_authority' : ActorMethod<[Principal], Result_2>,
   /**
    * Governor-only: club_domain serving clubs that have no group assignment.
    */
-  'set_website_default_club_domain' : ActorMethod<[Principal], Result_7>,
+  'set_website_default_club_domain' : ActorMethod<[Principal], Result_2>,
   /**
    * Governor-only stop for general and trial admission. Never removes assignments
    * or changes membership, service endpoints, media, or opening authorization.
