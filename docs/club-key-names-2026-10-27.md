@@ -2,6 +2,14 @@
 
 Local implementation only. No production conversion, rollout, permissions or email policy changed.
 
+## Essential-only scope — 27 October 04:44 UTC
+
+No new approval service is required by the narrowed scope. A dormant minimal delivery function can use the existing identity canister's synchronous immutable signed-approval admission and consensus receipt as the accepted-approval authority, subject to independently verified matching module semantics. Reconcile is read-only, exact retained receipts avoid submission, conflicting receipts refuse, and failed calls never retry automatically. A later explicit deliver action may submit the identical signature again only while its exact window is Fencing; the backend must make that repeat idempotent. This alternative does not change the old single-attempt helper, conversion-write journals, workflow protections or live runner. Real acceptance is required before selecting it for production.
+
+Edit Profile now connects strict original-name preparation to bounded club-copy refresh in the existing explicitly enabled loopback rehearsal only. Production makes no additional reads or writes. The helper uses existing current role destinations without granting readers, confirms original plaintext, refreshes through the existing create-only exact-original lifecycle receiver and verifies every copy again. Unknown/refused writes stop without retry; changed originals refuse stale refresh. Original replacement/deletion and configured club deletion already invalidate copies. Complete historical authority discovery, other identity/name-save paths and cross-authority erasure are not certified by this connection.
+
+Essential remaining work is complete account/original-authority coverage, safe ordinary maintenance across all converted save paths, real conversion/interruption acceptance, a small signed-in display/timing/cost check, verified existing GitHub/controller protections and separate deployment/conversion approvals. New receipt-service provision and broader generalized infrastructure are deferred, not rollout requirements. Live workflows remain blocked until the essential replacement is verified and explicitly approved.
+
 ## Current continuation — governed delivery and original-name provenance
 
 The dormant governed-delivery composition now binds the receipt stream to the signed preparation operation and requires a newly retained first intent before submitting. An identical intent observed during a competing claim is recovery-only. Existing exact canister approvals are adopted as separate unknown and verified events without submission. Focused tests cover concurrent predecessor races, no-op competing claims, interrupted intent/approval/verified acknowledgements, incomplete storage and changed artifacts. The delivery workflow runs these checks but retains its pre-credential blocker; no real governed store or live transport is provisioned.

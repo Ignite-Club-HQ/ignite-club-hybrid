@@ -289,11 +289,14 @@ export default function EditProfilePage() {
         if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
           throw new Error("Enter a valid email address, or leave it empty.");
         }
-        const [{ getCurrentInternetIdentity }, { saveIcpIdentityProfile }] = await Promise.all([
+        const [{ getCurrentInternetIdentity }, { saveIcpIdentityProfile }, { capturePrivateProfileSession }] = await Promise.all([
           import("@/live/internetIdentityAuth"),
           import("@/live/identityProfile"),
+          import('@/live/privateProfileSession'),
         ]);
+        const saveSessionActive = capturePrivateProfileSession();
         const identity = await getCurrentInternetIdentity();
+        saveSessionActive();
         if (!identity) throw new Error("You need to sign in again.");
         await saveIcpIdentityProfile(identity, user.id, {
           displayName: displayName.trim(),
@@ -303,11 +306,18 @@ export default function EditProfilePage() {
         // Mirror the display name into pii_access_control (pii_id = caller
         // principal text, field_id = "display_name", owner = the user).
         // Strict readback, still no private-reference publication or cutover.
-        const [{ getActiveIcpTarget }, { preparePrivateOwnProfileName }] = await Promise.all([
+        const [{ getActiveIcpTarget }, { preparePrivateOwnProfileName, refreshPrivateOwnClubNames }] = await Promise.all([
           import("@/live/targetRegistry"),
           import("@/live/privateProfileNames"),
         ]);
-        await preparePrivateOwnProfileName({ identity, target: getActiveIcpTarget() }, displayName.trim());
+        const nameContext = { identity, target: getActiveIcpTarget() };
+        await preparePrivateOwnProfileName(nameContext, displayName.trim());
+        saveSessionActive();
+        await refreshPrivateOwnClubNames(nameContext, displayName.trim(), async () => {
+          const { getLiveMyRoleGrants } = await import('@/live/features/membership');
+          const grants = await getLiveMyRoleGrants(nameContext);
+          return grants.flatMap(grant => grant.club ?? []);
+        }, saveSessionActive);
         // Optional contact email (own PII record, upsert semantics). Powers
         // competition welcome emails for existing members in ICP mode.
         // An unavailable initial email read is not permission to erase it.

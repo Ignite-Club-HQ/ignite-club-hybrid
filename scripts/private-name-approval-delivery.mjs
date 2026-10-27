@@ -73,3 +73,40 @@ export async function deliverNameApproval({artifact,binding,action},{readWindow,
   await persistJournal({binding:immutable,phase:'verified'});
   return {operationId,approvalId:binding.approvalId,phase:'verified',submitted:true};
 }
+
+/** Minimal alternative for the existing synchronous immutable approval
+ * endpoint. Its exact-repeat admission is the deduplication authority, not a
+ * second receipt service. Requires independently verified endpoint semantics;
+ * no automatic retry, conversion, window advance or release is performed.
+ * A later explicit deliver may submit identical signed bytes; reconcile never
+ * submits. Conversion's per-write unknown journals remain unchanged. */
+export async function deliverNameApprovalUsingCanisterReceipt(
+  {artifact,binding,action},
+  {readWindow,readApproval,submitApproval,assertTarget,assertImmutableAdmission},
+) {
+  artifact=Buffer.from(artifact);binding={...binding};
+  if(!['deliver','reconcile'].includes(action) || [readWindow,readApproval,submitApproval,assertTarget,assertImmutableAdmission].some(fn=>typeof fn!=='function'))throw Error('Verified immutable approval endpoint required');
+  const {approval,operationId,receipt}=verifyAdmissionArtifact(artifact,binding);
+  if(!hex(binding.targetModule,64)||!hex(binding.artifactCommit,40))throw Error('Pinned approval module and artifact commit required');
+  const target={identityId:binding.identityId,operator:binding.operator,targetModule:binding.targetModule,artifactCommit:binding.artifactCommit};
+  const guard=async()=>{
+    if(await assertTarget({...target})!==true || await assertImmutableAdmission({...target,operationId,receipt:structuredClone(receipt)})!==true)throw Error('Verified immutable approval admission changed');
+  };
+  await guard();
+  const window=await readWindow(operationId);await guard();
+  if(canonical(window?.request)!==canonical(approval.body.request)||!['Fencing','Opening','Writing','Closing','Releasing','Done'].includes(window?.phase))throw Error('Exact existing blocked conversion required');
+  const retained=await readApproval(operationId);await guard();
+  if(retained){
+    if(canonical(retained)!==canonical(receipt))throw Error('Different retained approval; no overwrite');
+    return {operationId,approvalId:binding.approvalId,phase:'verified',submitted:false};
+  }
+  if(action==='reconcile')throw Error('Approval not confirmed; reconciliation never submits');
+  if(window.phase!=='Fencing')throw Error('Approval must arrive before conversion opens');
+  await guard();
+  // No retry/catch loop: an ambiguous response stops this invocation. The
+  // next explicit action reads consensus state before any possible submit.
+  await submitApproval(operationId,approval);await guard();
+  const current=await readApproval(operationId);await guard();
+  if(canonical(current)!==canonical(receipt))throw Error('Approval receipt unresolved; do not advance conversion');
+  return {operationId,approvalId:binding.approvalId,phase:'verified',submitted:true};
+}

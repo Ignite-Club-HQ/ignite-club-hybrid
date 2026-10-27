@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {generateKeyPairSync,sign,createHash} from 'node:crypto';
-import {admissionBytes,verifyAdmissionArtifact,deliverNameApproval} from './private-name-approval-delivery.mjs';
+import {admissionBytes,verifyAdmissionArtifact,deliverNameApproval,deliverNameApprovalUsingCanisterReceipt} from './private-name-approval-delivery.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function fixture(preparation=false){
   const keys=generateKeyPairSync('ed25519'),planHash='a'.repeat(64);
@@ -81,4 +81,29 @@ test('only explicit exclusive first-intent acknowledgement permits submission',a
     const f=fixture(),persist=f.deps.persistJournal;f.deps.persistJournal=async j=>{await persist(j);return acknowledgement;};
     await assert.rejects(deliverNameApproval({...f,action:'deliver'},f.deps),/not exclusively claimed/);assert.equal(f.calls,0);assert.equal(f.journal.phase,'unknown');
   }
+});
+test('existing immutable canister approval needs no extra receipt store',async()=>{
+  const f=fixture(true);const deps={...f.deps,assertImmutableAdmission:async()=>true};
+  const first=await deliverNameApprovalUsingCanisterReceipt({...f,action:'deliver'},deps);assert.equal(first.submitted,true);assert.equal(f.calls,1);assert.equal(f.journal,null);
+  const next=await deliverNameApprovalUsingCanisterReceipt({...f,action:'reconcile'},deps);assert.equal(next.submitted,false);assert.equal(f.calls,1);
+});
+test('receipt-only delivery loses committed reply then reconciles without another submission',async()=>{
+  const f=fixture(true),submit=f.deps.submitApproval;f.deps.submitApproval=async()=>{await submit();throw Error('lost reply');};const deps={...f.deps,assertImmutableAdmission:async()=>true};
+  await assert.rejects(deliverNameApprovalUsingCanisterReceipt({...f,action:'deliver'},deps),/lost reply/);
+  await deliverNameApprovalUsingCanisterReceipt({...f,action:'reconcile'},deps);assert.equal(f.calls,1);
+});
+test('receipt-only reconciliation is read-only even with authoritative absence',async()=>{
+  const f=fixture(true);await assert.rejects(deliverNameApprovalUsingCanisterReceipt({...f,action:'reconcile'},{...f.deps,assertImmutableAdmission:async()=>true}),/never submits/);assert.equal(f.calls,0);
+});
+test('receipt-only path requires verified synchronous immutable admission and exact target',async()=>{
+  for(const change of ['missing','denied','target']){const f=fixture(true),deps={...f.deps,assertImmutableAdmission:async()=>true};if(change==='missing')delete deps.assertImmutableAdmission;if(change==='denied')deps.assertImmutableAdmission=async()=>false;if(change==='target')deps.assertTarget=async()=>false;
+    await assert.rejects(deliverNameApprovalUsingCanisterReceipt({...f,action:'deliver'},deps),/Verified immutable/);assert.equal(f.calls,0);}
+});
+test('receipt-only path refuses competing approval and late unsigned window',async()=>{
+  for(const change of ['conflict','late']){const f=fixture(true);if(change==='conflict')f.retained={...f.receipt,approval_id:'other'};else f.deps.readWindow=async()=>({request:f.body.request,phase:'Writing'});
+    await assert.rejects(deliverNameApprovalUsingCanisterReceipt({...f,action:'deliver'},{...f.deps,assertImmutableAdmission:async()=>true}),/Different retained|before conversion/);assert.equal(f.calls,0);}
+});
+test('receipt-only unknown uncommitted outcome never retries automatically',async()=>{
+  const f=fixture(true);let calls=0;f.deps.submitApproval=async()=>{calls++;throw Error('unknown');};
+  await assert.rejects(deliverNameApprovalUsingCanisterReceipt({...f,action:'deliver'},{...f.deps,assertImmutableAdmission:async()=>true}),/unknown/);assert.equal(calls,1);
 });
