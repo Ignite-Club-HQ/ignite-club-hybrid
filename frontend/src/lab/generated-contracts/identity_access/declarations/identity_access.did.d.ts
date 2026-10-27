@@ -27,6 +27,24 @@ export interface Account {
   'version' : bigint,
   'principals' : Array<Principal>,
 }
+export interface AccountInventoryCursor {
+  'after' : [] | [string],
+  'phase' : number,
+  'revision' : bigint,
+}
+export interface AccountInventoryPage {
+  'request' : Request_1,
+  'next' : [] | [AccountInventoryCursor],
+  'rows' : Array<AccountInventoryRow>,
+  'scanned' : number,
+  'revision' : bigint,
+}
+export interface AccountInventoryRow {
+  'original_authority' : OriginalNameAuthority,
+  'account' : Account,
+  'source_digest' : Uint8Array,
+  'profile' : [] | [Profile],
+}
 /**
  * Account status: `Suspended` accounts are rejected by caller-authenticated
  * self-service write paths (profile/theme/link/consent/terms — see
@@ -217,6 +235,9 @@ export interface MemoryStats {
   'stable_bytes' : bigint,
   'heap_bytes' : bigint,
 }
+export type OriginalNameAuthority = { 'NoName' : null } |
+  { 'Existing' : { 'subject' : Principal, 'sink' : Principal } } |
+  { 'Unresolved' : null };
 export interface OwnershipProgress {
   'inventory_digest' : Uint8Array,
   'verified_current' : boolean,
@@ -418,31 +439,33 @@ export type Result_30 = { 'Ok' : Array<PrincipalEligibility> } |
   { 'Err' : string };
 export type Result_31 = { 'Ok' : PrincipalEligibility } |
   { 'Err' : string };
-export type Result_32 = { 'Ok' : [] | [ApprovalReceipt] } |
+export type Result_32 = { 'Ok' : AccountInventoryPage } |
   { 'Err' : string };
-export type Result_33 = { 'Ok' : Uint8Array } |
+export type Result_33 = { 'Ok' : [] | [ApprovalReceipt] } |
   { 'Err' : string };
-export type Result_34 = { 'Ok' : WriterReceipt } |
+export type Result_34 = { 'Ok' : Uint8Array } |
   { 'Err' : string };
-export type Result_35 = { 'Ok' : RemovalHistoryManifest } |
+export type Result_35 = { 'Ok' : WriterReceipt } |
   { 'Err' : string };
-export type Result_36 = { 'Ok' : RemovalHistoryPage } |
+export type Result_36 = { 'Ok' : RemovalHistoryManifest } |
   { 'Err' : string };
-export type Result_37 = { 'Ok' : RemovalInventory } |
+export type Result_37 = { 'Ok' : RemovalHistoryPage } |
   { 'Err' : string };
-export type Result_38 = { 'Ok' : DirectoryCleanup } |
+export type Result_38 = { 'Ok' : RemovalInventory } |
   { 'Err' : string };
-export type Result_39 = { 'Ok' : Entitlement } |
+export type Result_39 = { 'Ok' : DirectoryCleanup } |
   { 'Err' : string };
 export type Result_4 = { 'Ok' : OwnershipProgress } |
   { 'Err' : string };
-export type Result_40 = { 'Ok' : bigint } |
+export type Result_40 = { 'Ok' : Entitlement } |
   { 'Err' : string };
-export type Result_41 = { 'Ok' : PrivacyConsent } |
+export type Result_41 = { 'Ok' : bigint } |
   { 'Err' : string };
-export type Result_42 = { 'Ok' : TermsAcceptance } |
+export type Result_42 = { 'Ok' : PrivacyConsent } |
   { 'Err' : string };
-export type Result_43 = { 'Ok' : Array<Receipt> } |
+export type Result_43 = { 'Ok' : TermsAcceptance } |
+  { 'Err' : string };
+export type Result_44 = { 'Ok' : Array<Receipt> } |
   { 'Err' : string };
 export type Result_5 = { 'Ok' : Progress } |
   { 'Err' : string };
@@ -821,11 +844,15 @@ export interface _SERVICE {
    * Versions are account-scoped evidence, NOT globally atomic access tokens.
    */
   'read_principal_eligibility' : ActorMethod<[Principal], Result_31>,
-  'read_private_name_conversion_approval' : ActorMethod<[string], Result_32>,
-  'read_private_name_source_digest' : ActorMethod<[string], Result_33>,
+  'read_private_name_account_inventory' : ActorMethod<
+    [string, Request_1, [] | [AccountInventoryCursor], number],
+    Result_32
+  >,
+  'read_private_name_conversion_approval' : ActorMethod<[string], Result_33>,
+  'read_private_name_source_digest' : ActorMethod<[string], Result_34>,
   'read_private_name_suspension' : ActorMethod<[string], Result_9>,
   'read_private_name_write_window' : ActorMethod<[string], Result_6>,
-  'read_private_name_writer_window' : ActorMethod<[Request_1], Result_34>,
+  'read_private_name_writer_window' : ActorMethod<[Request_1], Result_35>,
   /**
    * Service-delegated name permission only. Registry placement authenticates
    * both the ORIGINAL PII caller and owning audience service; location alone
@@ -839,17 +866,17 @@ export interface _SERVICE {
    * Local-only consensus recovery evidence. Reader lists/club receipts are NOT
    * a complete deployment inventory or an in-flight drain acknowledgement.
    */
-  'read_removal_history_manifest' : ActorMethod<[], Result_35>,
+  'read_removal_history_manifest' : ActorMethod<[], Result_36>,
   'read_removal_history_page' : ActorMethod<
     [bigint, RemovalHistoryCursor, number],
-    Result_36
+    Result_37
   >,
-  'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_37>,
+  'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_38>,
   /**
    * Subject-bound consensus ownership read; never implicitly registers an account.
    */
   'read_service_account' : ActorMethod<[Principal], Result>,
-  'reclaim_membership_directory' : ActorMethod<[], Result_38>,
+  'reclaim_membership_directory' : ActorMethod<[], Result_39>,
   /**
    * Caller-authenticated: redeems a signed attestation minted by the
    * session-free IAP verification endpoint after it confirms an Apple
@@ -865,7 +892,7 @@ export interface _SERVICE {
    */
   'redeem_entitlement' : ActorMethod<
     [string, string, bigint, string, string],
-    Result_39
+    Result_40
   >,
   'register_account' : ActorMethod<[], Result>,
   /**
@@ -878,7 +905,7 @@ export interface _SERVICE {
    * number of records changed (or that would change when `dry_run`).
    * Any NEW stored principal / principal-text field must be added here.
    */
-  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_40>,
+  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_41>,
   /**
    * Governor-only: revokes a verifier principal.
    */
@@ -943,7 +970,7 @@ export interface _SERVICE {
    */
   'set_entitlement' : ActorMethod<
     [Principal, string, string, bigint, string],
-    Result_39
+    Result_40
   >,
   'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_2>,
   'set_exclusion_scoped' : ActorMethod<
@@ -952,7 +979,7 @@ export interface _SERVICE {
   >,
   'set_family' : ActorMethod<[string, string], Result_2>,
   'set_group_inventory_binding' : ActorMethod<[Binding, bigint], Result_2>,
-  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_41>,
+  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_42>,
   /**
    * Sets (or replaces) the caller's profile. The account must already exist —
    * sign-in provisioning calls register_account first.
@@ -969,7 +996,7 @@ export interface _SERVICE {
    * caller's currently recorded version is rejected, so a stale client can
    * never roll the recorded acceptance backwards.
    */
-  'set_terms_acceptance' : ActorMethod<[number], Result_42>,
+  'set_terms_acceptance' : ActorMethod<[number], Result_43>,
   /**
    * Sets (or clears) the caller's UI theme preference, so it follows the
    * account across devices. Creates a blank profile entry if the caller has
@@ -981,7 +1008,7 @@ export interface _SERVICE {
    * Fresh, authenticated full-inventory seal verification. This does not erase
    * data, release registry locks, restore histories or activate a group.
    */
-  'verify_account_removal_seals' : ActorMethod<[string], Result_43>,
+  'verify_account_removal_seals' : ActorMethod<[string], Result_44>,
   'whoami' : ActorMethod<[], Result>,
   'write_approved_private_name' : ActorMethod<
     [string, string, [] | [string]],

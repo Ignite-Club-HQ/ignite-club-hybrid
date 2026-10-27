@@ -53,7 +53,14 @@ export async function collectPrivateNameClubInventory({ accounts, sources, ident
     if (!account || !text(account.accountId) || !text(account.subject) || accountIds.has(account.accountId) || subjects.has(account.subject)) throw Error('Unambiguous distinct account subjects required');
     subjects.add(account.subject); accountIds.add(account.accountId);
   }
-  const context = structuredClone({ identityId, operator, deploymentHash, historyRevision: String(historyRevision), sources, accounts: accounts.map(({accountId,subject}) => ({accountId,subject})) });
+  const allAliases=new Set();
+  const accountEvidence=accounts.map(account=>{
+    if(account.principals===undefined)return {accountId:account.accountId,subject:account.subject}; // legacy local fixtures, not complete account evidence
+    if(!Array.isArray(account.principals) || !account.principals.length || account.principals.length>8 || !account.principals.includes(account.subject) || !account.principals.every(text) || new Set(account.principals).size!==account.principals.length || !['Active','Suspended'].includes(account.status) || nat(account.version)>18446744073709551615n || typeof account.profilePresent!=='boolean' || !Array.isArray(account.sourceDigest) || account.sourceDigest.length!==32 || !account.sourceDigest.every(b=>Number.isInteger(b)&&b>=0&&b<=255) || !text(account.sink))throw Error('Complete account alias/status/version/authority evidence required');
+    return {accountId:account.accountId,subject:account.subject,principals:[...account.principals].sort(),status:account.status,version:String(account.version),profilePresent:account.profilePresent,sourceDigest:[...account.sourceDigest],sink:account.sink};
+  });
+  for(const account of accounts)for(const alias of account.principals??[account.subject]){if(allAliases.has(alias))throw Error('Ambiguous account aliases');allAliases.add(alias);}
+  const context = structuredClone({ identityId, operator, deploymentHash, historyRevision: String(historyRevision), sources, accounts: accountEvidence });
   let calls = 0;
   // assertFence must authenticate complete registered-plus-original-G1 source
   // coverage, account aliases/eligibility, management lifecycle, topology and
@@ -100,8 +107,13 @@ export async function collectPrivateNameClubInventory({ accounts, sources, ident
     }
     const active = [...clubs].filter(([,deleted]) => !deleted).map(([id]) => id).sort();
     for (const account of accounts) for (const club of active) {
-      const member = await fenced(() => actor.read_has_club_membership(account.subject, club));
-      if (typeof member !== 'boolean') throw Error('Consensus membership reply required');
+      let member=false;
+      // Do not short-circuit: every alias is part of complete read evidence.
+      for(const alias of account.principals??[account.subject]){
+        const reply=await fenced(() => actor.read_has_club_membership(alias, club));
+        if(typeof reply!=='boolean')throw Error('Consensus membership reply required');
+        member=member||reply;
+      }
       if (member) {
         const list = memberships.get(account.accountId);
         list.push(club);
@@ -127,7 +139,7 @@ export async function prepareInventoriedPrivateNameArtifact(input, deps) {
   const inventory = await collectPrivateNameClubInventory(input, deps);
   const byId = new Map(inventory.body.rows.map(row => [row.accountId, row]));
   const artifact = await preparePrivateNameArtifact({ ...input, inventoryHash: inventory.hash, rows: input.accounts.map(account => ({accountId: account.accountId, subject: account.subject, name: account.name, sink: account.sink, clubs: byId.get(account.accountId).clubs})) }, deps);
-  const context = {identityId: input.identityId, operator: input.operator, deploymentHash: input.deploymentHash, historyRevision: String(input.historyRevision), sources: structuredClone(input.sources), accounts: input.accounts.map(({accountId,subject}) => ({accountId,subject}))};
+  const context = {identityId: input.identityId, operator: input.operator, deploymentHash: input.deploymentHash, historyRevision: String(input.historyRevision), sources: structuredClone(input.sources), accounts: structuredClone(inventory.body.accounts)};
   if (await deps.assertFence(context) !== true) throw Error('External inventory fence changed during encryption');
   return {artifact, inventory};
 }

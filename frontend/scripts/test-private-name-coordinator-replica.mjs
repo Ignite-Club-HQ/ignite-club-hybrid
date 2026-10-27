@@ -16,7 +16,7 @@ import { idlFactory as competitionIdl } from '../src/lab/bindings/competition_do
 import { idlFactory as leagueIdl } from '../src/lab/bindings/mini_league_domain/declarations/mini_league_domain.did.js';
 import { idlFactory as piiIdl } from '../src/lab/bindings/pii_access_control/declarations/pii_access_control.did.js';
 import { idlFactory as blobIdl } from '../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js';
-import {createPrivateNameCoordinatorAdapter,createPrivateNameProfileAdapter,createPrivateNamePiiAdapter} from '../../scripts/private-name-canister-adapters.mjs';
+import {createPrivateNameCoordinatorAdapter,createPrivateNameProfileAdapter,createPrivateNamePiiAdapter,createPrivateNameAccountInventoryAdapter} from '../../scripts/private-name-canister-adapters.mjs';
 import {prepareInventoriedPrivateNameArtifact} from '../../scripts/private-name-club-inventory.mjs';
 import {savePrivateNameArtifact,readPrivateNameArtifact} from '../../scripts/private-name-plan-artifact.mjs';
 import {openPreparedExecutionJournal} from '../../scripts/private-name-execution-journal.mjs';
@@ -52,6 +52,8 @@ try {
   identity.actor.setPrincipal(outsider);
   const convertee = ok(await identity.actor.register_account());
   ok(await identity.actor.set_profile('Paul Cranwell', []));
+  // Account-first inventory must retain an account with no profile or clubs.
+  identity.actor.setPrincipal(p(3));const profileless=ok(await identity.actor.register_account());
   identity.actor.setPrincipal(governor);
   await pic.updateCanisterSettings({ canisterId: identity.canisterId, sender: governor, environmentVariables:
     [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }] });
@@ -137,6 +139,7 @@ try {
 
   // Begin: fences every original PII sink before any writer opens.
   let w = ok(await actor.begin_private_name_write_window('go-live', pinnedRevision));
+  await denied(()=>actor.read_private_name_account_inventory('go-live',w.request,[],100));
   assert.equal(phaseOf(w), 'Fencing');
   assert.equal(w.sinks.length, 2); assert.equal(w.writers.length, 11);
   await denied(() => actor.begin_private_name_write_window('concurrent', pinnedRevision));
@@ -152,6 +155,7 @@ try {
   assert.equal(phaseOf(w), 'Opening'); assert.equal(w.opened.length, half);
   for (const target of w.writers.slice(half)) w = ok(await actor.advance_private_name_write_window('go-live', target));
   assert.equal(phaseOf(w), 'Writing');
+  await denied(()=>actor.read_private_name_account_inventory('go-live',w.request,[],100)); // ordinary windows are not exclusion
 
   // Authorized writes proceed inside the window; topology stays closed.
   ok(await groups[0].club_domain.actor.set_identity_access_canister(identity.canisterId));
@@ -259,9 +263,11 @@ try {
   const fixtureSigningKey=createPrivateKey(readFileSync(process.env.PRIVATE_NAME_FIXTURE_SIGNER));
   const coordinator=deps.coordinator,begin=coordinator.begin;
   let admission;
+  let lockedAccountEvidence;
   coordinator.begin=async(id,revision)=>{
     const window=await begin(id,revision);
     if(window.phase==='Fencing'){
+      await denied(()=>actor.read_private_name_account_inventory(id,window.request,[],100));
       actor.setPrincipal(outsider);await denied(()=>actor.set_profile('Concurrent edit',[]));actor.setPrincipal(governor);
       await denied(()=>actor.advance_private_name_write_window(id,Principal.fromText(window.sinks[0])));
       const body={kind:'ignite-private-name-admission-v1',approval_id:'fixture-explicit-names',identity:identity.canisterId,operator:governor,request:window.request,plan_hash:artifact.hash,
@@ -293,6 +299,12 @@ try {
   try {
     await assert.rejects(executeSavedApprovedNamePlan({...request,approvalPath:join(directory,'approval-convert'),approvalBinding:approvalBinding('convert')},deps),/Injected lost committed club reply/);
     assert.equal((await deps.coordinator.read(operationId)).phase,'Writing');assert.equal(lockHeld,true);
+    const lockedWindow=ok(await actor.read_private_name_write_window(operationId));
+    const inventoryAdapter=createPrivateNameAccountInventoryAdapter(actor,{operationId,request:lockedWindow.request,assertFence:async()=>harnessExclusive});
+    lockedAccountEvidence=await inventoryAdapter.listAccounts();assert.equal(lockedAccountEvidence.rows.length,3);
+    const noProfile=lockedAccountEvidence.rows.find(r=>r.accountId===profileless.id);assert.ok(noProfile);assert.equal(noProfile.profile,null);assert.equal(noProfile.originalAuthority.kind,'NoName');
+    await denied(()=>actor.read_private_name_account_inventory(operationId,{...lockedWindow.request,generation:lockedWindow.request.generation+1n},[],100));
+    actor.setPrincipal(outsider);await denied(()=>actor.read_private_name_account_inventory(operationId,lockedWindow.request,[],100));actor.setPrincipal(governor);
     // The committed unknown reply retains both backend exclusion and exact
     // approval through a real coordinator upgrade, not only local disk reopen.
     actor.setPrincipal(outsider);await denied(()=>actor.set_profile('Conflicting edit',[]));actor.setPrincipal(governor);
@@ -302,6 +314,8 @@ try {
     await denied(()=>actor.publish_approved_private_name(operationId,artifact.body.rows[0].accountId));
     await pic.upgradeCanister({canisterId:identity.canisterId,wasm:rustWasm('identity_access'),sender:governor});actor.setPrincipal(governor);
     assert.equal((await deps.coordinator.read(operationId)).phase,'Writing');
+    const reopenedEvidence=await inventoryAdapter.listAccounts();assert.deepEqual(reopenedEvidence,lockedAccountEvidence); // unchanged stable rows survive upgrade
+    await denied(()=>actor.read_private_name_account_inventory(operationId,lockedWindow.request,[{phase:0,after:[],revision:BigInt(lockedAccountEvidence.revision)+1n}],100));
     ok(await actor.approve_private_name_conversion(operationId,admission));
     actor.setPrincipal(outsider);await denied(()=>actor.set_profile('After restart edit',[]));actor.setPrincipal(governor);
     journal.close();const savedBody=readPrivateNameArtifact(join(directory,'plan'),artifact.hash);
@@ -320,6 +334,6 @@ try {
       assert.equal(new TextDecoder().decode(IbeCiphertext.deserialize(Uint8Array.from(row.ciphertext)).decrypt(key)),profiles.find(p=>p.account_id===row.accountId).display_name);
     }
     sink0pre.actor.setPrincipal(governor);
-    console.log('PASS: real two-group signed exact-row conversion admission, preapproval/forged-signature refusal, ordinary profile/club/PII edit exclusion, incomplete publication/close refusal, persisted approval and edit locks through upgrade, disk-reopened committed-reply recovery without replay, exact ciphertext/profile readbacks and SDK decryption. Production completeness, pre-inventory drain, protected signer transport and management exclusion remain blocked.');
+    console.log('PASS: real two-group signed conversion/recovery plus account-first locked inventory, profileless account retention, ordinary/preapproval/foreign-request denial, full integrity traversal, stable evidence through upgrade and wrong-revision cursor refusal. Production pre-plan freeze/drain, original authority completeness, cryptographic preflight and management exclusion remain blocked.');
   } finally {journal?.close();harnessExclusive=false;rmSync(directory,{recursive:true,force:true});}
 } finally { if (pic) await pic.tearDown(); await server.stop(); }

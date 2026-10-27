@@ -53,7 +53,7 @@ impl WriteWindow {
         if completed&&self.prepared.iter().find(|p|p.receiver==target).is_none_or(|p|r.release_epoch<=p.release_epoch){return Err("Private-name completion epoch did not advance".into());}Ok(())
     }
     fn writer_receipt(&self,target:Principal,r:&WriterReceipt,sealed:bool)->Outcome<()> {
-        if !self.writers.contains(&target)||r.receiver!=target||r.request!=self.request||r.closing!=sealed||r.sealed!=sealed||(sealed&&r.active!=candid::Nat::from(0u8)){return Err("Private-name writer receipt mismatch or not drained".into());}Ok(())
+        if !self.writers.contains(&target)||r.receiver!=target||r.request!=self.request||r.closing!=sealed||r.sealed!=sealed||((sealed||super::private_name_writer_window::exclusive(&self.request))&&r.active!=candid::Nat::from(0u8)){return Err("Private-name writer receipt mismatch or not drained".into());}Ok(())
     }
     fn merge_sink(&mut self,target:Principal,r:SinkReceipt,completed:bool)->Outcome<()> {
         self.sink_receipt(target,&r,completed)?;
@@ -148,6 +148,7 @@ async fn advance_private_name_write_window(operation_id:String,target:Principal)
     }
     fn sink(w:&WriteWindow,t:Principal,done:bool)->SinkReceipt{SinkReceipt{request:super::super::private_name_coordination::Request{operation_id:w.request.operation_id.clone(),generation:w.request.generation,inventory_digest:w.request.inventory_digest.clone()},receiver:t,completed:done,release_epoch:if done{2u8.into()}else{1u8.into()}}}
     fn writer(w:&WriteWindow,t:Principal,sealed:bool)->WriterReceipt{WriterReceipt{request:w.request.clone(),receiver:t,closing:sealed,sealed,active:0u8.into()}}
+    #[test]fn exclusive_opening_refuses_active_receipts_and_retains_phase(){let mut w=fixture();w.request.operation_id="names:club-name-conversion-test".into();w.phase=WritePhase::Opening;let t=w.writers[0];let mut r=writer(&w,t,false);r.active=1u8.into();assert!(w.merge_writer(t,r,false).is_err());assert_eq!(w.phase,WritePhase::Opening);assert!(w.opened.is_empty());w.merge_writer(t,writer(&w,t,false),false).unwrap();assert_eq!(w.opened.len(),1);}
     #[test]fn no_writer_opens_until_every_original_sink_fenced(){let mut w=fixture();assert_eq!(w.sinks.len(),2);assert_eq!(w.writers.len(),11);let t=w.writers[0];assert!(w.merge_writer(t,writer(&w,t,false),false).is_err());for t in w.sinks.clone(){w.merge_sink(t,sink(&w,t,false),false).unwrap();}assert_eq!(w.phase,WritePhase::Opening);}
     #[test]fn no_sink_reopens_until_every_writer_drains(){let mut w=fixture();w.phase=WritePhase::Closing;let t=w.sinks[0];assert!(w.merge_sink(t,sink(&w,t,true),true).is_err());for t in w.writers.clone(){let mut r=writer(&w,t,true);r.active=1u8.into();assert!(w.merge_writer(t,r,true).is_err());w.merge_writer(t,writer(&w,t,true),true).unwrap();}assert_eq!(w.phase,WritePhase::Releasing);}
     #[test]fn late_reply_cannot_regress_phase_or_replace_receipts(){let mut w=fixture();for t in w.sinks.clone(){w.merge_sink(t,sink(&w,t,false),false).unwrap();}let t=w.sinks[0];assert!(w.merge_sink(t,sink(&w,t,false),false).is_err());assert_eq!(w.phase,WritePhase::Opening);assert_eq!(w.prepared.len(),2);}

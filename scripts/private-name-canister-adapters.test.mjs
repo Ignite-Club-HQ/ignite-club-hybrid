@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createPrivateNameCoordinatorAdapter,createPrivateNameProfileAdapter,createPrivateNamePiiAdapter,createApprovedNameWriteAdapter,createApprovedNameCoordinatorAdapter} from './private-name-canister-adapters.mjs';
+import {createPrivateNameCoordinatorAdapter,createPrivateNameProfileAdapter,createPrivateNamePiiAdapter,createApprovedNameWriteAdapter,createApprovedNameCoordinatorAdapter,createPrivateNameAccountInventoryAdapter} from './private-name-canister-adapters.mjs';
 const p=text=>({toText:()=>text});
 const window={phase:{Fencing:null},sinks:[p('sink')],writers:[p('writer')],opened:[{receiver:p('writer')}],sealed:[],completed:[]};
 test('generated coordinator converts principals and preserves revisions above JS safe integer',async()=>{
@@ -43,4 +43,41 @@ test('backend signed approval refusal prevents any conversion advance',async()=>
   const actor={begin_private_name_write_window:async()=>({Ok:window}),approve_private_name_conversion:async()=>({Err:'invalid signature'})};
   const adapter=createApprovedNameCoordinatorAdapter(actor,{fromText:p},{loadApproval:async()=>({signature:[]}),assertFence:async()=>true});
   await assert.rejects(adapter.begin('operation','1'),/refused/);
+});
+
+const accountRequest={operation_id:'names:club-name-conversion-test',generation:9007199254740993n,inventory_digest:Array(32).fill(4)};
+const accountRow=(id='a')=>({account:{id,principals:[p(`${id}-one`),p(`${id}-two`)],version:9007199254740993n,status:{Suspended:null}},profile:[],original_authority:{NoName:null},source_digest:Array(32).fill(7)});
+const accountPage=(rows,next,scanned=rows.length)=>({request:accountRequest,revision:9007199254740994n,scanned,rows,next});
+const accountAdapter=pages=>{let calls=0;return {adapter:createPrivateNameAccountInventoryAdapter({read_private_name_account_inventory:async()=>({Ok:pages[calls++]})},{operationId:'club-name-conversion-test',request:accountRequest,assertFence:async()=>true}),calls:()=>calls};};
+test('account-first evidence retains profileless suspended accounts and all aliases through profile validation',async()=>{
+  const {adapter,calls}=accountAdapter([accountPage([accountRow()], [{phase:1,after:[],revision:9007199254740994n}]),accountPage([],[],0)]);
+  const result=await adapter.listAccounts();assert.equal(calls(),2);assert.equal(result.revision,'9007199254740994');assert.equal(result.rows[0].version,'9007199254740993');assert.equal(result.rows[0].status,'Suspended');assert.equal(result.rows[0].profile,null);assert.deepEqual(result.rows[0].principals,['a-one','a-two']);
+});
+test('account inventory requires integrity terminal pass and refuses revision or request drift',async()=>{
+  for(const pages of [[accountPage([accountRow()],[])],[accountPage([accountRow()],[{phase:1,after:[],revision:9007199254740994n}]),{...accountPage([],[],0),revision:9007199254740995n}],[{...accountPage([],[],0),request:{...accountRequest,generation:1n}}]])await assert.rejects(accountAdapter(pages).adapter.listAccounts());
+});
+test('dangling profile refusal and exclusion loss cannot return partial accounts',async()=>{
+  let calls=0,held=true;const actor={read_private_name_account_inventory:async()=>{calls++;if(calls===1)return {Ok:accountPage([accountRow()],[{phase:1,after:[],revision:9007199254740994n}])};return {Err:'dangling profile'};}};
+  await assert.rejects(createPrivateNameAccountInventoryAdapter(actor,{operationId:'club-name-conversion-test',request:accountRequest,assertFence:async()=>held}).listAccounts(),/refused/);
+  actor.read_private_name_account_inventory=async()=>{held=false;return {Ok:accountPage([accountRow()],[])};};
+  await assert.rejects(createPrivateNameAccountInventoryAdapter(actor,{operationId:'club-name-conversion-test',request:accountRequest,assertFence:async()=>held}).listAccounts(),/exclusion/);
+});
+test('original name evidence preserves nonfirst subject and refuses mismatched reference',async()=>{
+  const r=accountRow();r.profile=[{account_id:'a',display_name:'pii-display-name:v1:sink:a-two'}];r.original_authority={Existing:{sink:p('sink'),subject:p('a-two')}};
+  const pages=[accountPage([r],[{phase:1,after:[],revision:9007199254740994n}]),accountPage([],[],0)];
+  assert.deepEqual((await accountAdapter(pages).adapter.listAccounts()).rows[0].originalAuthority,{kind:'Existing',sink:'sink',subject:'a-two'});
+  r.profile[0].display_name='pii-display-name:v1:sink:foreign';await assert.rejects(accountAdapter(pages).adapter.listAccounts(),/authority/);
+});
+test('ambiguous aliases across account pages stop complete inventory',async()=>{
+  const b=accountRow('b');b.account.principals=[p('a-one')];await assert.rejects(accountAdapter([accountPage([accountRow(),b],[])]).adapter.listAccounts(),/alias/);
+});
+test('committed generated actor exposes consensus account inventory and lossless evidence wire types',async()=>{
+  const {createRequire}=await import('node:module');const require=createRequire(new URL('../frontend/package.json',import.meta.url));
+  const {Actor,HttpAgent}=require('@icp-sdk/core/agent');const {IDL}=require('@icp-sdk/core/candid');const {Principal}=require('@icp-sdk/core/principal');
+  const {idlFactory}=await import('../frontend/src/lab/bindings/identity_access/declarations/identity_access.did.js');
+  const actor=Actor.createActor(idlFactory,{agent:new HttpAgent({host:'https://ic0.app'}),canisterId:'rkp4c-7iaaa-aaaaa-aaaca-cai'});assert.equal(typeof actor.read_private_name_account_inventory,'function');
+  const fn=new Map(idlFactory({IDL})._fields).get('read_private_name_account_inventory');assert.deepEqual(fn.annotations,[]);
+  const owner=Principal.fromUint8Array(Uint8Array.from([3,1]));const r=accountRow();r.account.principals=[owner];
+  const encoded=IDL.encode(fn.retTypes,[{Ok:accountPage([r],[],1)}]);const decoded=IDL.decode(fn.retTypes,encoded)[0].Ok;
+  assert.equal(decoded.rows[0].account.version,9007199254740993n);assert.deepEqual(decoded.rows[0].profile,[]);assert.ok('Suspended' in decoded.rows[0].account.status);
 });
