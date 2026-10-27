@@ -2337,13 +2337,13 @@ type Main =
        Err: text;
        Ok: Child;
      });
-   /// Independent deletion-only configuration for an empty owner-test group.
-   /// Does not release linked-account sync or register lifecycle receivers.
    link_display_identity_authority: (id: principal) ->
     (variant {
        Err: text;
        Ok;
      });
+   /// Independent deletion-only configuration for an empty owner-test group.
+   /// Does not release linked-account sync or register lifecycle receivers.
    set_owner_test_deletion_identity: (id: principal) ->
     (variant {
        Err: text;

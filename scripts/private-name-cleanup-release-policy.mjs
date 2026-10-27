@@ -17,9 +17,12 @@ export function cleanupEnvironment(environment, service) {
   }
   return [...environment.filter(row=>row.name!==CLEANUP_RELEASE),{name:CLEANUP_RELEASE,value:'1'}].sort((a,b)=>a.name.localeCompare(b.name));
 }
-export function requireCleanupWiring(service, rows, identity) {
+export function requireCleanupWiring(service, rows, identity, allowLegacyDisplayLink = false) {
   if (service !== 'club_domain') return;
   const matches=rows.filter(row=>row[0]==='identity_access');
+  // Owner-approved (2026-10-28): the display release may link the pinned
+  // original Group 1 club service once, after its module upgrade.
+  if(allowLegacyDisplayLink && matches.length===1 && matches[0][1]==='') return 'link';
   if(matches.length!==1 || matches[0][1]!==identity) throw Error('Cleanup requires existing exact identity wiring; do not rewire legacy clubs');
 }
 export async function activateCleanupSettings(steps, transport) {
