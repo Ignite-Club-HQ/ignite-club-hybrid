@@ -4,6 +4,7 @@ import AccountAdmission "../../shared/AccountAdmission";
 import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
 import PrivateNameReleaseFence "../../shared/PrivateNameReleaseFence";
+import PrivateNameCleanup "../../shared/PrivateNameCleanup";
 import Error "mo:core/Error";
 import PrimMem "mo:⛔";
 /// PII Access Control Canister
@@ -626,6 +627,7 @@ persistent actor class Main(governorInit : Principal) = this {
   transient let privateNamesIdentity = Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_IDENTITY");
   var private_name_release_intents : Map.Map<Text, PrivateNameReleaseFence.Intent>;
   var private_name_release_epoch : Nat;
+  var private_name_cleanup_receipts : Map.Map<Text, { caller : Principal; receipt : PrivateNameCleanup.Receipt }>;
   func privateNameVerifier() : ?Principal {
     if (not privateNamesRehearsal) return null;
     switch (privateNamesIdentity) {
@@ -730,6 +732,46 @@ persistent actor class Main(governorInit : Principal) = this {
   // replicas never enter generic grants, snapshots or key endpoints.
   func clubNameField(club : Text) : Text { "club_display_name:" # club };
   func clubNameScheme(club : Text) : Text { "vetkey-club-names-v1:" # club };
+
+  func cleanupReceiptKey(caller : Principal, id : Text) : Text { caller.toText() # "\u{1f}" # id };
+  public shared ({ caller }) func read_removed_private_club_name_receipt(id : Text, club : Text, subject : Principal) : async { #Ok : ?PrivateNameCleanup.Receipt; #Err : Text } {
+    if (not privateNamesRehearsal or Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_REHEARSAL") != ?"1" or caller.isAnonymous() or id.size() > 256) return #Err("Cleanup rehearsal required");
+    switch (private_name_cleanup_receipts.get(cleanupReceiptKey(caller, id))) {
+      case null #Ok(null);
+      case (?saved) { if (saved.caller != caller or saved.receipt.club != club or saved.receipt.subject != subject) return #Err("Cleanup receipt binding changed"); #Ok(?saved.receipt) }
+    }
+  };
+  public shared ({ caller }) func purge_removed_private_club_name(id : Text, club : Text, subject : Principal) : async { #Ok : PrivateNameCleanup.Receipt; #Err : Text } {
+    if (not privateNamesRehearsal or Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_REHEARSAL") != ?"1" or caller.isAnonymous() or id == "" or id.size() > 256 or not validMediaClub(club)) return #Err("Exact cleanup rehearsal required");
+    let verifier = privateNameVerifier() ?? return #Err("Configured cleanup identity required");
+    let key = cleanupReceiptKey(caller, id);
+    if (private_name_cleanup_receipts.containsKey(key)) return #Err("Read retained cleanup receipt; never replay purge");
+    if (private_name_cleanup_receipts.size() >= 4096) return #Err("Cleanup receipt capacity reached; retain intent");
+    let lease = switch (privateNameWriterGate.enter()) { case (#Ok(value)) value; case (#Err(e)) return #Err(e) };
+    try {
+      let original = pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == "display_name") ?? return #Err("Original private name required");
+      if (original.domain_owner != subject or original.master_key_id != vetkeySchemeId()) return #Err("Original cleanup binding changed");
+      let field = clubNameField(club);
+      let replica = pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == field);
+      switch (replica) { case (?r) { if (r.domain_owner != subject or r.master_key_id != clubNameScheme(club)) return #Err("Replica binding changed") }; case null {} };
+      let identity : actor { authorize_private_name_removal : shared (Principal, Text, Principal, Text) -> async { #Ok : PrivateNameCleanup.Account; #Err : Text } } = actor(verifier.toText());
+      var first : ?PrivateNameCleanup.Account = null;
+      for (_ in [0, 1].values()) {
+        let account = switch (await (with timeout = 10) identity.authorize_private_name_removal(caller, club, subject, id)) { case (#Ok(value)) value; case (#Err(e)) return #Err(e) };
+        if (privateNameVerifier() != ?verifier or (first != null and first != ?account)) return #Err("Cleanup authorization changed");
+        first := ?account;
+      };
+      // Exact saved original and replica checks, purge and tombstone commit form
+      // one synchronous segment. The club retains its membership-write lock.
+      if (private_name_cleanup_receipts.containsKey(key) or private_name_cleanup_receipts.size() >= 4096 or pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == "display_name") != ?original or pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == field) != replica) return #Err("Name generation changed; retain cleanup intent");
+      pii_records := pii_records.filter(func r = not (r.pii_id == subject.toText() and r.field_id == field));
+      mediaAuthEpoch += 1;
+      let receipt = { id; club; subject; original_retained = true; replica_absent = true };
+      private_name_cleanup_receipts.add(key, { caller; receipt });
+      log_audit(caller, subject.toText(), field, "club_name_removal", true, "Authorized retained member removal");
+      #Ok(receipt)
+    } catch (e) { #Err(Error.message(e)) } finally { privateNameWriterGate.leave(lease) }
+  };
 
   // Lifecycle readbacks distinguish confirmed absence from denied/unavailable
   // reads. These synchronous owner/governor methods never issue a shared key.

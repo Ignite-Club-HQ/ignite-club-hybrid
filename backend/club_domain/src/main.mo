@@ -48,6 +48,7 @@ import MembershipDirectorySource "membershipDirectorySource";
 import MembershipSourceRetention "membershipSourceRetention";
 import SubscriptionPolicy "subscriptionPolicy";
 import ProfileMembership "profileMembership";
+import PrivateNameCleanup "../../shared/PrivateNameCleanup";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -62,6 +63,10 @@ persistent actor class Main(governorInit : Principal) = this {
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
   // Separate stop-the-world rehearsal only; never enabled by deploy scripts.
   var private_name_writer_intents : Map.Map<Text, PrivateNameWriterWindow.Intent>;
+  var private_name_cleanup_rows : Map.Map<Text, PrivateNameCleanup.Intent>;
+  transient let nameCleanup = PrivateNameCleanup.Queue(private_name_cleanup_rows);
+  transient let automaticNameCleanup = Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_REHEARSAL") == ?"1";
+  transient var nameCleanupRunning = false;
   transient let privateNameWriterGate = PrivateNameWriterWindow.Gate(Runtime.envVar<system>("IGNITE_PRIVATE_NAME_WRITER_REHEARSAL") == ?"1", accountAdmissionAuthority, private_name_writer_intents, 4096);
   include PrivateNameWriterEndpoints(privateNameWriterGate, Principal.fromActor(this));
 
@@ -399,6 +404,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
   func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
     if (not isGovernor(caller)) return #err("Forbidden");
+    if (nameCleanup.locked()) return #err("Name cleanup pending; preserve exact account identifiers");
     if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Removed identity cannot be rekeyed or merged");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Anonymous principal not allowed");
     if (old.equal(new)) return #err("old and new must differ");
@@ -638,7 +644,10 @@ persistent actor class Main(governorInit : Principal) = this {
   var membershipDirectorySource : MembershipDirectorySource.State;
   var membershipSourceRetention : MembershipSourceRetention.State;
   func membershipEpoch() : Nat = membershipDiscoveryJournal.revision;
-  func bumpMembershipDiscovery() { MembershipDiscovery.bump(membershipDiscoveryJournal) };
+  func bumpMembershipDiscovery() {
+    if (nameCleanup.locked()) Runtime.trap("Name cleanup pending; membership changes remain locked");
+    MembershipDiscovery.bump(membershipDiscoveryJournal)
+  };
   transient var memberIndexEpoch : ?Nat = null;
   transient var memberIndex : MembershipIndex.Index = MembershipIndex.empty();
   transient let APP_WIDE = "\u{1F}*";
@@ -3998,6 +4007,57 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
   // ---- Role management: grants, requests, and member removal ----
+  // Retain before sending. Unknown purge outcomes only read receipts, never
+  // resubmit. The global membership-write guard covers all sibling writers.
+  func runNameCleanup() : async () {
+    if (not automaticNameCleanup or nameCleanupRunning) return;
+    let initial = nameCleanup.first() ?? return;
+    nameCleanupRunning := true;
+    try {
+      let verifier = identityAccessCanister ?? return;
+      let identity : actor { read_private_name_cleanup_account : shared Principal -> async { #Ok : PrivateNameCleanup.Account; #Err : Text } } = actor(verifier.toText());
+      var row = initial;
+      if (row.account == null) {
+        let saved = switch (await (with timeout = 10) identity.read_private_name_cleanup_account(row.user)) { case (#Err(_)) return; case (#Ok(value)) value };
+        if (identityAccessCanister != ?verifier or nameCleanup.get(row.id) != ?row or saved.principals.size() == 0 or saved.principals.size() > 25 or not saved.principals.any(func p = p == row.user)) return;
+        switch (saved.original_authority) { case (#NoName) { nameCleanup.finish(row.id); return }; case (#Unresolved) return; case (#Existing(_)) {} };
+        row := { row with account = ?saved }; nameCleanup.save(row);
+      };
+      let saved = row.account ?? return;
+      if (saved.principals.any(func p = isMember(p, row.club))) return;
+      let original = switch (saved.original_authority) { case (#Existing(value)) value; case _ return };
+      let receiver : actor {
+        purge_removed_private_club_name : shared (Text, Text, Principal) -> async { #Ok : PrivateNameCleanup.Receipt; #Err : Text };
+        read_removed_private_club_name_receipt : shared (Text, Text, Principal) -> async { #Ok : ?PrivateNameCleanup.Receipt; #Err : Text }
+      } = actor(original.sink.toText());
+      var receipt : ?PrivateNameCleanup.Receipt = null;
+      if (row.submitted) {
+        receipt := switch (await (with timeout = 10) receiver.read_removed_private_club_name_receipt(row.id, row.club, original.subject)) { case (#Ok(value)) value; case (#Err(_)) return }
+      } else {
+        row := { row with submitted = true }; nameCleanup.save(row);
+        receipt := switch (await (with timeout = 10) receiver.purge_removed_private_club_name(row.id, row.club, original.subject)) { case (#Ok(value)) ?value; case (#Err(_)) return }
+      };
+      if (identityAccessCanister != ?verifier or nameCleanup.get(row.id) != ?row or saved.principals.any(func p = isMember(p, row.club))) return;
+      switch (receipt) { case (?r) { if (r.id == row.id and r.club == row.club and r.subject == original.subject and r.replica_absent and r.original_retained) nameCleanup.finish(row.id) }; case null {} }
+    } catch (_) { /* Retain intent and unknown submission, including on timeout. */ }
+    finally { nameCleanupRunning := false }
+  };
+  transient let nameCleanupTimer = Timer.recurringTimer<system>(#seconds 60, runNameCleanup);
+  public shared ({ caller }) func resume_private_name_cleanup() : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller) or not automaticNameCleanup) return #Err("Governor and cleanup rehearsal required");
+    await runNameCleanup(); #Ok(private_name_cleanup_rows.size())
+  };
+  public shared ({ caller }) func read_private_name_cleanup_pending() : async { #Ok : [PrivateNameCleanup.Intent]; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok(private_name_cleanup_rows.values().toArray())
+  };
+  public shared ({ caller }) func read_private_name_removal_proof(id : Text) : async { #Ok : PrivateNameCleanup.Proof; #Err : Text } {
+    if (not automaticNameCleanup or identityAccessCanister != ?caller or caller.isAnonymous()) return #Err("Configured cleanup identity required");
+    let row = nameCleanup.get(id) ?? return #Err("Retained removal intent required");
+    let saved = row.account ?? return #Err("Verified cleanup account required");
+    if (not row.submitted or isTransferFenced(row.club) or not profiles.any(func p = p.id == row.club and p.deleted_at_ms == null)) return #Err("Cleanup scope unavailable");
+    #Ok({ intent = row; members = saved.principals.map(func p = isMember(p, row.club)) })
+  };
   // Provisional: `add_role_grant`/`remove_role_grant` mutate both the
   // Principal-keyed `acl.roles` (the actual authorization source used by
   // `isAdmin`/`isMember`/`canManageTeam`) and the Text-account-keyed
@@ -4051,6 +4111,7 @@ persistent actor class Main(governorInit : Principal) = this {
     acl := { acl with roles = acl.roles.filter(func(g) = not (g.user.equal(user) and g.role == role and g.club == ?club and g.team == team)) };
     let accountId = accountIdFor(user);
     accountRoles := accountRoles.filter(func(g) = not (g.account_id == accountId and g.role == role and g.club == ?club and g.team == team));
+    if (automaticNameCleanup and not isMember(user, club)) { ignore nameCleanup.enqueue(club, user, membershipEpoch()); ignore runNameCleanup() };
     #Ok
   
     } finally { removalReceiver.leave(caller) };
@@ -4081,6 +4142,7 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removedMembers.any(func(m) = m.club == club and m.user.equal(user))) {
       removedMembers := removedMembers.concat([{ club; user; removed_at_ms = nowMs(); removed_by = caller }]);
     };
+    if (automaticNameCleanup) { ignore nameCleanup.enqueue(club, user, membershipEpoch()); ignore runNameCleanup() };
     #Ok
   
     } finally { removalReceiver.leave(caller) };
