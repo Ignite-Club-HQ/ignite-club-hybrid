@@ -123,6 +123,7 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     const audience = { kind: 'club', authority: f.services.club_domain.canisterId, resource: f.clubId, profile_revision: 0n };
     expect('Err' in await denied.get_private_profile_names_batch([subject], audience)).toBe(true);
     event.unmount(); chat.unmount(); queryClient.clear();
+    await f.pic.upgradeCanister({canisterId:f.services.identity_access.canisterId,sender:f.governor,wasm:readFileSync('../target/private-name-cleanup/wasm32-unknown-unknown/release/identity_access.wasm'),arg:IDL.encode([IDL.Record({governor:IDL.Principal})],[{governor:f.governor}])});
     // Disable private read/conversion rehearsal on the real disposable sinks.
     // Automatic cleanup must work under its separate production switch only.
     await f.pic.updateCanisterSettings({ canisterId:f.services.club_domain.canisterId,sender:f.governor,environmentVariables:[{name:'IGNITE_PRIVATE_NAME_CLEANUP_RELEASE',value:'1'}] });

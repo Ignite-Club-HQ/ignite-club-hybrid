@@ -46,7 +46,7 @@ export function runPrivateNameAcceptance({ root = resolve(dirname(fileURLToPath(
     command('Compile disposable identity and registries', 'cargo', ['build', '--locked', '--release', '--target', 'wasm32-unknown-unknown', '-p', 'identity_access', '-p', 'shard_router', '-p', 'placement_registry']);
     delete env.IGNITE_PRIVATE_PROFILE_READS_REHEARSAL;
     env.IGNITE_PRIVATE_NAME_CLEANUP_RELEASE='1';
-    command('Compile cleanup-only identity with private reads/conversion disabled', 'cargo', ['build', '--locked', '--release', '--target', 'wasm32-unknown-unknown', '-p', 'identity_access']);
+    command('Compile cleanup-only identity with private reads/conversion disabled', 'cargo', ['build', '--locked', '--release', '--target', 'wasm32-unknown-unknown', '--target-dir','target/private-name-cleanup', '-p', 'identity_access']);
     delete env.IGNITE_PRIVATE_NAME_CLEANUP_RELEASE;
     env.IGNITE_PRIVATE_PROFILE_READS_REHEARSAL='1';
     command('Verify exact identity cleanup routing', 'cargo', ['test', '--locked', '-p', 'identity_access', 'private_name_cleanup']);
