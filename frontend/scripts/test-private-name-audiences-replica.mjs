@@ -285,5 +285,16 @@ try {
   // coordinator suite may exercise that authority-reducing write.
   assert.ok('Err' in await identity.actor.set_account_status(accounts.get(owner.toText()),{Suspended:null}));
   assert.ok('Err' in await read(viewer,scope('club',groups[1].club.canisterId,'club-1')));
+  // End-of-suite destructive lifecycle check: all replicas disappear when
+  // the original person name is deleted, while club names remain untouched.
+  original.actor.setPrincipal(owner);
+  ok(await original.actor.register_private_club_name(owner,'club-1',clubCipher));
+  ok(await original.actor.delete_pii(owner.toText(),'display_name'));
+  assert.ok('Err' in await original.actor.read_private_club_name_preparation(owner,'club-1'));
+  assert.ok('Err' in await original.actor.delete_pii(owner.toText(),'display_name'));
+  assert.ok('Err' in await read(owner,clubScope));
+  await pic.upgradeCanister({canisterId:original.canisterId,wasm:wasm('pii_access_control'),sender:governor,arg,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+  original.actor.setPrincipal(owner);assert.ok('Err' in await original.actor.read_private_club_name_preparation(owner,'club-1'));
+  console.log('PASS: original name deletion removes club replicas, cannot disclose after upgrade, and missing original deletion refuses. Previously downloaded ciphertext/keys are not revocable.');
   console.log('PASS: real cross-group original-PII SDK decryption for club, family, guardian, competition, league and direct; caller-created peer enumeration, unrelated user, service impersonation, blocked peer, block/unblock ABA and broadcast refusal; healthy direct retries. No live data or grants changed.');
 } finally {await pic?.tearDown();await server.stop();}
