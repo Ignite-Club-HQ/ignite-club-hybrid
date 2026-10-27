@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareVerifiedPrivateNameArtifact} from './private-name-verified-preparation.mjs';
+import {prepareVerifiedPrivateNameArtifact,prepareCompletePrivateNameArtifact} from './private-name-verified-preparation.mjs';
 import {encryptName} from './convert-private-names.mjs';
 import {MasterPublicKey} from '../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js';
 // Early refusals require neither a mainnet key nor any key derivation.
@@ -67,4 +67,15 @@ test('plaintext names require independent authority resolution without first-ali
   const f=await existingFixture();f.deps.accounts.rows[0].profile.display_name='Paul Cranwell';f.deps.accounts.rows[0].originalAuthority={kind:'Unresolved'};f.deps.resolveAuthority=async()=>null;
   await assert.rejects(prepareVerifiedPrivateNameArtifact(f.i,f.deps),/authority unresolved/);
   f.deps.resolveAuthority=async()=>({sink:'pii',subject:'person'});const artifact=await prepareVerifiedPrivateNameArtifact(f.i,f.deps);assert.equal(artifact.body.rows[0].subject,'person');
+});
+test('complete preparation takes accounts first and replaces caller clubs with verified ownership',async()=>{
+  const f=await existingFixture();let reads=0;
+  const deps={...f.deps,accountInventory:{listAccounts:async()=>{reads++;return f.deps.accounts;}},readName:async()=>'Paul Cranwell',assertFence:async()=>true,
+    actors:new Map([['club-source',{read_membership_source_page:async()=>({Ok:{revision:1n,scanned:1n,edges:[{Club:{id:'real-club',deleted:false}}],next:[]}}),read_has_club_membership:async subject=>subject==='person',read_membership_discovery_status:async()=>({Ok:{revision:1n}})}]])};
+  const result=await prepareCompletePrivateNameArtifact({...f.i,sources:[{group:'g1',canisterId:'club-source'}]},deps);
+  assert.equal(reads,1);assert.deepEqual(result.artifact.body.rows[0].clubs.map(c=>c.id),['real-club']);assert.equal(result.artifact.body.inventoryHash,result.inventory.hash);assert.equal(result.artifact.body.rows[0].subject,'person');
+});
+test('complete preparation refuses lost evidence before reading original plaintext',async()=>{
+  const f=await existingFixture();let names=0;
+  await assert.rejects(prepareCompletePrivateNameArtifact(f.i,{...f.deps,accountInventory:{listAccounts:async()=>f.deps.accounts},assertEvidence:async()=>false,readName:async()=>{names++;return 'Paul Cranwell';}}),/complete account evidence/);assert.equal(names,0);
 });
