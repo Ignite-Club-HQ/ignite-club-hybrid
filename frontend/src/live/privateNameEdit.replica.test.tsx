@@ -68,6 +68,16 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     expect(oldCopy.master_key_id).toBe(`vetkey-club-names-v1:${f.clubId}`);
     const storedProfile = f.ok(await identity.get_profile());
     expect(storedProfile.display_name).toBe(reference);
+    // Real trusted service caller, not an owner/browser alias list.
+    const cleanupReader = f.connect('identity_access', f.services.club_domain.canisterId).actor;
+    const routing = f.ok(await cleanupReader.read_private_name_cleanup_account(f.owner));
+    expect(routing.principals.map((p: any) => p.toText())).toEqual([subject]);
+    expect(routing.original_authority).toEqual({ Existing: { sink: f.services.pii_access_control.canisterId, subject: f.owner } });
+    expect(Object.keys(routing).sort()).toEqual(['account_id','account_version','original_authority','principals','revision']);
+    expect('Err' in await identity.read_private_name_cleanup_account(f.owner)).toBe(true);
+    expect('Err' in await f.connect('identity_access', f.outsider).actor.read_private_name_cleanup_account(f.owner)).toBe(true);
+    const unrelatedService = f.connect('identity_access', f.services.pii_access_control.canisterId).actor;
+    expect('Err' in await unrelatedService.read_private_name_cleanup_account(f.owner)).toBe(true);
     local.context = viewerContext;
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const msg = { id: f.message.id, text: f.message.text, image_url: null, created_at: new Date().toISOString(), author_id: subject, group_id: f.conversationId, reply_to_id: null };
