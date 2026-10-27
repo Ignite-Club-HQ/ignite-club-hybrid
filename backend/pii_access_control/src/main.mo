@@ -289,7 +289,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let inG = func(k : Text) : Bool = rootG.any(func(x) = x.pii_id == k);
     let gs = guardian_relationships.filter(func(x) = x.children.any(inG));
     { grants = club_read_grants.filter(func(x) = x.club_id == c);
-      records = pii_records.filter(func(x) = inG(x.pii_id));
+      records = pii_records.filter(func(x) = inG(x.pii_id) and not reservedMediaIdentity(x.pii_id, x.field_id));
       guardians = gs;
       guardian_labels = ?guardianLabels.filter(func(x) = gs.any(func(g) = g.guardian.equal(x.guardian))) }
   };
@@ -969,7 +969,7 @@ persistent actor class Main(governorInit : Principal) = this {
     // Remove existing if any, then append
     mediaAuthEpoch += 1;
     pii_records := Array.filter<PiiRecord>(pii_records, func(r) {
-      not (r.pii_id == pii_id and r.field_id == field_id)
+      not (r.pii_id == pii_id and (r.field_id == field_id or (field_id == "display_name" and Text.startsWith(r.field_id, #text "club_display_name:"))))
     }).concat([record]);
 
     log_audit(caller, pii_id, field_id, "register", true, "PII Registration");
@@ -1366,6 +1366,7 @@ persistent actor class Main(governorInit : Principal) = this {
     let before = club_read_grants.size();
     mediaAuthEpoch += 1;
     club_read_grants := club_read_grants.filter(func(g) = g.club_id != club_id);
+    pii_records := pii_records.filter(func r = r.field_id != clubNameField(club_id));
     privateMediaAuthorities.remove(club_id);
     // Permanent deletion is not a transfer: neither authority may survive
     // identifier reuse. Existing owner records remain independently owned.
@@ -1399,7 +1400,7 @@ persistent actor class Main(governorInit : Principal) = this {
         // Remove the record (cryptographic erasure)
         mediaAuthEpoch += 1;
         pii_records := Array.filter<PiiRecord>(pii_records, func(rec) {
-          not (rec.pii_id == pii_id and rec.field_id == field_id)
+          not (rec.pii_id == pii_id and (rec.field_id == field_id or (field_id == "display_name" and Text.startsWith(rec.field_id, #text "club_display_name:"))))
         });
 
         let now = now_ns();

@@ -86,6 +86,36 @@ try {
   };
   await decrypt(viewer,scope('club',groups[1].club.canisterId,'club-1'));
   await decrypt(viewer,scope('family',groups[1].club.canisterId,'child-1'));
+  // New shared-name route: real key derivation across an original G1 PII
+  // and independently registered G2 club. Other audiences retain person keys.
+  const clubScope = scope('club',groups[1].club.canisterId,'club-1');
+  const clubInput = encoding.encode('clubnames:club-1\u001fdisplay_name');
+  const clubCipher = IbeCiphertext.encrypt(verification,IbeIdentity.fromBytes(clubInput),encoding.encode('Paul Cranwell'),IbeSeed.random()).serialize();
+  original.actor.setPrincipal(owner);
+  ok(await original.actor.register_private_club_name(owner,'club-1',clubCipher));
+  assert.deepEqual(Array.from(ok(await original.actor.read_private_club_name_preparation(owner,'club-1')).ciphertext),Array.from(clubCipher));
+  original.actor.setPrincipal(outsider);
+  assert.ok('Err' in await original.actor.register_private_club_name(owner,'club-1',clubCipher));
+  assert.ok('Err' in await original.actor.get_encrypted_pii_batch([owner.toText()],'club_display_name:club-1','read','must not bypass'));
+  const clubRows = ok(await read(viewer,clubScope));
+  assert.equal(clubRows[0].master_key_id,'vetkey-club-names-v1:club-1');
+  original.actor.setPrincipal(viewer);
+  const clubTransport = TransportSecretKey.random();
+  const clubKey = EncryptedVetKey.deserialize(Uint8Array.from(ok(await original.actor.get_private_profile_club_name_vetkey([owner.toText()],clubScope,clubTransport.publicKeyBytes())))).decryptAndVerify(clubTransport,verification,clubInput);
+  assert.equal(new TextDecoder().decode(IbeCiphertext.deserialize(Uint8Array.from(clubRows[0].ciphertext)).decrypt(clubKey)),'Paul Cranwell');
+  assert.ok('Err' in await original.actor.get_private_profile_club_name_vetkey([owner.toText()],scope('family',groups[1].club.canisterId,'child-1'),clubTransport.publicKeyBytes()));
+  original.actor.setPrincipal(outsider);
+  assert.ok('Err' in await original.actor.get_private_profile_club_name_vetkey([owner.toText()],clubScope,clubTransport.publicKeyBytes()));
+  assert.ok('Err' in await original.actor.register_pii('clubnames:club-1','display_name',[1],outsider));
+  await decrypt(viewer,scope('family',groups[1].club.canisterId,'child-1'));
+  await pic.upgradeCanister({canisterId:original.canisterId,wasm:wasm('pii_access_control'),sender:governor,arg,upgradeModeOptions:{skip_pre_upgrade:[],wasm_memory_persistence:[{keep:null}]}});
+  const preserved = ok(await read(viewer,clubScope));
+  assert.equal(new TextDecoder().decode(IbeCiphertext.deserialize(Uint8Array.from(preserved[0].ciphertext)).decrypt(clubKey)),'Paul Cranwell');
+  // Replacing the original name invalidates every replica rather than
+  // continuing to show an old club name. Compatibility returns person keys.
+  original.actor.setPrincipal(owner);ok(await original.actor.register_pii(owner.toText(),'display_name',encrypted,owner));
+  assert.equal(ok(await read(viewer,clubScope))[0].master_key_id,'vetkey-ibe-v1');
+  console.log('PASS: real club-key names across groups, exact authorized ciphertext, outsider/family/generic-key denial, original-key upgrade preservation and stale-replica invalidation.');
   const broadcastService=groups[0].messaging;
   broadcastService.actor.setPrincipal(governor);ok(await broadcastService.actor.ensure_broadcast_conversation());
   const announcement=ok(await broadcastService.actor.send_message('broadcast','Announcement','private-broadcast-test',[],[]));
