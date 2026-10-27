@@ -89,6 +89,45 @@ export function createPrivateNameProfileAdapter(actor,{assertFence,maxPages=1000
   return {listProfiles,readProfile:async id=>{const profiles=await listProfiles();const row=profiles.find(p=>p.account_id===id);if(!row)throw Error('Exact conversion profile absent');return row;},publishReference:async(id,reference)=>{await guard();const profile=unwrap(await actor.convert_profile_name(id,reference));await guard();if(profile.account_id!==id || profile.display_name!==reference)throw Error('Conversion publication readback mismatch');return profile;}};
 }
 
+/** Account-first consensus evidence, including the terminal dangling-profile
+ * validation pass. A complete result is never inferred from a short page. */
+export function createPrivateNameAccountInventoryAdapter(actor,{operationId,request,assertFence,maxPages=2000,maxAccounts=100000}) {
+  if(typeof operationId!=='string' || !operationId || !request || typeof assertFence!=='function' || !Number.isSafeInteger(maxPages) || maxPages<1 || maxPages>2000 || !Number.isSafeInteger(maxAccounts) || maxAccounts<1 || maxAccounts>100000)throw Error('Exact bounded locked account inventory required');
+  const expected={operation_id:request.operation_id,generation:revision(request.generation),inventory_digest:Array.from(request.inventory_digest??[])};
+  if(expected.operation_id!==`names:${operationId}` || expected.inventory_digest.length!==32 || expected.inventory_digest.some(b=>!Number.isInteger(b)||b<0||b>255))throw Error('Exact account inventory request required');
+  const sameRequest=r=>r?.operation_id===expected.operation_id && revision(r.generation)===expected.generation && JSON.stringify(Array.from(r.inventory_digest))===JSON.stringify(expected.inventory_digest);
+  const guard=async()=>{if(await assertFence(structuredClone(expected))!==true)throw Error('Account inventory exclusion required');};
+  return {listAccounts:async()=>{
+    const rows=[],accounts=new Set(),aliases=new Set();let cursor=[],pinnedRevision;
+    for(let i=0;i<maxPages;i++){
+      await guard();const page=unwrap(await actor.read_private_name_account_inventory(operationId,expected,cursor,100));await guard();
+      const rev=revision(page.revision),phase=cursor[0]?.phase??0;
+      if(pinnedRevision===undefined)pinnedRevision=rev;
+      if(rev!==pinnedRevision || !sameRequest(page.request) || !Number.isInteger(page.scanned) || page.scanned<0 || page.scanned>100 || !Array.isArray(page.rows) || page.rows.length>page.scanned || (phase===1 && page.rows.length!==0) || !Array.isArray(page.next) || page.next.length>1)throw Error('Account inventory binding changed');
+      let previous=cursor[0]?.after[0]??'';
+      for(const row of page.rows){
+        const a=row?.account,status=Object.keys(a?.status??{});
+        if(typeof a?.id!=='string' || !a.id || a.id.length>64 || a.id<=previous || accounts.has(a.id) || !Array.isArray(a.principals) || !a.principals.length || status.length!==1 || !['Active','Suspended'].includes(status[0]) || !Array.isArray(row.profile) || row.profile.length>1)throw Error('Invalid complete account inventory');
+        const principals=a.principals.map(principal);for(const alias of principals){if(aliases.has(alias))throw Error('Ambiguous account alias inventory');aliases.add(alias);}
+        const profile=row.profile[0]??null;if(profile && (profile.account_id!==a.id || typeof profile.display_name!=='string'))throw Error('Account profile binding changed');
+        const kind=Object.keys(row.original_authority??{});if(kind.length!==1 || !['NoName','Unresolved','Existing'].includes(kind[0]))throw Error('Explicit original authority required');
+        let originalAuthority={kind:kind[0]};
+        if(kind[0]==='Existing'){const value=row.original_authority.Existing,sink=principal(value?.sink),subject=principal(value?.subject);if(!principals.includes(subject) || profile?.display_name!==`pii-display-name:v1:${sink}:${subject}`)throw Error('Original authority binding changed');originalAuthority={kind:'Existing',sink,subject};}
+        if(kind[0]==='NoName' && profile?.display_name)throw Error('Named account cannot disappear from conversion');
+        const sourceDigest=Array.from(row.source_digest??[]);if(sourceDigest.length!==32 || sourceDigest.some(b=>!Number.isInteger(b)||b<0||b>255))throw Error('Exact optional-profile source digest required');
+        accounts.add(a.id);previous=a.id;rows.push({accountId:a.id,principals,version:String(revision(a.version)),status:status[0],profile:profile?structuredClone(profile):null,originalAuthority,sourceDigest});
+        if(rows.length>maxAccounts)throw Error('Account inventory exceeds bound');
+      }
+      if(!page.next.length){if(phase!==1)throw Error('Profile integrity traversal incomplete');await guard();return {request:structuredClone(expected),revision:String(pinnedRevision),rows};}
+      const next=page.next[0];if(!next || revision(next.revision)!==pinnedRevision || !Array.isArray(next.after) || next.after.length>1 || ![0,1].includes(next.phase))throw Error('Account inventory cursor changed');
+      if(next.phase===phase){if(page.scanned===0 || typeof next.after[0]!=='string' || next.after[0]<=(cursor[0]?.after[0]??'') || (phase===0 && next.after[0]!==previous))throw Error('Account inventory cursor made no progress');}
+      else if(phase!==0 || next.phase!==1 || next.after.length!==0)throw Error('Account inventory phase changed');
+      cursor=[{phase:next.phase,after:[...next.after],revision:pinnedRevision}];
+    }
+    throw Error('Account inventory page budget exceeded');
+  }};
+}
+
 export function createPrivateNamePiiAdapter(actor,Principal) {
   const original=record=>{
     if(!record || typeof record.pii_id!=='string' || record.field_id!=='display_name')throw Error('PII ciphertext binding changed');
