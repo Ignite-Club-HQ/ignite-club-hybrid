@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "./featureRouter";
 
-const mocks = vi.hoisted(() => ({ register: vi.fn(), read: vi.fn(), scopedRead: vi.fn(), keys: vi.fn(), clubKey: vi.fn(), encrypt: vi.fn(), decrypt: vi.fn() }));
-vi.mock("./domains", () => ({ connectLivePiiAccessControl: vi.fn(async () => ({ actor: { register_pii: mocks.register, get_encrypted_pii_batch: mocks.read, get_private_profile_names_batch: mocks.scopedRead } })) }));
+const mocks = vi.hoisted(() => ({ register: vi.fn(), read: vi.fn(), scopedRead: vi.fn(), keys: vi.fn(), clubKey: vi.fn(), encrypt: vi.fn(), decrypt: vi.fn(), rehearsal: vi.fn(), refresh: vi.fn(), lifecycleRead: vi.fn() }));
+vi.mock('./privateProfileSearchMode', () => ({ privateProfileSearchRehearsalEnabled: mocks.rehearsal }));
+vi.mock("./domains", () => ({ connectLivePiiAccessControl: vi.fn(async () => ({ actor: { register_pii: mocks.register, get_encrypted_pii_batch: mocks.read, get_private_profile_names_batch: mocks.scopedRead, refresh_private_club_name_lifecycle: mocks.refresh, read_private_club_name_lifecycle: mocks.lifecycleRead } })) }));
 vi.mock("./piiVetKeys", () => ({ encryptPiiText: mocks.encrypt, fetchPiiVetKeys: mocks.keys, fetchClubNameVetKey: mocks.clubKey, clubNamePiiId: (id: string) => `clubnames:${id}`, CLUB_NAME_SCHEME_PREFIX: 'vetkey-club-names-v1:' }));
 vi.mock("@icp-sdk/vetkeys", () => ({ IbeCiphertext: { deserialize: () => ({ decrypt: mocks.decrypt }) } }));
 
-import { hydratePrivateProfileNames, preparePrivateOwnProfileName, preparePrivateOwnProfileEmail, privateProfileNameReference } from "./privateProfileNames";
+import { hydratePrivateProfileNames, preparePrivateOwnProfileName, preparePrivateOwnProfileEmail, privateProfileNameReference, refreshPrivateOwnClubNames } from "./privateProfileNames";
 import { retirePrivateProfileSession } from './privateProfileSession';
 
 const subject = "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe";
@@ -22,6 +23,55 @@ beforeEach(() => {
   mocks.read.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: "display_name", ciphertext: [9, 8] }] });
   mocks.keys.mockResolvedValue(new Map([[subject, "authorized-key"]]));
   mocks.decrypt.mockReturnValue(new TextEncoder().encode("Paul Cranwell"));
+  mocks.rehearsal.mockReturnValue(false);
+  mocks.refresh.mockResolvedValue({ Ok: null });
+  mocks.lifecycleRead.mockImplementation(async (_, club) => ({ Ok: [{ pii_id: subject, field_id: 'display_name', master_key_id: `vetkey-club-names-v1:${club}`, ciphertext: [9, 8] }] }));
+});
+
+describe('essential own-name copy maintenance', () => {
+  const discover = () => Promise.resolve(['club-1', 'club-1', 'club-2']);
+  const enable = () => {
+    mocks.rehearsal.mockReturnValue(true);
+    mocks.read.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9, 8], master_key_id: 'vetkey-ibe-v1' }] });
+  };
+  it('keeps production unchanged without even starting club discovery', async () => {
+    const clubs = vi.fn(discover);
+    await refreshPrivateOwnClubNames(ctx, 'Paul Cranwell', clubs);
+    expect(clubs).not.toHaveBeenCalled();expect(mocks.read).not.toHaveBeenCalled();expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it('refreshes each club once against exact original bytes and verifies all copies', async () => {
+    enable();await refreshPrivateOwnClubNames(ctx, ' Paul Cranwell ', discover);
+    expect(mocks.refresh.mock.calls).toEqual([
+      [Principal.fromText(subject), 'club-1', [9, 8], [9, 8]],
+      [Principal.fromText(subject), 'club-2', [9, 8], [9, 8]],
+    ]);
+    expect(mocks.lifecycleRead).toHaveBeenCalledTimes(2);
+    expect(mocks.lifecycleRead).toHaveBeenCalledWith(Principal.fromText(subject), 'club-1', [[9, 8]]);
+    expect(mocks.register).not.toHaveBeenCalled();
+  });
+  it('stops before replica writes when original plaintext differs', async () => {
+    enable();mocks.decrypt.mockReturnValue(new TextEncoder().encode('Newer name'));
+    await expect(refreshPrivateOwnClubNames(ctx, 'Paul Cranwell', discover)).rejects.toThrow('Original private name changed');expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it('propagates unavailable club discovery without original or replica writes', async () => {
+    enable();await expect(refreshPrivateOwnClubNames(ctx, 'Paul Cranwell', async () => { throw Error('Membership unavailable'); })).rejects.toThrow('Membership unavailable');expect(mocks.read).not.toHaveBeenCalled();expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it('rejects target drift during discovery before writes', async () => {
+    enable();const changed = { ...ctx, target: { ...ctx.target, canisterIds: { ...ctx.target.canisterIds } } };
+    await expect(refreshPrivateOwnClubNames(changed, 'Paul Cranwell', async () => { changed.target.canisterIds.pii_access_control = 'ryjl3-tyaaa-aaaaa-aaaba-cai';return ['club-1']; })).rejects.toThrow('maintenance changed');expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it('stops on session retirement during discovery', async () => {
+    enable();await expect(refreshPrivateOwnClubNames(ctx, 'Paul Cranwell', async () => { retirePrivateProfileSession();return ['club-1']; })).rejects.toThrow('session retired');expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it.each(['Unknown commit', 'Original name changed', 'Names not released'])('does not replay or continue after %s', async message => {
+    enable();mocks.refresh.mockRejectedValueOnce(Error(message));await expect(refreshPrivateOwnClubNames(ctx, 'Paul Cranwell', discover)).rejects.toThrow(message);expect(mocks.refresh).toHaveBeenCalledOnce();expect(mocks.lifecycleRead).not.toHaveBeenCalled();
+  });
+  it('refuses missing or changed closing readback after writes', async () => {
+    enable();mocks.lifecycleRead.mockResolvedValueOnce({ Ok: [] });await expect(refreshPrivateOwnClubNames(ctx, 'Paul Cranwell', discover)).rejects.toThrow('readback mismatch');expect(mocks.refresh).toHaveBeenCalledTimes(2);
+  });
+  it('bounds destinations before any crypto or replica mutation', async () => {
+    enable();await expect(refreshPrivateOwnClubNames(ctx, 'Paul Cranwell', async () => Array(101).fill('club'))).rejects.toThrow('Bounded exact');expect(mocks.encrypt).not.toHaveBeenCalled();expect(mocks.refresh).not.toHaveBeenCalled();
+  });
 });
 
 describe("private profile name preparation", () => {
