@@ -19,7 +19,9 @@ test('cleanup approval preserves existing settings and enables only cleanup',()=
   assert.equal(env.length,2);
 });
 test('unrelated rehearsal, duplicate settings and foreign targets fail closed',()=>{
-  for(const name of ['IGNITE_PRIVATE_PROFILE_READS_REHEARSAL','IGNITE_PRIVATE_NAME_WRITER_REHEARSAL','IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL'])assert.throws(()=>cleanupEnvironment([{name,value:'1'}],'club_domain'));
+  for(const name of ['IGNITE_PRIVATE_PROFILE_READS_REHEARSAL','IGNITE_PRIVATE_NAME_WRITER_REHEARSAL'])assert.throws(()=>cleanupEnvironment([{name,value:'1'}],'club_domain'));
+  // The live account admission release switch (historical LOCAL_REHEARSAL name) is preserved, not mistaken for a rehearsal.
+  assert.equal(cleanupEnvironment([{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'}],'club_domain').find(r=>r.name==='IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL')?.value,'1');
   assert.throws(()=>cleanupEnvironment([{name:'x',value:'1'},{name:'x',value:'2'}],'club_domain'));
   assert.throws(()=>cleanupEnvironment([],'shard_router'));
 });
