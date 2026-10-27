@@ -191,4 +191,12 @@ async fn complete_private_name_suspension_sink(operation_id: String, target: Pri
     #[test] fn acknowledged_boundary_survives_later_global_epochs() {let mut i=fixture();let t=i.targets[0];let first=receipt(&i,t,false);i.record(t,first.clone(),false).unwrap();let mut later=first.clone();later.release_epoch=9u8.into();i.record(t,later,false).unwrap();assert_eq!(i.prepared,vec![first]);}
     #[test] fn stable_roundtrip_retains_unknown_and_completed_intents() {let mut i=fixture();let t=i.targets[0];i.record(t,receipt(&i,t,false),false).unwrap();let restored:Intent=super::super::decode(&super::super::encode(&i));assert_eq!(restored,i);assert!(restored.can_commit().is_err()); i.phase=Phase::Done;assert_eq!(super::super::decode::<Intent>(&super::super::encode(&i)),i);}
     #[test] fn overlapping_callback_merges_preserve_both_receipts() {let mut i=fixture();let a=i.targets[0];let b=i.targets[1];let ra=receipt(&i,a,false);let rb=receipt(&i,b,false);i.record(a,ra.clone(),false).unwrap();i.record(b,rb.clone(),false).unwrap();i.record(a,ra,false).unwrap();assert_eq!(i.prepared.len(),2);assert!(i.prepared.contains(&rb));}
+    #[test] fn durable_recovery_keeps_reservation_until_all_completions() {
+        let mut i=fixture();i.request.operation_id="stable-recovery".into();i.account.id="stable-recovery-member".into();
+        save(&i);assert!(pending(&i.account.id));assert_eq!(get(&i.request.operation_id).unwrap(),i);
+        for t in i.targets.clone(){i.record(t,receipt(&i,t,false),false).unwrap();save(&i);}
+        i.can_commit().unwrap();i.phase=Phase::Committed;save(&i);
+        for t in i.targets.clone(){i=get(&i.request.operation_id).unwrap();i.record(t,receipt(&i,t,true),true).unwrap();save(&i);assert!(pending(&i.account.id));}
+        i.phase=Phase::Done;save(&i);assert!(!pending(&i.account.id));assert_eq!(get(&i.request.operation_id).unwrap().completed.len(),3);
+    }
 }

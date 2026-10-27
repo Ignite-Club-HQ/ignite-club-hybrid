@@ -26,7 +26,18 @@ upgrade preservation. The verifier is an explicit test fixture, not the real
 cross-group identity resolver; these results certify the sink boundary only.
 The Motoko policy/compiler checks and all 17 generated contracts pass.
 
-The complete writer/coordinator connection is still not implemented. Required
+An initial real identity-owned coordinator now implements rehearsal-only account
+suspension: immutable all-group and supplemental original-PII inventory,
+stable operation/generation journal (memories 26–27), one bounded sink step,
+exact consensus acknowledgement readback, callback-safe progress merges, atomic
+no-await suspension/commit, and completion readback before releasing the account
+reservation. Unknown outcomes remain durable; completed tombstones are retained.
+Direct suspension in the private-name rehearsal must use this coordinator.
+Account/profile/history drift refuses commit while retaining fences, and subject
+private references cannot point outside the captured original-PII targets.
+Suspension advances the account version; retries never reset committed progress.
+
+The complete writer/coordinator connection is still not implemented. Remaining
 coverage includes identity account/profile/alias changes; club ACL, guardians,
 teams, lifecycle and import/purge/rekey; messaging block/participants/evidence
 and admin mappings; competition/league roles, entries, guardians and nested
@@ -35,6 +46,11 @@ first journal and fence the complete pinned original-PII inventory, read back
 all exact acknowledgements, commit while fenced, then reopen with generation
 invalidation. A sink receipt alone cannot establish this. Production stays
 disabled until that coverage and protected release acceptance are verified.
+The identity regression suite passes 154 tests, including nine new coordinator
+policy/stable-recovery checks; all 17 contracts and ICP guards pass. These are
+not real multi-canister coordinator acceptance: participating remote inventory
+writers, remaining identity writers, real held-callback/upgrade recovery and
+approved signed-in acceptance remain unverified. No deployment or conversion.
 
 Final local disclosure safeguards now snapshot caller rows, share and confirm
 one pending original-authority lease, validate route bindings after closing
