@@ -33,3 +33,14 @@ assert restored.open(owner, { second with generation = 3 : Nat64 }) == #Err("Imm
 restored.leave(next);
 assert restored.seal(owner, second) == #Ok;
 assert Writer.Gate(false, null, Map.empty<Text, Writer.Intent>(), 1).enter() == #Ok(null);
+// Interrupted recovery: a window sealed while work was in flight seals itself
+// when the last retained callback finishes, without any repeated seal call.
+let recovered = Writer.Gate(true, ?owner, Map.empty<Text, Writer.Intent>(), 3);
+let third = { request with operation_id = "window-3"; generation = 3 : Nat64 };
+assert recovered.open(owner, third) == #Ok;
+let held = switch (recovered.enter()) { case (#Ok(key)) key; case _ { assert false; null } };
+assert recovered.seal(owner, third) == #Ok;
+switch (recovered.receipt(owner, third, outsider)) { case (#Ok(r)) { assert r.closing and not r.sealed and r.active == 1 }; case _ assert false };
+recovered.leave(held);
+switch (recovered.receipt(owner, third, outsider)) { case (#Ok(r)) { assert r.closing and r.sealed and r.active == 0 }; case _ assert false };
+assert recovered.open(owner, { request with operation_id = "window-4"; generation = 4 : Nat64 }) == #Ok;
