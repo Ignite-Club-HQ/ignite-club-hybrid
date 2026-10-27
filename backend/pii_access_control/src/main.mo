@@ -731,6 +731,64 @@ persistent actor class Main(governorInit : Principal) = this {
   func clubNameField(club : Text) : Text { "club_display_name:" # club };
   func clubNameScheme(club : Text) : Text { "vetkey-club-names-v1:" # club };
 
+  // Lifecycle readbacks distinguish confirmed absence from denied/unavailable
+  // reads. These synchronous owner/governor methods never issue a shared key.
+  public shared ({ caller }) func read_private_club_name_lifecycle(subject : Principal, club : Text) : async { #Ok : ?EncryptedPii; #Err : Text } {
+    if (not privateNamesRehearsal or not validMediaClub(club) or subject.isAnonymous() or subject == Principal.fromText("aaaaa-aa")) return #Err("Exact rehearsal name target required");
+    if (not isGovernor(caller) and caller != subject) return #Err("Name owner required");
+    switch (pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == clubNameField(club))) {
+      case null #Ok(null);
+      case (?r) {
+        if (r.domain_owner != subject or r.master_key_id != clubNameScheme(club)) return #Err("Name replica binding changed");
+        #Ok(?{ pii_id = subject.toText(); field_id = "display_name"; ciphertext = r.ciphertext; nonce = []; master_key_id = r.master_key_id })
+      }
+    }
+  };
+
+  // Create-only refresh pins the ORIGINAL saved bytes, not just a subject or
+  // sampled timestamp. Check and commit have no await boundary.
+  public shared ({ caller }) func refresh_private_club_name_lifecycle(subject : Principal, club : Text, originalCiphertext : [Nat8], ciphertext : [Nat8]) : async { #Ok; #Err : Text } {
+    if (not privateNamesRehearsal or not validMediaClub(club) or subject.isAnonymous() or subject == Principal.fromText("aaaaa-aa")) return #Err("Exact rehearsal name target required");
+    if (not isGovernor(caller) and caller != subject) return #Err("Name owner required");
+    let lease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(e)) return #Err(e) };
+    try {
+      if (originalCiphertext.size() == 0 or originalCiphertext.size() > 4096 or ciphertext.size() == 0 or ciphertext.size() > 4096) return #Err("Bounded saved name bytes required");
+      let original = pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == "display_name") ?? return #Err("Original private name required");
+      if (original.domain_owner != subject or original.master_key_id != vetkeySchemeId() or original.ciphertext != originalCiphertext) return #Err("Original name changed; retain lifecycle lock");
+      let field = clubNameField(club);
+      switch (pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == field)) {
+        case (?r) {
+          if (r.domain_owner != subject or r.master_key_id != clubNameScheme(club) or r.ciphertext != ciphertext) return #Err("Conflicting replica retained; never overwrite");
+          return #Ok
+        };
+        case null {}
+      };
+      pii_records := pii_records.concat([{ original with field_id = field; ciphertext; nonce = []; master_key_id = clubNameScheme(club); readers = [] }]);
+      mediaAuthEpoch += 1;
+      log_audit(caller, subject.toText(), field, "club_name_refresh", true, "Exact saved name bytes");
+      #Ok
+    } finally { privateNameWriterGate.leave(lease) }
+  };
+
+  // Exact-byte purge cannot delete a newer refresh after delayed delivery.
+  public shared ({ caller }) func purge_private_club_name_lifecycle(subject : Principal, club : Text, expectedCiphertext : [Nat8]) : async { #Ok; #Err : Text } {
+    if (not privateNamesRehearsal or not validMediaClub(club) or subject.isAnonymous() or subject == Principal.fromText("aaaaa-aa")) return #Err("Exact rehearsal name target required");
+    if (not isGovernor(caller) and caller != subject) return #Err("Name owner required");
+    let lease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(e)) return #Err(e) };
+    try {
+      if (expectedCiphertext.size() == 0 or expectedCiphertext.size() > 4096) return #Err("Bounded saved name bytes required");
+      let field = clubNameField(club);
+      switch (pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == field)) {
+        case null return #Ok;
+        case (?r) { if (r.domain_owner != subject or r.master_key_id != clubNameScheme(club) or r.ciphertext != expectedCiphertext) return #Err("Replica changed; retain lifecycle lock") }
+      };
+      pii_records := pii_records.filter(func r = not (r.pii_id == subject.toText() and r.field_id == field));
+      mediaAuthEpoch += 1;
+      log_audit(caller, subject.toText(), field, "club_name_purge", true, "Exact saved name bytes");
+      #Ok
+    } finally { privateNameWriterGate.leave(lease) }
+  };
+
   // Only identity's signed exact-row relay can enter this window. Public
   // register_pii/register_private_club_name remain ordinary locked writers.
   public shared ({ caller }) func register_conversion_name(request : PrivateNameReleaseFence.Request, subject : Principal, club : ?Text, ciphertext : [Nat8]) : async { #Ok; #Err : Text } {
