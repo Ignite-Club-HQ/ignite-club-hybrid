@@ -36,6 +36,16 @@ Fresh-window tests now exercise Fencing → Opening → Writing → Closing → 
 
 The journal requires a pre-provisioned parent directory rather than creating nested parents. Every successful open syncs the file and all ancestor directory entries before returning an adapter, including reopening after an interrupted creation; sync refusal stops execution rather than trusting a potentially non-durable intent.
 
+## Real-canister integration acceptance — 27 October
+
+The generated-actor adapters now normalize coordinator variants/principals and exact nat64 revisions, page every available conversion profile with all aliases, and use real original/club ciphertext readbacks. SDK encryption normalizes saved public-key arrays to Uint8Array; the real execution test exposed and fixed this mismatch.
+
+The disposable two-group coordinator test now collects actual club source pages and membership booleans for its two known single-alias accounts, saves randomized ciphertext, executes a fresh operation, deliberately loses a reply after a real club-copy commit, reopens disk receipts, and completes without replay. Both original keys/ciphertexts decrypt using the actual SDK after completion; all club bytes/profile references reconcile before release. Existing mid-Opening coordinator upgrade and stopped-sink recovery still run. The test passed on real local PocketIC canisters, not mainnet.
+
+Saved approval helpers use pinned Ed25519 public keys and independently pinned event/action identities, exact plan/operator/deployment/inventory/original-key bindings and non-overwriting private durable files. Approved execution rereads the saved signed approval at each fence check. The replica uses a disposable signer and fixture approval events only; no approval has been created for Paul or production. Protected CI signer/event authentication, remote retention and anti-rollback integration remain absent.
+
+This does **not** complete secure live conversion. Actual conflict prevention requires a distinct persistent exclusive authority mode: ordinary writers must drain and remain excluded before inventory while exact operation-bound conversion writes remain allowed. Existing Writing windows allow ordinary edits. Account paging still lacks complete operation-bound account/status/version/eligibility coverage and omits orphan profiles; source publication lacks atomic expected-source-state comparison. The local test owns exclusion and uses fixture plaintext comparison during preflight (real decryption is checked afterwards), so it cannot prove production security. Production runner remains blocked. Implement and verify the exclusive backend protocol, full account/alias/original-authority evidence, protected signer/transport and cryptographic preflight before enabling any live operation.
+
 ## Privacy and cost limitations
 
 A device that receives a shared key can retain it indefinitely; a 30-day cache expiry or application permission check cannot revoke a copied key or previously received ciphertext. Future cryptographic revocation requires a new key generation and re-encryption. Rotation is not implemented in this local batch. Current checks stop new unauthorized application disclosures, not access to material already obtained.
