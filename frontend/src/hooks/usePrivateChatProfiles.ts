@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { withFeatureBackend } from '@/live/featureRouter';
 import { readChatRelationshipProfiles, readDirectChatProfiles, type ChatProfile } from '@/live/chatRelationshipProfiles';
+import { onPrivateProfileSessionRetired, PRIVATE_PROFILE_DISPLAY_LIFETIME_MS } from '@/live/privateProfileSession';
 
 /** Decrypted chat names live only in this mounted audience, never the global
  * profile/message cache or persisted QueryClient snapshots. */
@@ -15,9 +16,11 @@ export function usePrivateChatProfiles(conversationId: string | undefined, viewe
     if (!enabled || !conversationId || !viewerId || !ids.length) return;
     let controller: AbortController | undefined;
     let disposed = false;
-    const retire = () => { controller?.abort(); setSnapshot(undefined); };
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    const retire = () => { controller?.abort(); clearTimeout(expiry); setSnapshot(undefined); };
     const refresh = async () => {
       controller?.abort();
+      clearTimeout(expiry);
       if (disposed || document.visibilityState === 'hidden') { retire(); return; }
       const current = new AbortController();
       controller = current;
@@ -29,7 +32,10 @@ export function usePrivateChatProfiles(conversationId: string | undefined, viewe
           icp: owner => kind === 'direct' ? readDirectChatProfiles(owner, conversationId, JSON.parse(idsKey), current.signal, directClubId)
             : readChatRelationshipProfiles(owner, conversationId, JSON.parse(idsKey), current.signal, broadcastMessageId),
         }, kind === 'direct' ? { shared: 'person' } : conversationId === 'broadcast' ? { shared: 'app' } : { conversationId });
-        if (!disposed && !current.signal.aborted) setSnapshot({ key: scopeKey, profiles });
+        if (!disposed && !current.signal.aborted) {
+          setSnapshot({ key: scopeKey, profiles });
+          expiry = setTimeout(() => { retire(); void refresh(); }, PRIVATE_PROFILE_DISPLAY_LIFETIME_MS);
+        }
       } catch {
         // Messages stay usable with neutral author labels; denial never falls
         // back to an audience-agnostic name cache.
@@ -41,8 +47,9 @@ export function usePrivateChatProfiles(conversationId: string | undefined, viewe
     document.addEventListener('visibilitychange', visible);
     window.addEventListener('pagehide', pageHidden);
     window.addEventListener('pageshow', visible);
+    const unsubscribe = onPrivateProfileSessionRetired(retire);
     return () => {
-      disposed = true; controller?.abort();
+      disposed = true; controller?.abort(); clearTimeout(expiry); unsubscribe();
       document.removeEventListener('visibilitychange', visible);
       window.removeEventListener('pagehide', pageHidden);
       window.removeEventListener('pageshow', visible);

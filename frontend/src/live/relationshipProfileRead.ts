@@ -4,6 +4,7 @@ import { privateProfileSearchRehearsalEnabled } from './privateProfileSearchMode
 import { readPrivateProfileEvidence } from './privateProfileEvidence';
 import { createLivePrivateProfileAuthorityResolver } from './privateProfileAuthority';
 import { listLiveProfilesByIds } from './features/identityAccessClient';
+import { capturePrivateProfileSession } from './privateProfileSession';
 
 export type ProfileRelationship = {
   kind: 'club' | 'family' | 'competition' | 'league' | 'direct' | 'broadcast' | 'competition_admin';
@@ -26,7 +27,9 @@ export async function readRelationshipProfiles(
   const identity = owner.identity;
   const principal = identity.getPrincipal().toText();
   const target = JSON.stringify(owner.target);
+  const sessionActive = capturePrivateProfileSession();
   const active = () => {
+    sessionActive();
     if (signal?.aborted || owner.identity !== identity || identity.getPrincipal().toText() !== principal
       || JSON.stringify(owner.target) !== target) throw new Error('Profile relationship changed or cancelled.');
   };

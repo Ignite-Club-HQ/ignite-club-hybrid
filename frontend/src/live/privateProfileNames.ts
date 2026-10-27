@@ -7,6 +7,7 @@ import { unwrapCandid } from "./features/candid";
 import { z } from "zod";
 import type { PrivateProfileAuthorityResolver } from "./privateProfileAuthority";
 import type { PrivateProfileAudience } from './privateProfileAudience';
+import { capturePrivateProfileSession } from './privateProfileSession';
 
 /** Dormant reference contract: publishing a reference requires the separately
  * approved identity/search cutover. The original key authority is immutable. */
@@ -31,7 +32,9 @@ async function prepareOwnField(ctx: FeatureBackendContext, field: "contact_email
   const subject = canonicalPrincipal(ctx.identity.getPrincipal().toText());
   const identity = ctx.identity;
   const target = JSON.stringify(ctx.target);
+  const sessionActive = capturePrivateProfileSession();
   const active = () => {
+    sessionActive();
     if (ctx.identity !== identity || ctx.identity.getPrincipal().toText() !== subject || JSON.stringify(ctx.target) !== target) throw new Error("Private profile write identity or authority changed.");
   };
   canonicalPrincipal(authority);
@@ -118,6 +121,7 @@ async function readNames(ctx: FeatureBackendContext, subjects: string[], field =
 async function boundedRead(ctx: FeatureBackendContext, subjects: string[], active: () => void, audience?: PrivateProfileAudience): Promise<Map<string, string>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let retired = false;
+  const sessionActive = capturePrivateProfileSession();
   const guard = () => {
     if (retired) throw new Error("Private profile read retired.");
     active();
@@ -166,6 +170,7 @@ export async function hydratePrivateProfileNames<T extends { display_name: strin
   const principal = identity.getPrincipal().toText();
   const target = JSON.stringify(ctx.target);
   const active = () => {
+    sessionActive();
     if (retired || options.signal?.aborted || ctx.identity !== identity || identity.getPrincipal().toText() !== principal || JSON.stringify(ctx.target) !== target) {
       throw new Error("Private profile read cancelled or changed.");
     }
