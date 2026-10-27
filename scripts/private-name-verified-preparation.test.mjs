@@ -45,3 +45,26 @@ test('evidence loss during original read or decrypt refuses preparation',async()
 test('closing original-generation drift refuses despite correct initial plaintext',async()=>{
   const f=await existingFixture(),read=f.deps.readOriginal;let count=0;f.deps.readOriginal=async t=>{const r=await read(t);if(++count===2)r.ciphertext=[...r.ciphertext,0];return r;};await assert.rejects(prepareVerifiedPrivateNameArtifact(f.i,f.deps),/changed during preparation/);
 });
+test('a nameless account cannot share a converted persons alias',async()=>{
+  const f=await existingFixture();f.deps.accounts.rows.push({accountId:'b',principals:['person'],version:'1',status:'Active',sourceDigest:Array(32).fill(3),profile:null,originalAuthority:{kind:'NoName'}});
+  let calls=0;f.deps.resolveAuthority=async()=>{calls++;return {sink:'pii',subject:'person'};};
+  await assert.rejects(prepareVerifiedPrivateNameArtifact(f.i,f.deps),/Ambiguous account aliases/);assert.equal(calls,0);
+});
+test('existing reference must retain verified authority rather than an unresolved lookup',async()=>{
+  const f=await existingFixture();f.deps.accounts.rows[0].originalAuthority={kind:'Unresolved'};
+  await assert.rejects(prepareVerifiedPrivateNameArtifact(f.i,f.deps),/reference authority unresolved/);assert.equal(f.calls.length,0);
+});
+test('named NoName and changed existing reference cannot vanish or redirect',async()=>{
+  for(const kind of ['NoName','Existing']){const f=await existingFixture();if(kind==='NoName')f.deps.accounts.rows[0].originalAuthority={kind};else f.deps.accounts.rows[0].profile.display_name='pii-display-name:v1:foreign:person';
+    await assert.rejects(prepareVerifiedPrivateNameArtifact(f.i,f.deps),/cannot disappear|reference authority changed/);assert.equal(f.calls.length,0);
+  }
+});
+test('all accounts remain covered including profileless and zero-club people',async()=>{
+  const f=await existingFixture();f.i.rows[0].clubs=[];f.deps.accounts.rows.push({accountId:'b',principals:['nameless'],version:'1',status:'Suspended',sourceDigest:Array(32).fill(3),profile:null,originalAuthority:{kind:'NoName'}});
+  const artifact=await prepareVerifiedPrivateNameArtifact(f.i,f.deps);assert.equal(artifact.body.rows.length,1);assert.deepEqual(artifact.body.rows[0].clubs,[]);assert.deepEqual(artifact.body.rows[0].ciphertext,f.original.ciphertext);
+});
+test('plaintext names require independent authority resolution without first-alias guessing',async()=>{
+  const f=await existingFixture();f.deps.accounts.rows[0].profile.display_name='Paul Cranwell';f.deps.accounts.rows[0].originalAuthority={kind:'Unresolved'};f.deps.resolveAuthority=async()=>null;
+  await assert.rejects(prepareVerifiedPrivateNameArtifact(f.i,f.deps),/authority unresolved/);
+  f.deps.resolveAuthority=async()=>({sink:'pii',subject:'person'});const artifact=await prepareVerifiedPrivateNameArtifact(f.i,f.deps);assert.equal(artifact.body.rows[0].subject,'person');
+});
