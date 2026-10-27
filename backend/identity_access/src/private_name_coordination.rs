@@ -17,6 +17,7 @@ pub enum Phase { Preparing, Committed, Done }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Intent {
     pub request: Request, pub account: Account,
+    pub profile_revision: u64,
     pub inventory: super::group_inventory::RemovalInventory,
     pub targets: Vec<Principal>, pub prepared: Vec<Receipt>, pub completed: Vec<Receipt>, pub phase: Phase,
 }
@@ -62,7 +63,7 @@ fn create(operation_id: String, generation: u64, account: Account, inventory: su
     targets.extend(inventory.supplemental.iter().filter(|d| d.domain == "pii_access_control").map(|d| d.canister));
     if targets.is_empty() || targets.len() > 256 { return Err("Bounded complete original PII inventory required".into()); }
     let inventory_digest = Sha256::digest(super::encode(&inventory)).to_vec();
-    Ok(Intent { request: Request { operation_id, generation, inventory_digest }, account, inventory, targets: targets.into_iter().collect(), prepared: vec![], completed: vec![], phase: Phase::Preparing })
+    Ok(Intent { request: Request { operation_id, generation, inventory_digest }, account, profile_revision: super::profile_search_revision(), inventory, targets: targets.into_iter().collect(), prepared: vec![], completed: vec![], phase: Phase::Preparing })
 }
 thread_local! {
     // Additive storage, deliberately separate from removal and directory state.
@@ -84,6 +85,14 @@ fn unchanged(intent: &Intent) -> Outcome<()> {
     let mut expected = intent.account.clone();
     if intent.phase != Phase::Preparing { expected.status = AccountStatus::Suspended; }
     if super::get_account(&expected.id).as_ref() != Some(&expected) { return Err("Private-name account changed; retain fences".into()); }
+    Ok(())
+}
+fn commit_preconditions(intent: &Intent) -> Outcome<()> {
+    unchanged(intent)?;
+    if super::profile_search_revision() != intent.profile_revision
+        || super::removal_history_revision() != intent.inventory.groups.history_revision {
+        return Err("Private-name authorization changed; retain fences".into());
+    }
     Ok(())
 }
 #[ic_cdk::update]
@@ -132,10 +141,12 @@ async fn prepare_private_name_suspension_sink(operation_id: String, target: Prin
 }
 #[ic_cdk::update]
 fn commit_private_name_suspension(operation_id: String) -> Outcome<Intent> {
-    access()?; let mut intent = get(&operation_id)?; unchanged(&intent)?;
+    access()?; let mut intent = get(&operation_id)?;
     if intent.phase != Phase::Preparing { return Ok(intent); }
+    commit_preconditions(&intent)?;
     intent.can_commit()?;
     let mut account = intent.account.clone(); account.status = AccountStatus::Suspended;
+    account.version = account.version.checked_add(1).ok_or("Account version exhausted")?;
     // No await: mutation and committed journal are one atomic message.
     super::put_account(&account); intent.phase = Phase::Committed; save(&intent); Ok(intent)
 }

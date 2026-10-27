@@ -30,6 +30,7 @@ mod admin_accounts;
 mod guardian_search;
 mod private_name_audience;
 mod private_name_coordination;
+use private_name_coordination::Intent;
 mod private_profile_reference;
 mod club_profiles;
 use deletion_timing::Ticket;
