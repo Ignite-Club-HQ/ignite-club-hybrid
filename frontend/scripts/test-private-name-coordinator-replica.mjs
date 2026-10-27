@@ -89,6 +89,9 @@ try {
   const revision = async () => ok(await actor.read_removal_history_manifest()).revision;
   ok(await actor.set_group_inventory_binding(binding, await revision()));
   ok(await actor.set_removal_supplemental_inventory(supplemental, await revision()));
+  // History reads take a writer lease once the gate closes; capture the exact
+  // pinned revision now. Upgrades and window phases do not bump it.
+  const pinnedRevision = await revision();
 
   // Inventory pinned; now close identity's own writes behind the writer gate.
   await pic.updateCanisterSettings({ canisterId: identity.canisterId, sender: governor, environmentVariables:
@@ -97,13 +100,12 @@ try {
   actor.setPrincipal(governor);
 
   // Closed gates: outsider, stale history and writes before any window.
-  const history = await revision();
-  actor.setPrincipal(outsider); await denied(() => actor.begin_private_name_write_window('go-live', history)); actor.setPrincipal(governor);
-  await denied(() => actor.begin_private_name_write_window('go-live', history + 1n));
+  actor.setPrincipal(outsider); await denied(() => actor.begin_private_name_write_window('go-live', pinnedRevision)); actor.setPrincipal(governor);
+  await denied(() => actor.begin_private_name_write_window('go-live', pinnedRevision + 1n));
   await denied(() => groups[0].club_domain.actor.set_identity_access_canister(outsider));
 
   // Begin: fences every original PII sink before any writer opens.
-  let w = ok(await actor.begin_private_name_write_window('go-live', history));
+  let w = ok(await actor.begin_private_name_write_window('go-live', pinnedRevision));
   assert.equal(phaseOf(w), 'Fencing');
   assert.equal(w.sinks.length, 2); assert.equal(w.writers.length, 11);
   await denied(() => actor.begin_private_name_write_window('concurrent', history));
@@ -151,7 +153,7 @@ try {
     await denied(() => g.pii_access_control.actor.open_private_name_writer_window(w.request));
   }
   // A later operation is a fresh generation, not a replay.
-  const next = ok(await actor.begin_private_name_write_window('second-op', await revision()));
+  const next = ok(await actor.begin_private_name_write_window('second-op', pinnedRevision));
   assert.equal(phaseOf(next), 'Fencing');
   assert.ok(next.request.generation > w.request.generation);
   assert.notDeepEqual(next.request.inventory_digest, []);
