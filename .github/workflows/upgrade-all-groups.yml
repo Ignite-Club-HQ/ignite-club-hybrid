@@ -46,6 +46,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - uses: oven-sh/setup-bun@v2
+        if: inputs.scope == 'private_name_cleanup' && inputs.action != 'recover'
+        with:
+          bun-version: '1.3.0'
       - name: Validate reviewed scope and exact confirmation
         run: |
           node --input-type=module <<'JS'

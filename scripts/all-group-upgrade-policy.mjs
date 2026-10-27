@@ -83,6 +83,12 @@ export function validateJournal(journal, binding) {
     const s=journal.steps.find(s=>s.canisterId===t.canisterId);
     if (!s || ['name','groupId','subnetId','newHash'].some(k=>s[k]!==t[k]) || !/^[a-f0-9]{64}$/.test(s.oldHash ?? '') || !/^[a-f0-9]{64}$/.test(s.settingsHash ?? '') || !['ready','pending','complete'].includes(s.phase)) throw Error('Invalid all-group journal step');
   }
+  if(binding.scope==='private_name_cleanup') {
+    const plan=binding.cleanupPlan,rows=journal.cleanupActivation;
+    if(!Array.isArray(plan)||plan.length!==binding.targets.length||new Set(plan.map(s=>s.canisterId)).size!==plan.length||plan.some(p=>!binding.targets.some(t=>['canisterId','name','groupId','subnetId','newHash'].every(k=>t[k]===p[k]))||!['oldSettingsHash','newSettingsHash'].every(k=>/^[a-f0-9]{64}$/.test(p[k]??''))))throw Error('Invalid checked cleanup activation plan');
+    if(rows!==undefined && (!Array.isArray(rows)||rows.length!==plan.length||plan.some(p=>rows.filter(s=>Object.keys(p).every(k=>s[k]===p[k])&&['ready','pending','complete'].includes(s.phase)).length!==1)))throw Error('Foreign cleanup activation journal');
+    if(journal.complete && (!rows || rows.some(s=>s.phase!=='complete')))throw Error('Cleanup activation not settled');
+  }
   for (const [groupId,canisterId] of Object.entries(binding.pii)) {
     const r=journal.keys.find(k=>k.groupId===groupId)?.receipt;
     if (!r || r.canisterId!==canisterId || r.governor!==binding.governor || r.host!=='https://icp-api.io' || r.deploymentId!=='mainnet' || r.environment!=='ic' || r.keyName!=='key_1' || !/^[a-f0-9]{192}$/.test(r.publicKeyHex ?? '') || !/^[a-f0-9]{64}$/.test(r.moduleHash ?? '')) throw Error('Original group photo-key receipt required');

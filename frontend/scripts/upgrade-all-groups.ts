@@ -13,6 +13,8 @@ import type { _SERVICE } from '../src/lab/bindings/shard_router/declarations/sha
 import { idlFactory as placementIdl } from '../src/lab/bindings/placement_registry/declarations/placement_registry.did.js';
 import { idlFactory as migrationIdl } from '../src/lab/bindings/migration_coordinator/declarations/migration_coordinator.did.js';
 import { idlFactory as workloadIdl } from '../src/lab/bindings/secret_workload_identity/declarations/secret_workload_identity.did.js';
+import { idlFactory as identityIdl } from '../src/lab/bindings/identity_access/declarations/identity_access.did.js';
+import type { _SERVICE as IdentityService } from '../src/lab/bindings/identity_access/declarations/identity_access.did';
 import type { _SERVICE as PlacementService } from '../src/lab/bindings/placement_registry/declarations/placement_registry.did';
 import type { _SERVICE as MigrationService } from '../src/lab/bindings/migration_coordinator/declarations/migration_coordinator.did';
 import type { _SERVICE as WorkloadService } from '../src/lab/bindings/secret_workload_identity/declarations/secret_workload_identity.did';
@@ -103,6 +105,17 @@ const readConfig=async(t:Target)=>{
 };
 const wiring:Record<string,string>={};
 const legacySettings:Record<string,string>={};
+const identityActor=Actor.createActor<IdentityService>(identityIdl,{agent,canisterId:shared.identity_access});
+const cleanupIdentityEvidence=async()=>{
+  const r=await identityActor.read_membership_directory_configuration();
+  if('Err'in r)throw Error('Cleanup identity directory configuration unavailable; no settings changed');
+  const c=r.Ok;
+  const b=c.binding;
+  const expected=inventory.groups.map((g:{id:string;services:{name:string;canisterId:string}[]})=>[g.id,g.services.find(s=>s.name==='club_domain')?.canisterId]);
+  if(!c.enabled || b.registry.toText()!==shared.shard_router || b.registry_revision!==initial.configurationRevision || b.target_alias!=='mainnet'||b.deployment_id!=='mainnet'||b.host!=='https://icp-api.io'||b.network_kind!=='public_mainnet'||c.sources.length!==expected.length||expected.some(([id,cid])=>c.sources.filter(([group,p])=>group===id&&p.toText()===cid).length!==1))throw Error('Cleanup requires existing complete matching identity directory; do not repin or reconfigure');
+  return c;
+};
+if(cleanupRelease)wiring[shared.identity_access]=digest(await cleanupIdentityEvidence());
 const readSharedEvidence=async(t:Target)=>{
   if(t.name==='shard_router')return router.read_group_opening_configuration();
   if(t.name==='placement_registry'){
@@ -173,6 +186,7 @@ const gate=async()=>{
   for(const t of targets.filter(t=>t.groupId!=='shared'))if(digest(await readConfig(t))!==wiring[t.canisterId])throw Error('Original wiring changed; stop');
   for(const t of targets.filter(t=>Object.hasOwn(legacySettings,t.canisterId))){const status=await observe(t);if(!status.legacyLifecycleDisabled||status.settingsHash!==legacySettings[t.canisterId])throw Error('Legacy lifecycle settings changed; stop without rewiring');}
   for(const t of targets.filter(t=>t.groupId==='shared'&&t.name!=='identity_access'))if(digest(await readSharedEvidence(t))!==wiring[t.canisterId])throw Error('Shared infrastructure configuration changed; stop without replay');
+  if(cleanupRelease&&digest(await cleanupIdentityEvidence())!==wiring[shared.identity_access])throw Error('Cleanup identity configuration changed; retain release intent');
 };
 const keyGate=(groupId:string,phase:string)=>{
   const mapping=join(directory,`${groupId}-pii.json`), receipt=join(directory,`${groupId}-original-key.json`);
@@ -241,6 +255,8 @@ if(cleanupRelease) {
 const moduleJournal={...journal,complete:false};
 if(!recovery)await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend'||cleanupRelease,gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
   if(recovery)throw Error('Recovery cannot install any module');
+  // Each club's trigger is upgraded only after identity and all PII receivers.
+  // Settings are protected/read back above and sampled again by executeUpgrades.
   const r=spawnSync('icp',installArgs(t,resolve(artifacts,t.name)),{cwd:directory,stdio:'inherit'});
   if(r.status!==0)throw Error('Install reply failed/unknown; pending journal retained, no replay');
 }});

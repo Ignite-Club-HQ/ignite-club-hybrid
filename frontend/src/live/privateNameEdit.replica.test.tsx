@@ -186,6 +186,12 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     expect(f.ok(await cleanupPii.read_private_name_cleanup_absence([f.owner],[f.clubId]))).toBe(true);
     expect(f.ok(await identity.get_profile()).display_name).toBe(reference);
     console.log('RECOVERY (disposable account): last-role cleanup retained through service outage and club upgrade; resumed with original name preserved');
+    // Ordinary unconverted names have no replicas; authoritative all-sink
+    // absence settles the no-op instead of locking every membership forever.
+    f.ok(await club.remove_member(f.clubId,f.viewer));
+    for(let step=0;step<60;step++){await f.pic.tick();if(f.ok(await club.read_private_name_cleanup_pending()).length===0)break;}
+    expect(f.ok(await club.read_private_name_cleanup_pending())).toEqual([]);
+    expect(f.ok(await viewerIdentity.get_profile()).display_name).toBe('Unconverted person');
     const governorIdentity = f.connect('identity_access', f.governor).actor;
     // Cleanup-only identity uses ordinary production status semantics; no
     // private-name conversion/read rehearsal was activated by its upgrade.
