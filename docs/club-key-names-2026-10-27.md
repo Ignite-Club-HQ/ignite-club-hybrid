@@ -2,7 +2,17 @@
 
 Local implementation only. No production conversion, rollout, permissions or email policy changed.
 
-## Current essential status — 27 October, 06:08 UTC
+## Current essential status — 27 October, automatic removal acceptance
+
+Ordinary `remove_member` and last-access `remove_role_grant` now retain a backend cleanup intent as part of revocation, then automatically resolve identity-owned aliases and the original PII sink. While an intent remains, membership-bearing mutations are blocked, including rejoining; removed-member cleanup never substitutes the club's local PII pointer. The original PII receiver asks identity to verify the exact router club assignment and all-alias nonmembership under the saved submitted operation, checks unchanged original/replica generations, and saves a purge receipt in the same synchronous segment as deletion. Unknown submissions use receipt readback only, never purge replay; failed pre-submission routing remains recoverable. A missing legacy router assignment remains unresolved rather than guessed. Receipt-bound account rekeys refuse pending separately verified recovery.
+
+Fresh disposable-canister acceptance passes: **before:** member present, one encrypted club-name copy, original private name retained; **after ordinary removal:** member absent, zero club-name copies, original name/reference retained. Removing only one of several roles preserves the copy. Last-role removal retains work during an identity outage and across a real club upgrade; rejoining is refused while pending, and resume finishes cleanup after the service returns. Real chat/event displays and shared name/avatar saves still pass. Five exact-alias authorization unit rules and 41 focused script regressions pass; contracts and ICP guards pass.
+
+The implementation has a separate `IGNITE_PRIVATE_NAME_CLEANUP_RELEASE` gate for approved activation without enabling unrelated rehearsal features. It is **not enabled in live services**, and no workflow/deployment/conversion was run. Production requires separately approved matching identity/club/PII deployment and exact trusted configuration; this test is not live coverage or management-exclusion evidence. Paul specified Giddy Goat as the club but has not identified a person for destructive membership testing. Do not choose a member or remove the club. Unknown submissions intentionally remain locked if no receipt exists; no expiry or automatic resend is provided.
+
+The historical routing-prerequisite and operator-only results below are superseded for ordinary member/last-role removal by this acceptance, not for account-wide erasure or production readiness.
+
+## Previous routing prerequisite — 27 October, 06:08 UTC
 
 The automatic-cleanup routing prerequisite is now implemented in identity: `read_private_name_cleanup_account` accepts one principal only from a registered directory club caller, verifies the complete current router registry, and returns identity-owned account aliases/version plus the exact original PII reference. It exposes no personal name, avatar, ciphertext or profile payload and grants no deletion permission. Every alias index, account lifecycle, profile/history revision and trusted configuration is checked around registry awaits. Plaintext names remain explicitly unresolved rather than guessing a sink; profileless names are explicit NoName. Unit coverage retains suspended accounts without bypassing existing coordinated suspension.
 
