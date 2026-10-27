@@ -25,7 +25,7 @@ export async function prepareCompletePrivateNameArtifact(input, deps) {
       if (account.originalAuthority?.kind !== 'NoName') throw Error('Explicit nameless account evidence required');
       // Nameless accounts still contribute all aliases to the fenced club
       // inventory. No PII authority is inferred and no name row is created.
-      inventoryAccounts.push({accountId:account.accountId, subject:account.principals?.[0], principals:account.principals, status:account.status, version:account.version, profilePresent:!!account.profile, sourceDigest:account.sourceDigest, sink:input.sinks?.[0]?.id});
+      inventoryAccounts.push({accountId:account.accountId, subject:account.principals?.[0], principals:account.principals, status:account.status, version:account.version, profilePresent:!!account.profile, sourceDigest:account.sourceDigest, sink:null, nameAbsent:true});
       continue;
     }
     const authority = await deps.resolveAuthority(structuredClone(account), structuredClone(accounts.request));
