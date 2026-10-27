@@ -744,7 +744,7 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func read_private_name_cleanup_absence(subjects : [Principal], club : ?Text) : async { #Ok : Bool; #Err : Text } {
     if (cleanupVerifier() != ?caller or caller.isAnonymous() or subjects.size() == 0 or subjects.size() > 8) return #Err("Configured cleanup identity required");
     switch (club) { case (?c) { if (not validMediaClub(c)) return #Err("Exact cleanup club required") }; case null {} };
-    #Ok(not pii_records.any(func r = subjects.any(func p = r.pii_id == p.toText()) and switch (club) { case (?c) r.field_id == clubNameField(c); case null Text.startsWith(r.field_id, #text "club_display_name:") }))
+    #Ok(not pii_records.any(func r = subjects.any(func p = r.pii_id == p.toText()) and (switch (club) { case (?c) r.field_id == clubNameField(c); case null Text.startsWith(r.field_id, #text "club_display_name:") })))
   };
   public shared ({ caller }) func read_removed_private_club_name_receipt(id : Text, club : Text, subject : Principal) : async { #Ok : ?PrivateNameCleanup.Receipt; #Err : Text } {
     if (cleanupVerifier() == null or caller.isAnonymous() or id.size() > 256) return #Err("Approved cleanup configuration required");
