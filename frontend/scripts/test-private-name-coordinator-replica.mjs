@@ -54,14 +54,19 @@ try {
       { name: 'IGNITE_PRIVATE_PROFILE_IDENTITY', value: identity.canisterId.toText() },
       { name: 'VETKD_KEY_NAME', value: 'key_1' }];
     for (const [d, idlFactory] of [['club_domain', clubIdl], ['messaging_domain', messagingIdl], ['competition_domain', competitionIdl], ['mini_league_domain', leagueIdl], ['pii_access_control', piiIdl]]) {
+      // Clubs register their media store before the writer window closes writes.
       const service = await pic.setupCanister({ idlFactory, wasm: motokoWasm(d), sender: governor, controllers: [governor],
-        arg: IDL.encode([IDL.Principal], [governor]), environmentVariables: env });
+        arg: IDL.encode([IDL.Principal], [governor]), environmentVariables: d === 'club_domain' ? env.filter(e => e.name !== 'IGNITE_PRIVATE_NAME_WRITER_REHEARSAL') : env });
       service.actor.setPrincipal(governor); group[d] = service;
     }
     const store = await pic.setupCanister({ idlFactory: blobIdl, wasm: resolve(root, 'backend/media_blob_store/main.wasm'), sender: governor, controllers: [governor],
       environmentVariables: [{ name: 'GOVERNOR_PRINCIPAL', value: governor.toText() }, { name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' },
         { name: 'IGNITE_ACCOUNT_SERVICE_IDENTITY', value: identity.canisterId.toText() }], arg: IDL.encode([IDL.Principal], [governor]) });
     ok(await group.club_domain.actor.register_media_quota_store(store.canisterId));
+    await pic.updateCanisterSettings({ canisterId: group.club_domain.canisterId, sender: governor, environmentVariables: env });
+    await pic.upgradeCanister({ canisterId: group.club_domain.canisterId, wasm: motokoWasm('club_domain'), sender: governor,
+      arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+    group.club_domain.actor.setPrincipal(governor);
     mediaStores.push(store);
     const mapped = domains.map((domain, i) => ({ domain, canister: group[domain] ? group[domain].canisterId : p(10 + n * 20 + i) }));
     let rev = await router.actor.version();
