@@ -145,7 +145,7 @@ try {
   const { DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import('@icp-sdk/vetkeys');
   const { createHash } = await import('node:crypto');
   const subject = outsider.toText(), field = 'display_name', name = 'Paul Cranwell';
-  const dpk = DerivedPublicKey.deserialize(Uint8Array.from(ok(await sink0pre.actor.pii_vetkey_verification_key())));
+  const dpk = DerivedPublicKey.deserialize(Uint8Array.from(await sink0pre.actor.pii_vetkey_verification_key()));
   const seed = createHash('sha256').update(`${subject}${field}`).update(name).digest();
   const ciphertext = Array.from(IbeCiphertext.encrypt(dpk, IbeIdentity.fromBytes(new TextEncoder().encode(`${subject}${field}`)),
     new TextEncoder().encode(name), IbeSeed.fromBytes(seed)).serialize());
