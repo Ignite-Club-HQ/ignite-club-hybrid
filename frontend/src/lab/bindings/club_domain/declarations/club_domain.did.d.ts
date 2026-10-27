@@ -28,6 +28,13 @@ export interface AccountRole {
   'role' : string,
   'team' : [] | [string],
 }
+export interface Account__1 {
+  'account_id' : string,
+  'account_version' : bigint,
+  'original_authority' : Authority,
+  'principals' : Array<Principal>,
+  'revision' : bigint,
+}
 export interface Acl {
   'teams' : Array<Team>,
   'guardians' : Array<Guardian>,
@@ -36,6 +43,9 @@ export interface Acl {
   'exclusions' : Array<Exclusion>,
   'roles' : Array<RoleGrant>,
 }
+export type Authority = { 'NoName' : null } |
+  { 'Existing' : { 'subject' : Principal, 'sink' : Principal } } |
+  { 'Unresolved' : null };
 export interface Batch {
   'requester' : Principal,
   'members' : Array<boolean>,
@@ -254,6 +264,13 @@ export interface HttpResponse {
   'body' : Uint8Array,
   'headers' : Array<[string, string]>,
   'status_code' : number,
+}
+export interface Intent {
+  'id' : string,
+  'submitted' : boolean,
+  'club' : string,
+  'user' : Principal,
+  'account' : [] | [Account__1],
 }
 export interface InviteMessageDefault { 'message' : string, 'club_id' : string }
 export interface InvitePayload {
@@ -1658,9 +1675,19 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'read_private_name_cleanup_pending' : ActorMethod<
+    [],
+    { 'Ok' : Array<Intent> } |
+      { 'Err' : string }
+  >,
   'read_private_name_preparation' : ActorMethod<
     [Request],
     { 'Ok' : Receipt__1 } |
+      { 'Err' : string }
+  >,
+  'read_private_name_removal_proof' : ActorMethod<
+    [string],
+    { 'Ok' : Proof } |
       { 'Err' : string }
   >,
   'read_private_name_writer_window' : ActorMethod<
@@ -1880,6 +1907,11 @@ export interface Main {
   'restore_team' : ActorMethod<
     [string],
     { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
+  'resume_private_name_cleanup' : ActorMethod<
+    [],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'retire_media_quota_records' : ActorMethod<
@@ -2501,6 +2533,7 @@ export interface PromoCode {
   'club_id' : [] | [string],
   'expires_at_ms' : [] | [bigint],
 }
+export interface Proof { 'members' : Array<boolean>, 'intent' : Intent }
 export interface Receipt {
   'outstanding' : bigint,
   'request' : Request__1,

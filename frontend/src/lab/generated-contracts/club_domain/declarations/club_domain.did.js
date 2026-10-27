@@ -673,12 +673,38 @@ export const idlFactory = ({ IDL }) => {
     'edges' : IDL.Vec(Edge),
     'revision' : IDL.Nat,
   });
+  const Authority = IDL.Variant({
+    'NoName' : IDL.Null,
+    'Existing' : IDL.Record({
+      'subject' : IDL.Principal,
+      'sink' : IDL.Principal,
+    }),
+    'Unresolved' : IDL.Null,
+  });
+  const Account__1 = IDL.Record({
+    'account_id' : IDL.Text,
+    'account_version' : IDL.Nat64,
+    'original_authority' : Authority,
+    'principals' : IDL.Vec(IDL.Principal),
+    'revision' : IDL.Nat64,
+  });
+  const Intent = IDL.Record({
+    'id' : IDL.Text,
+    'submitted' : IDL.Bool,
+    'club' : IDL.Text,
+    'user' : IDL.Principal,
+    'account' : IDL.Opt(Account__1),
+  });
   const Receipt__1 = IDL.Record({
     'active' : IDL.Nat,
     'request' : Request,
     'sealed' : IDL.Bool,
     'closing' : IDL.Bool,
     'receiver' : IDL.Principal,
+  });
+  const Proof = IDL.Record({
+    'members' : IDL.Vec(IDL.Bool),
+    'intent' : Intent,
   });
   const Cursor = IDL.Record({
     'offset' : IDL.Nat,
@@ -2388,9 +2414,19 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'read_private_name_cleanup_pending' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Intent), 'Err' : IDL.Text })],
+        [],
+      ),
     'read_private_name_preparation' : IDL.Func(
         [Request],
         [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_private_name_removal_proof' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Proof, 'Err' : IDL.Text })],
         [],
       ),
     'read_private_name_writer_window' : IDL.Func(
@@ -2629,6 +2665,11 @@ export const idlFactory = ({ IDL }) => {
     'restore_team' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'resume_private_name_cleanup' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'retire_media_quota_records' : IDL.Func(

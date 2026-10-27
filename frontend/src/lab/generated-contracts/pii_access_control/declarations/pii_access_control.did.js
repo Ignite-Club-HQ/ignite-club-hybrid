@@ -30,7 +30,7 @@ export const idlFactory = ({ IDL }) => {
     'field_id' : IDL.Text,
     'purpose' : IDL.Text,
   });
-  const Receipt__2 = IDL.Record({
+  const Receipt__3 = IDL.Record({
     'request' : Request,
     'completed' : IDL.Bool,
     'release_epoch' : IDL.Nat,
@@ -59,6 +59,13 @@ export const idlFactory = ({ IDL }) => {
     'subjects' : IDL.Vec(IDL.Principal),
     'generation' : IDL.Nat64,
   });
+  const Receipt__1 = IDL.Record({
+    'id' : IDL.Text,
+    'subject' : IDL.Principal,
+    'club' : IDL.Text,
+    'original_retained' : IDL.Bool,
+    'replica_absent' : IDL.Bool,
+  });
   const Receipt = IDL.Record({
     'outstanding' : IDL.Nat,
     'request' : Request__1,
@@ -69,7 +76,7 @@ export const idlFactory = ({ IDL }) => {
     'authority' : IDL.Opt(IDL.Principal),
     'revision' : IDL.Nat,
   });
-  const Receipt__1 = IDL.Record({
+  const Receipt__2 = IDL.Record({
     'active' : IDL.Nat,
     'request' : Request,
     'sealed' : IDL.Bool,
@@ -91,7 +98,7 @@ export const idlFactory = ({ IDL }) => {
     'club_media_lock_version' : IDL.Func([], [IDL.Nat], ['query']),
     'complete_private_name_release_fence' : IDL.Func(
         [Request],
-        [IDL.Variant({ 'Ok' : Receipt__2, 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : Receipt__3, 'Err' : IDL.Text })],
         [],
       ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
@@ -214,7 +221,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'prepare_private_name_release_fence' : IDL.Func(
         [Request],
-        [IDL.Variant({ 'Ok' : Receipt__2, 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : Receipt__3, 'Err' : IDL.Text })],
         [],
       ),
     'purge_club_grants' : IDL.Func(
@@ -230,6 +237,11 @@ export const idlFactory = ({ IDL }) => {
     'purge_private_club_name_lifecycle' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Vec(IDL.Nat8)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'purge_removed_private_club_name' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
         [],
       ),
     'read_account_audit_access' : IDL.Func(
@@ -279,17 +291,22 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_private_name_preparation' : IDL.Func(
         [Request],
-        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : Receipt__2, 'Err' : IDL.Text })],
         [],
       ),
     'read_private_name_release_fence' : IDL.Func(
         [Request],
-        [IDL.Variant({ 'Ok' : Receipt__2, 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : Receipt__3, 'Err' : IDL.Text })],
         [],
       ),
     'read_private_name_writer_window' : IDL.Func(
         [Request],
-        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : Receipt__2, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_removed_private_club_name_receipt' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Receipt__1), 'Err' : IDL.Text })],
         [],
       ),
     'refresh_private_club_name_lifecycle' : IDL.Func(

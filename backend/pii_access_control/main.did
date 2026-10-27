@@ -11,20 +11,28 @@ type Request =
    inventory_digest: blob;
    operation_id: text;
  };
-type Receipt__2 = 
+type Receipt__3 = 
  record {
    completed: bool;
    receiver: principal;
    release_epoch: nat;
    request: Request;
  };
-type Receipt__1 = 
+type Receipt__2 = 
  record {
    active: nat;
    closing: bool;
    receiver: principal;
    request: Request;
    sealed: bool;
+ };
+type Receipt__1 = 
+ record {
+   club: text;
+   id: text;
+   original_retained: bool;
+   replica_absent: bool;
+   subject: principal;
  };
 type Receipt = 
  record {
@@ -61,7 +69,7 @@ type Main =
    complete_private_name_release_fence: (request: Request) ->
     (variant {
        Err: text;
-       Ok: Receipt__2;
+       Ok: Receipt__3;
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
@@ -166,7 +174,7 @@ type Main =
    prepare_private_name_release_fence: (request: Request) ->
     (variant {
        Err: text;
-       Ok: Receipt__2;
+       Ok: Receipt__3;
      });
    purge_club_grants: (club_id: text) -> (variant {
                                             Err: text;
@@ -176,6 +184,16 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   purge_private_club_name_lifecycle: (subject: principal, club: text,
+    expectedCiphertext: vec nat8) -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
+   purge_removed_private_club_name: (id: text, club: text, subject:
+    principal) -> (variant {
+                     Err: text;
+                     Ok: Receipt__1;
+                   });
    read_account_audit_access: (filter: AuditFilter) -> (vec AuditRecord);
    read_account_my_guardian_children: () -> (vec text);
    read_account_removal_drain: (request: Request__1) ->
@@ -192,6 +210,12 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_private_club_name_lifecycle: (subject: principal, club: text,
+    expectedOriginal: opt vec nat8) ->
+    (variant {
+       Err: text;
+       Ok: opt EncryptedPii;
+     });
    read_private_club_name_preparation: (subject: principal, club: text) ->
     (variant {
        Err: text;
@@ -209,17 +233,28 @@ type Main =
    read_private_name_preparation: (request: Request) ->
     (variant {
        Err: text;
-       Ok: Receipt__1;
+       Ok: Receipt__2;
      });
    read_private_name_release_fence: (request: Request) ->
     (variant {
        Err: text;
-       Ok: Receipt__2;
+       Ok: Receipt__3;
      });
    read_private_name_writer_window: (request: Request) ->
     (variant {
        Err: text;
-       Ok: Receipt__1;
+       Ok: Receipt__2;
+     });
+   read_removed_private_club_name_receipt: (id: text, club: text, subject:
+    principal) -> (variant {
+                     Err: text;
+                     Ok: opt Receipt__1;
+                   });
+   refresh_private_club_name_lifecycle: (subject: principal, club: text,
+    originalCiphertext: vec nat8, ciphertext: vec nat8) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    register_conversion_name: (request: Request, subject: principal, club:
     opt text, ciphertext: vec nat8) -> (variant {

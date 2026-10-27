@@ -53,7 +53,7 @@ export interface Main {
   'club_media_lock_version' : ActorMethod<[], bigint>,
   'complete_private_name_release_fence' : ActorMethod<
     [Request],
-    { 'Ok' : Receipt__2 } |
+    { 'Ok' : Receipt__3 } |
       { 'Err' : string }
   >,
   /**
@@ -154,7 +154,7 @@ export interface Main {
   >,
   'prepare_private_name_release_fence' : ActorMethod<
     [Request],
-    { 'Ok' : Receipt__2 } |
+    { 'Ok' : Receipt__3 } |
       { 'Err' : string }
   >,
   'purge_club_grants' : ActorMethod<
@@ -170,6 +170,11 @@ export interface Main {
   'purge_private_club_name_lifecycle' : ActorMethod<
     [Principal, string, Uint8Array],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'purge_removed_private_club_name' : ActorMethod<
+    [string, string, Principal],
+    { 'Ok' : Receipt__1 } |
       { 'Err' : string }
   >,
   'read_account_audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
@@ -208,17 +213,22 @@ export interface Main {
   >,
   'read_private_name_preparation' : ActorMethod<
     [Request],
-    { 'Ok' : Receipt__1 } |
+    { 'Ok' : Receipt__2 } |
       { 'Err' : string }
   >,
   'read_private_name_release_fence' : ActorMethod<
     [Request],
-    { 'Ok' : Receipt__2 } |
+    { 'Ok' : Receipt__3 } |
       { 'Err' : string }
   >,
   'read_private_name_writer_window' : ActorMethod<
     [Request],
-    { 'Ok' : Receipt__1 } |
+    { 'Ok' : Receipt__2 } |
+      { 'Err' : string }
+  >,
+  'read_removed_private_club_name_receipt' : ActorMethod<
+    [string, string, Principal],
+    { 'Ok' : [] | [Receipt__1] } |
       { 'Err' : string }
   >,
   'refresh_private_club_name_lifecycle' : ActorMethod<
@@ -329,13 +339,20 @@ export interface Receipt {
   'receiver' : Principal,
 }
 export interface Receipt__1 {
+  'id' : string,
+  'subject' : Principal,
+  'club' : string,
+  'original_retained' : boolean,
+  'replica_absent' : boolean,
+}
+export interface Receipt__2 {
   'active' : bigint,
   'request' : Request,
   'sealed' : boolean,
   'closing' : boolean,
   'receiver' : Principal,
 }
-export interface Receipt__2 {
+export interface Receipt__3 {
   'request' : Request,
   'completed' : boolean,
   'release_epoch' : bigint,
