@@ -90,7 +90,7 @@ export function buildConversionPlan({ rows, sinks, historyRevision }) {
 export async function encryptName(publicKey, subject, name) {
   const { DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import(new URL('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js', import.meta.url).href);
   return IbeCiphertext.encrypt(
-    DerivedPublicKey.deserialize(publicKey),
+    DerivedPublicKey.deserialize(Uint8Array.from(publicKey)),
     IbeIdentity.fromBytes(new TextEncoder().encode(`${subject}${NAME_FIELD}`)),
     new TextEncoder().encode(name),
     IbeSeed.random(),
@@ -105,7 +105,7 @@ export async function encryptClubName(publicKey, club, subject, name) {
   if (!club || club.length > 64 || /[\u001f/]/.test(club)) throw Error('Invalid exact club');
   const { DerivedPublicKey, IbeCiphertext, IbeIdentity, IbeSeed } = await import(new URL('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js', import.meta.url).href);
   const input = `clubnames:${club}\u001f${NAME_FIELD}`;
-  return IbeCiphertext.encrypt(DerivedPublicKey.deserialize(publicKey), IbeIdentity.fromBytes(new TextEncoder().encode(input)), new TextEncoder().encode(name), IbeSeed.random()).serialize();
+  return IbeCiphertext.encrypt(DerivedPublicKey.deserialize(Uint8Array.from(publicKey)), IbeIdentity.fromBytes(new TextEncoder().encode(input)), new TextEncoder().encode(name), IbeSeed.random()).serialize();
 }
 
 export async function prepareClubNameCopies(sink, publicKey, row, { pii, journal }) {
