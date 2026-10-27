@@ -115,3 +115,28 @@ test('per-source scan budget refuses oversized traversals even within call budge
   deps.actors.get('source-1').read_membership_source_page=async()=>({Ok:{revision:8n,scanned:100n,edges:[],next:[{revision:8n,phase:0n,offset:++offset,nested:0n}]}});
   await assert.rejects(collectPrivateNameClubInventory(inputs,deps),/scan budget/);
 });
+
+const completeAccount=a=>({...a,principals:[a.subject,`${a.subject}-alias`],status:'Suspended',version:'9007199254740993',profilePresent:true,sourceDigest:Array(32).fill(7)});
+test('membership on a nonfirst alias survives and every alias is checked without short circuit',async()=>{
+  const {inputs,deps}=setup();inputs.accounts=inputs.accounts.map(completeAccount);const seen=[];
+  for(const actor of deps.actors.values())actor.read_has_club_membership=async(subject,club)=>{seen.push([subject,club]);return subject==='person-1-alias';};
+  const result=await collectPrivateNameClubInventory(inputs,deps);
+  assert.deepEqual(result.body.rows[0].clubs,['club-1','club-2']);assert.deepEqual(result.body.rows[1].clubs,[]);assert.equal(seen.length,8);assert.equal(result.calls,12);
+  assert.equal(result.body.accounts[0].version,'9007199254740993');assert.equal(result.body.accounts[0].status,'Suspended');assert.deepEqual(result.body.accounts[0].principals,['person-1','person-1-alias']);assert.equal(JSON.stringify(result.body).includes('Paul'),false);
+});
+test('failed second alias read blocks inventory even when first alias is a member',async()=>{
+  const {inputs,deps}=setup();inputs.accounts=inputs.accounts.map(completeAccount);
+  deps.actors.get('source-1').read_has_club_membership=async subject=>{if(subject.endsWith('-alias'))throw Error('alias denied');return true;};
+  await assert.rejects(collectPrivateNameClubInventory(inputs,deps),/alias denied/);
+});
+test('alias overlap and missing account metadata refuse before source reads',async()=>{
+  for(const mutate of [a=>{a[1].principals.push(a[0].subject);},a=>{delete a[0].version;},a=>{delete a[0].status;},a=>{a[0].principals=['foreign'];}]){
+    const {inputs,deps,reads}=setup();inputs.accounts=inputs.accounts.map(completeAccount);mutate(inputs.accounts);await assert.rejects(collectPrivateNameClubInventory(inputs,deps));assert.equal(reads(),0);
+  }
+});
+test('encryption fence and inventory hash retain full alias metadata without plaintext',async()=>{
+  const {inputs,deps}=setup();inputs.accounts=inputs.accounts.map(completeAccount);inputs.sinks=[{id:'pii-1',publicKey:[1]}];
+  const contexts=[];deps.assertFence=async context=>{contexts.push(context);return true;};
+  const result=await prepareInventoriedPrivateNameArtifact(inputs,{...deps,encryptName:async()=>[2],encryptClubName:async()=>[3]});
+  assert.deepEqual(contexts.at(-1).accounts,result.inventory.body.accounts);assert.equal(result.artifact.body.inventoryHash,result.inventory.hash);
+});
