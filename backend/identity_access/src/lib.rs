@@ -3554,17 +3554,20 @@ mod tests {
         assert!(account_for(owner).is_err());
         assert_eq!(ensure_account(owner).unwrap(), id);
         assert_eq!(account_for(owner).unwrap().id, id);
-        let stranger = principal(171);
-        let foreign = Account { id: account_id(stranger), principals: vec![principal(172)], version: 0, status: AccountStatus::Active };
-        put_account(&foreign);
-        // Occupied by another live account: caller gets its own fresh account,
-        // never joins the foreign one, and repeat sign-ins are stable.
-        let fresh = ensure_account(stranger).unwrap();
-        assert_ne!(fresh, foreign.id);
-        assert_eq!(get_account(&foreign.id).unwrap().principals, vec![principal(172)]);
-        assert_eq!(ensure_account(stranger).unwrap(), fresh);
-        deindex_principal(stranger);
-        assert_eq!(ensure_account(stranger).unwrap(), fresh);
+        // Original account still has another alias but silently lost the
+        // creator (no denial/erasure/removal): the creator gets it back, with
+        // the alias kept, and repeat sign-ins are stable.
+        let creator = principal(171);
+        let original = Account { id: account_id(creator), principals: vec![principal(172)], version: 3, status: AccountStatus::Active };
+        put_account(&original);
+        let mut profile = get_or_init_profile(&original.id); profile.display_name = "Paul".into(); put_profile_entry(&profile);
+        assert_eq!(ensure_account(creator).unwrap(), original.id);
+        assert_eq!(get_account(&original.id).unwrap().principals, vec![principal(172), creator]);
+        assert_eq!(get_account(&original.id).unwrap().version, 4);
+        assert_eq!(ensure_account(creator).unwrap(), original.id);
+        deindex_principal(creator);
+        assert_eq!(ensure_account(creator).unwrap(), original.id);
+        assert_eq!(get_profile_entry(&original.id).unwrap().display_name, "Paul");
         // Orphaned derived account (no logins left) is reclaimed by its owner.
         let orphan_owner = principal(173);
         let orphan_id = ensure_account(orphan_owner).unwrap();
@@ -3572,6 +3575,43 @@ mod tests {
         orphan.principals.clear(); put_account(&orphan); deindex_principal(orphan_owner);
         assert_eq!(ensure_account(orphan_owner).unwrap(), orphan_id);
         assert_eq!(get_account(&orphan_id).unwrap().principals, vec![orphan_owner]);
+    }
+    #[test]
+    fn sign_in_parked_on_empty_duplicate_moves_back_to_original() {
+        let user = principal(174);
+        let original = Account { id: account_id(user), principals: vec![principal(175)], version: 2, status: AccountStatus::Active };
+        put_account(&original);
+        let mut profile = get_or_init_profile(&original.id); profile.display_name = "Original".into(); put_profile_entry(&profile);
+        // Simulate the earlier recovery that parked the sign-in on a fresh account.
+        let dup = Account { id: "parked-duplicate".into(), principals: vec![user], version: 0, status: AccountStatus::Active };
+        put_account(&dup); index_principal(user, &dup.id);
+        let mut draft = get_or_init_profile(&dup.id); draft.display_name = "Draft".into(); put_profile_entry(&draft);
+        assert_eq!(ensure_account(user).unwrap(), original.id);
+        assert!(get_account(&dup.id).is_none());
+        assert!(get_profile_entry(&dup.id).is_none());
+        assert_eq!(account_for(user).unwrap().id, original.id);
+        assert_eq!(get_profile_entry(&original.id).unwrap().display_name, "Original");
+        // A duplicate that already holds roles is never discarded.
+        let other = principal(176);
+        let orig2 = Account { id: account_id(other), principals: vec![principal(177)], version: 1, status: AccountStatus::Active };
+        put_account(&orig2);
+        let busy = Account { id: "busy-duplicate".into(), principals: vec![other], version: 0, status: AccountStatus::Active };
+        put_account(&busy); index_principal(other, &busy.id);
+        let mut s = state();
+        s.roles.push(RoleGrant { account_id: busy.id.clone(), role: "member".into(), site_id: None, club_id: Some("c".into()), team_id: None });
+        store(&s);
+        assert_eq!(ensure_account(other).unwrap(), busy.id);
+        assert!(get_account(&busy.id).is_some());
+    }
+    #[test]
+    fn erased_original_never_reattaches() {
+        let user = principal(178);
+        let original = Account { id: account_id(user), principals: vec![principal(179)], version: 1, status: AccountStatus::Active };
+        put_account(&original);
+        ERASED_ACCOUNTS.with(|m| m.borrow_mut().insert(original.id.clone(), 1));
+        let fresh = ensure_account(user).unwrap();
+        assert_ne!(fresh, original.id);
+        assert_eq!(get_account(&original.id).unwrap().principals, vec![principal(179)]);
     }
     #[test]
     fn removal_intent_survives_restored_accounts_and_cannot_complete_without_receivers() {
