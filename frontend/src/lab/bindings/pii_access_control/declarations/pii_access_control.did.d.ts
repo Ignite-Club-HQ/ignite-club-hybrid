@@ -81,6 +81,11 @@ export interface Main {
     { 'Ok' : Array<[] | [Uint8Array]> } |
       { 'Err' : string }
   >,
+  'get_private_profile_club_name_vetkey' : ActorMethod<
+    [Array<string>, PrivateNameScope, Uint8Array],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'get_private_profile_name_vetkeys_batch' : ActorMethod<
     [Array<string>, PrivateNameScope, Uint8Array],
     { 'Ok' : Array<[] | [Uint8Array]> } |
@@ -160,6 +165,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_private_club_name_preparation' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : EncryptedPii } |
+      { 'Err' : string }
+  >,
   'read_private_media_authority' : ActorMethod<
     [string],
     {
@@ -183,6 +193,11 @@ export interface Main {
   >,
   'register_pii' : ActorMethod<
     [string, string, Uint8Array, Principal],
+    { 'Ok' : EncryptedPii } |
+      { 'Err' : string }
+  >,
+  'register_private_club_name' : ActorMethod<
+    [Principal, string, Uint8Array],
     { 'Ok' : EncryptedPii } |
       { 'Err' : string }
   >,
