@@ -147,10 +147,11 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     expect(f.ok(await identity.get_profile()).display_name).toBe(reference);
     expect(f.ok(await governorPii.get_encrypted_pii_batch([subject], 'display_name', 'read', 'Verify original retained'))).toHaveLength(1);
     const governorIdentity = f.connect('identity_access', f.governor).actor;
-    f.ok(await governorIdentity.set_account_status(routing.account_id, { Suspended: null }));
-    const suspendedRouting = f.ok(await cleanupReader.read_private_name_cleanup_account(f.owner));
-    expect(suspendedRouting.principals.map((p: any) => p.toText())).toEqual([subject]);
-    expect(suspendedRouting.original_authority).toEqual(routing.original_authority);
+    // Existing coordinated suspension cannot be bypassed for a fixture.
+    expect('Err' in await governorIdentity.set_account_status(routing.account_id, { Suspended: null })).toBe(true);
+    const retainedRouting = f.ok(await cleanupReader.read_private_name_cleanup_account(f.owner));
+    expect(retainedRouting.principals.map((p: any) => p.toText())).toEqual([subject]);
+    expect(retainedRouting.original_authority).toEqual(routing.original_authority);
     // Registry mutation cannot silently repin the cleanup authority.
     const router = f.services.shard_router.actor;
     router.setPrincipal(f.governor);
