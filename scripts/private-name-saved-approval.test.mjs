@@ -39,3 +39,10 @@ test('invalid saved approval blocks execution before lock or network activity',a
   await assert.rejects(executeSavedApprovedNamePlan({artifact:s.binding.artifact,expectedHash:s.binding.expectedHash,approvalPath:s.path,approvalBinding:s.binding},{executionLock:{enter:async()=>{entered=true;}}}));
   assert.equal(entered,false);
 });
+test('saved approval deletion during lock entry stops before any authority reads',async t=>{
+  const s=await fixture(t);saveSignedNameApproval(s.path,s.envelope,s.binding);let reads=0;
+  await assert.rejects(executeSavedApprovedNamePlan({artifact:s.binding.artifact,expectedHash:s.binding.expectedHash,approvalPath:s.path,approvalBinding:s.binding},{
+    assertExecution:async()=>true,journal:{ids:()=>[],get:()=>undefined},piiBySink:new Map([['pii',{}]]),coordinator:{},
+    executionLock:{enter:async()=>{rmSync(s.path);return true;},assertHeld:async()=>true},identity:{listProfiles:async()=>{reads++;return [];}}
+  }),/ENOENT/);assert.equal(reads,0);
+});
