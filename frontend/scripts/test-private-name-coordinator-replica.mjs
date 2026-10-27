@@ -211,5 +211,5 @@ try {
   assert.ok(next.request.generation > w.request.generation);
   assert.notDeepEqual(next.request.inventory_digest, []);
 
-  console.log('PASS: real identity coordinator fenced 2 sinks, opened/sealed 11 writers across two groups, resumed after a mid-Opening upgrade and a stopped-sink hold, kept topology closed, and completed with durable receipts.');
+  console.log('PASS: real identity coordinator fenced 2 sinks, opened/sealed 11 writers across two groups, resumed after a mid-Opening upgrade and a stopped-sink hold, kept topology closed, converted a real plaintext name to a verified reference inside the window, and completed with durable receipts.');
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
