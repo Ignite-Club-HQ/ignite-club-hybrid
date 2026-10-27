@@ -61,7 +61,7 @@ pub fn enter() -> Result<Lease,String> {
 }
 impl Drop for Lease {
     fn drop(&mut self) {
-        if let Some(ref request)=self.0 {if let Ok(mut i)=load(&request.operation_id){if i.request==*request&&i.active>0{i.active-=1;save(&i);}}}
+        if let Some(ref request)=self.0 {if let Ok(mut i)=load(&request.operation_id){if i.request==*request&&i.active>0{i.active-=1;if i.closing&&i.active==0{i.sealed=true;}save(&i);}}}
     }
 }
 pub fn require_window() { if enabled() && current().is_none_or(|i|i.closing) {ic_cdk::trap("Coordinated private-name write window required");} }
