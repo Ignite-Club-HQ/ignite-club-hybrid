@@ -15,12 +15,13 @@ thread_local! {
 }
 pub fn enabled() -> bool {
     #[cfg(target_arch="wasm32")]
-    { ic_cdk::api::env_var_value("IGNITE_PRIVATE_NAME_WRITER_REHEARSAL") == "1" }
+    { ic_cdk::api::env_var_name_exists("IGNITE_PRIVATE_NAME_WRITER_REHEARSAL") && ic_cdk::api::env_var_value("IGNITE_PRIVATE_NAME_WRITER_REHEARSAL") == "1" }
     #[cfg(not(target_arch="wasm32"))]
     { false }
 }
 fn authorize() -> Result<(), String> {
     if !enabled() { return Err("Private-name writer rehearsal required".into()); }
+    if !ic_cdk::api::env_var_name_exists("IGNITE_ACCOUNT_SERVICE_IDENTITY") { return Err("Configured rehearsal identity required".into()); }
     let text = ic_cdk::api::env_var_value("IGNITE_ACCOUNT_SERVICE_IDENTITY");
     let authority = Principal::from_text(text).map_err(|_| "Configured rehearsal identity required")?;
     if authority == Principal::anonymous() || authority == Principal::management_canister() || authority != ic_cdk::api::msg_caller() { return Err("Configured rehearsal identity required".into()); }
