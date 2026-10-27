@@ -22,7 +22,7 @@ import { createJournalApi } from './media-stage-two-github.mjs';
 import { persistGroup2Journal } from '../../scripts/group2-journal.mjs';
 import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/group2-upgrade-rules.mjs';
 import { placementOperatorEvidenceIdl, normalizePlacementOperatorEvidence } from '../../scripts/placement-upgrade-evidence.mjs';
-import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement } from '../../scripts/all-group-wiring-policy.mjs';
+import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement, approvedDisplayLinkRows } from '../../scripts/all-group-wiring-policy.mjs';
 import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades, requireCompletedRecovery, galleryAuthorities, verifyCompletedRecovery, normalizePlan } from '../../scripts/all-group-upgrade-policy.mjs';
 import { CLEANUP_RELEASE, cleanupEnvironment, requireCleanupWiring, activateCleanupSettings, canonicalSettingRows, supersedableSettingsStage } from '../../scripts/private-name-cleanup-release-policy.mjs';
 import { isSecureNameScope, secureNameEnvironment, secureNameChangedSettings } from '../../scripts/secure-name-release-policy.mjs';
@@ -112,6 +112,7 @@ const readConfig=async(t:Target)=>{
 const wiring:Record<string,string>={};
 const LEGACY_G1_CLUB='mzzzv-taaaa-aaaal-qxlrq-cai';
 const displayLinks:Target[]=[];
+const displayLinkRows:Record<string,[string,string][]>={};
 const legacySettings:Record<string,string>={};
 const identityActor=Actor.createActor<IdentityService>(identityIdl,{agent,canisterId:shared.identity_access});
 const cleanupIdentityEvidence=async()=>{
@@ -151,7 +152,7 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
   const permission=groupPermissionRequirement(t.name,own('club_domain'));
   if(permission)requireRow(permission[0],permission[1]);
   if(t.name==='club_domain'){
-    if(cleanupRelease || secureRelease){const legacyDisplay=scope==='private_club_name_display'&&t.groupId==='g1'&&t.canisterId===LEGACY_G1_CLUB;if(requireCleanupWiring(t.name,rows,shared.identity_access,legacyDisplay)==='link')displayLinks.push(t);}
+    if(cleanupRelease || secureRelease){const legacyDisplay=scope==='private_club_name_display'&&t.groupId==='g1'&&t.canisterId===LEGACY_G1_CLUB;if(requireCleanupWiring(t.name,rows,shared.identity_access,legacyDisplay)==='link'){displayLinks.push(t);displayLinkRows[t.canisterId]=approvedDisplayLinkRows(t,rows,shared.identity_access);}}
     // The original G1 authority predates group lifecycle wiring. Its empty
     // singleton must be preserved, never configured by an upgrade. Verify
     // disabled settings via controller readback, not a guessed group label.
@@ -202,7 +203,12 @@ const gate=async()=>{
   const current=await registry();
   if(current.configurationRevision!==initial.configurationRevision||groupApprovalConfiguration(current.groups,current.placements)!==configuration)throw Error('Routing configuration drift; stop without replay');
   planInventory(shared,provisions,current,scope,hashes);
-  for(const t of targets.filter(t=>t.groupId!=='shared'))if(digest(await readConfig(t))!==wiring[t.canisterId])throw Error('Original wiring changed; stop');
+  for(const t of targets.filter(t=>t.groupId!=='shared')){
+    const link=journal?.displayIdentityLinks?.[t.canisterId];
+    const expected=link?.phase==='complete'?link.afterHash:wiring[t.canisterId];
+    if(link && (link.beforeHash!==wiring[t.canisterId]||link.afterHash!==digest(displayLinkRows[t.canisterId])))throw Error('Foreign display identity link receipt');
+    if(digest(await readConfig(t))!==expected)throw Error('Original wiring changed; stop');
+  }
   for(const t of targets.filter(t=>Object.hasOwn(legacySettings,t.canisterId))){const status=await observe(t);if(!status.legacyLifecycleDisabled||status.settingsHash!==legacySettings[t.canisterId])throw Error('Legacy lifecycle settings changed; stop without rewiring');}
   for(const t of targets.filter(t=>t.groupId==='shared'&&t.name!=='identity_access'))if(digest(await readSharedEvidence(t))!==wiring[t.canisterId])throw Error('Shared infrastructure configuration changed; stop without replay');
   if(cleanupRelease&&digest(await cleanupIdentityEvidence())!==wiring[shared.identity_access])throw Error('Cleanup identity configuration changed; retain release intent');
@@ -300,10 +306,17 @@ for(const t of displayLinks){
   const factory=()=>IDL.Service({link_display_identity_authority:IDL.Func([IDL.Principal],[IDL.Variant({Ok:IDL.Null,Err:IDL.Text})],[])});
   const actor=Actor.createActor(factory,{agent,canisterId:t.canisterId}) as unknown as {link_display_identity_authority(p:Principal):Promise<{Ok:null}|{Err:string}>};
   await gate();
+  journal.displayIdentityLinks??={};
+  const saved=journal.displayIdentityLinks[t.canisterId];
+  if(saved?.phase==='complete')continue;
+  if(saved)throw Error('Unknown display link; retain intent and reconcile without replay');
+  journal.displayIdentityLinks[t.canisterId]={beforeHash:wiring[t.canisterId],afterHash:digest(displayLinkRows[t.canisterId]),phase:'pending'};
+  await persist();
   const r=await actor.link_display_identity_authority(Principal.fromText(shared.identity_access));
   if('Err'in r)throw Error(`Display identity link refused for ${t.groupId}: ${r.Err}`);
   const rows=await readConfig(t);
-  if(rows.filter(x=>x[0]==='identity_access'&&x[1]===shared.identity_access).length!==1)throw Error('Display identity link readback failed');
+  if(digest(rows)!==journal.displayIdentityLinks[t.canisterId].afterHash)throw Error('Display identity link readback failed; retain intent');
+  journal.displayIdentityLinks[t.canisterId].phase='complete';await persist();
   console.log(`Linked ${t.groupId} club service to the account service for private name displays.`);
 }
 if(journal.publication || journal.published){validateJournal(journal,binding);console.log('Exact saved snapshot retained for publication resume; modules reverified without reinstall.');process.exit(0);}

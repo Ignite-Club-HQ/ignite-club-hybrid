@@ -1,10 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement, validateGroupPermissionWiring } from './all-group-wiring-policy.mjs';
+import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement, validateGroupPermissionWiring, approvedDisplayLinkRows } from './all-group-wiring-policy.mjs';
 import { digest } from './all-group-upgrade-policy.mjs';
 const identity = 'mq2sj-fiaaa-aaaal-qxlqa-cai';
 const g1 = {groupId:'g1',name:'club_domain',canisterId:'mzzzv-taaaa-aaaal-qxlrq-cai'};
 const legacyRows = [['club_domain',g1.canisterId],['identity_access','']];
+test('approved display link changes exactly the original G1 empty identity row',()=>{
+  const result=approvedDisplayLinkRows(g1,legacyRows,identity);
+  assert.deepEqual(result,[['club_domain',g1.canisterId],['identity_access',identity]]);
+  assert.equal(legacyRows[1][1],'');
+  assert.notEqual(digest(result),digest(legacyRows));
+  for(const target of [{...g1,groupId:'g2'},{...g1,name:'pii_access_control'},{...g1,canisterId:'foreign-cai'}])assert.throws(()=>approvedDisplayLinkRows(target,legacyRows,identity));
+  for(const rows of [[],[['identity_access','foreign-cai']],[['identity_access',''],['identity_access','']]])assert.throws(()=>approvedDisplayLinkRows(g1,rows,identity));
+  assert.throws(()=>approvedDisplayLinkRows(g1,legacyRows,'foreign-cai'));
+});
 test('media and insights require their real local role permission source, not a nonexistent club pointer', () => {
   for (const service of ['media_metadata','insights_domain']) {
     assert.deepEqual(groupPermissionRequirement(service,g1.canisterId),['permission_source','local_club_roles']);
