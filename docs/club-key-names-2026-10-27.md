@@ -2,6 +2,14 @@
 
 Local implementation only. No production conversion, rollout, permissions or email policy changed.
 
+## Current essential status — 27 October, 05:53 UTC
+
+Authorized member removal and exact encrypted-name cleanup now share one retained operation in `removeMemberAndReconcileNames`. Each verified account alias has a saved intent before the existing administrator-authorized removal; cleanup starts only after all aliases have definitive nonmembership. Lost removal and purge replies recover by exact readback without resending either write. Unverified membership, rejoining, changed saved ciphertext, malformed journals and failed durability stop with work retained. The composition remains dormant and requires independently authenticated complete original-authority/alias targets and uninterrupted exclusion; it is not an automatic all-group backend hook or atomic remote revocation.
+
+The complete isolated workflow passed again: 186 script tests, 129 frontend tests, real two-group signed conversion/recovery, eight-target lifecycle recovery, held-edit drain, and actual shared profile-save/chat/event display acceptance. The display test now loses both a committed authorized club removal reply and a committed purge reply, resumes the same operation, and verifies that neither write repeats and the original private name/reference remains. An additional 34 focused removal/adapter/workflow safety tests passed. Paul's successful GitHub test is test evidence only.
+
+**Run the isolated test workflow again to test these changes.** Live rollout remains blocked by unavailable authenticated production account/original-authority coverage and continuous management exclusion, unconnected automatic removal/erasure cleanup, verified live module/controller/protected workflow settings, and separate deployment/conversion approvals. No live gate, service, workflow execution, secret or production account was changed. Historical sections below record earlier stages; this current status supersedes their outstanding-item lists.
+
 ## Run the essential test workflow
 
 In GitHub Actions select **Test encrypted personal names (isolated only)**, then **Run workflow** on the branch containing this change. No production credentials, signed owner artifact, canister IDs or deployment approval are needed. The job compiles disposable services with the pinned Motoko compiler, creates a temporary fixture signer, runs full two-group conversion/interrupted recovery, verifies immutable canister approval receipts without another storage service, tests held-edit locks and name-copy deletion recovery, then checks actual chat/event display rows. A summary and `private-name-isolated-test-report` artifact identify each passing or failed step. Fixture signing keys are deleted and never uploaded.

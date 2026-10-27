@@ -41,7 +41,7 @@ import { hydrateRsvpDisplayProfiles } from '../features/events/rsvpDisplayProfil
 import { EventAttendeeCard } from '../components/event/EventAttendeeCard';
 import { GroupChatMessageRow } from '../components/chat/GroupChatMessageRow';
 import { saveIcpIdentityProfile } from './identityProfile';
-import { reconcileRemovedMemberNames } from '../../../scripts/private-name-replica-lifecycle.mjs';
+import { removeMemberAndReconcileNames } from '../../../scripts/private-name-replica-lifecycle.mjs';
 import { createPrivateNameLifecycleAdapter } from '../../../scripts/private-name-canister-adapters.mjs';
 import { Principal } from '@icp-sdk/core/principal';
 
@@ -110,22 +110,25 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     const audience = { kind: 'club', authority: f.services.club_domain.canisterId, resource: f.clubId, profile_revision: 0n };
     expect('Err' in await denied.get_private_profile_names_batch([subject], audience)).toBe(true);
     event.unmount(); chat.unmount(); queryClient.clear();
-    // Actual club-admin removal followed by existing governor-only exact-byte
-    // cleanup. A lost committed reply resolves by absence, never another purge.
+    // One retained operation connects actual authorized club removal to the
+    // governor-only exact-byte cleanup. Both lost replies settle without replay.
     const club = f.connect('club_domain', f.governor).actor;
     const governorPii = f.connect('pii_access_control', f.governor).actor;
-    f.ok(await club.remove_member(f.clubId, f.owner));
     const target = { sink: f.services.pii_access_control.canisterId.toText(), subject, club: f.clubId, ciphertext: unchangedBytes };
     const adapter = createPrivateNameLifecycleAdapter({ targets: [target], actors: new Map([[target.sink, governorPii]]), Principal, assertFence: async () => true });
-    let journal: any = null, purges = 0;
+    let journal: any = null, purges = 0, removals = 0;
     const cleanup = { ...adapter, accounts: [{ accountId: subject, principals: [subject] }], assertEvidence: async () => true,
       readMembership: async (t: any) => club.read_has_club_membership(Principal.fromText(t.subject), t.club),
+      removeMember: async (t: any) => { removals++; f.ok(await club.remove_member(t.club, Principal.fromText(t.subject))); throw Error('Lost committed member-removal reply'); },
       readJournal: async () => structuredClone(journal), persistJournal: async (value: any) => { journal = structuredClone(value); },
       purgeExactReplica: async (value: any) => { purges++; await adapter.purgeExactReplica(value); throw Error('Lost removed-member purge reply'); },
     };
     const cleanupPlan = { operationId: 'acceptance-member-removal', action: 'purge', targets: [target] };
-    await expect(reconcileRemovedMemberNames(cleanupPlan, cleanup)).rejects.toThrow('Lost removed-member purge reply');
-    expect(await reconcileRemovedMemberNames(cleanupPlan, cleanup)).toEqual({ completed: 1, action: 'purge' });
+    await expect(removeMemberAndReconcileNames(cleanupPlan, cleanup)).rejects.toThrow('Lost committed member-removal reply');
+    expect(purges).toBe(0); expect(removals).toBe(1);
+    await expect(removeMemberAndReconcileNames(cleanupPlan, cleanup)).rejects.toThrow('Lost removed-member purge reply');
+    expect(await removeMemberAndReconcileNames(cleanupPlan, cleanup)).toEqual({ completed: 1, action: 'purge' });
+    expect(removals).toBe(1);
     expect(purges).toBe(1); expect(f.ok(await governorPii.read_private_club_name_lifecycle(f.owner, f.clubId, []))).toEqual([]);
     expect(f.ok(await identity.get_profile()).display_name).toBe(reference);
     expect(f.ok(await governorPii.get_encrypted_pii_batch([subject], 'display_name', 'read', 'Verify original retained'))).toHaveLength(1);
