@@ -1,6 +1,7 @@
 // Offline tests for the protected private-name conversion tool. No network.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
 import {
   validateConversionRequest, assertNamesApproval, planConversions, buildConversionPlan,
   encryptName, nameReference, conversionJournal, convertOneAccount, withConversionWindow,
@@ -18,7 +19,7 @@ test('request validation gates live actions behind the names scope', () => {
   assert.doesNotThrow(() => validateConversionRequest({ action: 'check' }));
   assert.throws(() => validateConversionRequest({ action: 'convert' }), /names conversion approval/);
   assert.throws(() => validateConversionRequest({ action: 'convert', approvalScope: 'data' }), /names conversion approval/);
-  assert.throws(() => validateConversionRequest({ action: 'convert', approvalScope: 'names', plan: 'x'.repeat(64) }), /Type CONVERT PRIVATE NAMES/);
+  assert.throws(() => validateConversionRequest({ action: 'convert', approvalScope: 'names', plan: 'a'.repeat(64) }), /Type CONVERT PRIVATE NAMES/);
   assert.doesNotThrow(() => validateConversionRequest({ action: 'convert', approvalScope: 'names', plan: 'a'.repeat(64), confirmation: CONFIRM_CONVERT }));
   assert.throws(() => validateConversionRequest({ action: 'wipe' }), /Action must be/);
 });
@@ -51,9 +52,11 @@ test('plan hash binds rows, sinks and history revision', () => {
   assert.notEqual(buildConversionPlan({ rows: [], sinks: [SINK], historyRevision: 7n }).hash, a.hash);
 });
 
+const require = createRequire(import.meta.url);
+
 test('encryption is deterministic for resume safety', async () => {
   const { DerivedPublicKey, MasterPublicKey } = await import('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js');
-  const { Principal } = await import('../frontend/node_modules/@icp-sdk/core/principal/index.js');
+  const { Principal } = require('@icp-sdk/core/principal');
   const key = MasterPublicKey.productionKey('key_1').deriveCanisterKey(Principal.fromText(SINK).toUint8Array()).deriveSubKey(new TextEncoder().encode('ignite-pii-v1')).publicKeyBytes();
   const one = await encryptName(key, SUBJECT, 'Paul Cranwell');
   const two = await encryptName(key, SUBJECT, 'Paul Cranwell');
@@ -169,6 +172,6 @@ test('reconciliation refuses leftover plaintext or foreign references', () => {
 
 async function testKey() {
   const { MasterPublicKey } = await import('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js');
-  const { Principal } = await import('../frontend/node_modules/@icp-sdk/core/principal/index.js');
+  const { Principal } = require('@icp-sdk/core/principal');
   return MasterPublicKey.productionKey('key_1').deriveCanisterKey(Principal.fromText(SINK).toUint8Array()).deriveSubKey(new TextEncoder().encode('ignite-pii-v1')).publicKeyBytes();
 }
