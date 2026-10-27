@@ -15,6 +15,18 @@ pub struct ApprovalBody { pub kind:String,pub approval_id:String,pub identity:Pr
 #[derive(Clone,Debug,CandidType,Serialize,Deserialize,PartialEq,Eq)]
 pub struct SignedApproval { pub body:ApprovalBody,pub signature:Vec<u8> }
 thread_local!{static APPROVALS:RefCell<StableBTreeMap<String,Vec<u8>,super::Memory>>=RefCell::new(StableBTreeMap::init(super::memory(31)));}
+thread_local!{static WRITES:RefCell<StableBTreeMap<String,Vec<u8>,super::Memory>>=RefCell::new(StableBTreeMap::init(super::memory(32)));}
+fn receipt_key(id:&str,account:&str,club:&Option<String>)->String{format!("{}",hex_digest(&super::encode(&(id,account,club))))}
+fn hex_digest(bytes:&[u8])->String{Sha256::digest(bytes).iter().map(|b|format!("{b:02x}")).collect()}
+fn acknowledged(id:&str,r:&ApprovedRow,club:Option<String>,bytes:&[u8])->bool{WRITES.with(|m|m.borrow().get(&receipt_key(id,&r.account_id,&club)))==Some(Sha256::digest(bytes).to_vec())}
+pub(super) fn complete(id:&str,w:&WriteWindow)->Outcome<()>{
+    require_approval(id,w)?;
+    for r in get(id)?.body.rows{
+        if !acknowledged(id,&r,None,&r.ciphertext) || r.clubs.iter().any(|c|!acknowledged(id,&r,Some(c.club.clone()),&c.ciphertext)) {return Err("Approved ciphertext writes remain unresolved; retain locks".into());}
+        let profile=super::get_profile_entry(&r.account_id).ok_or("Exact converted profile required")?;
+        if profile.display_name!=format!("pii-display-name:v1:{}:{}",r.sink.to_text(),r.subject.to_text()) {return Err("Approved profile publication incomplete; retain locks".into());}
+    }Ok(())
+}
 fn key()->Outcome<VerifyingKey>{
     let value=option_env!("IGNITE_PRIVATE_NAME_APPROVER_PUBLIC_KEY").ok_or("Immutable conversion signer is not configured")?;
     if value.len()!=64 || !value.is_ascii(){return Err("Invalid immutable conversion signer".into());}
@@ -59,15 +71,19 @@ fn approved_row(id:&str,account:&str)->Outcome<(WriteWindow,ApprovedRow)>{
 async fn write_approved_private_name(operation_id:String,account_id:String,club:Option<String>)->Outcome<()>{
     let(w,r)=approved_row(&operation_id,&account_id)?;
     if source_digest(&account_id)?!=r.source_digest{return Err("Approved name source changed".into());}
-    let bytes=match &club{None=>r.ciphertext,Some(id)=>r.clubs.into_iter().find(|c|&c.club==id).ok_or("Exact approved club required")?.ciphertext};
-    let reply=ic_cdk::call::Call::bounded_wait(r.sink,"register_conversion_name").with_args(&(w.request.clone(),r.subject,club,bytes)).await.map_err(|_|"Conversion ciphertext outcome unknown; retain locks")?;
+    let bytes=match &club{None=>r.ciphertext.clone(),Some(id)=>r.clubs.iter().find(|c|&c.club==id).ok_or("Exact approved club required")?.ciphertext.clone()};
+    if acknowledged(&operation_id,&r,club.clone(),&bytes){return Ok(());}
+    let reply=ic_cdk::call::Call::bounded_wait(r.sink,"register_conversion_name").with_args(&(w.request.clone(),r.subject,club.clone(),bytes.clone())).await.map_err(|_|"Conversion ciphertext outcome unknown; retain locks")?;
     let result:Outcome<()>=reply.candid().map_err(|_|"Invalid conversion ciphertext reply")?;
-    super::private_name_write_coordinator::access()?;require_approval(&operation_id,&super::private_name_write_coordinator::get(&operation_id)?)?;result
+    super::private_name_write_coordinator::access()?;require_approval(&operation_id,&super::private_name_write_coordinator::get(&operation_id)?)?;
+    result?;
+    WRITES.with(|m|m.borrow_mut().insert(receipt_key(&operation_id,&account_id,&club),Sha256::digest(&bytes).to_vec()));Ok(())
 }
 #[ic_cdk::update]
 fn publish_approved_private_name(operation_id:String,account_id:String)->Outcome<Profile>{
     let(w,r)=approved_row(&operation_id,&account_id)?;let _lease=super::private_name_writer_window::enter_conversion(&w.request)?;
     let reference=format!("pii-display-name:v1:{}:{}",r.sink.to_text(),r.subject.to_text());let existing=super::get_profile_entry(&account_id).ok_or("Exact profile required")?;
+    if !acknowledged(&operation_id,&r,None,&r.ciphertext) || r.clubs.iter().any(|c|!acknowledged(&operation_id,&r,Some(c.club.clone()),&c.ciphertext)){return Err("Approved ciphertext writes required before publication".into());}
     if existing.display_name==reference{return Ok(existing);}
     if source_digest(&account_id)?!=r.source_digest{return Err("Approved name source changed".into());}
     if !super::private_profile_reference::valid(&reference,&super::get_account(&account_id).ok_or("Exact account required")?.principals){return Err("Approved alias changed".into());}

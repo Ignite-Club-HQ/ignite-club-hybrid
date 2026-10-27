@@ -100,6 +100,7 @@ fn read_private_name_write_window(operation_id:String)->Outcome<WriteWindow>{acc
 #[ic_cdk::update]
 fn close_private_name_write_window(operation_id:String)->Outcome<WriteWindow>{
     access()?;let mut w=get(&operation_id)?;
+    if super::private_name_writer_window::exclusive(&w.request){super::private_name_conversion_approval::complete(&operation_id,&w)?;}
     if w.phase==WritePhase::Writing{w.phase=WritePhase::Closing;save_at(&operation_id,&w);}
     else if w.phase!=WritePhase::Closing&&w.phase!=WritePhase::Releasing&&w.phase!=WritePhase::Done{return Err("All writers must be opened before closing".into());}Ok(w)
 }
@@ -110,6 +111,7 @@ async fn advance_private_name_write_window(operation_id:String,target:Principal)
     // the generic coordinator without the retained exact signature.
     if super::private_name_writer_window::exclusive(&w.request) {
         super::private_name_conversion_approval::require_approval(&operation_id,&w)?;
+        if matches!(w.phase,WritePhase::Closing|WritePhase::Releasing|WritePhase::Done){super::private_name_conversion_approval::complete(&operation_id,&w)?;}
     }
     let phase=w.phase.clone();
     match phase {
