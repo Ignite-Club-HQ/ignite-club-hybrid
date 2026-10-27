@@ -73,7 +73,9 @@ thread_local! {
 fn get(id: &str) -> Outcome<Intent> { INTENTS.with(|m| m.borrow().get(&id.to_string())).map(|b| super::decode(&b)).ok_or("Private-name intent missing".into()) }
 fn save(intent: &Intent) { INTENTS.with(|m| m.borrow_mut().insert(intent.request.operation_id.clone(), super::encode(intent))); }
 pub(super) fn pending(account: &str) -> bool { INTENTS.with(|m| m.borrow().iter().any(|e| { let i: Intent = super::decode(&e.value()); i.account.id == account && i.phase != Phase::Done })) }
+pub(super) fn any_pending() -> bool { INTENTS.with(|m| m.borrow().iter().any(|e| super::decode::<Intent>(&e.value()).phase != Phase::Done)) }
 fn access() -> Outcome<()> {
+    if super::private_name_writer_window::enabled() { return Err("Use the all-writer coordinator in writer rehearsal".into()); }
     if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1") || !super::account_group_rehearsal_enabled() { return Err("Private-name coordination rehearsal required".into()); }
     super::require_governor(&super::state(), ic_cdk::api::msg_caller())
 }

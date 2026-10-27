@@ -1,60 +1,150 @@
-type backend = variant { Icp : record { canister : principal }; Supabase : record { environment : text } };
-type backend_kind = variant { Icp; Supabase };
-type availability = record { icp_enabled : bool; supabase_enabled : bool; version : nat64 };
-type policy = record { country : text; icp_enabled : bool; supabase_enabled : bool; version : nat64 };
-type init = record { governor : principal };
-type page = record { next : opt text; placements : vec placement; registry_version : nat64 };
-type placement_state = variant { Active; Blocked; MigrationRequired; ReadOnly };
-type placement = record { backend : backend; club_id : text; country : text; state : placement_state; version : nat64 };
-type decision = record { backend_enabled : bool; country_allowed : bool; placement : placement; reason : text; writable : bool };
-type result_availability = variant { Ok : availability; Err : text };
-type result_decision = variant { Ok : opt decision; Err : text };
-type result_opt_placement = variant { Ok : opt placement; Err : text };
-type result_page = variant { Ok : page; Err : text };
-type result_policy = variant { Ok : policy; Err : text };
-type result_placement = variant { Ok : placement; Err : text };
-type audit_event = record { id : nat64; at_ns : nat64; caller : principal; action : text; club_id : opt text; detail : text; registry_version : nat64 };
-type audit_page = record { events : vec audit_event; next : opt nat64 };
-type result_audit_page = variant { Ok : audit_page; Err : text };
-type target = record { alias : text; site_id : opt text; profile : text; backend : backend; deployment_class : text; enabled : bool; healthy : bool; version : nat64 };
-type site_availability = record { site_id : text; enabled : bool; version : nat64 };
-type result_site_availability = variant { Ok : site_availability; Err : text };
-type result_bool = variant { Ok : bool; Err : text };
-type residency_assignment = record { club_id : text; profile : text; target_alias : text; version : nat64 };
-type residency_policy = record { country : text; allowed_profiles : vec text; version : nat64 };
-type operator_role = variant { PlacementAdmin; MigrationOperator; SecurityAdmin; InfrastructureAdmin; Auditor };
-type operator_record = record { user : principal; roles : vec operator_role };
-type result_target = variant { Ok : target; Err : text };
-type result_opt_target = variant { Ok : opt target; Err : text };
-type result_residency = variant { Ok : residency_assignment; Err : text };
-type result_opt_residency = variant { Ok : opt residency_assignment; Err : text };
-type result_residency_policy = variant { Ok : residency_policy; Err : text };
-type result_operator = variant { Ok : operator_record; Err : text };
-type result_unit = variant { Ok; Err : text };
-service : (init) -> {
-  cycles_balance : () -> (nat) query;
-   memory_stats: () -> (record { heap_bytes: nat; memory_bytes: nat; stable_bytes: nat }) query;
-  get_availability : () -> (availability) query;
-  get_site_availability : (text) -> (result_bool) query;
-  get_decision : (text) -> (result_decision) query;
-  get_policy : (text) -> (result_policy) query;
-  get_placement : (text) -> (result_opt_placement) query;
-  list_placements : (opt text, nat16) -> (result_page) query;
-  list_audit : (opt nat64, nat16) -> (result_audit_page) query;
-  get_target : (text) -> (result_opt_target) query;
-  get_residency : (text) -> (result_opt_residency) query;
-  get_residency_policy : (text) -> (result_residency_policy) query;
-  get_operator : (principal) -> (result_operator) query;
-  grant_operator : (principal, vec operator_role) -> (result_operator);
-  revoke_operator : (principal) -> (result_unit);
-  set_target : (text, opt text, text, backend, text, bool, nat64) -> (result_target);
-  set_target_health : (text, bool, nat64) -> (result_target);
-  set_site_availability : (text, bool, nat64) -> (result_site_availability);
-  set_residency_policy : (text, vec text, nat64) -> (result_residency_policy);
-  set_residency : (text, text, text, nat64) -> (result_residency);
-  set_availability : (backend_kind, bool, nat64) -> (result_availability);
-  set_placement : (text, text, backend, nat64) -> (result_placement);
-  set_policy : (text, bool, bool, nat64) -> (result_policy);
-  set_state : (text, placement_state, nat64) -> (result_placement);
-  version : () -> (nat64) query;
+type AuditEvent = record {
+  id : nat64;
+  action : text;
+  at_ns : nat64;
+  registry_version : nat64;
+  detail : text;
+  caller : principal;
+  club_id : opt text;
 };
+type AuditPage = record { next : opt nat64; events : vec AuditEvent };
+type Availability = record {
+  icp_enabled : bool;
+  version : nat64;
+  supabase_enabled : bool;
+};
+type Backend = variant {
+  Icp : record { canister : principal };
+  Supabase : record { environment : text };
+};
+type BackendKind = variant { Icp; Supabase };
+type Decision = record {
+  writable : bool;
+  placement : Placement;
+  country_allowed : bool;
+  backend_enabled : bool;
+  reason : text;
+};
+type Init = record { governor : principal };
+type MemoryStats = record {
+  memory_bytes : nat;
+  stable_bytes : nat;
+  heap_bytes : nat;
+};
+type Operator = record { user : principal; roles : vec OperatorRole };
+type OperatorRole = variant {
+  Auditor;
+  PlacementAdmin;
+  SecurityAdmin;
+  InfrastructureAdmin;
+  MigrationOperator;
+};
+type Page = record {
+  placements : vec Placement;
+  next : opt text;
+  registry_version : nat64;
+};
+type Placement = record {
+  country : text;
+  version : nat64;
+  state : PlacementState;
+  club_id : text;
+  backend : Backend;
+};
+type PlacementState = variant { Blocked; Active; ReadOnly; MigrationRequired };
+type Policy = record {
+  country : text;
+  icp_enabled : bool;
+  version : nat64;
+  supabase_enabled : bool;
+};
+type ResidencyAssignment = record {
+  version : nat64;
+  target_alias : text;
+  club_id : text;
+  profile : text;
+};
+type ResidencyPolicy = record {
+  country : text;
+  allowed_profiles : vec text;
+  version : nat64;
+};
+type Result = variant { Ok : opt Decision; Err : text };
+type Result_1 = variant { Ok : opt Operator; Err : text };
+type Result_10 = variant { Ok : Page; Err : text };
+type Result_11 = variant { Ok; Err : text };
+type Result_12 = variant { Ok : WriterReceipt; Err : text };
+type Result_13 = variant { Ok : Availability; Err : text };
+type Result_14 = variant { Ok : Placement; Err : text };
+type Result_15 = variant { Ok : ResidencyAssignment; Err : text };
+type Result_16 = variant { Ok : SiteAvailability; Err : text };
+type Result_17 = variant { Ok : Target; Err : text };
+type Result_2 = variant { Ok : opt Placement; Err : text };
+type Result_3 = variant { Ok : Policy; Err : text };
+type Result_4 = variant { Ok : opt ResidencyAssignment; Err : text };
+type Result_5 = variant { Ok : ResidencyPolicy; Err : text };
+type Result_6 = variant { Ok : bool; Err : text };
+type Result_7 = variant { Ok : opt Target; Err : text };
+type Result_8 = variant { Ok : Operator; Err : text };
+type Result_9 = variant { Ok : AuditPage; Err : text };
+type SiteAvailability = record {
+  version : nat64;
+  enabled : bool;
+  site_id : text;
+};
+type Target = record {
+  alias : text;
+  deployment_class : text;
+  healthy : bool;
+  version : nat64;
+  enabled : bool;
+  site_id : opt text;
+  profile : text;
+  backend : Backend;
+};
+type WriterReceipt = record {
+  active : nat;
+  request : WriterRequest;
+  sealed : bool;
+  closing : bool;
+  receiver : principal;
+};
+type WriterRequest = record {
+  inventory_digest : blob;
+  generation : nat64;
+  operation_id : text;
+};
+service : (Init) -> {
+  // Public: remaining cycles (shown in admin settings).
+  cycles_balance : () -> (nat) query;
+  get_availability : () -> (Availability) query;
+  get_decision : (text) -> (Result) query;
+  get_operator : (principal) -> (Result_1) query;
+  get_placement : (text) -> (Result_2) query;
+  get_policy : (text) -> (Result_3) query;
+  get_residency : (text) -> (Result_4) query;
+  get_residency_policy : (text) -> (Result_5) query;
+  get_site_availability : (text) -> (Result_6) query;
+  get_target : (text) -> (Result_7) query;
+  grant_operator : (principal, vec OperatorRole) -> (Result_8);
+  list_audit : (opt nat64, nat16) -> (Result_9) query;
+  list_placements : (opt text, nat16) -> (Result_10) query;
+  // Public: live memory reading for the admin health page.
+  memory_stats : () -> (MemoryStats) query;
+  open_private_name_writer_window : (WriterRequest) -> (Result_11);
+  read_private_name_writer_window : (WriterRequest) -> (Result_12);
+  revoke_operator : (principal) -> (Result_11);
+  seal_private_name_writer_window : (WriterRequest) -> (Result_11);
+  set_availability : (BackendKind, bool, nat64) -> (Result_13);
+  set_placement : (text, text, Backend, nat64) -> (Result_14);
+  set_policy : (text, bool, bool, nat64) -> (Result_3);
+  set_residency : (text, text, text, nat64) -> (Result_15);
+  set_residency_policy : (text, vec text, nat64) -> (Result_5);
+  set_site_availability : (text, bool, nat64) -> (Result_16);
+  set_state : (text, PlacementState, nat64) -> (Result_14);
+  set_target : (text, opt text, text, Backend, text, bool, nat64) -> (
+      Result_17,
+    );
+  set_target_health : (text, bool, nat64) -> (Result_17);
+  version : () -> (nat64) query;
+}

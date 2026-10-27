@@ -78,24 +78,38 @@ type Result =
    Err: text;
    Ok: Settings;
  };
-type Request = 
+type Request__1 = 
  record {
    account_id: text;
    generation: nat64;
    inventory_digest: blob;
    subjects: vec principal;
  };
-type Receipt__1 = 
+type Request = 
+ record {
+   generation: nat64;
+   inventory_digest: blob;
+   operation_id: text;
+ };
+type Receipt__2 = 
  record {
    creator: principal;
    input: Input;
    match_id: text;
  };
+type Receipt__1 = 
+ record {
+   active: nat;
+   closing: bool;
+   receiver: principal;
+   request: Request;
+   sealed: bool;
+ };
 type Receipt = 
  record {
    outstanding: nat;
    receiver: principal;
-   request: Request;
+   request: Request__1;
  };
 type PlayHQStat = 
  record {
@@ -617,10 +631,16 @@ type Main =
                 Err: text;
                 Ok: nat;
               });
-   prepare_account_removal: (request: Request) -> (variant {
-                                                     Err: text;
-                                                     Ok;
-                                                   });
+   open_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   prepare_account_removal: (request: Request__1) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    prepare_my_broadcast_erasure: () -> (variant {
                                           Err: text;
                                           Ok;
@@ -718,7 +738,7 @@ type Main =
        Err: text;
        Ok: opt text;
      });
-   read_account_removal_drain: (request: Request) ->
+   read_account_removal_drain: (request: Request__1) ->
     (variant {
        Err: text;
        Ok: Receipt;
@@ -738,7 +758,7 @@ type Main =
    read_fixture_operation: (operation: text) ->
     (variant {
        Err: text;
-       Ok: opt Receipt__1;
+       Ok: opt Receipt__2;
      });
    read_group_opening_configuration: () -> (vec record {
                                                   text;
@@ -793,6 +813,11 @@ type Main =
                                 Err: text;
                                 Ok: vec principal;
                               });
+   read_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
+     });
    read_profile_admin_thread_batch: (requester: principal, competition_id:
     text, member: principal, subjects: vec principal, expected: opt nat) ->
     (variant {
@@ -903,10 +928,15 @@ type Main =
        Err: text;
        Ok: CompetitionJoinLink;
      });
-   seal_account_removal: (request: Request) ->
+   seal_account_removal: (request: Request__1) ->
     (variant {
        Err: text;
        Ok: Receipt;
+     });
+   seal_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    send_competition_broadcast: (competition_id: text, title: text, body:
     text) -> (variant {

@@ -9,87 +9,75 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
-  const init = IDL.Record({ 'governor' : IDL.Principal });
-  const availability = IDL.Record({
+  const Init = IDL.Record({ 'governor' : IDL.Principal });
+  const Availability = IDL.Record({
     'icp_enabled' : IDL.Bool,
     'version' : IDL.Nat64,
     'supabase_enabled' : IDL.Bool,
   });
-  const placement_state = IDL.Variant({
+  const PlacementState = IDL.Variant({
     'Blocked' : IDL.Null,
     'Active' : IDL.Null,
     'ReadOnly' : IDL.Null,
     'MigrationRequired' : IDL.Null,
   });
-  const backend = IDL.Variant({
+  const Backend = IDL.Variant({
     'Icp' : IDL.Record({ 'canister' : IDL.Principal }),
     'Supabase' : IDL.Record({ 'environment' : IDL.Text }),
   });
-  const placement = IDL.Record({
+  const Placement = IDL.Record({
     'country' : IDL.Text,
     'version' : IDL.Nat64,
-    'state' : placement_state,
+    'state' : PlacementState,
     'club_id' : IDL.Text,
-    'backend' : backend,
+    'backend' : Backend,
   });
-  const decision = IDL.Record({
+  const Decision = IDL.Record({
     'writable' : IDL.Bool,
-    'placement' : placement,
+    'placement' : Placement,
     'country_allowed' : IDL.Bool,
     'backend_enabled' : IDL.Bool,
     'reason' : IDL.Text,
   });
-  const result_decision = IDL.Variant({
-    'Ok' : IDL.Opt(decision),
-    'Err' : IDL.Text,
-  });
-  const operator_role = IDL.Variant({
+  const Result = IDL.Variant({ 'Ok' : IDL.Opt(Decision), 'Err' : IDL.Text });
+  const OperatorRole = IDL.Variant({
     'Auditor' : IDL.Null,
     'PlacementAdmin' : IDL.Null,
     'SecurityAdmin' : IDL.Null,
     'InfrastructureAdmin' : IDL.Null,
     'MigrationOperator' : IDL.Null,
   });
-  const operator_record = IDL.Record({
+  const Operator = IDL.Record({
     'user' : IDL.Principal,
-    'roles' : IDL.Vec(operator_role),
+    'roles' : IDL.Vec(OperatorRole),
   });
-  const result_operator = IDL.Variant({
-    'Ok' : operator_record,
-    'Err' : IDL.Text,
-  });
-  const result_opt_placement = IDL.Variant({
-    'Ok' : IDL.Opt(placement),
-    'Err' : IDL.Text,
-  });
-  const policy = IDL.Record({
+  const Result_1 = IDL.Variant({ 'Ok' : IDL.Opt(Operator), 'Err' : IDL.Text });
+  const Result_2 = IDL.Variant({ 'Ok' : IDL.Opt(Placement), 'Err' : IDL.Text });
+  const Policy = IDL.Record({
     'country' : IDL.Text,
     'icp_enabled' : IDL.Bool,
     'version' : IDL.Nat64,
     'supabase_enabled' : IDL.Bool,
   });
-  const result_policy = IDL.Variant({ 'Ok' : policy, 'Err' : IDL.Text });
-  const residency_assignment = IDL.Record({
+  const Result_3 = IDL.Variant({ 'Ok' : Policy, 'Err' : IDL.Text });
+  const ResidencyAssignment = IDL.Record({
     'version' : IDL.Nat64,
     'target_alias' : IDL.Text,
     'club_id' : IDL.Text,
     'profile' : IDL.Text,
   });
-  const result_opt_residency = IDL.Variant({
-    'Ok' : IDL.Opt(residency_assignment),
+  const Result_4 = IDL.Variant({
+    'Ok' : IDL.Opt(ResidencyAssignment),
     'Err' : IDL.Text,
   });
-  const residency_policy = IDL.Record({
+  const ResidencyPolicy = IDL.Record({
     'country' : IDL.Text,
     'allowed_profiles' : IDL.Vec(IDL.Text),
     'version' : IDL.Nat64,
   });
-  const result_residency_policy = IDL.Variant({
-    'Ok' : residency_policy,
-    'Err' : IDL.Text,
-  });
-  const result_bool = IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text });
-  const target = IDL.Record({
+  const Result_5 = IDL.Variant({ 'Ok' : ResidencyPolicy, 'Err' : IDL.Text });
+  const Result_6 = IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text });
+  const Target = IDL.Record({
     'alias' : IDL.Text,
     'deployment_class' : IDL.Text,
     'healthy' : IDL.Bool,
@@ -97,13 +85,11 @@ export const idlFactory = ({ IDL }) => {
     'enabled' : IDL.Bool,
     'site_id' : IDL.Opt(IDL.Text),
     'profile' : IDL.Text,
-    'backend' : backend,
+    'backend' : Backend,
   });
-  const result_opt_target = IDL.Variant({
-    'Ok' : IDL.Opt(target),
-    'Err' : IDL.Text,
-  });
-  const audit_event = IDL.Record({
+  const Result_7 = IDL.Variant({ 'Ok' : IDL.Opt(Target), 'Err' : IDL.Text });
+  const Result_8 = IDL.Variant({ 'Ok' : Operator, 'Err' : IDL.Text });
+  const AuditEvent = IDL.Record({
     'id' : IDL.Nat64,
     'action' : IDL.Text,
     'at_ns' : IDL.Nat64,
@@ -112,117 +98,127 @@ export const idlFactory = ({ IDL }) => {
     'caller' : IDL.Principal,
     'club_id' : IDL.Opt(IDL.Text),
   });
-  const audit_page = IDL.Record({
+  const AuditPage = IDL.Record({
     'next' : IDL.Opt(IDL.Nat64),
-    'events' : IDL.Vec(audit_event),
+    'events' : IDL.Vec(AuditEvent),
   });
-  const result_audit_page = IDL.Variant({
-    'Ok' : audit_page,
-    'Err' : IDL.Text,
-  });
-  const page = IDL.Record({
-    'placements' : IDL.Vec(placement),
+  const Result_9 = IDL.Variant({ 'Ok' : AuditPage, 'Err' : IDL.Text });
+  const Page = IDL.Record({
+    'placements' : IDL.Vec(Placement),
     'next' : IDL.Opt(IDL.Text),
     'registry_version' : IDL.Nat64,
   });
-  const result_page = IDL.Variant({ 'Ok' : page, 'Err' : IDL.Text });
-  const result_unit = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
-  const backend_kind = IDL.Variant({ 'Icp' : IDL.Null, 'Supabase' : IDL.Null });
-  const result_availability = IDL.Variant({
-    'Ok' : availability,
+  const Result_10 = IDL.Variant({ 'Ok' : Page, 'Err' : IDL.Text });
+  const MemoryStats = IDL.Record({
+    'memory_bytes' : IDL.Nat,
+    'stable_bytes' : IDL.Nat,
+    'heap_bytes' : IDL.Nat,
+  });
+  const WriterRequest = IDL.Record({
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'generation' : IDL.Nat64,
+    'operation_id' : IDL.Text,
+  });
+  const Result_11 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
+  const WriterReceipt = IDL.Record({
+    'active' : IDL.Nat,
+    'request' : WriterRequest,
+    'sealed' : IDL.Bool,
+    'closing' : IDL.Bool,
+    'receiver' : IDL.Principal,
+  });
+  const Result_12 = IDL.Variant({ 'Ok' : WriterReceipt, 'Err' : IDL.Text });
+  const BackendKind = IDL.Variant({ 'Icp' : IDL.Null, 'Supabase' : IDL.Null });
+  const Result_13 = IDL.Variant({ 'Ok' : Availability, 'Err' : IDL.Text });
+  const Result_14 = IDL.Variant({ 'Ok' : Placement, 'Err' : IDL.Text });
+  const Result_15 = IDL.Variant({
+    'Ok' : ResidencyAssignment,
     'Err' : IDL.Text,
   });
-  const result_placement = IDL.Variant({ 'Ok' : placement, 'Err' : IDL.Text });
-  const result_residency = IDL.Variant({
-    'Ok' : residency_assignment,
-    'Err' : IDL.Text,
-  });
-  const site_availability = IDL.Record({
+  const SiteAvailability = IDL.Record({
     'version' : IDL.Nat64,
     'enabled' : IDL.Bool,
     'site_id' : IDL.Text,
   });
-  const result_site_availability = IDL.Variant({
-    'Ok' : site_availability,
-    'Err' : IDL.Text,
-  });
-  const result_target = IDL.Variant({ 'Ok' : target, 'Err' : IDL.Text });
+  const Result_16 = IDL.Variant({ 'Ok' : SiteAvailability, 'Err' : IDL.Text });
+  const Result_17 = IDL.Variant({ 'Ok' : Target, 'Err' : IDL.Text });
   
   return IDL.Service({
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
-    'get_availability' : IDL.Func([], [availability], ['query']),
-    'get_decision' : IDL.Func([IDL.Text], [result_decision], ['query']),
-    'get_operator' : IDL.Func([IDL.Principal], [result_operator], ['query']),
-    'get_placement' : IDL.Func([IDL.Text], [result_opt_placement], ['query']),
-    'get_policy' : IDL.Func([IDL.Text], [result_policy], ['query']),
-    'get_residency' : IDL.Func([IDL.Text], [result_opt_residency], ['query']),
-    'get_residency_policy' : IDL.Func(
-        [IDL.Text],
-        [result_residency_policy],
-        ['query'],
-      ),
-    'get_site_availability' : IDL.Func([IDL.Text], [result_bool], ['query']),
-    'get_target' : IDL.Func([IDL.Text], [result_opt_target], ['query']),
+    'get_availability' : IDL.Func([], [Availability], ['query']),
+    'get_decision' : IDL.Func([IDL.Text], [Result], ['query']),
+    'get_operator' : IDL.Func([IDL.Principal], [Result_1], ['query']),
+    'get_placement' : IDL.Func([IDL.Text], [Result_2], ['query']),
+    'get_policy' : IDL.Func([IDL.Text], [Result_3], ['query']),
+    'get_residency' : IDL.Func([IDL.Text], [Result_4], ['query']),
+    'get_residency_policy' : IDL.Func([IDL.Text], [Result_5], ['query']),
+    'get_site_availability' : IDL.Func([IDL.Text], [Result_6], ['query']),
+    'get_target' : IDL.Func([IDL.Text], [Result_7], ['query']),
     'grant_operator' : IDL.Func(
-        [IDL.Principal, IDL.Vec(operator_role)],
-        [result_operator],
+        [IDL.Principal, IDL.Vec(OperatorRole)],
+        [Result_8],
         [],
       ),
     'list_audit' : IDL.Func(
         [IDL.Opt(IDL.Nat64), IDL.Nat16],
-        [result_audit_page],
+        [Result_9],
         ['query'],
       ),
     'list_placements' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Nat16],
-        [result_page],
+        [Result_10],
         ['query'],
       ),
-    'memory_stats' : IDL.Func(
+    'memory_stats' : IDL.Func([], [MemoryStats], ['query']),
+    'open_private_name_writer_window' : IDL.Func(
+        [WriterRequest],
+        [Result_11],
         [],
-        [
-          IDL.Record({
-            'memory_bytes' : IDL.Nat,
-            'stable_bytes' : IDL.Nat,
-            'heap_bytes' : IDL.Nat,
-          }),
-        ],
-        ['query'],
       ),
-    'revoke_operator' : IDL.Func([IDL.Principal], [result_unit], []),
+    'read_private_name_writer_window' : IDL.Func(
+        [WriterRequest],
+        [Result_12],
+        [],
+      ),
+    'revoke_operator' : IDL.Func([IDL.Principal], [Result_11], []),
+    'seal_private_name_writer_window' : IDL.Func(
+        [WriterRequest],
+        [Result_11],
+        [],
+      ),
     'set_availability' : IDL.Func(
-        [backend_kind, IDL.Bool, IDL.Nat64],
-        [result_availability],
+        [BackendKind, IDL.Bool, IDL.Nat64],
+        [Result_13],
         [],
       ),
     'set_placement' : IDL.Func(
-        [IDL.Text, IDL.Text, backend, IDL.Nat64],
-        [result_placement],
+        [IDL.Text, IDL.Text, Backend, IDL.Nat64],
+        [Result_14],
         [],
       ),
     'set_policy' : IDL.Func(
         [IDL.Text, IDL.Bool, IDL.Bool, IDL.Nat64],
-        [result_policy],
+        [Result_3],
         [],
       ),
     'set_residency' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Nat64],
-        [result_residency],
+        [Result_15],
         [],
       ),
     'set_residency_policy' : IDL.Func(
         [IDL.Text, IDL.Vec(IDL.Text), IDL.Nat64],
-        [result_residency_policy],
+        [Result_5],
         [],
       ),
     'set_site_availability' : IDL.Func(
         [IDL.Text, IDL.Bool, IDL.Nat64],
-        [result_site_availability],
+        [Result_16],
         [],
       ),
     'set_state' : IDL.Func(
-        [IDL.Text, placement_state, IDL.Nat64],
-        [result_placement],
+        [IDL.Text, PlacementState, IDL.Nat64],
+        [Result_14],
         [],
       ),
     'set_target' : IDL.Func(
@@ -230,17 +226,17 @@ export const idlFactory = ({ IDL }) => {
           IDL.Text,
           IDL.Opt(IDL.Text),
           IDL.Text,
-          backend,
+          Backend,
           IDL.Text,
           IDL.Bool,
           IDL.Nat64,
         ],
-        [result_target],
+        [Result_17],
         [],
       ),
     'set_target_health' : IDL.Func(
         [IDL.Text, IDL.Bool, IDL.Nat64],
-        [result_target],
+        [Result_17],
         [],
       ),
     'version' : IDL.Func([], [IDL.Nat64], ['query']),
@@ -248,7 +244,7 @@ export const idlFactory = ({ IDL }) => {
 };
 
 export const init = ({ IDL }) => {
-  const init = IDL.Record({ 'governor' : IDL.Principal });
+  const Init = IDL.Record({ 'governor' : IDL.Principal });
   
-  return [init];
+  return [Init];
 };

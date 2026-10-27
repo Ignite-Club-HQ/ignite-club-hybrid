@@ -389,7 +389,7 @@ export interface Main {
   'list_blocked_users' : ActorMethod<[], Array<Principal>>,
   'list_broadcast_message_readers' : ActorMethod<
     [Array<string>],
-    { 'Ok' : Array<Receipt__1> } |
+    { 'Ok' : Array<Receipt__2> } |
       { 'Err' : string }
   >,
   'list_club_admin_threads' : ActorMethod<
@@ -482,7 +482,7 @@ export interface Main {
   >,
   'list_read_receipts' : ActorMethod<
     [string],
-    { 'Ok' : Array<Receipt__1> } |
+    { 'Ok' : Array<Receipt__2> } |
       { 'Err' : string }
   >,
   'list_typing' : ActorMethod<
@@ -492,7 +492,7 @@ export interface Main {
   >,
   'mark_read' : ActorMethod<
     [string, string],
-    { 'Ok' : Receipt__1 } |
+    { 'Ok' : Receipt__2 } |
       { 'Err' : string }
   >,
   'memory_stats' : ActorMethod<
@@ -527,13 +527,18 @@ export interface Main {
       } |
       { 'Err' : string }
   >,
+  'open_private_name_writer_window' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'pin_message' : ActorMethod<
     [string, string],
     { 'Ok' : PinnedMessage } |
       { 'Err' : string }
   >,
   'prepare_account_removal' : ActorMethod<
-    [Request],
+    [Request__1],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -679,7 +684,7 @@ export interface Main {
   >,
   'read_account_list_read_receipts' : ActorMethod<
     [string],
-    { 'Ok' : Array<Receipt__1> } |
+    { 'Ok' : Array<Receipt__2> } |
       { 'Err' : string }
   >,
   'read_account_list_typing' : ActorMethod<
@@ -720,7 +725,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_account_removal_drain' : ActorMethod<
-    [Request],
+    [Request__1],
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
@@ -754,6 +759,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_private_name_writer_window' : ActorMethod<
+    [Request],
+    { 'Ok' : Receipt__1 } |
+      { 'Err' : string }
+  >,
   'read_profile_broadcast_batch' : ActorMethod<
     [Principal, string, Array<Principal>, [] | [bigint]],
     { 'Ok' : Batch } |
@@ -840,8 +850,13 @@ export interface Main {
     ChatPhotoReminderResult
   >,
   'seal_account_removal' : ActorMethod<
-    [Request],
+    [Request__1],
     { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
+  'seal_private_name_writer_window' : ActorMethod<
+    [Request],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'search_messages' : ActorMethod<
@@ -1120,10 +1135,17 @@ export interface RecapConfig {
 }
 export interface Receipt {
   'outstanding' : bigint,
-  'request' : Request,
+  'request' : Request__1,
   'receiver' : Principal,
 }
 export interface Receipt__1 {
+  'active' : bigint,
+  'request' : Request,
+  'sealed' : boolean,
+  'closing' : boolean,
+  'receiver' : Principal,
+}
+export interface Receipt__2 {
   'conversation_id' : string,
   'read' : boolean,
   'user' : Principal,
@@ -1143,6 +1165,11 @@ export interface Reference {
   'resource_id' : string,
 }
 export interface Request {
+  'inventory_digest' : Uint8Array,
+  'generation' : bigint,
+  'operation_id' : string,
+}
+export interface Request__1 {
   'account_id' : string,
   'inventory_digest' : Uint8Array,
   'subjects' : Array<Principal>,
@@ -1192,7 +1219,7 @@ export interface State {
   'attachmentMetadata' : Array<AttachmentMetadata>,
   'dmLinks' : Array<DmLink>,
   'userMessagingSettings' : Array<UserMessagingSettings>,
-  'receipts' : Array<Receipt__1>,
+  'receipts' : Array<Receipt__2>,
   'reactions' : Array<Reaction>,
   'roles' : Array<RoleGrant>,
   'competitionAdmins' : Array<CompetitionAdmin>,

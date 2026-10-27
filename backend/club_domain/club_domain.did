@@ -232,19 +232,25 @@ type Reservation =
    store: principal;
    token: text;
  };
-type Request__1 = 
+type Request__2 = 
  record {
    club: text;
    expected_revision: nat64;
    operation: Operation__1;
    request_id: text;
  };
-type Request = 
+type Request__1 = 
  record {
    account_id: text;
    generation: nat64;
    inventory_digest: blob;
    subjects: vec principal;
+ };
+type Request = 
+ record {
+   generation: nat64;
+   inventory_digest: blob;
+   operation_id: text;
  };
 type RemovedMember = 
  record {
@@ -268,11 +274,19 @@ type Reference =
    store: opt text;
    url: text;
  };
+type Receipt__1 = 
+ record {
+   active: nat;
+   closing: bool;
+   receiver: principal;
+   request: Request;
+   sealed: bool;
+ };
 type Receipt = 
  record {
    outstanding: nat;
    receiver: principal;
-   request: Request;
+   request: Request__1;
  };
 type PromoCode = 
  record {
@@ -1336,15 +1350,21 @@ type Main =
                              Err: text;
                              Ok: SeasonTeamAssignment;
                            });
-   mutate: (req: Request__1) -> (variant {
+   mutate: (req: Request__2) -> (variant {
                                    Err: text;
                                    Ok: Mutation;
                                  });
    my_role_grants: () -> (vec RoleGrant) query;
-   prepare_account_removal: (request: Request) -> (variant {
-                                                     Err: text;
-                                                     Ok;
-                                                   });
+   open_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   prepare_account_removal: (request: Request__1) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    prepare_deleted_retained_media: (token: text, entry: Object) ->
     (Result__1);
    prepare_media_quota_reservation: (store: principal, token: text, club_id:
@@ -1671,7 +1691,7 @@ type Main =
        Err: text;
        Ok: opt text;
      });
-   read_account_removal_drain: (request: Request) ->
+   read_account_removal_drain: (request: Request__1) ->
     (variant {
        Err: text;
        Ok: Receipt;
@@ -1807,6 +1827,11 @@ type Main =
              clubs: vec text;
              next: opt text;
            };
+     });
+   read_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok: Receipt__1;
      });
    read_profile_candidates: (club_id: text, cursor: opt Cursor) ->
     (variant {
@@ -2120,10 +2145,15 @@ type Main =
        Ok: TeamSubscription;
      });
    schema: () -> (text) query;
-   seal_account_removal: (request: Request) ->
+   seal_account_removal: (request: Request__1) ->
     (variant {
        Err: text;
        Ok: Receipt;
+     });
+   seal_private_name_writer_window: (request: Request) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    send_fee_reminders: (club_id: text, payment_period: text, payment_type:
     text, message: text) -> (variant {

@@ -139,6 +139,11 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
   });
   const Request = IDL.Record({
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'generation' : IDL.Nat64,
+    'operation_id' : IDL.Text,
+  });
+  const Request__1 = IDL.Record({
     'account_id' : IDL.Text,
     'inventory_digest' : IDL.Vec(IDL.Nat8),
     'subjects' : IDL.Vec(IDL.Principal),
@@ -146,7 +151,14 @@ export const idlFactory = ({ IDL }) => {
   });
   const Receipt = IDL.Record({
     'outstanding' : IDL.Nat,
+    'request' : Request__1,
+    'receiver' : IDL.Principal,
+  });
+  const Receipt__1 = IDL.Record({
+    'active' : IDL.Nat,
     'request' : Request,
+    'sealed' : IDL.Bool,
+    'closing' : IDL.Bool,
     'receiver' : IDL.Principal,
   });
   const Main = IDL.Service({
@@ -486,8 +498,13 @@ export const idlFactory = ({ IDL }) => {
         ['composite_query'],
       ),
     'my_leagues' : IDL.Func([], [IDL.Vec(MiniLeague)], ['composite_query']),
-    'prepare_account_removal' : IDL.Func(
+    'open_private_name_writer_window' : IDL.Func(
         [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'prepare_account_removal' : IDL.Func(
+        [Request__1],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -646,7 +663,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_account_my_leagues' : IDL.Func([], [IDL.Vec(MiniLeague)], []),
     'read_account_removal_drain' : IDL.Func(
-        [Request],
+        [Request__1],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
@@ -685,6 +702,11 @@ export const idlFactory = ({ IDL }) => {
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
+    'read_private_name_writer_window' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
         [],
       ),
     'read_profile_audience_batch' : IDL.Func(
@@ -729,8 +751,13 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'seal_account_removal' : IDL.Func(
-        [Request],
+        [Request__1],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'seal_private_name_writer_window' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_availability' : IDL.Func(

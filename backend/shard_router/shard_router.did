@@ -60,6 +60,17 @@ type GroupRegistrySnapshot = record {
   placements : vec GroupPlacement;
   revision : nat64;
 };
+type HttpRequest = record {
+  url : text;
+  method : text;
+  body : blob;
+  headers : vec record { text; text };
+};
+type HttpResponse = record {
+  body : blob;
+  headers : vec record { text; text };
+  status_code : nat16;
+};
 type Init = record { governor : principal };
 type MemoryStats = record {
   memory_bytes : nat;
@@ -108,9 +119,10 @@ type Result_19 = variant { Ok : vec GroupAssignment; Err : text };
 type Result_2 = variant { Ok : AssignResult; Err : text };
 type Result_20 = variant { Ok : opt OwnerOpening; Err : text };
 type Result_21 = variant { Ok : bool; Err : text };
-type Result_22 = variant { Ok : PublicGroupPage; Err : text };
-type Result_23 = variant { Ok : opt RoutingApproval; Err : text };
-type Result_24 = variant { Ok : RoutingApproval; Err : text };
+type Result_22 = variant { Ok : WriterReceipt; Err : text };
+type Result_23 = variant { Ok : PublicGroupPage; Err : text };
+type Result_24 = variant { Ok : opt RoutingApproval; Err : text };
+type Result_25 = variant { Ok : RoutingApproval; Err : text };
 type Result_3 = variant { Ok : AssignDomainResult; Err : text };
 type Result_4 = variant { Ok : GroupAssignment; Err : text };
 type Result_5 = variant { Ok : DomainMigration; Err : text };
@@ -147,8 +159,18 @@ type ShardGroup = record {
   min_cycles : nat64;
   heap_bytes : nat64;
 };
-type HttpRequest = record { method : text; url : text; headers : vec record { text; text }; body : blob };
-type HttpResponse = record { status_code : nat16; headers : vec record { text; text }; body : blob };
+type WriterReceipt = record {
+  active : nat;
+  request : WriterRequest;
+  sealed : bool;
+  closing : bool;
+  receiver : principal;
+};
+type WriterRequest = record {
+  inventory_digest : blob;
+  generation : nat64;
+  operation_id : text;
+};
 service : (Init) -> {
   abort_domain_migration : (text, text, nat64) -> (Result);
   abort_migration : (text, nat64) -> (Result);
@@ -184,6 +206,8 @@ service : (Init) -> {
   get_group_assignment : (text) -> (Result_10) query;
   get_migration : (text) -> (Result_11) query;
   get_route : (text) -> (Result_12) query;
+  // Public club-website resolver: redirects /club?id=..&scope=.. to the owning group.
+  http_request : (HttpRequest) -> (HttpResponse) query;
   list_groups : () -> (Result_13) query;
   list_routes : (opt text, nat16) -> (Result_14) query;
   // Public: live memory reading for the admin health page.
@@ -191,6 +215,7 @@ service : (Init) -> {
   // Explicit governor signature grants only bounded owner test placement, not
   // global admission, membership, recovery release or general accepting status.
   open_owner_test_group : (OwnerOpeningApproval) -> (Result_15);
+  open_private_name_writer_window : (WriterRequest) -> (Result_7);
   // Any signed-in user creating a club asks for its group here; the router picks
   // the healthiest accepting group. Capped per principal; retries are free.
   place_my_new_club : (text, text) -> (Result_4);
@@ -211,27 +236,27 @@ service : (Init) -> {
   // No private approval data: admins deleting a different account still need
   // the complete group inventory, even when they have no test-club membership.
   read_owner_test_deletion_required : (text) -> (Result_21);
+  read_private_name_writer_window : (WriterRequest) -> (Result_22);
   // Anonymous infrastructure discovery only: never memberships, placements,
   // controller details or a grant to read/write any destination resource.
-  read_public_group_targets : (text, opt nat64, opt text, nat32) -> (Result_22);
+  read_public_group_targets : (text, opt nat64, opt text, nat32) -> (Result_23);
   // Consensus read for signed-in clients; infrastructure metadata only.
-  read_routing_approval : (text) -> (Result_23);
+  read_routing_approval : (text) -> (Result_24);
   record_group_health : (text, nat64, nat64, nat64) -> (Result);
   // Governor-only. Binds the exact configuration revision and approved digest;
   // any later group/placement/policy change makes clients fail closed again.
-  record_routing_approval : (RoutingApproval, nat64) -> (Result_24);
+  record_routing_approval : (RoutingApproval, nat64) -> (Result_25);
   register_group : (ShardGroup, nat64) -> (Result);
   register_group_placement : (GroupPlacement, nat64) -> (Result);
   release_deletion_lock : (text, nat64) -> (Result_7);
   reserve_group_media_growth : (text, text, text, nat64) -> (Result);
+  seal_private_name_writer_window : (WriterRequest) -> (Result_7);
   set_deletion_authority : (principal) -> (Result_7);
+  // Governor-only: club_domain serving clubs that have no group assignment.
+  set_website_default_club_domain : (principal) -> (Result_7);
   // Governor-only stop for general and trial admission. Never removes assignments
   // or changes membership, service endpoints, media, or opening authorization.
   stop_group_new_placements : (text, text, nat64) -> (Result);
   stop_owner_test_group : (text, nat64) -> (Result_15);
-  // Public club-website resolver: 307 to the owning group's club_domain /club.
-  http_request : (HttpRequest) -> (HttpResponse) query;
-  // Governor-only fallback club_domain for clubs without a group assignment.
-  set_website_default_club_domain : (principal) -> (Result_7);
   version : () -> (nat64) query;
 }
