@@ -122,7 +122,7 @@ impl Drop for Lease {
         if let Some(ref request)=self.0 {if let Ok(mut i)=load(&request.operation_id){if i.request==*request&&i.active>0{i.active-=1;if i.closing&&i.active==0{i.sealed=true;}save(&i);}}}
     }
 }
-pub fn require_window() { if enabled() && (preparation_pending() || current().is_none_or(|i|i.closing || exclusive(&i.request))) {ic_cdk::trap("Coordinated ordinary private-name write window required");} }
+pub fn require_window() { if preparation_pending() || (enabled() && current().is_none_or(|i|i.closing || exclusive(&i.request))) {ic_cdk::trap("Coordinated ordinary private-name write window required");} }
 
 #[cfg(test)]
 mod accounting_tests {
