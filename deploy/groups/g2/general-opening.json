@@ -17,7 +17,7 @@
       "name": "club_domain",
       "canisterId": "yfwyv-nyaaa-aaaal-qxpyq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "b163a5a8403eb064ff248f3e3737ccd91193902a82fe6b9bc95d7648b28f95f6"
+      "moduleHash": "3c55bec919ea4d839d6f292a2e86272e32f21328cbf16213dc9b851059ff42fa"
     },
     {
       "name": "events_domain",
@@ -29,7 +29,7 @@
       "name": "messaging_domain",
       "canisterId": "yluv5-wiaaa-aaaal-qxpzq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "e8d7a960832c270f91dfe2f579326a74261f3e3ddbed0facd644381ec7876e17"
+      "moduleHash": "d3f7bcc8bb12f717b54b9af2bb7bc96615afc78e3e9322978b96e86228e8a258"
     },
     {
       "name": "vault_domain",
@@ -41,7 +41,7 @@
       "name": "competition_domain",
       "canisterId": "yzsce-2yaaa-aaaal-qxp2q-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "1f816f7d1e5887ea61e272f71c74af6c0d767a7557af434768deedc85e240ada"
+      "moduleHash": "c5fb94d89fe17407435cf19a03881da721c16dc8f30e9ab03a214e8b3d084087"
     },
     {
       "name": "club_points_domain",
@@ -53,7 +53,7 @@
       "name": "mini_league_domain",
       "canisterId": "yxqpm-biaaa-aaaal-qxp3q-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "c2cb3242389d8142bbeae35709c52187dc78967fad992f3f582bcb3f87b87a0b"
+      "moduleHash": "7c8dc5712146ad6cb0e94e8c6908755a1b9c8d2bb7a5e08b013e7cd7049add91"
     },
     {
       "name": "media_metadata",
@@ -77,7 +77,7 @@
       "name": "pii_access_control",
       "canisterId": "zt5a6-yiaaa-aaaal-qxp5q-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "f822943d725542f6301dc1dbe903ba4fa66750cea1b4c2428f1c4da11310cd02"
+      "moduleHash": "d777c5fbc952f3a1485a1f0706332c1fe99e72fedcf39bb50f0d2b4a95ba62b9"
     },
     {
       "name": "timer_jobs",
