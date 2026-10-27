@@ -9,7 +9,7 @@ export function secureNameChangedSettings(scope, service) {
   if (!isSecureNameScope(scope) || !['identity_access','pii_access_control','club_domain'].includes(service) || (scope==='secure_name_save' && service==='club_domain')) throw Error('Exact secure-name target required');
   return scope==='secure_name_save'
     ? [SAVE_RELEASE,service==='identity_access'?'IGNITE_SECURE_ADULT_NAME_PII':'IGNITE_SECURE_ADULT_NAME_IDENTITY']
-    : [DISPLAY_RELEASE];
+    : [DISPLAY_RELEASE,...(service==='pii_access_control'?['IGNITE_PRIVATE_PROFILE_IDENTITY']:[])];
 }
 export function secureNameEnvironment(environment, service, scope, {identity, originalPii}) {
   const changed=secureNameChangedSettings(scope,service);
@@ -25,17 +25,19 @@ export function secureNameEnvironment(environment, service, scope, {identity, or
   }
   const exact=(name,value,required=false)=>{
     const row=environment.find(r=>r.name===name);
-    if((required&&!row)||(row&&row.value!==value))throw Error('Secure-name authority mismatch; no rewiring');
+    if((required&&!row)||(row&&row.value!==value))throw Error(`Secure-name authority mismatch: ${name}; no rewiring`);
   };
   if(service==='identity_access')exact('IGNITE_SECURE_ADULT_NAME_PII',originalPii,scope==='private_club_name_display');
   if(service==='pii_access_control') {
     exact('VETKD_KEY_NAME','key_1',true);
     exact('IGNITE_SECURE_ADULT_NAME_IDENTITY',identity,scope==='private_club_name_display');
-    if(scope==='private_club_name_display')exact('IGNITE_PRIVATE_PROFILE_IDENTITY',identity,true);
+    // Secure saving already pins this same account authority. Display adds its
+    // separate verifier binding if absent; it must never replace a foreign one.
+    if(scope==='private_club_name_display')exact('IGNITE_PRIVATE_PROFILE_IDENTITY',identity);
   }
   if(scope==='private_club_name_display'&&service!=='club_domain')exact(SAVE_RELEASE,'1',true);
   const additions=scope==='secure_name_save'
     ? [{name:SAVE_RELEASE,value:'1'},{name:changed[1],value:service==='identity_access'?originalPii:identity}]
-    : [{name:DISPLAY_RELEASE,value:'1'}];
+    : [{name:DISPLAY_RELEASE,value:'1'},...(service==='pii_access_control'?[{name:'IGNITE_PRIVATE_PROFILE_IDENTITY',value:identity}]:[])];
   return [...environment.filter(r=>!changed.includes(r.name)),...additions].sort((a,b)=>a.name.localeCompare(b.name));
 }
