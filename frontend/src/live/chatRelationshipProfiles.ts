@@ -5,6 +5,7 @@ import { readRelationshipProfiles, type ProfileRelationship } from './relationsh
 import { getLiveDirectConversation, getLiveGroupMetadata, type LiveGroupMetadata } from './features/messaging';
 import { getLiveMiniLeague } from './features/miniLeagues';
 import { listLiveCompetitionCards, listLiveOfficialChats } from './features/competitions';
+import { capturePrivateProfileSession } from './privateProfileSession';
 
 export type ChatProfile = { id: string; display_name: string | null; avatar_url: string | null };
 
@@ -16,7 +17,9 @@ export async function readDirectChatProfiles(owner: FeatureBackendContext, conve
   if (ids.length > 2) throw new Error('Direct names require at most two participants.');
   if (!ids.length) return new Map();
   const identity = owner.identity, principal = identity.getPrincipal().toText(), target = JSON.stringify(owner.target);
+  const sessionActive = capturePrivateProfileSession();
   const active = () => {
+    sessionActive();
     if (signal?.aborted || identity !== owner.identity || principal !== identity.getPrincipal().toText() || target !== JSON.stringify(owner.target))
       throw new Error('Direct name audience changed or cancelled.');
   };
@@ -66,7 +69,9 @@ export async function readChatRelationshipProfiles(
   const identity = owner.identity;
   const principal = identity.getPrincipal().toText();
   const target = JSON.stringify(owner.target);
+  const sessionActive = capturePrivateProfileSession();
   const active = () => {
+    sessionActive();
     if (signal?.aborted || owner.identity !== identity || identity.getPrincipal().toText() !== principal
       || JSON.stringify(owner.target) !== target) throw new Error('Chat profile audience changed or cancelled.');
   };

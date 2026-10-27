@@ -2,6 +2,7 @@ import { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "./featureRouter";
 import { accountAuthoritiesFromRegistry, type AccountRegistryBinding, type AccountRegistrySnapshot } from "./accountAuthorityRegistry";
 import { readLiveAccountAuthoritySnapshot } from "./accountAuthorityRegistry";
+import { capturePrivateProfileSession } from './privateProfileSession';
 
 export type PrivateProfileAuthorityLease = {
   context: FeatureBackendContext;
@@ -34,7 +35,9 @@ export function createPrivateProfileAuthorityResolver(
   const principal = identity.getPrincipal().toText();
   const target = fingerprint(ctx.target);
   const pinnedBinding = { ...binding, requiredClubAuthorities: [...binding.requiredClubAuthorities] };
+  const sessionActive = capturePrivateProfileSession();
   const active = () => {
+    sessionActive();
     if (ctx.identity !== identity || identity.getPrincipal().isAnonymous() || identity.getPrincipal().toText() !== principal ||
         fingerprint(ctx.target) !== target || ctx.target.alias !== pinnedBinding.targetAlias ||
         ctx.target.host !== pinnedBinding.host || ctx.target.networkKind !== pinnedBinding.networkKind || ctx.target.status === "disabled") {

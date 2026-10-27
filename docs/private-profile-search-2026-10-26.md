@@ -11,6 +11,34 @@ and other details must remain viewable in the app.
 
 ### Consolidated completion status — 27 October
 
+Final local disclosure safeguards now snapshot caller rows, share and confirm
+one pending original-authority lease, validate route bindings after closing
+checks, and retire sibling batches after refusal. Synchronous session retirement
+guards name preparation, hydration, relationship/chat reads and authority
+resolution even when an old identity object remains unchanged. Sign-out,
+principal replacement and account-cache cleanup invalidate mounted labels.
+Chat names clear on background/pagehide, expire after 60 seconds in foreground
+and require fresh authorization before redisclosure; that bound is not an
+instantaneous remote-revocation guarantee. Generic profile-cache reads cannot
+decrypt private references, and cleared batches settle neutrally without late
+cache repopulation, old fallback disclosure or replacement-request deletion.
+
+The remaining cross-service gap is precise: a remote authority can commit a
+valid response, then revoke access while that response is still in transit.
+Another closing read merely moves that window. A sound release-commit protocol
+must durably fence every original PII sink before revocation is acknowledged,
+advance generations to reject delayed/ABA responses, and cover every relevant
+writer in identity, clubs, messaging, competitions, leagues and recovery.
+No such coordinated protocol is implemented or certified here. Client-arrival
+time revocation and recalling previously delivered IBE keys are impossible;
+neither may be promised by a release check. Production remains disabled.
+
+Current fresh checks pass 156 tests per sign-in mode and ICP isolation guards.
+Real-SDK replica
+execution is unavailable in this checkout because the PocketIC executable and
+compiled service artifacts are absent; earlier replica results are not fresh
+verification of this batch. Live signed-in acceptance remains unverified.
+
 Unanswered DM headers now reuse the page's already-known shared-club locator
 through the exact owning club's independent name authorization. The chat's two
 participants are checked before and after disclosure; club routing must retain

@@ -8,6 +8,7 @@ vi.mock("./piiVetKeys", () => ({ encryptPiiText: mocks.encrypt, fetchPiiVetKeys:
 vi.mock("@icp-sdk/vetkeys", () => ({ IbeCiphertext: { deserialize: () => ({ decrypt: mocks.decrypt }) } }));
 
 import { hydratePrivateProfileNames, preparePrivateOwnProfileName, preparePrivateOwnProfileEmail, privateProfileNameReference } from "./privateProfileNames";
+import { retirePrivateProfileSession } from './privateProfileSession';
 
 const subject = "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe";
 const authority = "rrkah-fqaaa-aaaaa-aaaaq-cai";
@@ -52,6 +53,17 @@ describe("private profile name preparation", () => {
 });
 
 describe("authorized name display", () => {
+  it('rejects a held read when the global session retires with its old context unchanged', async () => {
+    let release: (value: unknown) => void = () => {};
+    mocks.read.mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    const pending = hydratePrivateProfileNames(ctx, [{ display_name: reference }]);
+    await vi.waitFor(() => expect(mocks.read).toHaveBeenCalled());
+    retirePrivateProfileSession();
+    release({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9] }] });
+    await expect(pending).rejects.toThrow('session retired');
+    expect(mocks.keys).not.toHaveBeenCalled();
+    expect(mocks.decrypt).not.toHaveBeenCalled();
+  });
   it.each(['club', 'family', 'competition', 'league', 'guardian_search'] as const)('withholds %s names when final authority confirmation changes after decryption', async kind => {
     const audience = { kind, authority: Principal.fromText(authority), resource: 'exact-resource', profile_revision: 7n };
     mocks.scopedRead.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9] }] });
@@ -179,6 +191,49 @@ describe("original-authority display rehearsal", () => {
   const foreignAuthority = "ryjl3-tyaaa-aaaaa-aaaba-cai";
   const foreignReference = privateProfileNameReference(foreignAuthority, subject);
   const lease = (confirm = vi.fn(async () => {})) => ({ context: { ...ctx, target: { ...ctx.target, canisterIds: { ...ctx.target.canisterIds, pii_access_control: foreignAuthority } } }, confirm });
+
+  it('does not attach an authorized name to a row mutated during the read', async () => {
+    const rows = [{ principal: Principal.fromText(subject), display_name: reference }];
+    mocks.read.mockImplementation(async () => {
+      rows[0].principal = Principal.fromText(authority);
+      rows[0].display_name = 'Replaced row';
+      return { Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9] }] };
+    });
+    const result = await hydratePrivateProfileNames(ctx, rows);
+    expect(result[0].principal.toText()).toBe(subject);
+    expect(result[0].display_name).toBe('Paul Cranwell');
+    expect(rows[0].principal.toText()).toBe(authority);
+  });
+
+  it('withholds decrypted names if the resolver route mutates during closing confirmation', async () => {
+    const route = lease();
+    route.confirm = async () => { route.context.target.canisterIds.pii_access_control = authority; };
+    expect(await hydratePrivateProfileNames(ctx, [{ display_name: foreignReference }], { resolveAuthority: async () => route })).toEqual([{ display_name: null }]);
+    expect(mocks.decrypt).toHaveBeenCalled();
+  });
+
+  it('shares one pending original-authority lease across concurrent subject batches', async () => {
+    const rows = Array.from({ length: 26 }, (_, i) => ({ display_name: privateProfileNameReference(foreignAuthority, Principal.fromUint8Array(new Uint8Array([i + 1, 2])).toText()) }));
+    const route = lease();
+    const resolveAuthority = vi.fn(async () => { await new Promise(resolve => setTimeout(resolve, 1)); return route; });
+    mocks.scopedRead.mockImplementation(async ids => ({ Ok: ids.map(id => ({ pii_id: id, field_id: 'display_name', ciphertext: [9] })) }));
+    mocks.keys.mockImplementation(async (_, ids) => new Map(ids.map(id => [id, 'key'])));
+    const result = await hydratePrivateProfileNames(ctx, rows, { resolveAuthority, audience: { kind: 'club', authority: Principal.fromText(authority), resource: 'club-1', profile_revision: 0n } });
+    expect(result).toHaveLength(26);
+    expect(resolveAuthority).toHaveBeenCalledOnce();
+    expect(route.confirm).toHaveBeenCalledOnce();
+  });
+
+  it('retires sibling ciphertext work when one scoped batch is refused', async () => {
+    const rows = Array.from({ length: 26 }, (_, i) => ({ display_name: privateProfileNameReference(authority, Principal.fromUint8Array(new Uint8Array([i + 1, 2])).toText()) }));
+    let release: (value: unknown) => void = () => {};
+    mocks.scopedRead.mockResolvedValueOnce({ Err: 'Membership revoked' }).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    await expect(hydratePrivateProfileNames(ctx, rows, { audience: { kind: 'club', authority: Principal.fromText(authority), resource: 'club-1', profile_revision: 0n } })).rejects.toThrow('Membership revoked');
+    release({ Ok: [{ pii_id: Principal.fromUint8Array(new Uint8Array([26, 2])).toText(), field_id: 'display_name', ciphertext: [9] }] });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mocks.keys).not.toHaveBeenCalled();
+    expect(mocks.decrypt).not.toHaveBeenCalled();
+  });
 
   it("decrypts through the verified original authority and confirms it after unlocking", async () => {
     const route = lease(); const resolveAuthority = vi.fn(async () => route);

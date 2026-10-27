@@ -53,6 +53,8 @@ let pendingResolvers = new Map<
   Array<(p: CachedProfile | null) => void>
 >();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let generation = 0;
+const activeBatches = new Set<Map<string, Array<(p: CachedProfile | null) => void>>>();
 
 function notify(id: string) {
   for (const cb of updateListeners) {
@@ -72,6 +74,8 @@ async function flushBatch() {
   pendingIds = new Set();
   pendingResolvers = new Map();
   if (ids.length === 0) return;
+  const captured = generation;
+  activeBatches.add(resolvers);
 
   try {
     const rows = await withFeatureBackend("membership", {
@@ -85,7 +89,7 @@ async function flushBatch() {
       },
       icp: async (ctx) => {
         const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
-        const profiles = await listLiveProfilesByIds(ctx, ids);
+        const profiles = await listLiveProfilesByIds(ctx, ids, { hydratePrivateNames: false });
         return profiles.map((p): CachedProfile => ({
           id: p.account_id,
           display_name: p.display_name,
@@ -93,6 +97,8 @@ async function flushBatch() {
         }));
       },
     }, { shared: 'person' });
+
+    if (captured !== generation) return;
 
     const now = Date.now();
     const byId = new Map<string, CachedProfile>();
@@ -107,6 +113,7 @@ async function flushBatch() {
       for (const cb of cbs) cb(profile);
     }
   } catch (err) {
+    if (captured !== generation) return;
     for (const id of ids) {
       inFlight.delete(id);
       const cbs = resolvers.get(id) ?? [];
@@ -114,6 +121,8 @@ async function flushBatch() {
     }
     // eslint-disable-next-line no-console
     console.warn("[profileCache] batch fetch failed", err);
+  } finally {
+    activeBatches.delete(resolvers);
   }
 }
 
@@ -225,11 +234,18 @@ export function updateProfileCache(profile: Partial<CachedProfile> & { id: strin
 
 /** Clear the whole cache (called on sign-out / cross-user switch). */
 export function clearProfileCache() {
+  generation++;
+  const changed = [...cache.keys()];
+  for (const callbacks of [pendingResolvers, ...activeBatches]) {
+    for (const resolvers of callbacks.values()) for (const resolve of resolvers) resolve(null);
+  }
+  activeBatches.clear();
   cache.clear();
   inFlight.clear();
   pendingIds = new Set();
   pendingResolvers = new Map();
   if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  for (const id of changed) notify(id);
 }
 
 /** Subscribe to per-id cache updates. Returns unsubscribe. */
@@ -251,6 +267,7 @@ export async function fetchProfilesWithCache(
   opts: { allowStale?: boolean; timeout?: number } = {},
 ): Promise<Map<string, CachedProfile>> {
   const { allowStale = false, timeout = DEFAULT_TIMEOUT_MS } = opts;
+  const captured = generation;
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (uniqueIds.length === 0) return new Map();
 
@@ -269,7 +286,8 @@ export async function fetchProfilesWithCache(
   });
 
   // Fallback returns whatever we have cached so UI never hangs on slow network.
-  return withTimeout(fetchPromise, timeout, cached);
+  const result = await withTimeout(fetchPromise, timeout, cached);
+  return captured === generation ? result : new Map();
 }
 
 /** Convenience: fetch one profile through the cache. */
