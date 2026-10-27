@@ -125,6 +125,7 @@ module {
     };
     public func seal(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
       if (not authorized(caller)) return #Err("Configured rehearsal identity required");
+      if (request.operation_id == ordinaryRequest().operation_id) return #Err("Reserved ordinary accounting identity");
       if (preparation(request)) return #Err("Preparation releases only through approved completion");
       switch (intents.get(request.operation_id)) {
         case null #Err("Exact private-name writer intent required");

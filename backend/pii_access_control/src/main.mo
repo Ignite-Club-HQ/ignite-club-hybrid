@@ -733,9 +733,17 @@ persistent actor class Main(governorInit : Principal) = this {
 
   // Lifecycle readbacks distinguish confirmed absence from denied/unavailable
   // reads. These synchronous owner/governor methods never issue a shared key.
-  public shared ({ caller }) func read_private_club_name_lifecycle(subject : Principal, club : Text) : async { #Ok : ?EncryptedPii; #Err : Text } {
+  public shared ({ caller }) func read_private_club_name_lifecycle(subject : Principal, club : Text, expectedOriginal : ?[Nat8]) : async { #Ok : ?EncryptedPii; #Err : Text } {
     if (not privateNamesRehearsal or not validMediaClub(club) or subject.isAnonymous() or subject == Principal.fromText("aaaaa-aa")) return #Err("Exact rehearsal name target required");
     if (not isGovernor(caller) and caller != subject) return #Err("Name owner required");
+    switch (expectedOriginal) {
+      case null {};
+      case (?bytes) {
+        if (bytes.size() == 0 or bytes.size() > 4096) return #Err("Bounded saved original bytes required");
+        let original = pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == "display_name") ?? return #Err("Original private name required");
+        if (original.domain_owner != subject or original.master_key_id != vetkeySchemeId() or original.ciphertext != bytes) return #Err("Original name changed; retain lifecycle lock")
+      }
+    };
     switch (pii_records.find(func r = r.pii_id == subject.toText() and r.field_id == clubNameField(club))) {
       case null #Ok(null);
       case (?r) {

@@ -90,7 +90,9 @@ pub fn open(request: WriterRequest) -> Result<(),String> {
     save(&WriterIntent{request,closing:false,sealed:false,active:0});Ok(())
 }
 pub fn seal(request: WriterRequest) -> Result<(),String> {
-    authorize()?; let mut i=load(&request.operation_id)?;
+    authorize()?;
+    if request.operation_id==ordinary_request().operation_id{return Err("Reserved ordinary accounting identity".into());}
+    let mut i=load(&request.operation_id)?;
     if preparation(&request){return Err("Preparation releases only through approved completion".into());}
     if i.request!=request{return Err("Immutable private-name writer conflict".into());}
     i.closing=true;i.sealed=i.active==0;save(&i);Ok(())

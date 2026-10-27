@@ -37,6 +37,7 @@ let ordinary = Writer.Gate(false, null, ordinaryState, 10);
 let ordinaryLease = switch (ordinary.enter()) { case (#Ok(k)) k; case _ { assert false; null } };
 assert ordinaryLease != null;
 let tracked = Writer.Gate(true, ?owner, ordinaryState, 10);
+switch (ordinaryLease) { case (?r) assert tracked.seal(owner,r) == #Err("Reserved ordinary accounting identity"); case null assert false };
 let baselinePreparation = { request with operation_id = "names:club-name-preparation-baseline" };
 assert tracked.freeze(owner, baselinePreparation) == #Ok;
 switch (tracked.preparationReceipt(owner, baselinePreparation, owner)) { case (#Ok(r)) assert r.active == 1; case _ assert false };

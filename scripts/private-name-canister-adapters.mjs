@@ -167,20 +167,20 @@ export function createPrivateNameLifecycleAdapter({targets,actors,Principal,asse
   const resolve=t=>{
     const match=saved.find(s=>targetKey(s)===targetKey(t));
     if(!match || JSON.stringify(match)!==JSON.stringify(t))throw Error('Foreign lifecycle target refused');
-    return actors.get(match.sink);
+    return {actor:actors.get(match.sink),target:structuredClone(match)};
   };
   const guard=async()=>{if(await assertFence(structuredClone(saved))!==true)throw Error('Lifecycle authority/exclusion changed');};
-  const run=async(t,fn)=>{const actor=resolve(t);await guard();const reply=await fn(actor);await guard();return unwrap(reply);};
+  const run=async(t,fn)=>{const {actor,target}=resolve(t);await guard();const reply=await fn(actor,target);await guard();return {value:unwrap(reply),target};};
   return {
     readState:async t=>{
-      const result=await run(t,a=>a.read_private_club_name_lifecycle(Principal.fromText(t.subject),t.club));
+      const {value:result,target}=await run(t,(a,s)=>a.read_private_club_name_lifecycle(Principal.fromText(s.subject),s.club,s.originalCiphertext===undefined?[]:[s.originalCiphertext]));
       if(!Array.isArray(result)||result.length>1)throw Error('Typed lifecycle readback required');
       if(!result.length)return null;
       const r=result[0],ciphertext=Array.from(r.ciphertext??[]);
-      if(r.pii_id!==t.subject || r.field_id!=='display_name' || r.master_key_id!==`vetkey-club-names-v1:${t.club}` || !bounded(ciphertext))throw Error('Exact lifecycle ciphertext binding changed');
+      if(r.pii_id!==target.subject || r.field_id!=='display_name' || r.master_key_id!==`vetkey-club-names-v1:${target.club}` || !bounded(ciphertext))throw Error('Exact lifecycle ciphertext binding changed');
       return {scheme:r.master_key_id,ciphertext};
     },
-    writeSavedReplica:async t=>{if(!bounded(t.originalCiphertext))throw Error('Saved original ciphertext required');await run(t,a=>a.refresh_private_club_name_lifecycle(Principal.fromText(t.subject),t.club,t.originalCiphertext,t.ciphertext));},
-    purgeExactReplica:async t=>{await run(t,a=>a.purge_private_club_name_lifecycle(Principal.fromText(t.subject),t.club,t.ciphertext));},
+    writeSavedReplica:async t=>{if(!bounded(t.originalCiphertext))throw Error('Saved original ciphertext required');await run(t,(a,s)=>a.refresh_private_club_name_lifecycle(Principal.fromText(s.subject),s.club,s.originalCiphertext,s.ciphertext));},
+    purgeExactReplica:async t=>{await run(t,(a,s)=>a.purge_private_club_name_lifecycle(Principal.fromText(s.subject),s.club,s.ciphertext));},
   };
 }

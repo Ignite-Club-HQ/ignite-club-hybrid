@@ -36,7 +36,7 @@ try{
   assert.deepEqual(await reconcileNameReplicaLifecycle({operationId:'local-name-refresh',action:'refresh',targets},deps),{completed:8,action:'refresh'});
   const selected=targets[0],actor=actors.get(selected.sink);
   assert.ok(actor);
-  actor.setPrincipal(outsider);assert.ok('Err'in await actor.read_private_club_name_lifecycle(person,'club-one'));assert.ok('Err'in await actor.purge_private_club_name_lifecycle(person,'club-one',selected.ciphertext));actor.setPrincipal(governor);
+  actor.setPrincipal(outsider);assert.ok('Err'in await actor.read_private_club_name_lifecycle(person,'club-one',[]));assert.ok('Err'in await actor.purge_private_club_name_lifecycle(person,'club-one',selected.ciphertext));actor.setPrincipal(governor);
   assert.ok('Err'in await actor.purge_private_club_name_lifecycle(person,'club-one',[9]));
   assert.ok('Err'in await actor.refresh_private_club_name_lifecycle(person,'club-one',[9],selected.ciphertext));
   assert.ok('Err'in await actor.refresh_private_club_name_lifecycle(person,'club-one',selected.originalCiphertext,[9]));
@@ -56,10 +56,11 @@ try{
   // cannot regenerate a club copy after the original has changed.
   ok(await actor.refresh_private_club_name_lifecycle(person,'club-one',selected.originalCiphertext,selected.ciphertext));
   ok(await actor.register_pii(person.toText(),'display_name',[7,7],person));
-  assert.deepEqual(ok(await actor.read_private_club_name_lifecycle(person,'club-one')),[]);
+  assert.deepEqual(ok(await actor.read_private_club_name_lifecycle(person,'club-one',[])),[]);
+  assert.ok('Err'in await actor.read_private_club_name_lifecycle(person,'club-one',[selected.originalCiphertext]));
   assert.ok('Err'in await actor.refresh_private_club_name_lifecycle(person,'club-one',selected.originalCiphertext,selected.ciphertext));
   const disabled=await pic.setupCanister({idlFactory,wasm,sender:governor,controllers:[governor],arg,environmentVariables:[{name:'VETKD_KEY_NAME',value:'key_1'}]});disabled.actor.setPrincipal(governor);
-  assert.ok('Err'in await disabled.actor.read_private_club_name_lifecycle(person,'club-one'));
+  assert.ok('Err'in await disabled.actor.read_private_club_name_lifecycle(person,'club-one',[]));
   assert.ok('Err'in await disabled.actor.refresh_private_club_name_lifecycle(person,'club-one',selected.originalCiphertext,selected.ciphertext));
   assert.ok('Err'in await disabled.actor.purge_private_club_name_lifecycle(person,'club-one',selected.ciphertext));
   console.log('PASS: two original PII sinks, two aliases and two clubs; eight saved ciphertext refreshes/purges; committed lost reply resolves after upgrade without replay; originals/emails retained; stale original/conflicting purge/outsiders denied; production-disabled methods refuse. Explicit fixture coverage is not live inventory or exclusion proof.');
