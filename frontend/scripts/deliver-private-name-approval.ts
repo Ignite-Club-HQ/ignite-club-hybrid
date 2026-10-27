@@ -42,6 +42,8 @@ function content(file:any,max:number){
 const artifact=content(await github(`contents/${artifactPath}?ref=${artifactCommit}`),32*1024*1024);
 verifyAdmissionArtifact(artifact,binding); // before agent or any canister operation
 await github(`git/ref/heads/${branch}`); // require a pre-provisioned receipts branch
+const protection=await github(`branches/${encodeURIComponent(branch)}/protection`);
+if(protection.enforce_admins?.enabled!==true || protection.allow_force_pushes?.enabled!==false || protection.allow_deletions?.enabled!==false)throw Error('Receipt branch must enforce administrator protection and prohibit rewinds/deletion');
 const agent=await HttpAgent.create({host:'https://icp-api.io',identity:operatorIdentity}); // platform root key only
 const actor=Actor.createActor(idlFactory,{agent,canisterId:identityId}) as any;
 const ok=(r:any)=>{if(!r || !('Ok'in r) || 'Err'in r)throw Error('Approval canister refused; blocker remains locked');return r.Ok;};

@@ -71,7 +71,9 @@ jobs:
           test "$DELIVERY_PROTECTION_READY" = yes || { echo 'Configure required reviewers and protected approval storage first'; exit 1; }
           test "$CONFIRMATION" = 'DELIVER SIGNED NAME APPROVAL ONLY'
       - name: Install existing project dependencies
-        run: node scripts/ensure-frontend-deps.mjs
+        run: |
+          node scripts/ensure-frontend-deps.mjs
+          npx --yes tsx@4.21.0 --version
       - name: Test delivery-only safeguards
         run: node --test scripts/private-name-approval-delivery.test.mjs
       - name: Restore existing delivery governor, not the approval signer
@@ -85,7 +87,7 @@ jobs:
       - name: Deliver original signature and verify retained receipt
         env:
           GH_TOKEN: ${{ github.token }}
-        run: npx --yes tsx@4.21.0 frontend/scripts/deliver-private-name-approval.ts
+        run: npx --offline --yes tsx@4.21.0 frontend/scripts/deliver-private-name-approval.ts
       - name: Remove delivery credential
         if: always()
         run: rm -f "$OPERATOR_PEM_PATH"
