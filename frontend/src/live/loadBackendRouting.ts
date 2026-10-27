@@ -19,7 +19,7 @@ import {
 import { isFeatureCanisterConfigured, resolveFeatureBackend, type FeatureArea } from "./featureBackend";
 import { getActiveIcpTarget, registerIcpEngineResolver, type IcpTargetConfig } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
-import { isSignedInWithEmail } from "./authBackendMode";
+import { isSignedInWithEmail, isIcpProviderMounted } from "./authBackendMode";
 import { shouldBootstrapFromIcp } from "./icpBootstrap";
 
 export { isSignedInWithEmail };
@@ -217,7 +217,7 @@ export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProv
   // isFeatureRoutedToIcp() returned true for email users and Messages/Media
   // went to the canisters (blank).
   if (isSignedInWithEmail()) return "supabase";
-  if (hasStoredInternetIdentitySession()) {
+  if (isIcpProviderMounted() || hasStoredInternetIdentitySession()) {
     return "icp";
   }
   const config = getBackendRoutingConfig();
