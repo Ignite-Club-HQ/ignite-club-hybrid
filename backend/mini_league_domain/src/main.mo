@@ -1,3 +1,5 @@
+import PrivateNameWriterWindow "../../shared/PrivateNameWriterWindow";
+import PrivateNameWriterEndpoints "../../shared/PrivateNameWriterEndpoints";
 import AccountAdmission "../../shared/AccountAdmission";
 import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
@@ -27,6 +29,11 @@ persistent actor class Main(governorInit : Principal) = this {
     case (?id) ?Principal.fromText(id); case null null
   };
   transient let accountAdmission = AccountAdmission.Gate(accountAdmissionEnabled, accountAdmissionAuthority);
+  // Separate stop-the-world rehearsal only; never enabled by deploy scripts.
+  var private_name_writer_intents : Map.Map<Text, PrivateNameWriterWindow.Intent>;
+  transient let privateNameWriterGate = PrivateNameWriterWindow.Gate(Runtime.envVar<system>("IGNITE_PRIVATE_NAME_WRITER_REHEARSAL") == ?"1", accountAdmissionAuthority, private_name_writer_intents, 4096);
+  include PrivateNameWriterEndpoints(privateNameWriterGate, Principal.fromActor(this));
+
   var removal_intents : Map.Map<Text, RemovalReceiver.Request>;
   var removal_subjects : Map.Map<Principal, Text>;
   var removal_active : Map.Map<Principal, Nat>;
@@ -105,10 +112,15 @@ persistent actor class Main(governorInit : Principal) = this {
     not transferFences.any(func(c) = blobContainsText(arg, c))
   };
   public shared ({ caller }) func set_transfer_fence(club : Text, fenced : Bool) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not isGovernor(caller)) return #Err("Governor required");
     transferFences := transferFences.filter(func(c) = c != club);
     if (fenced) transferFences := transferFences.concat([club]);
     #Ok
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
   func leagueFenced(id : Text) : Bool = transferFences.size() > 0 and leagues.any(func(l) = l.id == id and isFenced(l.club_id));
   func sessionFenced(id : Text) : Bool = transferFences.size() > 0 and sessions.any(func(s) = s.id == id and leagueFenced(s.mini_league_id));
@@ -153,6 +165,9 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(to_candid (leagueSnapshot(club)))
   };
   public shared ({ caller }) func import_club_snapshot(club : Text, snapshot : Blob) : async { #Ok : Nat; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before import");
     let decoded : ?LeagueSnapshot = from_candid (snapshot);
@@ -176,11 +191,18 @@ persistent actor class Main(governorInit : Principal) = this {
     children := children.filter(func(k) = not s.children.any(func(y) = y.id == k.id)).concat(s.children);
     guardians := guardians.filter(func(g) = not s.guardians.any(func(y) = y.child_id == g.child_id and y.guardian_user_id.equal(g.guardian_user_id))).concat(s.guardians);
     #Ok(s.leagues.size())
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
   public shared ({ caller }) func purge_club_snapshot(club : Text) : async { #Ok : Nat; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not isFenced(club)) return #Err("Club must be fenced before purge");
     let n = leagues.size(); dropLeagueClub(club); #Ok(n - leagues.size())
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   func isGovernor(caller : Principal) : Bool { not caller.equal(Principal.anonymous()) and governor.equal(caller) };
@@ -336,27 +358,42 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     auth(caller);
     if (not isGovernor(caller)) return #Err("Only governor can transfer governorship");
     if (new_governor.equal(Principal.anonymous())) return #Err("New governor cannot be anonymous");
     governor := new_governor;
     #Ok
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func set_club_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor only");
     if (id.equal(Principal.anonymous())) return #Err("Invalid club_domain canister id");
     clubDomainCanister := ?id;
     #Ok
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func set_events_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor only");
     if (Principal.isAnonymous(id)) return #Err("Invalid canister id");
     eventsDomainCanister := ?id;
     #Ok
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
   // Trusted events authority supplies the original signed caller. No user may impersonate a parent.
   public composite query ({ caller }) func can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
@@ -369,6 +406,9 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func read_can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(viewer)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -385,9 +425,14 @@ persistent actor class Main(governorInit : Principal) = this {
     false
   
     } finally { removalReceiver.leave(viewer) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -400,11 +445,16 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // ---------------- Mini-leagues ----------------
 
   public shared ({ caller }) func create_mini_league(club_id : Text, name : Text, description : ?Text, logo_url : ?Text, team_size : Nat16, min_players_per_side : Nat16, minutes_per_half : Nat16, bib_colors : [Text], show_matches_to_members : Bool) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -423,9 +473,14 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(created)
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func update_mini_league(id : Text, name : Text, description : ?Text, logo_url : ?Text, team_size : Nat16, min_players_per_side : Nat16, minutes_per_half : Nat16, bib_colors : [Text], show_matches_to_members : Bool) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -443,9 +498,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func set_mini_league_status(id : Text, status : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -463,6 +523,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public composite query ({ caller }) func get_mini_league(id : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
@@ -599,6 +661,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // The configured event authority asks for opaque RSVP subjects only.
   // Every player/guardian is revalidated through the consensus authority.
   public shared ({ caller }) func read_event_notification_subjects(league_id : Text, club_id : Text) : async { #Ok : [{ user : Text; child : ?Text }]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (eventsDomainCanister != ?caller) return #Err("Events authority required");
     let league = findLeague(league_id) ?? return #Err("Mini-league not found");
     if (league.club_id != club_id or leagueFenced(league_id)) return #Err("League scope mismatch or locked");
@@ -652,6 +717,8 @@ persistent actor class Main(governorInit : Principal) = this {
     if (admins != initialAdmins) return #Err("League staff changed");
     if (eventsDomainCanister != ?caller or findLeague(league_id) != ?league or players.filter(func(p) = p.mini_league_id == league_id) != initialPlayers or guardians != initialGuardians or leagueFenced(league_id)) return #Err("League audience changed");
     #Ok(out)
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // Public: unauthenticated directory listing for the home page "browse
@@ -664,6 +731,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // ---------------- Sessions ----------------
 
   public shared ({ caller }) func create_session(mini_league_id : Text, session_date : Text, start_time : Text, end_time : ?Text, location_name : ?Text, address : ?Text, postcode : ?Text, team_size_override : ?Nat16) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -686,9 +756,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func update_session(id : Text, session_date : Text, start_time : Text, end_time : ?Text, location_name : ?Text, address : ?Text, postcode : ?Text, team_size_override : ?Nat16) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -706,11 +781,16 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // Cancellation kept separate from update_session, mirroring
   // set_event_cancelled, so cancelling cannot clobber other fields.
   public shared ({ caller }) func cancel_session(id : Text) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -727,9 +807,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func set_session_status(id : Text, status : Text) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -747,6 +832,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public composite query ({ caller }) func list_sessions(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueSession]; #Err : Text } {
@@ -763,6 +850,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // ---------------- Players ----------------
 
   public shared ({ caller }) func add_player(mini_league_id : Text, name : Text, child_id : ?Text, parent_user_id : ?Text, ability_rating : ?Nat16, notes : ?Text) : async { #Ok : Types.MiniLeaguePlayer; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -794,9 +884,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func update_player(id : Text, name : Text, ability_rating : ?Nat16, notes : ?Text) : async { #Ok : Types.MiniLeaguePlayer; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -819,9 +914,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func remove_player(id : Text) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -858,6 +958,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public composite query ({ caller }) func list_players(mini_league_id : Text) : async { #Ok : [Types.MiniLeaguePlayer]; #Err : Text } {
@@ -888,6 +990,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // Mirrors the `child_guardians` insert AddSecondParentDialog performs on
   // the Supabase branch; idempotent on (child_id, guardian_user_id).
   public shared ({ caller }) func link_mini_league_guardian(child_id : Text, guardian_user_id : Principal) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -912,6 +1017,8 @@ persistent actor class Main(governorInit : Principal) = this {
   
     } finally { removalReceiver.leave(guardian_user_id) };
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // Matches exactly what ManagePlayersDialog computes client-side from
@@ -953,6 +1060,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // player row (second-parent invites); otherwise a new player is created on
   // claim (primary parent join-link flow).
   public shared ({ caller }) func create_invite(mini_league_id : Text, player_id : ?Text, label_text : ?Text) : async { #Ok : Types.MiniLeagueInvite; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -983,6 +1093,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // Mirrors claim_mini_league_invite(_token): binds the caller as the
@@ -990,6 +1102,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // player_name when the invite has no pre-bound player), and returns the
   // (mini_league_id, club_id, player_id) triple like the Postgres function.
   public shared ({ caller }) func claim_invite(token : Text, player_name : Text) : async { #Ok : Types.ClaimedInvite; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1042,6 +1157,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // Bearer preview contains no parent/email/child identifier. Claim binds caller atomically.
@@ -1063,6 +1180,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // ---------------- Groups ----------------
 
   public shared ({ caller }) func create_group(session_id : Text, name : Text, ability_band : ?Text, display_order : Nat16, target_size : Nat16, pitch_name : ?Text) : async { #Ok : Types.MiniLeagueGroup; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1084,9 +1204,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func update_group(id : Text, name : Text, ability_band : ?Text, display_order : Nat16, target_size : Nat16, pitch_name : ?Text) : async { #Ok : Types.MiniLeagueGroup; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1104,9 +1229,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func assign_player_to_group(group_id : Text, player_id : Text, jersey_number : ?Nat16) : async { #Ok : Types.MiniLeagueGroupPlayer; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1125,9 +1255,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func unassign_player_from_group(group_id : Text, player_id : Text) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1143,6 +1278,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public composite query ({ caller }) func list_group_players(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupPlayer]; #Err : Text } {
@@ -1185,6 +1322,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // ---------------- Group duties ----------------
 
   public shared ({ caller }) func create_duty(group_id : Text, name : Text, points : ?Nat16) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1206,12 +1346,17 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // Any player-linked caller (the claimed parent) or a league admin can
   // claim an open duty for a player — mirrors the member-facing duty claim
   // flow in EventDutiesSection/MatchDutiesDialog.
   public shared ({ caller }) func claim_duty(id : Text, player_id : Text) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1249,9 +1394,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func complete_duty(id : Text, points_awarded : Bool) : async { #Ok : Types.MiniLeagueGroupDuty; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1273,6 +1423,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public composite query ({ caller }) func list_duties(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupDuty]; #Err : Text } {
@@ -1302,6 +1454,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // a player) or the claimed parent of that player, mirroring the
   // events_domain set_rsvp guard shape.
   public shared ({ caller }) func set_availability(session_id : Text, player_id : Text, status : Text) : async { #Ok : Types.MiniLeagueSessionAvailability; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1338,6 +1493,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public composite query ({ caller }) func get_availability(session_id : Text, player_id : Text) : async { #Ok : ?Types.MiniLeagueSessionAvailability; #Err : Text } {
@@ -1383,6 +1540,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // ---------------- Admins ----------------
 
   public shared ({ caller }) func add_admin(mini_league_id : Text, user_id : Principal) : async { #Ok : Types.MiniLeagueAdmin; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1401,9 +1561,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func remove_admin(mini_league_id : Text, user_id : Principal) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1419,6 +1584,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public query ({ caller }) func list_admins(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueAdmin]; #Err : Text } {
@@ -1436,6 +1603,9 @@ persistent actor class Main(governorInit : Principal) = this {
   func validJoinLinkRole(value : Text) : Bool { value == "player" or value == "admin" };
 
   public shared ({ caller }) func create_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1467,9 +1637,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func rotate_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1498,9 +1673,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func revoke_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1517,6 +1697,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // Token lookup for the claim page: the token itself is the capability, so
@@ -1531,6 +1713,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // Claims an admin join link: grants the caller league-admin rights instead
   // of minting a roster player.
   public shared ({ caller }) func claim_admin_join_link(token : Text) : async { #Ok : { mini_league_id : Text; club_id : Text }; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1558,11 +1743,16 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // Mirrors join_competition_by_token but mints a fresh player record,
   // since mini-league join links are not pre-bound to an existing player.
   public shared ({ caller }) func join_mini_league_by_token(token : Text, player_name : Text) : async { #Ok : Types.ClaimedInvite; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1602,6 +1792,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public query ({ caller }) func list_mini_league_join_links(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueJoinLink]; #Err : Text } {
@@ -1618,6 +1810,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // and their players/duties, availability, invites, admins, join links).
   // Mirrors the Supabase mini_leagues delete, which cascades via FK.
   public shared ({ caller }) func delete_mini_league(mini_league_id : Text) : async { #Ok; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1650,6 +1845,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // Clones a league with its roster (players keep name/rating/notes and any
@@ -1657,6 +1854,9 @@ persistent actor class Main(governorInit : Principal) = this {
   // id. Sessions, groups, duties and availability are not copied — they are
   // per-session state, same as the Supabase duplicateLeagueMutation.
   public shared ({ caller }) func duplicate_mini_league(mini_league_id : Text, new_name : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1705,11 +1905,16 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
   // Any NEW stored principal / principal-text field added to this canister must be added here.
   public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (removalReceiver.denied(old) or removalReceiver.denied(new)) return #err("Account removal fenced");
     if (not isGovernor(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
@@ -1803,11 +2008,16 @@ persistent actor class Main(governorInit : Principal) = this {
     };
 
     #ok(changed)
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
 
   // Additive protected consensus reads; live UI rollout is a separate release gate.
   public shared ({ caller }) func read_account_verify_child_guardian(user : Principal, child : Text) : async Bool {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (caller != Principal.fromActor(this)) return false;
     if (not removalReceiver.enter(user)) return false;
     try {
@@ -1816,9 +2026,14 @@ persistent actor class Main(governorInit : Principal) = this {
     let allowed = await* currentGuardianWrite(user, child);
     allowed and not removalReceiver.denied(user)
     } finally { removalReceiver.leave(user) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_verify_player_access(user : Principal, player : Types.MiniLeaguePlayer) : async Bool {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (caller != Principal.fromActor(this)) return false;
     if (not removalReceiver.enter(user)) return false;
     try {
@@ -1829,9 +2044,14 @@ persistent actor class Main(governorInit : Principal) = this {
     let allowed = await* playerAccessWrite(user, current);
     allowed and not removalReceiver.denied(user) and findPlayer(player.id) == ?current and not playerFenced(player.id)
     } finally { removalReceiver.leave(user) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller = origin }) func read_account_verify_league_access(viewer : Principal, league : Types.MiniLeague) : async Bool {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(viewer)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1846,9 +2066,14 @@ persistent actor class Main(governorInit : Principal) = this {
     false
   
     } finally { removalReceiver.leave(viewer) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller = origin }) func read_account_filter_visible_leagues(viewer : Principal, candidates : [Types.MiniLeague]) : async [Types.MiniLeague] {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(viewer)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1860,9 +2085,14 @@ persistent actor class Main(governorInit : Principal) = this {
     out
   
     } finally { removalReceiver.leave(viewer) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_can_read_league_matches(viewer : Principal, league_id : Text, club_id : Text) : async Bool {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(viewer)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1874,9 +2104,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(viewer) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_get_mini_league(id : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1887,9 +2122,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_mini_leagues_by_club(club_id : Text) : async [Types.MiniLeague] {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1897,9 +2137,14 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = item.club_id == club_id)); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_get_news_audience(mini_league_id : Text, requester : Principal) : async { #Ok : Types.MiniLeagueNewsAudience; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(requester)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1948,9 +2193,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(requester) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_get_mini_leagues(ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1959,9 +2209,14 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(do { let removalReply = await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = ids.any(func(i) = i == item.id))); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_mini_leagues_by_clubs(club_ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1970,9 +2225,14 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(do { let removalReply = await this.read_account_filter_visible_leagues(caller, leagues.filter(func(item) = club_ids.any(func(c) = c == item.club_id))); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply })
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_my_leagues() : async [Types.MiniLeague] {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1980,9 +2240,14 @@ persistent actor class Main(governorInit : Principal) = this {
     do { let removalReply = await this.read_account_filter_visible_leagues(caller, leagues); if (removalReceiver.denied(caller)) throw Error.reject("Account removal fenced after callback"); removalReply }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_get_my_league_access(ids : [Text]) : async { #Ok : [{ id : Text; can_manage : Bool; can_delete : Bool; is_club_admin : Bool }]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -1993,6 +2258,8 @@ persistent actor class Main(governorInit : Principal) = this {
     }))
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_profile_audience_batch(requester : Principal, id : Text, subjects : [Principal], expected : ?Nat) : async { #Ok : { revision : Nat; requester : Principal; club : Text; subjects : [Principal]; members : [Bool] }; #Err : Text } {
@@ -2060,6 +2327,9 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   public shared ({ caller }) func read_account_get_league_members(id : Text) : async { #Ok : [{ user_id : Text; is_staff : Bool; is_parent : Bool }]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2092,9 +2362,14 @@ persistent actor class Main(governorInit : Principal) = this {
     #Ok(all.map(func(u) = { user_id = u; is_staff = staffIds.any(func(x) = x == u); is_parent = parentIds.any(func(x) = x == u) }))
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_sessions(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueSession]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2108,9 +2383,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_players(mini_league_id : Text) : async { #Ok : [Types.MiniLeaguePlayer]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2124,9 +2404,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_get_player_guardian_status(player_id : Text) : async { #Ok : Types.PlayerGuardianStatus; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2158,9 +2443,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_invites(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueInvite]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2171,9 +2461,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_group_players(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupPlayer]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2197,9 +2492,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_groups(session_id : Text) : async { #Ok : [Types.MiniLeagueGroup]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2218,9 +2518,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_duties(group_id : Text) : async { #Ok : [Types.MiniLeagueGroupDuty]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2244,9 +2549,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_get_availability(session_id : Text, player_id : Text) : async { #Ok : ?Types.MiniLeagueSessionAvailability; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2265,9 +2575,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_session_availability(session_id : Text) : async { #Ok : [Types.MiniLeagueSessionAvailability]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2286,9 +2601,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_my_availability() : async [Types.MiniLeagueSessionAvailability] {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2298,9 +2618,14 @@ persistent actor class Main(governorInit : Principal) = this {
     availability.filter(func(item) = myPlayerIds.any(func(pid) = pid == item.player_id))
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_admins(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueAdmin]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2311,9 +2636,14 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
   public shared ({ caller }) func read_account_list_mini_league_join_links(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueJoinLink]; #Err : Text } {
+    let privateWriterLease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(reason)) throw Error.reject(reason) };
+    try {
+
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
 
@@ -2324,5 +2654,7 @@ persistent actor class Main(governorInit : Principal) = this {
     }
   
     } finally { removalReceiver.leave(caller) };
+  
+    } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 };
