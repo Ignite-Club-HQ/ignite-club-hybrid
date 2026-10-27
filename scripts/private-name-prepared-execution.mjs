@@ -61,14 +61,18 @@ export async function executePreparedPrivateNamePlan({artifact,expectedHash,appr
   const body=verifyPrivateNameArtifact(artifact,expectedHash);
   approval=structuredClone(approval);
   assertNamesApproval(approval,expectedHash);
-  if (typeof deps.assertExecution !== 'function' || !deps.journal || !deps.piiBySink || !deps.coordinator) throw Error('Verified prepared execution dependencies required');
+  if (typeof deps.assertExecution !== 'function' || !deps.journal || !deps.piiBySink || !deps.coordinator || !deps.executionLock) throw Error('Verified prepared execution dependencies required');
   const operationId=`club-name-conversion-${expectedHash}`;
   const context={planHash:expectedHash,operationId,identityId:body.identityId,operator:body.operator,deploymentHash:body.deploymentHash,inventoryHash:body.inventoryHash,historyRevision:body.historyRevision,sinks:structuredClone(body.sinks),approval};
   const guard=async()=>{
+    if (await deps.executionLock.assertHeld(structuredClone(context)) !== true) throw Error('Exact prepared execution lock required');
     if (await deps.assertExecution(structuredClone(context)) !== true) throw Error('Authenticated prepared execution fence/approval required');
   };
   validatePreparedJournal(body,expectedHash,deps.journal);
   for (const sink of body.sinks) if (!deps.piiBySink.has(sink.id)) throw Error('Complete original PII execution actors required');
+  // enter must durably claim an exclusive operation-bound lock or verify the
+  // original recovery owner. Never expiry, replacement, or an automatic reset.
+  if (await deps.executionLock.enter(structuredClone(context)) !== true) throw Error('Exclusive prepared execution lock required');
   const reconcile=async()=>{
     await guard();const profiles=await deps.identity.listProfiles();await guard();
     const binding=await deps.readBinding();await guard();
@@ -83,7 +87,15 @@ export async function executePreparedPrivateNamePlan({artifact,expectedHash,appr
       }});
   };
   await reconcile(); // refusal anywhere prevents opening a window
-  const guardedCoordinator=Object.fromEntries(['begin','advance','close','read'].map(method=>[method,async(...args)=>{await guard();const result=await deps.coordinator[method](...args);await guard();return result;} ]));
+  const guardedCoordinator=Object.fromEntries(['begin','advance','close','read'].map(method=>[method,async(...args)=>{
+    await guard();
+    if (method==='close' && (await reconcile()).length!==0) throw Error('Prepared plan incomplete before closing');
+    const result=await deps.coordinator[method](...args);await guard();
+    // An interrupted Closing/Releasing window must not seal/release sinks
+    // while a changed or unfinished plan still has pending profile rows.
+    if (method==='begin' && ['Closing','Releasing','Done'].includes(result.phase) && (await reconcile()).length!==0) throw Error('Prepared plan incomplete; closing window retained');
+    return result;
+  } ]));
   const window=await withConversionWindow(guardedCoordinator,operationId,body.historyRevision,async()=>{
     const pending=await reconcile();
     validatePreparedJournal(body,expectedHash,deps.journal);
@@ -93,5 +105,6 @@ export async function executePreparedPrivateNamePlan({artifact,expectedHash,appr
   // Resuming a Closing/Releasing/Done window still requires complete readback.
   if ((await reconcile()).length!==0) throw Error('Prepared plan incomplete after window readback');
   await guard();
+  await deps.executionLock.complete(structuredClone(context));
   return {planHash:expectedHash,operationId,converted:body.rows.length,phase:window.phase};
 }

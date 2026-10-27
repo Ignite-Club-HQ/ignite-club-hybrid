@@ -12,8 +12,10 @@ async function setup(){
   const pii={readOriginal:async p=>originals.get(p),writeOriginal:async(p,ct)=>{writes.push(`original:${p}`);originals.set(p,{subject:p,field:'display_name',ciphertext:ct});},readClub:async(p,c)=>clubs.get(`${p}:${c}`),writeClub:async(p,c,ct)=>{writes.push(`club:${c}`);clubs.set(`${p}:${c}`,{subject:p,club:c,master_key_id:`vetkey-club-names-v1:${c}`,ciphertext:ct});}};
   const state={phase:'Writing',sinks:['pii'],writers:['identity'],opened:[],sealed:[],completed:[]};
   const deps={journal,piiBySink:new Map([['pii',pii]]),assertExecution:async()=>true,readBinding:async()=>({...artifact.body}),decryptName:async row=>row.accountId==='a1'?'Paul':'Other',identity:{listProfiles:async()=>structuredClone(profiles),readProfile:async id=>structuredClone(profiles.find(p=>p.account_id===id)),publishReference:async(id,ref)=>{writes.push(`profile:${id}`);profiles.find(p=>p.account_id===id).display_name=ref;}},coordinator:{begin:async()=>{order.push('begin');return structuredClone(state);},close:async()=>{order.push('close');state.phase='Closing';return structuredClone(state);},advance:async()=>{order.push('advance');if(state.phase==='Closing')state.phase='Releasing';else state.phase='Done';return structuredClone(state);},read:async()=>structuredClone(state)}};
+  const lock={held:false,complete:0};
+  deps.executionLock={enter:async()=>{lock.held=true;return true;},assertHeld:async()=>lock.held,complete:async()=>{lock.held=false;lock.complete++;}};
   const request={artifact,expectedHash:artifact.hash,approval:{action:'convert',plan:artifact.hash,approvalScope:'names',confirmation:CONFIRM_CONVERT}};
-  return {request,deps,entries,originals,clubs,writes,order,profiles,state,pii};
+  return {request,deps,entries,originals,clubs,writes,order,profiles,state,pii,lock};
 }
 test('saved original and club ciphertext executes in order then verifies before release',async()=>{
   const s=await setup();const report=await executePreparedPrivateNamePlan(s.request,s.deps);
@@ -32,7 +34,7 @@ test('partial conversion recovery retains the full original plan and never rewri
 test('unknown absent write remains locked without replay or closing',async()=>{
   const s=await setup();let attempts=0;s.pii.writeOriginal=async()=>{attempts++;throw Error('lost');};
   await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/lost/);
-  await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/no replay/);assert.equal(attempts,1);assert.equal(s.order.includes('close'),false);
+  await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/no replay/);assert.equal(attempts,1);assert.equal(s.order.includes('close'),false);assert.equal(s.lock.held,true);assert.equal(s.lock.complete,0);
 });
 test('club write lost reply resolves exact bytes without another write',async()=>{
   const s=await setup();const original=s.pii.writeClub;let failed=true;
@@ -71,4 +73,19 @@ test('fence refusal at any stage prevents release',async()=>{
 test('final readback mismatch retains the Writing window',async()=>{
   const s=await setup();const publish=s.deps.identity.publishReference;s.deps.identity.publishReference=async(id,ref)=>{await publish(id,ref);if(id==='a2')s.originals.get('person1').ciphertext=[99];};
   await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/ciphertext mismatch/);assert.equal(s.order.includes('close'),false);
+});
+
+test('unfinished Closing or Releasing windows cannot advance to sink release',async()=>{
+  for(const phase of ['Closing','Releasing','Done']){
+    const s=await setup();s.state.phase=phase;
+    await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/closing window retained/);
+    assert.deepEqual(s.order,['begin']);assert.equal(s.writes.length,0);assert.equal(s.lock.held,true);
+  }
+});
+test('exclusive lock refusal prevents all reads and mutations',async()=>{
+  const s=await setup();s.deps.executionLock.enter=async()=>false;s.deps.identity.listProfiles=async()=>{throw Error('must not read');};
+  await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/Exclusive prepared execution lock/);assert.equal(s.writes.length,0);assert.equal(s.order.length,0);
+});
+test('successful exact reconciliation completes the lock only after release',async()=>{
+  const s=await setup();await executePreparedPrivateNamePlan(s.request,s.deps);assert.equal(s.state.phase,'Done');assert.equal(s.lock.held,false);assert.equal(s.lock.complete,1);
 });
