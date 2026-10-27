@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Principal } from '@icp-sdk/core/principal';
 import type { FeatureBackendContext } from './featureRouter';
-const mocks = vi.hoisted(() => ({ enabled: true, direct: vi.fn(), metadata: vi.fn(), league: vi.fn(), cards: vi.fn(), chats: vi.fn(), profiles: vi.fn(), legacy: vi.fn() }));
+const mocks = vi.hoisted(() => ({ enabled: true, direct: vi.fn(), metadata: vi.fn(), league: vi.fn(), cards: vi.fn(), chats: vi.fn(), profiles: vi.fn(), legacy: vi.fn(), routing: vi.fn(), clubOwner: undefined as unknown }));
+vi.mock('./featureRouter', () => ({ withFeatureBackend: async (_feature: string, providers: any, scope: unknown) => { mocks.routing(scope); return providers.icp(mocks.clubOwner); } }));
 vi.mock('./privateProfileSearchMode', () => ({ privateProfileSearchRehearsalEnabled: () => mocks.enabled }));
 vi.mock('./features/messaging', () => ({ getLiveGroupMetadata: mocks.metadata, getLiveDirectConversation: mocks.direct }));
 vi.mock('./features/miniLeagues', () => ({ getLiveMiniLeague: mocks.league }));
@@ -14,6 +15,7 @@ const context = () => ({ identity, target: { alias: 'g2' } }) as unknown as Feat
 const metadata = () => ({ conversationId: 'chat', kind: 'group', clubId: 'club', teamId: null, members: [identity.getPrincipal()] });
 beforeEach(() => {
   vi.resetAllMocks(); mocks.enabled = true;
+  mocks.clubOwner = context();
   mocks.metadata.mockResolvedValue(metadata());
   mocks.profiles.mockResolvedValue([{ account_id: 'person', display_name: 'Private name', avatar_ref: [] }]);
   mocks.legacy.mockResolvedValue(new Map());
@@ -49,6 +51,39 @@ describe('rehearsal chat relationship names', () => {
     await expect(readDirectChatProfiles(context(), 'dm', ['foreign'])).rejects.toThrow('participants required');
     expect(mocks.profiles).not.toHaveBeenCalled(); expect(mocks.legacy).not.toHaveBeenCalled();
     await expect(readDirectChatProfiles(context(), 'dm', ['a', 'b', 'c'])).rejects.toThrow('at most two');
+  });
+  it('resolves an unanswered DM through independently authorized exact-club names', async () => {
+    mocks.direct.mockResolvedValue({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'person' });
+    const out = await readDirectChatProfiles(context(), 'dm', ['person'], undefined, 'shared-club');
+    expect(mocks.routing).toHaveBeenCalledWith({ clubId: 'shared-club' });
+    expect(mocks.profiles).toHaveBeenCalledWith(mocks.clubOwner, ['person'], { kind: 'club', resource: 'shared-club' }, undefined);
+    expect(out.get('person')?.display_name).toBe('Private name');
+    expect(mocks.direct).toHaveBeenCalledTimes(2);
+    expect(mocks.legacy).not.toHaveBeenCalled();
+  });
+  it('does not fall back to direct names when the hinted club refuses membership', async () => {
+    mocks.direct.mockResolvedValue({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'person' });
+    mocks.profiles.mockRejectedValue(new Error('Club relationship denied'));
+    await expect(readDirectChatProfiles(context(), 'dm', ['person'], undefined, 'foreign-club')).rejects.toThrow('denied');
+    expect(mocks.profiles).toHaveBeenCalledTimes(1);
+    expect(mocks.direct).toHaveBeenCalledTimes(1);
+    expect(mocks.legacy).not.toHaveBeenCalled();
+  });
+  it('refuses foreign DM subjects even when a shared club locator is supplied', async () => {
+    mocks.direct.mockResolvedValue({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'person' });
+    await expect(readDirectChatProfiles(context(), 'dm', ['foreign'], undefined, 'club')).rejects.toThrow('participants required');
+    expect(mocks.routing).not.toHaveBeenCalled(); expect(mocks.profiles).not.toHaveBeenCalled();
+  });
+  it('withholds club-authorized names when the DM participants change before delivery', async () => {
+    mocks.direct.mockResolvedValueOnce({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'person' })
+      .mockResolvedValueOnce({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'foreign' });
+    await expect(readDirectChatProfiles(context(), 'dm', ['person'], undefined, 'club')).rejects.toThrow('participants changed');
+  });
+  it('rejects a different identity object returned by club routing before name access', async () => {
+    mocks.direct.mockResolvedValue({ id: 'dm', participant_1: identity.getPrincipal().toText(), participant_2: 'person' });
+    mocks.clubOwner = { ...context(), identity: { ...identity } };
+    await expect(readDirectChatProfiles(context(), 'dm', ['person'], undefined, 'club')).rejects.toThrow('identity changed');
+    expect(mocks.profiles).not.toHaveBeenCalled();
   });
   it('withholds DM names if a held closing participant reply changes', async () => {
     let release: ((value: unknown) => void) | undefined;
