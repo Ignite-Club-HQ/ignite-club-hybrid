@@ -68,7 +68,7 @@ try {
       arg: IDL.encode([IDL.Principal], [governor]), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
     group.club_domain.actor.setPrincipal(governor);
     mediaStores.push(store);
-    const mapped = domains.map((domain, i) => ({ domain, canister: group[domain] ? group[domain].canisterId : p(10 + n * 20 + i) }));
+    const mapped = domains.map((domain, i) => ({ domain, canister: group[domain] ? group[domain].canisterId : domain === 'secret_workload_identity' ? p(200) : p(10 + n * 20 + i) }));
     let rev = await router.actor.version();
     rev = ok(await router.actor.register_group({ id: `g${n}`, target_alias: 'local', domains: mapped, accepting: false, max_clubs: 100,
       assigned_clubs: 0, heap_budget_bytes: 1_000_000n, heap_bytes: 0n, min_cycles: 1n, cycles: 0n, observed_at_ns: 0n, photo_store: [] }, rev));
