@@ -12,7 +12,7 @@ export async function prepareCompletePrivateNameArtifact(input, deps) {
   if (typeof deps.accountInventory?.listAccounts !== 'function' || typeof deps.resolveAuthority !== 'function' || typeof deps.readName !== 'function') throw Error('Complete account inventory and authorized name reader required');
   input = structuredClone(input);
   const accounts = structuredClone(await deps.accountInventory.listAccounts());
-  if (!accounts?.request || !Array.isArray(accounts.rows)) throw Error('Complete locked account evidence required');
+  if (!accounts?.request || !Array.isArray(accounts.rows) || accounts.rows.length > 4096 || !Array.isArray(input.sinks) || !input.sinks.length) throw Error('Complete locked account evidence required');
   const guard = async () => {
     if (typeof deps.assertEvidence !== 'function' || await deps.assertEvidence({request:structuredClone(accounts.request),revision:accounts.revision,identityId:input.identityId,deploymentHash:input.deploymentHash,sinks:structuredClone(input.sinks)}) !== true) throw Error('Verified complete account evidence required');
   };
@@ -43,7 +43,9 @@ export async function prepareCompletePrivateNameArtifact(input, deps) {
   const memberships = new Map(inventory.body.rows.map(row => [row.accountId,row.clubs]));
   const artifact = await prepareVerifiedPrivateNameArtifact({...input,historyRevision:accounts.revision,inventoryHash:inventory.hash,rows:rows.map(row => ({...row,clubs:memberships.get(row.accountId)}))}, {
     ...deps,accounts,resolveAuthority:async (account,request) => {
+      await guard();
       const latest = await deps.resolveAuthority(account,request);
+      await guard();
       if (canonical(latest) !== canonical(resolved.get(account.accountId))) throw Error('Original name authority changed during inventory');
       return latest;
     },
