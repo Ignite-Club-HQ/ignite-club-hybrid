@@ -3,6 +3,55 @@
 import {preparePrivateNameArtifact, verifyPrivateNameArtifact} from './private-name-plan-artifact.mjs';
 import {encryptName, encryptClubName} from './convert-private-names.mjs';
 import {canonical} from './migrate-club-plan.mjs';
+import {collectPrivateNameClubInventory} from './private-name-club-inventory.mjs';
+
+/** Account-first composition: callers cannot substitute profile/member-only
+ * lists or their own clubs. Evidence/authority still come from the existing
+ * authenticated operator boundary, not this helper or an invented mapping. */
+export async function prepareCompletePrivateNameArtifact(input, deps) {
+  if (typeof deps.accountInventory?.listAccounts !== 'function' || typeof deps.resolveAuthority !== 'function' || typeof deps.readName !== 'function') throw Error('Complete account inventory and authorized name reader required');
+  input = structuredClone(input);
+  const accounts = structuredClone(await deps.accountInventory.listAccounts());
+  if (!accounts?.request || !Array.isArray(accounts.rows) || accounts.rows.length > 4096 || !Array.isArray(input.sinks) || !input.sinks.length) throw Error('Complete locked account evidence required');
+  const guard = async () => {
+    if (typeof deps.assertEvidence !== 'function' || await deps.assertEvidence({request:structuredClone(accounts.request),revision:accounts.revision,identityId:input.identityId,deploymentHash:input.deploymentHash,sinks:structuredClone(input.sinks)}) !== true) throw Error('Verified complete account evidence required');
+  };
+  await guard();
+  const inventoryAccounts = [], rows = [];
+  const resolved = new Map();
+  for (const account of accounts.rows) {
+    const profileName = account.profile?.display_name;
+    if (!profileName) {
+      if (account.originalAuthority?.kind !== 'NoName') throw Error('Explicit nameless account evidence required');
+      // Nameless accounts still contribute all aliases to the fenced club
+      // inventory. No PII authority is inferred and no name row is created.
+      inventoryAccounts.push({accountId:account.accountId, subject:account.principals?.[0], principals:account.principals, status:account.status, version:account.version, profilePresent:!!account.profile, sourceDigest:account.sourceDigest, sink:null, nameAbsent:true});
+      continue;
+    }
+    const authority = await deps.resolveAuthority(structuredClone(account), structuredClone(accounts.request));
+    await guard();
+    if (!authority || !account.principals.includes(authority.subject) || !input.sinks.some(s => s.id === authority.sink)) throw Error('Authenticated original name authority unresolved');
+    const name = await deps.readName(structuredClone(account), structuredClone(authority), structuredClone(accounts.request));
+    await guard();
+    if (typeof name !== 'string' || !name.trim()) throw Error('Authorized original personal name required');
+    resolved.set(account.accountId, structuredClone(authority));
+    inventoryAccounts.push({accountId:account.accountId,subject:authority.subject,principals:account.principals,status:account.status,version:account.version,profilePresent:true,sourceDigest:account.sourceDigest,sink:authority.sink});
+    rows.push({accountId:account.accountId,subject:authority.subject,sink:authority.sink,name,clubs:[]});
+  }
+  const inventory = await collectPrivateNameClubInventory({...input,accounts:inventoryAccounts,historyRevision:accounts.revision}, deps);
+  await guard();
+  const memberships = new Map(inventory.body.rows.map(row => [row.accountId,row.clubs]));
+  const artifact = await prepareVerifiedPrivateNameArtifact({...input,historyRevision:accounts.revision,inventoryHash:inventory.hash,rows:rows.map(row => ({...row,clubs:memberships.get(row.accountId)}))}, {
+    ...deps,accounts,resolveAuthority:async (account,request) => {
+      await guard();
+      const latest = await deps.resolveAuthority(account,request);
+      await guard();
+      if (canonical(latest) !== canonical(resolved.get(account.accountId))) throw Error('Original name authority changed during inventory');
+      return latest;
+    },
+  });
+  return {artifact,inventory};
+}
 
 export async function prepareVerifiedPrivateNameArtifact(input, {accounts, resolveAuthority, assertEvidence, decryptCiphertext, readOriginal}) {
   if (!accounts || !Array.isArray(accounts.rows) || !accounts.request || accounts.rows.length > 4096 || typeof resolveAuthority !== 'function' || typeof assertEvidence !== 'function' || typeof decryptCiphertext !== 'function') throw Error('Complete authenticated preparation dependencies required');

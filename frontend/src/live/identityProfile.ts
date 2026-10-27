@@ -67,15 +67,33 @@ export async function saveIcpIdentityProfile(
       active();
       if (current?.display_name?.startsWith('pii-display-name:')) {
         const { preparePrivateOwnProfileName, refreshPrivateOwnClubNames, privateProfileNameReference, hydratePrivateProfileNames } = await import('./privateProfileNames');
-        const expected = privateProfileNameReference(target.canisterIds.pii_access_control ?? '', caller);
+        const parts = current.display_name.split(':');
+        const originalAuthority = parts.length === 4 ? parts[2] : '';
+        const expected = privateProfileNameReference(originalAuthority, caller);
         if (current.display_name !== expected) throw Error('Original private name authority must be verified before saving.');
-        const context = { identity, target };
+        let context = { identity, target };
+        let confirm = async () => { active(); };
+        if (originalAuthority !== target.canisterIds.pii_access_control) {
+          const [{ readPrivateProfileEvidence }, { createLivePrivateProfileAuthorityResolver }] = await Promise.all([
+            import('./privateProfileEvidence'), import('./privateProfileAuthority'),
+          ]);
+          const evidence = await readPrivateProfileEvidence(context);
+          active();
+          if (!evidence) throw Error('Verified original private name authority evidence is required.');
+          const lease = await createLivePrivateProfileAuthorityResolver(context, evidence)(originalAuthority);
+          active();
+          context = lease.context;
+          if (context.identity !== identity || context.target.host !== target.host || context.target.canisterIds.pii_access_control !== originalAuthority) throw Error('Original private name route changed.');
+          confirm = async () => { active(); await lease.confirm(); active(); };
+        }
         const [previousName] = await hydratePrivateProfileNames(context, [current]);
         active();
+        await confirm();
         if (!previousName?.display_name) throw Error('Original private name could not be verified.');
         if (previousName.display_name !== input.displayName.trim()) {
           nameToSave = await preparePrivateOwnProfileName(context, input.displayName);
           active();
+          await confirm();
           await refreshPrivateOwnClubNames(context, input.displayName, async () => {
             const { getLiveMyRoleGrants } = await import('./features/membership');
             const grants = await getLiveMyRoleGrants(context);
@@ -84,6 +102,7 @@ export async function saveIcpIdentityProfile(
           }, active);
           active();
         } else nameToSave = expected;
+        await confirm();
         privateNameMaintained = true;
       }
     }

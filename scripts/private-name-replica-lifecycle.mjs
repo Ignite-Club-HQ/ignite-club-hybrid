@@ -2,6 +2,39 @@
 // authority inference, automatic retry, or authorization grants.
 import {canonical} from './migrate-club-plan.mjs';
 const bytes=v=>Array.isArray(v)&&v.length>0&&v.length<=4096&&v.every(b=>Number.isInteger(b)&&b>=0&&b<=255);
+/** Existing owner/governor lifecycle transport is sufficient for removal:
+ * no browser rights or new service. Recheck every verified account alias at
+ * the owning club before each journal/read/write boundary. A role removal
+ * that leaves any membership cannot authorize cleanup. */
+export async function reconcileRemovedMemberNames(plan, {accounts, readMembership, ...deps}) {
+  if (plan?.action !== 'purge' || !Array.isArray(accounts) || !accounts.length || accounts.length > 4096 || typeof readMembership !== 'function' || typeof deps.assertEvidence !== 'function') throw Error('Verified removed-account lifecycle evidence required');
+  accounts = structuredClone(accounts); plan = structuredClone(plan);
+  const subjects = new Map();
+  for (const account of accounts) {
+    if (!account || typeof account.accountId !== 'string' || !account.accountId || !Array.isArray(account.principals) || !account.principals.length || account.principals.length > 8 || new Set(account.principals).size !== account.principals.length) throw Error('Complete removed-account aliases required');
+    for (const subject of account.principals) {
+      if (typeof subject !== 'string' || !subject || subjects.has(subject)) throw Error('Ambiguous removed-account aliases');
+      subjects.set(subject,account);
+    }
+  }
+  for (const target of plan.targets ?? []) if (!subjects.has(target.subject)) throw Error('Foreign removed-member lifecycle target');
+  const assertEvidence = async saved => {
+    if (await deps.assertEvidence(saved) !== true) return false;
+    const checked = new Set();
+    for (const target of plan.targets) {
+      const account = subjects.get(target.subject);
+      for (const alias of account.principals) {
+        const key = canonical([alias,target.club]);
+        if (checked.has(key)) continue;
+        checked.add(key);
+        if (await readMembership({accountId:account.accountId,subject:alias,club:target.club}) !== false) throw Error('Removed member still has membership or membership is unverified');
+        if (await deps.assertEvidence(saved) !== true) return false;
+      }
+    }
+    return true;
+  };
+  return reconcileNameReplicaLifecycle(plan, {...deps,assertEvidence});
+}
 export async function reconcileNameReplicaLifecycle(plan,{assertEvidence,readJournal,persistJournal,readState,writeSavedReplica,purgeExactReplica}) {
   if(!plan || canonical(Object.keys(plan).sort())!==canonical(['action','operationId','targets']) || !['refresh','purge'].includes(plan.action) || typeof plan.operationId!=='string' || !plan.operationId || plan.operationId.length>128 || !Array.isArray(plan.targets) || !plan.targets.length || plan.targets.length>4096 || [assertEvidence,readJournal,persistJournal,readState,writeSavedReplica,purgeExactReplica].some(fn=>typeof fn!=='function'))throw Error('Exact bounded lifecycle dependencies required');
   plan=structuredClone(plan);const ids=new Set();

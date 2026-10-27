@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {reconcileNameReplicaLifecycle} from './private-name-replica-lifecycle.mjs';
+import {reconcileNameReplicaLifecycle,reconcileRemovedMemberNames} from './private-name-replica-lifecycle.mjs';
 const plan=action=>({operationId:'names:test',action,targets:[{sink:'original-g1',subject:'alias-1',club:'club-g2',ciphertext:[1,2],...(action==='refresh'?{originalCiphertext:[8,1]}:{})},{sink:'original-g2',subject:'alias-2',club:'club-g2',ciphertext:[3,4],...(action==='refresh'?{originalCiphertext:[8,2]}:{})}]});
 function fixture(action){let journal=null,held=true,writes=0,lost=false;const states=new Map(action==='purge'?[['alias-1',{ciphertext:[1,2],scheme:'vetkey-club-names-v1:club-g2'}],['alias-2',{ciphertext:[3,4],scheme:'vetkey-club-names-v1:club-g2'}]]:[]);const mutate=async t=>{writes++;assert.equal(journal.receipts.some(r=>r.phase==='unknown'),true);if(action==='purge')states.delete(t.subject);else states.set(t.subject,{ciphertext:t.ciphertext,scheme:`vetkey-club-names-v1:${t.club}`});if(lost){lost=false;throw Error('Lost committed reply');}};return {deps:{assertEvidence:async()=>held,readJournal:async()=>structuredClone(journal),persistJournal:async j=>{journal=structuredClone(j);},readState:async t=>structuredClone(states.get(t.subject)??null),writeSavedReplica:mutate,purgeExactReplica:mutate},states,lose:()=>{lost=true;},deny:()=>{held=false;},writes:()=>writes,journal:()=>journal};}
 test('cross-authority alias purge requires exact acknowledgements for every target',async()=>{const f=fixture('purge');assert.deepEqual(await reconcileNameReplicaLifecycle(plan('purge'),f.deps),{completed:2,action:'purge'});assert.equal(f.states.size,0);assert.equal(f.writes(),2);});
@@ -14,3 +14,18 @@ test('plaintext target properties cannot enter durable lifecycle receipts',async
 test('purge refuses a newer replica before persisting or deleting it',async()=>{const f=fixture('purge');f.states.set('alias-1',{scheme:'vetkey-club-names-v1:club-g2',ciphertext:[9]});await assert.rejects(reconcileNameReplicaLifecycle(plan('purge'),f.deps),/Replica changed/);assert.equal(f.writes(),0);assert.equal(f.journal(),null);});
 test('refresh recovery cannot substitute another original name generation',async()=>{const f=fixture('refresh');f.lose();await assert.rejects(reconcileNameReplicaLifecycle(plan('refresh'),f.deps));const changed=plan('refresh');changed.targets[0].originalCiphertext=[9];await assert.rejects(reconcileNameReplicaLifecycle(changed,f.deps),/journal differs/);assert.equal(f.writes(),1);});
 test('top-level plaintext never enters the retained lifecycle journal',async()=>{const f=fixture('refresh');await assert.rejects(reconcileNameReplicaLifecycle({...plan('refresh'),name:'Paul Cranwell'},f.deps),/dependencies/);assert.equal(f.journal(),null);assert.equal(f.writes(),0);});
+const removedAccounts=[{accountId:'account',principals:['alias-1','alias-2']}];
+test('removed-member cleanup verifies every alias and reuses exact recoverable purge',async()=>{
+  const f=fixture('purge'),seen=new Set();const result=await reconcileRemovedMemberNames(plan('purge'),{...f.deps,accounts:removedAccounts,readMembership:async t=>{seen.add(t.subject);return false;}});
+  assert.deepEqual(result,{completed:2,action:'purge'});assert.deepEqual([...seen],['alias-1','alias-2']);assert.equal(f.writes(),2);
+});
+test('remaining role on any alias or unverified membership blocks removal cleanup',async()=>{
+  for(const reply of [true,undefined,null]){const f=fixture('purge');await assert.rejects(reconcileRemovedMemberNames(plan('purge'),{...f.deps,accounts:removedAccounts,readMembership:async t=>t.subject==='alias-2'?reply:false}),/still has membership/);assert.equal(f.writes(),0);}
+});
+test('membership restored during cleanup stops before another purge',async()=>{
+  const f=fixture('purge');let restored=false;const purge=f.deps.purgeExactReplica;f.deps.purgeExactReplica=async t=>{await purge(t);restored=true;};
+  await assert.rejects(reconcileRemovedMemberNames(plan('purge'),{...f.deps,accounts:removedAccounts,readMembership:async()=>restored}),/still has membership/);assert.equal(f.writes(),1);assert.equal(f.journal().receipts[0].phase,'unknown');
+});
+test('lost removed-member purge reply recovers by readback without replay',async()=>{
+  const f=fixture('purge');f.lose();const deps={...f.deps,accounts:removedAccounts,readMembership:async()=>false};await assert.rejects(reconcileRemovedMemberNames(plan('purge'),deps),/Lost committed/);await reconcileRemovedMemberNames(plan('purge'),deps);assert.equal(f.writes(),2);
+});
