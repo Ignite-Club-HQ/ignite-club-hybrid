@@ -8,6 +8,7 @@ use std::{cell::RefCell, collections::BTreeSet};
 use sha2::{Digest, Sha256};
 use super::{Outcome, private_name_writer_window::{WriterRequest,WriterReceipt}};
 use super::private_name_coordination::Receipt as SinkReceipt;
+use super::group_inventory::RemovalInventory;
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WritePhase { Preparing, AwaitingApproval, Fencing, Opening, Writing, Closing, Releasing, Done }
@@ -99,7 +100,7 @@ fn save_at(id:&str,w:&WriteWindow){JOURNAL.with(|m|m.borrow_mut().insert(id.to_s
 /// admission synchronously, retain the operation, then freeze every candidate
 /// writer before collecting the verified topology under those locks.
 #[ic_cdk::update]
-fn begin_private_name_preparation(operation_id:String, expected_history_revision:u64, candidate:super::group_inventory::RemovalInventory)->Outcome<WriteWindow>{
+fn begin_private_name_preparation(operation_id:String, expected_history_revision:u64, candidate:RemovalInventory)->Outcome<WriteWindow>{
     access()?;
     if !operation_id.starts_with("club-name-preparation-") || operation_id.len()>100{return Err("Independent preparation identity required".into());}
     if let Ok(w)=get(&operation_id){if w.inventory!=candidate{return Err("Immutable preparation inventory conflict".into());}return Ok(w);}
@@ -181,6 +182,7 @@ async fn advance_private_name_write_window(operation_id:String,target:Principal)
             let reply=ic_cdk::call::Call::bounded_wait(target,reader).with_arg(&w.request).await.map_err(|_|"Private-name writer outcome unknown; retain window")?;
             let receipt:Outcome<WriterReceipt>=reply.candid().map_err(|_|"Invalid private-name writer receipt")?;
             access()?;let mut current=get(&operation_id)?;
+            if prepared && phase==WritePhase::Opening && current.phase==WritePhase::Opening && current.opened.len()==current.writers.len(){current.opened.clear();}
             current.merge_writer(target,receipt?,phase==WritePhase::Closing)?;save_at(&operation_id,&current);Ok(current)
         },
         WritePhase::Done=>Ok(w),

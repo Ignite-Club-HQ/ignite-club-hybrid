@@ -56,6 +56,7 @@ use private_name_conversion_approval::{SignedApproval,ApprovalReceipt};
 mod private_name_coordination;
 mod private_name_write_coordinator;
 use private_name_write_coordinator::WriteWindow;
+use group_inventory::RemovalInventory;
 use private_name_coordination::Intent;
 use private_name_conversion::{ConversionPage, ConversionProfileRow};
 mod private_profile_reference;
