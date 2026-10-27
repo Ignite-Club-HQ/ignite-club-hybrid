@@ -53,7 +53,9 @@ export function createNameApprovalReceiptStore({operationId,storeBinding,readStr
     persistJournal:async journal=>{
       if(poisoned)throw Error('Receipt append outcome unknown; reopen and reconcile without replay');
       const events=await read(),event=makeNameApprovalReceiptEvent({operationKey,storeBinding,events,journal});
-      if(!event)return;
+      // Only the caller that atomically appended the first intent may submit.
+      // An identical retained intent belongs to recovery, not a fresh writer.
+      if(!event)return {created:false};
       try{
         await guard();
         // The service must enforce this predecessor atomically; client reads
@@ -62,6 +64,7 @@ export function createNameApprovalReceiptStore({operationId,storeBinding,readStr
         await guard();
         if(!exact(acknowledgement,['hash'])||acknowledgement.hash!==event.hash)throw Error('Durable receipt append acknowledgement required');
         const retained=await read();if(canonical(retained)!==canonical([...events,event]))throw Error('Durable append readback differs');
+        return {created:true};
       }catch(error){poisoned=true;throw error;}
     },
   };
