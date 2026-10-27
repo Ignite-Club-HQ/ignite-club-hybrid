@@ -137,9 +137,10 @@ try {
   // Close, seal every writer, then release sinks with a stopped-sink hold.
   w = ok(await actor.close_private_name_write_window('go-live'));
   assert.equal(phaseOf(w), 'Closing');
-  await denied(() => groups[0].club_domain.actor.set_identity_access_canister(outsider));
   for (const target of w.writers) w = ok(await actor.advance_private_name_write_window('go-live', target));
   assert.equal(phaseOf(w), 'Releasing');
+  // Every writer is sealed and drained before any sink releases.
+  await denied(() => groups[0].club_domain.actor.set_identity_access_canister(outsider));
   const sink0 = groups.map(g => g.pii_access_control).find(s => s.canisterId.toText() === w.sinks[0].toText());
   await pic.stopCanister({ canisterId: sink0.canisterId, sender: governor });
   const signature = new Map(identityIdl({ IDL })._fields).get('advance_private_name_write_window'); assert.ok(signature);
