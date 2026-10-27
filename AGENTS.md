@@ -80,3 +80,5 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Vault recovery reads owner-wide intents and exact decrypted hash markers before strict grants/store acknowledgement; unknown outcomes retain locks/cursors. Erasure scrubs shared ancestors without orphaning others. Cleanup needs age/allowance or erasure receipts; backups commit validated pages to writable sinks, retaining Blob fallback where unsupported. Why: prevent guessed recovery, data loss and partial exports.
 - Private names use rehearsal-only original-PII audiences and synchronous session retirement; generic caches never decrypt references and generation-fence late results. Why: chat IDs and retired contexts cannot authorize disclosure. Read frontend/AGENTS.md and backend/identity_access/AGENTS.md.
 
+
+- Whole-authority private-name writer coordination uses backend/shared writer gates and identity-owned immutable phase journals; topology remains closed and production activation is forbidden until trapped-callback recovery and actual complete-inventory orchestration pass. Why: sink-only receipts and anonymous abandoned counts cannot prove safe recoverable revocation.
