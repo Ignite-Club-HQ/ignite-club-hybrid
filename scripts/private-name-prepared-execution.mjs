@@ -105,7 +105,13 @@ export async function executePreparedPrivateNamePlan({artifact,expectedHash,appr
   await reconcile(); // refusal anywhere prevents opening a window
   const guardedCoordinator=Object.fromEntries(['begin','advance','close','read'].map(method=>[method,async(...args)=>{
     await guard();
-    if (method==='close' || method==='advance') {
+    let requireComplete=method==='close';
+    if (method==='advance') {
+      const current=await deps.coordinator.read(args[0]);await guard();
+      if (!['Fencing','Opening','Writing','Closing','Releasing','Done'].includes(current?.phase)) throw Error('Unknown prepared coordinator phase');
+      requireComplete=['Closing','Releasing','Done'].includes(current.phase);
+    }
+    if (requireComplete) {
       if ((await reconcile()).length!==0) throw Error('Prepared plan incomplete before closing');
       await settleJournal();
     }
