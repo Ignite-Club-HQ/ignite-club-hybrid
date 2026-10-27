@@ -187,8 +187,9 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     expect(f.ok(await identity.get_profile()).display_name).toBe(reference);
     console.log('RECOVERY (disposable account): last-role cleanup retained through service outage and club upgrade; resumed with original name preserved');
     const governorIdentity = f.connect('identity_access', f.governor).actor;
-    // Existing coordinated suspension cannot be bypassed for a fixture.
-    expect('Err' in await governorIdentity.set_account_status(routing.account_id, { Suspended: null })).toBe(true);
+    // Cleanup-only identity uses ordinary production status semantics; no
+    // private-name conversion/read rehearsal was activated by its upgrade.
+    f.ok(await governorIdentity.set_account_status(routing.account_id, { Suspended: null }));
     const retainedRouting = f.ok(await cleanupReader.read_private_name_cleanup_account(f.owner));
     expect(retainedRouting.principals.map((p: any) => p.toText())).toEqual([subject]);
     expect(retainedRouting.original_authority).toEqual(routing.original_authority);

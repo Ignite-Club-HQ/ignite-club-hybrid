@@ -151,7 +151,17 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
   }
   wiring[t.canisterId]=digest(rows);
 }
-const binding={repo,release,scope,...(scope==='full_backend'?{upgradeUnchanged:true}:{}),governor:GROUP2_GOVERNOR,host:'https://icp-api.io',router:shared.shard_router,configurationRevision:String(initial.configurationRevision),configuration,targets,pii:inventory.pii,wiring};
+const observations=[];
+for(const t of targets)observations.push({...t,...await observe(t)});
+const freshCleanupPlan=cleanupRelease?observations.map(s=>({canisterId:s.canisterId,name:s.name,groupId:s.groupId,subnetId:s.subnetId,newHash:s.newHash,oldSettingsHash:s.rawSettingsHash,newSettingsHash:s.cleanupSettingsHash})):undefined;
+const retainedCleanupPlan=cleanupRelease&&journal?.binding?.release===release&&journal?.binding?.scope===scope?journal.binding.cleanupPlan:undefined;
+const cleanupPlan=retainedCleanupPlan??freshCleanupPlan;
+if(cleanupRelease && (!Array.isArray(cleanupPlan)||cleanupPlan.length!==targets.length||targets.some(t=>{
+  const matches=cleanupPlan.filter((s:any)=>s.canisterId===t.canisterId&&s.name===t.name&&s.groupId===t.groupId&&s.subnetId===t.subnetId&&s.newHash===t.newHash);
+  const observed=observations.find(o=>o.canisterId===t.canisterId);
+  return matches.length!==1||!observed||matches[0].newSettingsHash!==observed.cleanupSettingsHash||![matches[0].oldSettingsHash,matches[0].newSettingsHash].includes(observed.rawSettingsHash);
+})))throw Error('Foreign cleanup activation plan or settings drift');
+const binding={repo,release,scope,...(scope==='full_backend'?{upgradeUnchanged:true}:{}),...(cleanupRelease?{cleanupPlan}:{}),governor:GROUP2_GOVERNOR,host:'https://icp-api.io',router:shared.shard_router,configurationRevision:String(initial.configurationRevision),configuration,targets,pii:inventory.pii,wiring};
 const planHash=digest(binding);
 const same=journal&&digest(journal.binding)===planHash;
 if(recovery&&!same)throw Error('Live recovery plan differs from the original release; no installs permitted');
@@ -171,8 +181,6 @@ const keyGate=(groupId:string,phase:string)=>{
   if(r.status!==0)throw Error('Original photo-key verification failed');
   return JSON.parse(readFileSync(receipt,'utf8'));
 };
-const observations=[];
-for(const t of targets)observations.push({...t,...await observe(t)});
 if(cleanupRelease) {
   // PII identity is a protected existing setting, not an upgrade-time setter.
   // The helper never invents it; the live check below requires it exactly.
@@ -212,8 +220,11 @@ if(recovery){
 }
 await persist();await verifyKeys();
 if(cleanupRelease) {
-  journal.cleanupActivation??=observations.map(s=>({canisterId:s.canisterId,name:s.name,groupId:s.groupId,subnetId:s.subnetId,newHash:s.newHash,oldSettingsHash:s.rawSettingsHash,newSettingsHash:s.cleanupSettingsHash,phase:'ready'}));
-  if(journal.cleanupActivation.length!==targets.length || targets.some(t=>journal.cleanupActivation.filter((s:any)=>s.canisterId===t.canisterId&&s.newSettingsHash===observations.find(o=>o.canisterId===t.canisterId)?.cleanupSettingsHash).length!==1))throw Error('Foreign cleanup activation journal');
+  // Motoko release switches are transient upgrade-time reads. Settings are
+  // retained first; only the ordered verified module upgrades activate them.
+  // Identity and all PII receivers precede every club trigger.
+  journal.cleanupActivation??=cleanupPlan.map((s:any)=>({...s,phase:'ready'}));
+  if(journal.cleanupActivation.length!==targets.length || cleanupPlan.some((p:any)=>journal.cleanupActivation.filter((s:any)=>Object.keys(p).every(k=>s[k]===p[k])&&['ready','pending','complete'].includes(s.phase)).length!==1))throw Error('Foreign cleanup activation journal');
   await persist();
   if(recovery && journal.cleanupActivation.some((s:any)=>s.phase!=='complete'))throw Error('Recovery cannot activate settings');
   await activateCleanupSettings(journal.cleanupActivation,{gate,observe,persist,update:async(t:Target)=>{
