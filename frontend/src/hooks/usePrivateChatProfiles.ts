@@ -16,12 +16,13 @@ export function usePrivateChatProfiles(conversationId: string | undefined, viewe
     if (!enabled || !conversationId || !viewerId || !ids.length) return;
     let controller: AbortController | undefined;
     let disposed = false;
+    let sessionRetired = false;
     let expiry: ReturnType<typeof setTimeout> | undefined;
     const retire = () => { controller?.abort(); clearTimeout(expiry); setSnapshot(undefined); };
     const refresh = async () => {
       controller?.abort();
       clearTimeout(expiry);
-      if (disposed || document.visibilityState === 'hidden') { retire(); return; }
+      if (disposed || sessionRetired || document.visibilityState === 'hidden') { retire(); return; }
       const current = new AbortController();
       controller = current;
       // Each visibility refresh rechecks the exact authority, not a device copy.
@@ -47,7 +48,7 @@ export function usePrivateChatProfiles(conversationId: string | undefined, viewe
     document.addEventListener('visibilitychange', visible);
     window.addEventListener('pagehide', pageHidden);
     window.addEventListener('pageshow', visible);
-    const unsubscribe = onPrivateProfileSessionRetired(retire);
+    const unsubscribe = onPrivateProfileSessionRetired(() => { sessionRetired = true; retire(); });
     return () => {
       disposed = true; controller?.abort(); clearTimeout(expiry); unsubscribe();
       document.removeEventListener('visibilitychange', visible);

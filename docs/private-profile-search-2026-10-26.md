@@ -33,7 +33,8 @@ No such coordinated protocol is implemented or certified here. Client-arrival
 time revocation and recalling previously delivered IBE keys are impossible;
 neither may be promised by a release check. Production remains disabled.
 
-Current fresh checks use existing frontend regressions. Real-SDK replica
+Current fresh checks pass 156 tests per sign-in mode and ICP isolation guards.
+Real-SDK replica
 execution is unavailable in this checkout because the PocketIC executable and
 compiled service artifacts are absent; earlier replica results are not fresh
 verification of this batch. Live signed-in acceptance remains unverified.

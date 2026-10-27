@@ -27,6 +27,8 @@ describe('mounted private chat name lifetime', () => {
     act(() => retirePrivateProfileSession());
     expect(hook.result.current('person')).toBeNull();
     expect(mocks.read.mock.calls[0][3].aborted).toBe(true);
+    act(() => { window.dispatchEvent(new Event('pageshow')); });
+    expect(mocks.read).toHaveBeenCalledOnce();
   });
   it('aborts pending names on backgrounding and ignores their late reply', async () => {
     let finish: (value: unknown) => void = () => {};
