@@ -9,6 +9,17 @@ use ic_stable_structures::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
+const PRIVATE_NAME_WRITER_MEMORY: u8 = 30;
+#[path = "../../shared/private_name_writer_window.rs"]
+mod private_name_writer_window;
+use private_name_writer_window::{WriterRequest, WriterReceipt};
+#[ic_cdk::update]
+fn open_private_name_writer_window(request: WriterRequest) -> Result<(), String> { private_name_writer_window::open(request) }
+#[ic_cdk::update]
+fn seal_private_name_writer_window(request: WriterRequest) -> Result<(), String> { private_name_writer_window::seal(request) }
+#[ic_cdk::update]
+fn read_private_name_writer_window(request: WriterRequest) -> Result<WriterReceipt, String> { private_name_writer_window::receipt(request) }
+
 mod group_inventory;
 mod removal_barrier;
 mod deletion_timing;
@@ -433,6 +444,8 @@ fn validate_service_authorities(authorities: &[Principal]) -> Outcome<()> {
 }
 #[ic_cdk::update]
 fn set_service_authorities(authorities: Vec<Principal>) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     if !account_group_rehearsal_enabled() { return Err("Service admission not released".into()); }
     require_governor(&state(), ic_cdk::api::msg_caller())?;
     if removal_pending() { return Err("Removal barrier pending".into()); }
@@ -553,6 +566,8 @@ fn recheck_directory(config:&membership_runtime::Config)->Outcome<()> {
 /// legacy club ownership, source freshness, recovery or directory cutover.
 #[ic_cdk::update]
 async fn configure_membership_directory(binding:group_inventory::Binding,authorities:Vec<Principal>,generation:u64)->Outcome<Vec<membership_transport::SourceBinding>>{
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     admission_configuration_clear()?;
     let pinned=group_inventory_binding().ok_or("Existing deployment registry pin required")?;
@@ -594,13 +609,17 @@ async fn configure_membership_directory(binding:group_inventory::Binding,authori
     save_directory_config(&config);arm_directory_timer();Ok(grants)
 }
 #[ic_cdk::update]
-fn disable_membership_directory()->Outcome<()>{require_governor(&state(),ic_cdk::api::msg_caller())?;let mut c=directory_config()?;c.enabled=false;save_directory_config(&c);Ok(())}
+fn disable_membership_directory()->Outcome<()>{
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+require_governor(&state(),ic_cdk::api::msg_caller())?;let mut c=directory_config()?;c.enabled=false;save_directory_config(&c);Ok(())}
 /// Exact operator readback of the separate directory configuration. Does not
 /// return memberships, grant lifecycle readers, or certify currentness.
 #[derive(CandidType,Deserialize)]
 struct DirectoryConfigurationReadback { binding:group_inventory::Binding,generation:u64,inventory_digest:Vec<u8>,sources:Vec<(String,Principal)>,enabled:bool,app_enabled:bool }
 #[ic_cdk::update]
 fn read_membership_directory_configuration()->Outcome<DirectoryConfigurationReadback>{
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     let c=directory_config()?;
     Ok(DirectoryConfigurationReadback{binding:c.binding,generation:c.generation,inventory_digest:c.inventory_digest,sources:c.sources,enabled:c.enabled,app_enabled:c.release.is_some()})
@@ -610,6 +629,8 @@ fn read_membership_directory_configuration()->Outcome<DirectoryConfigurationRead
 /// checks precede every persisted page/replay, with no intervening await.
 #[ic_cdk::update]
 fn read_my_membership_directory_diagnostic(consumer:u64,token:Option<membership_wire::Token>)->Outcome<membership_wire::Reply>{
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller=ic_cdk::api::msg_caller();
     let viewer=membership_lookup_viewer(caller)?;
     let config=directory_config()?;recheck_directory(&config)?;
@@ -619,6 +640,8 @@ fn read_my_membership_directory_diagnostic(consumer:u64,token:Option<membership_
 /// Only the exact configured source may notify; never accepts raw edges.
 #[ic_cdk::update]
 fn invalidate_membership_directory_source(binding:membership_transport::SourceBinding,revision:candid::Nat)->membership_transport::UnitReply {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let result=(||->Outcome<()>{
         let mut c=directory_config()?;let revision=membership_transport::number(&revision)?;
         // Validate against a local config copy first. Coordinator validation
@@ -651,6 +674,8 @@ async fn directory_source_status(config:&membership_runtime::Config,source:&str,
 /// requests/publications. Governor-only until live worker acceptance passes.
 #[ic_cdk::update]
 async fn advance_membership_directory_source(source:String)->Outcome<membership_runtime::Progress>{
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     advance_directory_source(source).await
 }
@@ -737,6 +762,8 @@ struct DirectoryAcceptanceCheck {snapshot_verified:bool,restoration_guard_verifi
 /// history rejects upgrade/restore ABA, including restoration of identity.
 #[ic_cdk::update]
 async fn check_membership_directory_acceptance()->Outcome<DirectoryAcceptanceCheck>{
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     let config=directory_config()?;recheck_directory(&config)?;
     let (_,expected,_)=verify_directory_snapshot(&config,||recheck_directory(&config)).await?;
@@ -791,6 +818,8 @@ async fn read_directory_photo_stores(binding:&group_inventory::Binding,recheck:i
 /// Repeating an acknowledged release is safe; a different release is refused.
 #[ic_cdk::update]
 async fn enable_membership_directory(release:String)->Outcome<DirectoryAcceptanceCheck>{
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     if release.len()!=40||!release.bytes().all(|v|v.is_ascii_digit()||(b'a'..=b'f').contains(&v)){return Err("Exact release commit required".into());}
     let config=directory_config()?;
@@ -802,6 +831,8 @@ async fn enable_membership_directory(release:String)->Outcome<DirectoryAcceptanc
 }
 #[ic_cdk::update]
 async fn read_my_membership_directory(consumer:u64,token:Option<membership_wire::Token>)->Outcome<membership_wire::ReleasedReply>{
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller=ic_cdk::api::msg_caller();let viewer=membership_lookup_viewer(caller)?;
     let config=directory_config()?;let release=config.release.clone().ok_or("Membership lookup not released; existing discovery required")?;
     let recheck=||->Outcome<()>{
@@ -826,6 +857,8 @@ async fn read_my_membership_directory(consumer:u64,token:Option<membership_wire:
 /// club claims or proofs. This never enables the verified-current reader.
 #[ic_cdk::update]
 async fn advance_membership_directory_ownership()->Outcome<membership_coordinator::OwnershipProgress>{
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     advance_directory_ownership().await
 }
@@ -853,6 +886,8 @@ async fn advance_directory_ownership()->Outcome<membership_coordinator::Ownershi
 // Independent of start: an exhausted pool must still be reclaimable.
 #[ic_cdk::update]
 fn reclaim_membership_directory()->Outcome<DirectoryCleanup>{
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     require_governor(&state(),ic_cdk::api::msg_caller())?;
     let (scanned,complete)=DIRECTORY_COORDINATOR.with(|c|c.borrow_mut().reclaim_retired())?;
     Ok(DirectoryCleanup{scanned:scanned as u64,complete})
@@ -869,6 +904,7 @@ struct DirectoryTimerGuard;
 impl Drop for DirectoryTimerGuard{fn drop(&mut self){DIRECTORY_TIMER_BUSY.with(|b|*b.borrow_mut()=false);}}
 #[export_name="canister_global_timer"]
 extern "C" fn membership_directory_global_timer(){
+    if private_name_writer_window::enabled() { return; }
     arm_directory_timer();
     let entered=DIRECTORY_TIMER_BUSY.with(|b|{let mut b=b.borrow_mut();if *b{false}else{*b=true;true}});
     if !entered{return;}
@@ -915,6 +951,8 @@ fn persist_removal_intent(account: &Account, inventory: group_inventory::Removal
 }
 #[ic_cdk::update]
 async fn begin_account_removal(account_id: String, expected_history_revision: u64) -> Outcome<removal_barrier::Intent> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
     // Unknown outcomes retry the original immutable intent, not today's registry.
     if let Some(intent) = removal_intent(&account_id) { return Ok(intent); }
@@ -929,6 +967,8 @@ async fn begin_account_removal(account_id: String, expected_history_revision: u6
 }
 #[ic_cdk::update]
 fn read_account_removal_intent(account_id: String) -> Outcome<removal_barrier::Intent> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
     removal_intent(&account_id).ok_or("Removal intent missing".into())
 }
@@ -936,6 +976,8 @@ fn read_account_removal_intent(account_id: String) -> Outcome<removal_barrier::I
 // Stored receipts are recovery evidence, never cached permission to complete.
 #[ic_cdk::update]
 async fn advance_account_removal_receiver(account_id: String, target: Principal) -> Outcome<removal_barrier::Receipt> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
     let intent = removal_intent(&account_id).ok_or("Removal intent missing")?;
     if !intent.targets.contains(&target) { return Err("Receiver outside frozen removal inventory".into()); }
@@ -959,6 +1001,8 @@ async fn advance_account_removal_receiver(account_id: String, target: Principal)
 /// data, release registry locks, restore histories or activate a group.
 #[ic_cdk::update]
 async fn verify_account_removal_seals(account_id: String) -> Outcome<Vec<removal_barrier::Receipt>> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
     let intent = removal_intent(&account_id).ok_or("Removal intent missing")?;
     let request = intent.request();
@@ -991,6 +1035,8 @@ fn admission_configuration_clear() -> Outcome<()> {
 /// never from a browser-supplied principal list. No lifecycle gate is released.
 #[ic_cdk::update]
 async fn authorize_group2_admission(binding: group_inventory::Binding) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     authorize_group_admission_inner("g2".into(), binding).await
 }
 /// Governor-only. Adds one new group's exact 12 readers (derived from two
@@ -998,6 +1044,8 @@ async fn authorize_group2_admission(binding: group_inventory::Binding) -> Outcom
 /// Re-running for an already-authorized group is a no-op on the reader set.
 #[ic_cdk::update]
 async fn authorize_group_admission(group_id: String, binding: group_inventory::Binding) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     authorize_group_admission_inner(group_id, binding).await
 }
 async fn authorize_group_admission_inner(group_id: String, binding: group_inventory::Binding) -> Outcome<()> {
@@ -1049,6 +1097,8 @@ async fn authorize_group_admission_inner(group_id: String, binding: group_invent
 }
 #[ic_cdk::update]
 fn disable_group2_admission() -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     require_governor(&state(), ic_cdk::api::msg_caller())?;
     let mut config=group2_admission(); config.enabled=false;
     GROUP2_ADMISSION.with(|m|m.borrow_mut().set(encode(&config)));
@@ -1071,6 +1121,8 @@ fn store_group_inventory_binding(binding: group_inventory::Binding, expected_his
 }
 #[ic_cdk::update]
 fn set_group_inventory_binding(binding: group_inventory::Binding, expected_history_revision: u64) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
     store_group_inventory_binding(binding, expected_history_revision)
 }
@@ -1127,6 +1179,8 @@ fn supplemental_inventory() -> Vec<group_inventory::Supplemental> {
 }
 #[ic_cdk::update]
 fn set_removal_supplemental_inventory(entries: Vec<group_inventory::Supplemental>, expected_history_revision: u64) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
     if removal_pending() { return Err("Removal barrier pending".into()); }
     if removal_history_revision() != expected_history_revision || !link_lifecycle().pending.is_empty() { return Err("History changed or unlink pending".into()); }
@@ -1227,6 +1281,8 @@ fn history_manifest() -> RemovalHistoryManifest {
 /// a complete deployment inventory or an in-flight drain acknowledgement.
 #[ic_cdk::update]
 fn read_removal_history_manifest() -> Outcome<RemovalHistoryManifest> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
     Ok(history_manifest())
 }
@@ -1300,6 +1356,8 @@ fn history_page(revision: u64, cursor: RemovalHistoryCursor, limit: u16) -> Outc
 }
 #[ic_cdk::update]
 fn read_removal_history_page(revision: u64, cursor: RemovalHistoryCursor, limit: u16) -> Outcome<RemovalHistoryPage> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     history_access(account_group_rehearsal_enabled(), state().governor, ic_cdk::api::msg_caller())?;
     history_page(revision, cursor, limit)
 }
@@ -1351,6 +1409,8 @@ fn read_group_opening_configuration() -> Outcome<Vec<(String, String)>> {
 /// protocol. Existing history/lifecycle gates remain unchanged.
 #[ic_cdk::update]
 fn pin_owner_test_deletion_registry(binding: group_inventory::Binding) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     require_governor(&state(), ic_cdk::api::msg_caller())?;
     if !bound_deletion_released() || binding.network_kind != "public_mainnet" { return Err("Bound deletion mainnet release required".into()); }
     store_group_inventory_binding(binding, removal_history_revision())
@@ -1359,6 +1419,8 @@ fn pin_owner_test_deletion_registry(binding: group_inventory::Binding) -> Outcom
 /// narrow predicate neither registers a reader nor releases global admission.
 #[ic_cdk::update]
 fn read_owner_test_creation_eligible(subject: Principal) -> Outcome<bool> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let binding = group_inventory_binding().ok_or("Deletion registry not pinned")?;
     if ic_cdk::api::msg_caller() != binding.registry || !bound_deletion_released() { return Err("Pinned router and bound deletion release required".into()); }
     let account = match account_for_write(subject) { Ok(a) => a, Err(_) => return Ok(false) };
@@ -1367,6 +1429,8 @@ fn read_owner_test_creation_eligible(subject: Principal) -> Outcome<bool> {
 
 #[ic_cdk::update]
 fn set_club_authorities(authorities: Vec<Principal>) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     if !account_group_rehearsal_enabled() { return Err("Cross-group account lifecycle not released".into()); }
     require_governor(&state(), ic_cdk::api::msg_caller())?;
     if removal_pending() { return Err("Removal barrier pending".into()); }
@@ -1406,6 +1470,7 @@ fn state() -> CoreState {
     STATE.with(|s| decode(s.borrow().get()))
 }
 fn store(value: &CoreState) {
+    private_name_writer_window::require_window();
     STATE.with(|s| s.borrow_mut().set(encode(value)));
 }
 
@@ -1414,6 +1479,7 @@ fn get_account(id: &str) -> Option<Account> {
     ACCOUNTS.with(|m| m.borrow().get(&id.to_string())).map(|b| decode(&b))
 }
 fn put_account(account: &Account) {
+    private_name_writer_window::require_window();
     bump_profile_search_revision();
     ACCOUNTS.with(|m| m.borrow_mut().insert(account.id.clone(), encode(account)));
 }
@@ -1928,6 +1994,8 @@ fn whoami() -> Outcome<Account> {
 
 #[ic_cdk::update]
 fn register_account() -> Outcome<Account> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let account_id = ensure_account(caller)?;
     get_account(&account_id).ok_or("Account unavailable".into())
@@ -1942,6 +2010,8 @@ fn valid_display_name(value: &str) -> bool {
 /// sign-in provisioning calls register_account first.
 #[ic_cdk::update]
 fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Profile> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let account = account_for_write(caller)?;
     let account_id = account.id;
@@ -1972,6 +2042,8 @@ fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Prof
 /// never called `set_profile`.
 #[ic_cdk::update]
 fn set_theme_preference(theme: Option<String>) -> Outcome<Profile> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let account_id = account_for_write(caller)?.id;
     if let Some(value) = theme.as_deref() {
@@ -1991,6 +2063,8 @@ fn set_theme_preference(theme: Option<String>) -> Outcome<Profile> {
 /// caller has never called `set_profile`.
 #[ic_cdk::update]
 fn set_club_switcher_hint_seen() -> Outcome<Profile> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let account_id = account_for_write(caller)?.id;
     let mut profile = get_or_init_profile(&account_id);
@@ -2056,6 +2130,8 @@ fn search_profiles(query: String, limit: u16) -> Outcome<Vec<ProfileSearchResult
 /// never permissions: only pinned membership sources may verify this child.
 #[ic_cdk::update]
 async fn search_guardian_profiles(authority: Principal, child: String, query: String, limit: u16) -> Outcome<Vec<ProfileSearchResult>> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let account = account_for_write(caller)?;
     let config = directory_config()?;
@@ -2215,6 +2291,8 @@ fn export_state() -> Outcome<State> {
 /// Bounded authenticated admin directory; full export stays governor-only.
 #[ic_cdk::update]
 fn list_admin_accounts(query: String, after: Option<String>, limit: u16) -> Outcome<admin_accounts::AdminAccountPage> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let core = state();
     admin_accounts::authorize(&core, ic_cdk::api::msg_caller())?;
     admin_accounts::page(&core, query, after, limit)
@@ -2254,6 +2332,8 @@ fn get_privacy_consent(account_id: String, purpose: String) -> Outcome<bool> {
 
 #[ic_cdk::update]
 fn begin_link(target: Principal) -> Outcome<LinkChallenge> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     let account = account_for_write(caller)?;
@@ -2295,6 +2375,8 @@ fn begin_link(target: Principal) -> Outcome<LinkChallenge> {
 }
 #[ic_cdk::update]
 fn accept_link(id: u64) -> Outcome<Account> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     let index = state
@@ -2342,6 +2424,8 @@ fn accept_link(id: u64) -> Outcome<Account> {
 }
 #[ic_cdk::update]
 async fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     if !account_group_rehearsal_enabled() { return Err("Cross-group identity revocation not released".into()); }
     let caller = ic_cdk::api::msg_caller();
     // A self-unlink may only be resumed by a surviving sign-in identity.
@@ -2412,6 +2496,8 @@ fn bind_external_site(
     site_id: String,
     external_user_id: String,
 ) -> Outcome<ExternalSiteBinding> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     require_governor(&state, caller)?;
@@ -2456,6 +2542,8 @@ fn set_privacy_consent(
     purpose: String,
     granted: bool,
 ) -> Outcome<PrivacyConsent> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     let account = account_for(caller)?;
@@ -2495,6 +2583,8 @@ fn set_privacy_consent(
 /// never roll the recorded acceptance backwards.
 #[ic_cdk::update]
 fn set_terms_acceptance(terms_version: u32) -> Outcome<TermsAcceptance> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     let account_id = account_for_write(caller)?.id;
@@ -2556,6 +2646,8 @@ fn my_terms_acceptance() -> Outcome<Option<TermsAcceptance>> {
 
 #[ic_cdk::update]
 fn erase_account(account_id: String) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     if group_inventory_binding().is_some() { return Err("Bound deletion required".into()); }
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
@@ -2626,6 +2718,8 @@ fn erase_account_core(state: &mut CoreState, account: &Account) -> Outcome<()> {
 /// Any NEW stored principal / principal-text field must be added here.
 #[ic_cdk::update]
 fn rekey_principal(old: Principal, new: Principal, dry_run: bool) -> Outcome<u64> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     require_governor(&state, caller)?;
@@ -2765,6 +2859,8 @@ fn grant_role(
     club: Option<String>,
     team: Option<String>,
 ) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     grant_role_scoped(account_id, role, None, club, team)
 }
 
@@ -2776,6 +2872,8 @@ fn grant_role_scoped(
     club: Option<String>,
     team: Option<String>,
 ) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     require_governor(&state, caller)?;
@@ -2816,6 +2914,8 @@ fn grant_role_scoped(
 /// Mirrors `grant_role`'s auth (governor-only).
 #[ic_cdk::update]
 fn revoke_role(account_id: String, role: String, club: Option<String>, team: Option<String>) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     revoke_role_scoped(account_id, role, None, club, team)
 }
 
@@ -2828,6 +2928,8 @@ fn revoke_role_scoped(
     club: Option<String>,
     team: Option<String>,
 ) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     require_governor(&state, caller)?;
@@ -2860,12 +2962,14 @@ fn revoke_role_scoped(
 /// admin-gated writes on their behalf keep working.
 #[ic_cdk::update]
 fn set_account_status(account_id: String, status: AccountStatus) -> Outcome<Account> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let state = state();
     admin_accounts::authorize(&state, caller)?;
     let mut account = get_account(&account_id).ok_or("Unknown account")?;
     if private_name_coordination::pending(&account_id) { return Err("Private-name suspension recovery pending".into()); }
-    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") == Some("1") && status == AccountStatus::Suspended {
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") == Some("1") && status == AccountStatus::Suspended && !private_name_writer_window::enabled() {
         return Err("Use coordinated private-name suspension".into());
     }
     if DELETION_TICKETS.with(|m|m.borrow().contains_key(&account.id)) { return Err("Deletion reservation pending".into()); }
@@ -2879,6 +2983,8 @@ fn set_account_status(account_id: String, status: AccountStatus) -> Outcome<Acco
 
 #[ic_cdk::update]
 fn set_family(account_id: String, child_id: String) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     require_governor(&state, caller)?;
@@ -2908,6 +3014,8 @@ fn set_family(account_id: String, child_id: String) -> Outcome<()> {
 
 #[ic_cdk::update]
 fn set_exclusion(account_id: String, club: String, team: Option<String>) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     set_exclusion_scoped(account_id, None, club, team)
 }
 
@@ -2918,6 +3026,8 @@ fn set_exclusion_scoped(
     club: String,
     team: Option<String>,
 ) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     require_governor(&state, caller)?;
@@ -3063,6 +3173,8 @@ fn upsert_entitlement(
 /// identity, once one is established).
 #[ic_cdk::update]
 fn add_verifier(verifier: Principal) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     require_governor(&state, caller)?;
@@ -3080,6 +3192,8 @@ fn add_verifier(verifier: Principal) -> Outcome<()> {
 /// Governor-only: revokes a verifier principal.
 #[ic_cdk::update]
 fn remove_verifier(verifier: Principal) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     require_governor(&state, caller)?;
@@ -3093,6 +3207,8 @@ fn remove_verifier(verifier: Principal) -> Outcome<()> {
 /// session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
 #[ic_cdk::update]
 fn set_attestation_secret(secret: Vec<u8>) -> Outcome<()> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     require_governor(&state, caller)?;
@@ -3115,6 +3231,8 @@ fn set_entitlement(
     expires_at_ms: u64,
     source: String,
 ) -> Outcome<Entitlement> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     let state = state();
     if state.governor != caller && !state.verifiers.contains(&caller) {
@@ -3144,6 +3262,8 @@ fn redeem_entitlement(
     source: String,
     signature_hex: String,
 ) -> Outcome<Entitlement> {
+    let _private_writer_lease = private_name_writer_window::enter().unwrap_or_else(|reason| ic_cdk::trap(reason));
+
     let caller = ic_cdk::api::msg_caller();
     authenticated(caller)?;
     let state = state();
