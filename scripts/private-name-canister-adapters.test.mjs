@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createPrivateNameCoordinatorAdapter,createPrivateNameProfileAdapter,createPrivateNamePiiAdapter,createApprovedNameWriteAdapter,createApprovedNameCoordinatorAdapter,createPrivateNameAccountInventoryAdapter} from './private-name-canister-adapters.mjs';
+import {createPrivateNameCoordinatorAdapter,createPrivateNameProfileAdapter,createPrivateNamePiiAdapter,createApprovedNameWriteAdapter,createApprovedNameCoordinatorAdapter,createPrivateNameAccountInventoryAdapter,createPrivateNamePreparationAdapter} from './private-name-canister-adapters.mjs';
 const p=text=>({toText:()=>text});
 const window={phase:{Fencing:null},sinks:[p('sink')],writers:[p('writer')],opened:[{receiver:p('writer')}],sealed:[],completed:[]};
 test('generated coordinator converts principals and preserves revisions above JS safe integer',async()=>{
@@ -80,4 +80,8 @@ test('committed generated actor exposes consensus account inventory and lossless
   const owner=Principal.fromUint8Array(Uint8Array.from([3,1]));const r=accountRow();r.account.principals=[owner];
   const encoded=IDL.encode(fn.retTypes,[{Ok:accountPage([r],[],1)}]);const decoded=IDL.decode(fn.retTypes,encoded)[0].Ok;
   assert.equal(decoded.rows[0].account.version,9007199254740993n);assert.deepEqual(decoded.rows[0].profile,[]);assert.ok('Suspended' in decoded.rows[0].account.status);
+});
+test('preparation adapter preserves unsigned waiting stages and stops when external coverage changes',async()=>{
+  let calls=0,held=true;const actor={begin_private_name_preparation:async()=>{calls++;return {Ok:{...window,phase:{Preparing:null}}};},advance_private_name_preparation:async()=>({Ok:{...window,phase:{AwaitingApproval:null}}}),verify_private_name_preparation:async()=>({Ok:window})};
+  const adapter=createPrivateNamePreparationAdapter(actor,{fromText:p},{assertFence:async()=>held});assert.equal((await adapter.begin('club-name-preparation-owner','1',{})).phase,'Preparing');assert.equal((await adapter.advance('op','writer')).phase,'AwaitingApproval');held=false;await assert.rejects(adapter.begin('op','1',{}),/coverage/);assert.equal(calls,1);
 });

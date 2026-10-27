@@ -345,7 +345,11 @@ try {
     await denied(()=>actor.read_private_name_account_inventory(preparationId,prep.request,[],100));
     // Wrong caller and unsigned conversion writes cannot activate preparation.
     sink0pre.actor.setPrincipal(governor);await denied(()=>sink0pre.actor.activate_private_name_preparation(prep.request));
-    for(const target of prep.writers)prep=ok(await actor.advance_private_name_preparation(preparationId,target));
+    const prepHalf=Math.floor(prep.writers.length/2);
+    for(const target of prep.writers.slice(0,prepHalf))prep=ok(await actor.advance_private_name_preparation(preparationId,target));
+    await pic.upgradeCanister({canisterId:identity.canisterId,wasm:rustWasm('identity_access'),sender:governor});actor.setPrincipal(governor);
+    prep=ok(await actor.read_private_name_write_window(preparationId));assert.equal(phaseOf(prep),'Preparing');assert.equal(prep.opened.length,prepHalf);
+    for(const target of prep.writers.slice(prepHalf))prep=ok(await actor.advance_private_name_preparation(preparationId,target));
     assert.equal(phaseOf(prep),'AwaitingApproval');
     await denied(()=>groups[0].club_domain.actor.set_identity_access_canister(outsider));
     await denied(()=>router.actor.set_website_default_club_domain(outsider));
@@ -377,6 +381,6 @@ try {
     assert.equal(phaseOf(prep),'Done');
     await denied(()=>actor.begin_private_name_preparation(preparationId,candidate.groups.history_revision,{...candidate,supplemental:[]}));
     console.log('PASS: independent pre-signature preparation locks all 13 two-group account/club/PII/chat/competition/registry participants; unsigned writes/management edits refused, locks survive upgrade, exact signed same-request activation completes without an ordinary-write gap.');
-    console.log('PASS: real two-group signed conversion/recovery plus account-first locked inventory, profileless account retention, ordinary/preapproval/foreign-request denial, full integrity traversal, stable evidence through upgrade and wrong-revision cursor refusal. Production pre-plan freeze/drain, original authority completeness, cryptographic preflight and management exclusion remain blocked.');
+    console.log('PASS: real two-group signed conversion/recovery plus account-first inventory and independent preapproval locks. Production activation still requires instrumented baseline/external management exclusion, complete original-authority evidence, cryptographic preflight, protected configuration and separate approvals.');
   } finally {journal?.close();harnessExclusive=false;rmSync(directory,{recursive:true,force:true});}
 } finally { if (pic) await pic.tearDown(); await server.stop(); }

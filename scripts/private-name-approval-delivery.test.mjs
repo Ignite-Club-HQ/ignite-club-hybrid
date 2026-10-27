@@ -4,9 +4,10 @@ import {readFileSync} from 'node:fs';
 import {generateKeyPairSync,sign,createHash} from 'node:crypto';
 import {admissionBytes,verifyAdmissionArtifact,deliverNameApproval} from './private-name-approval-delivery.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
-function fixture(){
+function fixture(preparation=false){
   const keys=generateKeyPairSync('ed25519'),planHash='a'.repeat(64);
   const body={kind:'ignite-private-name-admission-v1',approval_id:'explicit-owner-event',identity:'identity',operator:'operator',request:{operation_id:`names:club-name-conversion-${planHash}`,generation:'9007199254740993',inventory_digest:Array(32).fill(1)},plan_hash:planHash,rows:[{account_id:'account',subject:'person',sink:'pii',source_digest:Array(32).fill(2),ciphertext:[3,4],clubs:[{club:'club',ciphertext:[5,6]}]}]};
+  if(preparation){body.kind='ignite-private-name-preparation-admission-v2';body.request.operation_id='names:club-name-preparation-owner-request';}
   const approval={body,signature:sign(null,admissionBytes(body),keys.privateKey).toString('hex')},artifact=Buffer.from(JSON.stringify(approval));
   const binding={artifactHash:hash(artifact),planHash,identityId:'identity',operator:'operator',approvalId:body.approval_id,approverKey:keys.publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('hex'),targetModule:'b'.repeat(64),artifactCommit:'c'.repeat(40),canonicalPrincipal:v=>v};
   const receipt=verifyAdmissionArtifact(artifact,binding).receipt;
@@ -64,4 +65,14 @@ test('changed artifact pin cannot bypass a retained delivery for the same operat
 });
 test('approved artifact ingress budget refuses oversized payloads before parsing or transport',()=>{
   const f=fixture(),raw=Buffer.alloc(1500001);assert.throws(()=>verifyAdmissionArtifact(raw,{...f.binding,artifactHash:hash(raw)}),/bounded/);
+});
+test('signed preparation delivery preserves independent lock identity instead of rebuilding it from plan hash',async()=>{
+  const f=fixture(true),v=verifyAdmissionArtifact(f.artifact,f.binding);assert.equal(v.operationId,'club-name-preparation-owner-request');
+  const result=await deliverNameApproval({...f,action:'deliver'},f.deps);assert.equal(result.operationId,v.operationId);assert.equal(f.calls,1);assert.equal(f.journal.phase,'verified');
+});
+test('changed preparation identity or v1 signature cannot authorize an independent lock',()=>{
+  const f=fixture(true);for(const change of [b=>{b.request.operation_id='names:club-name-preparation-other';},b=>{b.kind='ignite-private-name-admission-v1';}]){const a=structuredClone(f.approval);change(a.body);const raw=Buffer.from(JSON.stringify(a));assert.throws(()=>verifyAdmissionArtifact(raw,{...f.binding,artifactHash:hash(raw)}));}
+});
+test('lost preparation approval reply reconciles without resubmission',async()=>{
+  const f=fixture(true),submit=f.deps.submitApproval;f.deps.submitApproval=async()=>{await submit();throw Error('lost preparation reply');};await assert.rejects(deliverNameApproval({...f,action:'deliver'},f.deps));assert.equal(f.journal.phase,'unknown');await deliverNameApproval({...f,action:'reconcile'},f.deps);assert.equal(f.calls,1);
 });
