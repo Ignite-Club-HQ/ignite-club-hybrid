@@ -1,0 +1,53 @@
+name: Test encrypted personal names (isolated only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-name-isolated-acceptance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NAME_TEST_REPORT_PATH: ${{ runner.temp }}/private-name-test-report.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.0'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install existing dependencies and pinned local compiler
+        run: |
+          node scripts/ensure-frontend-deps.mjs
+          bun add -g ic-mops@3.5.1
+      - name: Check isolated test safety
+        run: node --test scripts/test-private-name-workflow.test.mjs
+      - name: Run essential real-canister acceptance without production credentials
+        run: node scripts/test-private-name-workflow.mjs
+      - name: Report isolated test result
+        if: always()
+        run: |
+          echo '## Encrypted personal-name test' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Disposable canisters only. No deployment, real-account conversion or production change.' >> "$GITHUB_STEP_SUMMARY"
+          if test -f "$NAME_TEST_REPORT_PATH"; then
+            node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.env.NAME_TEST_REPORT_PATH));fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,"\nResult: "+(r.passed?"PASS":"FAILED")+"\n"+r.steps.map(s=>"- "+(s.passed?"PASS":"FAIL")+": "+s.label).join("\n")+"\n")'
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: private-name-isolated-test-report
+          path: ${{ runner.temp }}/private-name-test-report.json
+          if-no-files-found: ignore

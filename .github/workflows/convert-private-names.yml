@@ -36,8 +36,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci
-        working-directory: frontend
+      - name: Install existing project dependencies
+        run: node scripts/ensure-frontend-deps.mjs
       - name: Run conversion action
         env:
           ACTION: ${{ inputs.action }}

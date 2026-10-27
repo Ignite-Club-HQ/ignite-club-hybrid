@@ -2,6 +2,14 @@
 
 Local implementation only. No production conversion, rollout, permissions or email policy changed.
 
+## Run the essential test workflow
+
+In GitHub Actions select **Test encrypted personal names (isolated only)**, then **Run workflow** on the branch containing this change. No production credentials, signed owner artifact, canister IDs or deployment approval are needed. The job compiles disposable services with the pinned Motoko compiler, creates a temporary fixture signer, runs full two-group conversion/interrupted recovery, verifies immutable canister approval receipts without another storage service, tests held-edit locks and name-copy deletion recovery, then checks actual chat/event display rows. A summary and `private-name-isolated-test-report` artifact identify each passing or failed step. Fixture signing keys are deleted and never uploaded.
+
+The exact runner passed locally: 167 conversion/approval tests, 121 frontend/display tests, real two-group conversion/recovery, eight-target lifecycle recovery and observed held-callback drain. Receipt-only delivery now has real-canister acceptance for lost reply plus upgrade, read-only reconciliation, exact-repeat admission and refusal of a different valid signed approval. Four runner tests verify credential exclusion, exact build scope and fail-closed cleanup/reporting.
+
+**This is a test workflow, not a live rollout workflow.** The existing delivery and live-conversion workflows remain blocked. Safe maintenance for every converted save/removal path, complete production original-authority/person coverage, protected matching deployed-module evidence and Paul's separate deployment/conversion approvals are still required before real accounts can be converted. No new receipt service or broader infrastructure was added. GitHub execution itself has not been observed here; the same command and workflow file were checked locally.
+
 ## Real name-edit acceptance — 27 October
 
 The opt-in `frontend/src/live/privateNameEdit.replica.test.tsx` starts actual disposable identity, router, club, PII and messaging canisters through `frontend/scripts/private-name-edit-fixture.mjs`. It calls the same original-name preparation and club-copy refresh helpers used by Edit Profile. Encryption, saved ciphertext, canister authorization, vetKey delivery, SDK verification/decryption, the mounted chat-profile hook, actual group message row and actual event attendee card are not mocked.
