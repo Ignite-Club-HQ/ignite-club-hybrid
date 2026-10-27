@@ -71,6 +71,19 @@ jobs:
       - name: Verify cleanup-only activation on disposable canisters before governor restoration
         if: inputs.scope == 'private_name_cleanup' && inputs.action != 'recover'
         run: node scripts/test-private-name-workflow.mjs
+      - name: Verify existing cleanup source and deployment protections
+        if: inputs.scope == 'private_name_cleanup'
+        run: |
+          node --input-type=module <<'JS'
+          import {requireCleanupGithubProtection} from './scripts/private-name-cleanup-release-policy.mjs';
+          const read=async path=>{
+            const r=await fetch('https://api.github.com/repos/'+process.env.GITHUB_REPOSITORY+path,{headers:{Authorization:'Bearer '+process.env.GH_TOKEN,Accept:'application/vnd.github+json'}});
+            if(!r.ok)throw Error('Cleanup protection read refused: '+r.status+'; no governor restored');
+            return r.json();
+          };
+          if(!process.env.GITHUB_REF?.startsWith('refs/heads/'))throw Error('Protected branch required');
+          requireCleanupGithubProtection(await read('/environments/group-2-admin-controls'),await read('/branches/'+encodeURIComponent(process.env.GITHUB_REF.slice(11))+'/protection'));
+          JS
       - name: Restore existing governor only
         # Cleanup must not restore signing credentials until live protections
         # and real disposable acceptance have passed on this exact source.
