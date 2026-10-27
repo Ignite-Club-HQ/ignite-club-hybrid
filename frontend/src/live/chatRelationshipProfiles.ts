@@ -6,13 +6,14 @@ import { getLiveDirectConversation, getLiveGroupMetadata, type LiveGroupMetadata
 import { getLiveMiniLeague } from './features/miniLeagues';
 import { listLiveCompetitionCards, listLiveOfficialChats } from './features/competitions';
 import { capturePrivateProfileSession } from './privateProfileSession';
+import { privateClubNameDisplaysEnabled } from './privateClubNameDisplayMode';
 
 export type ChatProfile = { id: string; display_name: string | null; avatar_url: string | null };
 
 /** Real two-person DMs only; read exact participants before and after names.
  * The identity service separately delegates to the owning messaging authority. */
 export async function readDirectChatProfiles(owner: FeatureBackendContext, conversationId: string, ids: readonly string[], signal?: AbortSignal, clubId?: string): Promise<Map<string, ChatProfile>> {
-  if (!privateProfileSearchRehearsalEnabled()) return (await import('@/lib/profileCache')).fetchProfilesWithCache([...ids]);
+  if (!privateProfileSearchRehearsalEnabled() && !(clubId && privateClubNameDisplaysEnabled())) return (await import('@/lib/profileCache')).fetchProfilesWithCache([...ids]);
   ids = [...new Set(ids)];
   if (ids.length > 2) throw new Error('Direct names require at most two participants.');
   if (!ids.length) return new Map();
@@ -60,7 +61,7 @@ export async function readDirectChatProfiles(owner: FeatureBackendContext, conve
 export async function readChatRelationshipProfiles(
   owner: FeatureBackendContext, conversationId: string, ids: readonly string[], signal?: AbortSignal, broadcastMessageId?: string,
 ): Promise<Map<string, ChatProfile>> {
-  if (!privateProfileSearchRehearsalEnabled()) {
+  if (!privateClubNameDisplaysEnabled()) {
     return (await import('@/lib/profileCache')).fetchProfilesWithCache([...ids]);
   }
   ids = [...new Set(ids)];
@@ -84,6 +85,9 @@ export async function readChatRelationshipProfiles(
   active();
   if (metadata.conversationId !== conversationId) throw new Error('Chat profile conversation mismatch.');
   const opening = metadataKey(metadata);
+  if (!privateProfileSearchRehearsalEnabled() && (!metadata.clubId || !['club', 'team', 'group', 'club_admin'].includes(metadata.kind))) {
+    throw new Error('This private name audience is not released.');
+  }
   let relationship: ProfileRelationship;
   let confirmResource: () => Promise<void> = async () => {};
   if (metadata.kind === 'broadcast' && conversationId === 'broadcast' && !metadata.clubId && !metadata.teamId) {

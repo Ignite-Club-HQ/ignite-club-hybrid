@@ -75,7 +75,7 @@ import {
 import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
 import { useChatProfileWorkset } from "@/hooks/useChatProfileWorkset";
-import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useMessageReads } from "@/hooks/useMessageReads";
 import {
@@ -188,7 +188,7 @@ function SupabaseClubAdminChatPage() {
   const { user, profile, initialized } = useAuth();
   const queryClient = useQueryClient();
   const authReady = !!user && initialized;
-  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const privateChatNames = privateClubNameDisplaysEnabled() && isFeatureRoutedToIcp("messaging");
   const openedFromNotificationRef = useRef<number | null>(
     conversationId ? consumeFromNotificationFlag("club_admin", conversationId) : null,
   );
@@ -1364,6 +1364,7 @@ function SupabaseClubAdminChatPage() {
 
   useEffect(() => {
     if (!user?.id || !conversationId || !conversation?.id) return;
+    if (privateChatNames && !isMember) return;
     // Only store a title that is actually authoritative for this account — a
     // placeholder ("Club Admin" / "Member") must not become the remembered name.
     const authoritative = isMember ? !!club?.name : !!resolvedMemberName;

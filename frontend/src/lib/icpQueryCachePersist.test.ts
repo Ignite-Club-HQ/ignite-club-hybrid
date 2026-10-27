@@ -24,6 +24,12 @@ describe('bounded ICP snapshots', () => {
     expect(result({ secret: 'private' }, ['vetkey'])).toBeNull();
     expect(result({ url: 'blob:dead-link' })).toBeNull();
   });
+  it('does not persist decrypted club personal-name queries or composite rosters', () => {
+    expect(result([{ name:'Personal name' }],['event-rsvp-display-names'])).toBeNull();
+    expect(result([{ display_name:'Personal name' }],['event-member-roles'])).toBeNull();
+    expect(result([{ profiles:{display_name:'Personal name'} }],['event-duties'])).toBeNull();
+    expect(result([{ name:'Giddy Goat' }],['clubs'])).not.toBeNull();
+  });
   it('respects explicit persistence opt-out', () => {
     expect(result(['private'], ['clubs'], { persist: false })).toBeNull();
   });

@@ -98,7 +98,7 @@ import { fetchProfilesWithCache, fetchSingleProfileWithCache, getProfilesFromCac
 import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
 import { useChatProfileWorkset } from "@/hooks/useChatProfileWorkset";
-import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
 import { getCachedMessages, cacheMessages, shouldRefetchMessages } from "@/lib/messageCache";
 import { consumeFromNotificationFlag } from "@/lib/notificationPreload";
 import { logChatOpenLatency } from "@/lib/chatOpenLatency";
@@ -515,7 +515,7 @@ export default function ClubChatPage() {
   const mapLiveClubRows = async (ctx: any, rows: any[], onReady?: (messages: Message[]) => void, signal?: AbortSignal): Promise<Message[]> => {
     assertReadNotAborted(signal);
     const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
-    const privateNames = privateProfileSearchRehearsalEnabled();
+    const privateNames = privateClubNameDisplaysEnabled();
     let profilesMap = privateNames ? new Map() : getProfilesFromCache(authorIds).cached;
     const profilesRead = privateNames ? Promise.resolve(new Map()) : withReadDeadline(fetchProfilesWithCache(authorIds), "Chat profiles", 8_000, signal).catch(() => profilesMap);
     // Reactions persist on the canister; restore them on every refetch.
@@ -834,7 +834,7 @@ export default function ClubChatPage() {
   const authorIds = useMemo(() => {
     return [...new Set((localMessages || []).flatMap(m => [m.author_id, ...(m.reactions ?? []).map(r => r.user_id)]).filter(Boolean))];
   }, [localMessages]);
-  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const privateChatNames = privateClubNameDisplaysEnabled() && isFeatureRoutedToIcp("messaging");
   const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
   const privateWorkset = useChatProfileWorkset(localMessages ?? [], clubId, user?.id);
   const getPrivateProfile = usePrivateChatProfiles(clubId, user?.id, privateWorkset.ids, privateChatNames);

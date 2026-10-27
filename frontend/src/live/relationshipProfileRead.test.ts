@@ -8,6 +8,8 @@ vi.mock('./features/identityAccessClient', () => ({ listLiveProfilesByIds: state
 vi.mock('./privateProfileEvidence', () => ({ readPrivateProfileEvidence: state.evidence }));
 vi.mock('./privateProfileAuthority', () => ({ createLivePrivateProfileAuthorityResolver: () => state.resolver }));
 import { readRelationshipProfiles } from './relationshipProfileRead';
+import { afterEach } from 'vitest';
+afterEach(() => vi.unstubAllEnvs());
 const identity = { getPrincipal: () => Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai') };
 function context() {
   return { identity, target: { alias: 'g2', host: 'https://icp-api.io', networkKind: 'public_mainnet', canisterIds: {
@@ -43,5 +45,13 @@ describe('relationship-scoped private display reads', () => {
     await readRelationshipProfiles(context(), ['person'], { kind: 'club', resource: 'club' });
     expect(state.read).toHaveBeenCalledWith(state.shared, ['person']);
     expect(state.evidence).not.toHaveBeenCalled();
+  });
+  it('production club display uses exact club audience without rehearsal evidence or global search', async () => {
+    state.rehearsal = false; vi.stubEnv('IGNITE_LIVE_PRIVATE_CLUB_NAME_DISPLAYS', '1');
+    const owner=context();
+    await readRelationshipProfiles(owner, ['person'], { kind:'club',resource:'exact-club' });
+    const options=state.read.mock.calls[0][2];
+    expect(options.audience).toEqual({kind:'club',resource:'exact-club',authority:Principal.fromText(owner.target.canisterIds.club_domain),profile_revision:0n});
+    expect(options.resolveAuthority).toBeUndefined(); expect(state.evidence).not.toHaveBeenCalled();
   });
 });

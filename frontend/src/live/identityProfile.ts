@@ -69,6 +69,15 @@ export async function saveIcpIdentityProfile(
       const { preparePrivateOwnProfileName } = await import('./privateProfileNames');
       nameToSave = await preparePrivateOwnProfileName({ identity, target }, input.displayName);
       active();
+      const { refreshPrivateOwnClubNames } = await import('./privateProfileNames');
+      const { privateClubNameDisplaysEnabled } = await import('./privateClubNameDisplayMode');
+      if (privateClubNameDisplaysEnabled()) await refreshPrivateOwnClubNames({ identity, target }, input.displayName, async () => {
+        const { getLiveMyRoleGrants } = await import('./features/membership');
+        const grants = await getLiveMyRoleGrants({ identity, target });
+        active();
+        return grants.flatMap(grant => grant.club ?? []);
+      }, active);
+      active();
       privateNameMaintained = true;
     } else {
       if (!isLoopbackRehearsalHost(target.host)) throw Error('Private profile save requires a loopback rehearsal target.');

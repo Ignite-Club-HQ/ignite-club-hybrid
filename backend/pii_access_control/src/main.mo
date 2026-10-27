@@ -638,18 +638,22 @@ persistent actor class Main(governorInit : Principal) = this {
   // Explicit local configuration only. Neither scope nor PII references can
   // choose the trusted identity verifier; no new permanent reader grants.
   transient let privateNamesRehearsal = Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") == ?"1";
+  transient let privateClubNameDisplays = Runtime.envVar<system>("IGNITE_PRIVATE_CLUB_NAME_DISPLAY_RELEASE") == ?"1";
   transient let privateNamesIdentity = Runtime.envVar<system>("IGNITE_PRIVATE_PROFILE_IDENTITY");
   var private_name_release_intents : Map.Map<Text, PrivateNameReleaseFence.Intent>;
   var private_name_release_epoch : Nat;
   var private_name_cleanup_receipts : Map.Map<Text, { caller : Principal; receipt : PrivateNameCleanup.Receipt }>;
   func privateNameVerifier() : ?Principal {
-    if (not privateNamesRehearsal) return null;
+    if (not privateNamesRehearsal and not privateClubNameDisplays) return null;
     switch (privateNamesIdentity) {
       case null null;
       case (?id) { let p = Principal.fromText(id); if (p.isAnonymous() or p == Principal.fromText("aaaaa-aa")) null else ?p }
     }
   };
   transient let privateNameReleaseFence = PrivateNameReleaseFence.Gate(privateNamesRehearsal, privateNameVerifier(), private_name_release_intents, 4096);
+  func canReleasePrivateName(captured : Nat, scope : PrivateNameScope) : Bool {
+    (privateNamesRehearsal or (privateClubNameDisplays and scope.kind == "club")) and privateNameVerifier() != null and captured == private_name_release_epoch and not privateNameReleaseFence.blocked()
+  };
   // Sink acknowledgements certify only this receiver. The coordinator must
   // fence the COMPLETE original-PII inventory before acknowledging revocation.
   public shared ({ caller }) func prepare_private_name_release_fence(request : PrivateNameReleaseFence.Request) : async { #Ok : PrivateNameReleaseFence.Receipt; #Err : Text } {
@@ -696,7 +700,7 @@ persistent actor class Main(governorInit : Principal) = this {
   // Field is fixed: guardian/family/member scopes NEVER unlock email/media.
   public shared ({ caller }) func get_private_profile_names_batch(ids : [Text], scope : PrivateNameScope) : async { #Ok : [EncryptedPii]; #Err : Text } {
     let releaseEpoch = private_name_release_epoch;
-    if (not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name release fenced or not configured");
+    if (not canReleasePrivateName(releaseEpoch, scope)) return #Err("Private-name release fenced or not configured");
     if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
     try {
       await admitAccount(caller); auth(caller);
@@ -704,7 +708,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let first = await authorizePrivateNames(caller, ids, scope);
       await admitAccount(caller);
       let final = await authorizePrivateNames(caller, ids, scope);
-      if (epoch != mediaAuthEpoch or first != final or not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name authorization changed");
+      if (epoch != mediaAuthEpoch or first != final or not canReleasePrivateName(releaseEpoch, scope)) return #Err("Private-name authorization changed");
       var out : [EncryptedPii] = [];
       for (id in ids.values()) {
         let r = pii_records.find(func r = r.pii_id == id and r.field_id == "display_name") ?? return #Err("Private name not found");
@@ -719,7 +723,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   public shared ({ caller }) func get_private_profile_name_vetkeys_batch(ids : [Text], scope : PrivateNameScope, transport : Blob) : async { #Ok : [?Blob]; #Err : Text } {
     let releaseEpoch = private_name_release_epoch;
-    if (not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name release fenced or not configured");
+    if (not canReleasePrivateName(releaseEpoch, scope)) return #Err("Private-name release fenced or not configured");
     if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
     try {
       await admitAccount(caller); auth(caller);
@@ -729,13 +733,13 @@ persistent actor class Main(governorInit : Principal) = this {
       var out : [?Blob] = [];
       for (id in ids.values()) {
         let key = await ManagementCanister.vetKdDeriveKey(ibeIdentity(id, "display_name"), vetkdContext(), vetkdKeyId<system>(), transport);
-        if (epoch != mediaAuthEpoch or not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name authorization changed");
+        if (epoch != mediaAuthEpoch or not canReleasePrivateName(releaseEpoch, scope)) return #Err("Private-name authorization changed");
         out := out.concat([?key]);
       };
       // One whole-batch closing authorization AFTER all derivations.
       await admitAccount(caller);
       let final = await authorizePrivateNames(caller, ids, scope);
-      if (epoch != mediaAuthEpoch or first != final or not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name authorization changed");
+      if (epoch != mediaAuthEpoch or first != final or not canReleasePrivateName(releaseEpoch, scope)) return #Err("Private-name authorization changed");
       for (id in ids.values()) { log_audit(caller, id, "display_name", "private_name_vetkey", true, scope.kind) };
       #Ok(out)
     } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }
@@ -802,7 +806,8 @@ persistent actor class Main(governorInit : Principal) = this {
   // Lifecycle readbacks distinguish confirmed absence from denied/unavailable
   // reads. These synchronous owner/governor methods never issue a shared key.
   public shared ({ caller }) func read_private_club_name_lifecycle(subject : Principal, club : Text, expectedOriginal : ?[Nat8]) : async { #Ok : ?EncryptedPii; #Err : Text } {
-    if (not privateNamesRehearsal or not validMediaClub(club) or subject.isAnonymous() or subject == Principal.fromText("aaaaa-aa")) return #Err("Exact rehearsal name target required");
+    if ((not privateNamesRehearsal and not privateClubNameDisplays) or not validMediaClub(club) or subject.isAnonymous() or subject == Principal.fromText("aaaaa-aa")) return #Err("Exact released name target required");
+    if (not privateNamesRehearsal and caller != subject) return #Err("Name owner required");
     if (not isGovernor(caller) and caller != subject) return #Err("Name owner required");
     switch (expectedOriginal) {
       case null {};
@@ -824,7 +829,8 @@ persistent actor class Main(governorInit : Principal) = this {
   // Create-only refresh pins the ORIGINAL saved bytes, not just a subject or
   // sampled timestamp. Check and commit have no await boundary.
   public shared ({ caller }) func refresh_private_club_name_lifecycle(subject : Principal, club : Text, originalCiphertext : [Nat8], ciphertext : [Nat8]) : async { #Ok; #Err : Text } {
-    if (not privateNamesRehearsal or not validMediaClub(club) or subject.isAnonymous() or subject == Principal.fromText("aaaaa-aa")) return #Err("Exact rehearsal name target required");
+    if ((not privateNamesRehearsal and not privateClubNameDisplays) or not validMediaClub(club) or subject.isAnonymous() or subject == Principal.fromText("aaaaa-aa")) return #Err("Exact released name target required");
+    if (not privateNamesRehearsal and caller != subject) return #Err("Name owner required");
     if (not isGovernor(caller) and caller != subject) return #Err("Name owner required");
     let lease = switch (privateNameWriterGate.enter()) { case (#Ok(key)) key; case (#Err(e)) return #Err(e) };
     try {
@@ -928,7 +934,7 @@ persistent actor class Main(governorInit : Principal) = this {
   public shared ({ caller }) func get_private_profile_club_name_vetkey(ids : [Text], scope : PrivateNameScope, transport : Blob) : async { #Ok : Blob; #Err : Text } {
     let releaseEpoch = private_name_release_epoch;
     if (scope.kind != "club" or not validMediaClub(scope.resource) or ids.size() == 0 or transport.size() != 48) return #Err("Exact club adult-name audience required");
-    if (not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name release fenced or not configured");
+    if (not canReleasePrivateName(releaseEpoch, scope)) return #Err("Private-name release fenced or not configured");
     if (not removalReceiver.enter(caller)) return #Err("Account removal fenced");
     try {
       await admitAccount(caller); auth(caller);
@@ -941,7 +947,7 @@ persistent actor class Main(governorInit : Principal) = this {
       let key = await ManagementCanister.vetKdDeriveKey(ibeIdentity("clubnames:" # scope.resource, "display_name"), vetkdContext(), vetkdKeyId<system>(), transport);
       await admitAccount(caller);
       let final = await authorizePrivateNames(caller, ids, scope);
-      if (first != final or epoch != mediaAuthEpoch or not privateNameReleaseFence.canRelease(releaseEpoch, private_name_release_epoch)) return #Err("Private-name authorization changed");
+      if (first != final or epoch != mediaAuthEpoch or not canReleasePrivateName(releaseEpoch, scope)) return #Err("Private-name authorization changed");
       log_audit(caller, "clubnames:" # scope.resource, "display_name", "club_name_vetkey", true, scope.kind);
       #Ok(key)
     } catch (e) { #Err(Error.message(e)) } finally { removalReceiver.leave(caller) }

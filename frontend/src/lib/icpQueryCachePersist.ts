@@ -8,7 +8,7 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_QUERIES = 100;
 const MAX_QUERY_BYTES = 128 * 1024;
 const MAX_TOTAL_BYTES = ICP_READ_CACHE_BYTES;
-const SKIP_KEY = /media-feed|photos|signed|photo-url|blob|media-url|vetkey|secret|token|decrypt/i;
+const SKIP_KEY = /media-feed|photos|signed|photo-url|blob|media-url|vetkey|secret|token|decrypt|private.*profile|display.names|roster.*names/i;
 type Snapshot = DehydratedState['queries'][number];
 interface Stored { scope: string; savedAt: number; bytes: number; snapshot: Snapshot }
 type ScopeReader = () => string | null;
@@ -79,6 +79,9 @@ export function snapshotQuery(query: Query): { snapshot: Snapshot; bytes: number
     if (proto !== Object.prototype && proto !== null) return false;
     for (const key in value) {
       if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+      // Personal labels belong to mounted authorized readers, not offline
+      // snapshots (including composite rosters/duties that embed profiles).
+      if (['display_name', 'displayName'].includes(key) && typeof (value as Record<string, unknown>)[key] === 'string') return false;
       bytes += key.length * 2;
       if (!visit((value as Record<string, unknown>)[key], depth + 1)) return false;
     }

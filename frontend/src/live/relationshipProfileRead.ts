@@ -5,6 +5,7 @@ import { readPrivateProfileEvidence } from './privateProfileEvidence';
 import { createLivePrivateProfileAuthorityResolver } from './privateProfileAuthority';
 import { listLiveProfilesByIds } from './features/identityAccessClient';
 import { capturePrivateProfileSession } from './privateProfileSession';
+import { privateClubNameDisplaysEnabled } from './privateClubNameDisplayMode';
 
 export type ProfileRelationship = {
   kind: 'club' | 'family' | 'competition' | 'league' | 'direct' | 'broadcast' | 'competition_admin';
@@ -39,7 +40,9 @@ export async function readRelationshipProfiles(
     icp: async shared => {
       active();
       if (shared.identity !== identity) throw new Error('Profile reader identity changed.');
-      if (!privateProfileSearchRehearsalEnabled()) {
+      const rehearsal = privateProfileSearchRehearsalEnabled();
+      const releasedClub = relationship.kind === 'club' && privateClubNameDisplaysEnabled();
+      if (!rehearsal && !releasedClub) {
         const rows = await listLiveProfilesByIds(shared, ids);
         active();
         return rows;
@@ -53,7 +56,7 @@ export async function readRelationshipProfiles(
       const rows = await listLiveProfilesByIds(shared, ids, {
         signal,
         audience: { ...relationship, authority, profile_revision: 0n },
-        resolveAuthority: async original => {
+        ...(rehearsal ? { resolveAuthority: async (original: string) => {
           active();
           if (!resolver) {
             const evidence = await readPrivateProfileEvidence(shared);
@@ -64,7 +67,7 @@ export async function readRelationshipProfiles(
           const lease = await resolver(original);
           active();
           return { context: lease.context, confirm: async () => { active(); await lease.confirm(); active(); } };
-        },
+        } } : {}),
       });
       active();
       return rows;

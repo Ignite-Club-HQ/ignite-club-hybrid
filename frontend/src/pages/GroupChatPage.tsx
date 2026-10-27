@@ -126,7 +126,7 @@ import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
 import { useChatProfileWorkset } from "@/hooks/useChatProfileWorkset";
-import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
 import { shouldRefetchMessages } from "@/lib/messageCache";
 import {
   classifyChatThreadState,
@@ -856,7 +856,7 @@ export default function GroupChatPage() {
       ...reactions.map(r => r.user_id),
     ].filter((id): id is string => !!id))];
   }, [localMessages, reactions]);
-  const privateChatNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const privateChatNames = privateClubNameDisplaysEnabled() && isFeatureRoutedToIcp("messaging");
   const { getProfile: getLegacyProfile } = useProfiles(privateChatNames ? [] : authorIds);
   const privateWorkset = useChatProfileWorkset(localMessages ?? [], groupId, user?.id, reactions);
   const getPrivateProfile = usePrivateChatProfiles(groupId, user?.id, privateWorkset.ids, privateChatNames);

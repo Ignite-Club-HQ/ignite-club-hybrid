@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Principal } from '@icp-sdk/core/principal';
 import type { FeatureBackendContext } from './featureRouter';
 const mocks = vi.hoisted(() => ({ enabled: true, direct: vi.fn(), metadata: vi.fn(), league: vi.fn(), cards: vi.fn(), chats: vi.fn(), profiles: vi.fn(), legacy: vi.fn(), routing: vi.fn(), clubOwner: undefined as unknown }));
@@ -10,6 +10,7 @@ vi.mock('./features/competitions', () => ({ listLiveCompetitionCards: mocks.card
 vi.mock('./relationshipProfileRead', () => ({ readRelationshipProfiles: mocks.profiles }));
 vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: mocks.legacy }));
 import { readChatRelationshipProfiles, readDirectChatProfiles } from './chatRelationshipProfiles';
+afterEach(() => vi.unstubAllEnvs());
 const identity = { getPrincipal: () => Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai') };
 const context = () => ({ identity, target: { alias: 'g2' } }) as unknown as FeatureBackendContext;
 const metadata = () => ({ conversationId: 'chat', kind: 'group', clubId: 'club', teamId: null, members: [identity.getPrincipal()] });
@@ -21,6 +22,14 @@ beforeEach(() => {
   mocks.legacy.mockResolvedValue(new Map());
 });
 describe('rehearsal chat relationship names', () => {
+  it('production club-only release uses scoped names and refuses unrelated audiences', async () => {
+    mocks.enabled=false; vi.stubEnv('IGNITE_LIVE_PRIVATE_CLUB_NAME_DISPLAYS','1');
+    const result=await readChatRelationshipProfiles(context(),'chat',['person']);
+    expect(result.get('person')?.display_name).toBe('Private name'); expect(mocks.legacy).not.toHaveBeenCalled();
+    mocks.metadata.mockResolvedValue({...metadata(),kind:'competition',clubId:null});
+    await expect(readChatRelationshipProfiles(context(),'chat',['person'])).rejects.toThrow('not released');
+    expect(mocks.cards).not.toHaveBeenCalled();
+  });
   it('resolves canonical broadcast reader/reactor names through messaging, not a club', async () => {
     mocks.metadata.mockResolvedValue({ ...metadata(), conversationId: 'broadcast', kind: 'broadcast', clubId: null, teamId: null, members: [] });
     await readChatRelationshipProfiles(context(), 'broadcast', ['person'], undefined, 'msg-broadcast-1');

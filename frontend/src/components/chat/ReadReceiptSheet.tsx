@@ -14,6 +14,7 @@ import type { ReaderInfo } from "@/hooks/useMessageReads";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
 import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
 
 type MessageType = "team" | "club" | "broadcast" | "group" | "dm" | "club_admin";
 
@@ -55,7 +56,7 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
   const [fetchedReaders, setFetchedReaders] = useState<ReaderInfo[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const privateNames = privateProfileSearchRehearsalEnabled() && resolveAuthBackend() === "icp";
+  const privateNames = (privateProfileSearchRehearsalEnabled() || (!['dm', 'broadcast'].includes(messageType) && privateClubNameDisplaysEnabled())) && resolveAuthBackend() === "icp";
   const baseReaders = propReaders.length > 0 ? propReaders : fetchedReaders;
   const getPrivateProfile = usePrivateChatProfiles(contextId, currentUserId,
     [...baseReaders.map(row => row.user_id), ...allMembers.map(row => row.user_id)], privateNames && open, messageType === 'dm' ? 'direct' : 'group', messageType === 'broadcast' ? messageId : undefined);
