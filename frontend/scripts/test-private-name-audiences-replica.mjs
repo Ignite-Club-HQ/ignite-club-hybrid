@@ -262,7 +262,10 @@ try {
   remoteClub.actor.setPrincipal(governor);ok(await remoteClub.actor.replace_acl(1n,{clubs:['club-1'],teams:[],children:[],guardians:[],exclusions:[],roles:[{user:owner,role:'member',club:['club-1'],team:[]}]}));
   remoteClub.actor.setPrincipal(league.canisterId);assert.ok('Err' in await remoteClub.actor.read_profile_remote_revision([viewer,owner],[remote]),'Removal invalidates retained remote authorization generation');
   assert.ok('Err' in await read(viewer,guardian),'Guardian removal withholds fresh keys');
-  identity.actor.setPrincipal(governor);ok(await identity.actor.set_account_status(accounts.get(owner.toText()),{Suspended:null}));
+  identity.actor.setPrincipal(governor);
+  // Current identity deliberately refuses direct suspension; only the real
+  // coordinator suite may exercise that authority-reducing write.
+  assert.ok('Err' in await identity.actor.set_account_status(accounts.get(owner.toText()),{Suspended:null}));
   assert.ok('Err' in await read(viewer,scope('club',groups[1].club.canisterId,'club-1')));
   console.log('PASS: real cross-group original-PII SDK decryption for club, family, guardian, competition, league and direct; caller-created peer enumeration, unrelated user, service impersonation, blocked peer, block/unblock ABA and broadcast refusal; healthy direct retries. No live data or grants changed.');
 } finally {await pic?.tearDown();await server.stop();}

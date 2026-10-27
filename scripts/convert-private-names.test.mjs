@@ -55,13 +55,13 @@ test('plan hash binds rows, sinks and history revision', () => {
 
 const require = createRequire(new URL('../frontend/package.json', import.meta.url));
 
-test('encryption is deterministic for resume safety', async () => {
+test('encryption is randomized to prevent offline name guessing', async () => {
   const { DerivedPublicKey, MasterPublicKey } = await import('../frontend/node_modules/@icp-sdk/vetkeys/dist/lib/index.es.js');
   const { Principal } = require('@icp-sdk/core/principal');
   const key = MasterPublicKey.productionKey('key_1').deriveCanisterKey(Principal.fromText(SINK).toUint8Array()).deriveSubKey(new TextEncoder().encode('ignite-pii-v1')).publicKeyBytes();
   const one = await encryptName(key, SUBJECT, 'Paul Cranwell');
   const two = await encryptName(key, SUBJECT, 'Paul Cranwell');
-  assert.deepEqual(Array.from(one), Array.from(two));
+  assert.notDeepEqual(Array.from(one), Array.from(two));
   const other = await encryptName(key, SUBJECT, 'Someone Else');
   assert.notDeepEqual(Array.from(one), Array.from(other));
   assert.ok(DerivedPublicKey.deserialize(key));
@@ -177,10 +177,10 @@ async function testKey() {
   return MasterPublicKey.productionKey('key_1').deriveCanisterKey(Principal.fromText(SINK).toUint8Array()).deriveSubKey(new TextEncoder().encode('ignite-pii-v1')).publicKeyBytes();
 }
 
-test('club encryption is deterministic but separated from person, other club and subject ciphertext', async () => {
+test('club encryption is randomized and separated from person and other club ciphertext', async () => {
   const key = await testKey();
   const one = await encryptClubName(key, 'club-1', SUBJECT, 'Paul');
-  assert.deepEqual(one, await encryptClubName(key, 'club-1', SUBJECT, 'Paul'));
+  assert.notDeepEqual(one, await encryptClubName(key, 'club-1', SUBJECT, 'Paul'));
   assert.notDeepEqual(one, await encryptClubName(key, 'club-2', SUBJECT, 'Paul'));
   assert.notDeepEqual(one, await encryptClubName(key, 'club-1', OWNER, 'Paul'));
   assert.notDeepEqual(one, await encryptName(key, SUBJECT, 'Paul'));
