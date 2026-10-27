@@ -22,10 +22,12 @@ import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/gr
 import { placementOperatorEvidenceIdl, normalizePlacementOperatorEvidence } from '../../scripts/placement-upgrade-evidence.mjs';
 import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement } from '../../scripts/all-group-wiring-policy.mjs';
 import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades, requireCompletedRecovery, galleryAuthorities, verifyCompletedRecovery, normalizePlan } from '../../scripts/all-group-upgrade-policy.mjs';
+import { CLEANUP_RELEASE, cleanupEnvironment, requireCleanupWiring, activateCleanupSettings } from '../../scripts/private-name-cleanup-release-policy.mjs';
 
 const [action, scope, artifacts, pem, directory] = process.argv.slice(2);
 const CHECKED_PLAN = process.env.CHECKED_PLAN ? normalizePlan(process.env.CHECKED_PLAN) : process.env.CHECKED_PLAN;
 const services = validateRequest(action, scope, process.env.CONFIRMATION, CHECKED_PLAN);
+const cleanupRelease = scope === 'private_name_cleanup';
 if (!artifacts || !pem || !directory) throw Error('Artifacts, existing key and report directory required');
 const root = new URL('../../', import.meta.url);
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, root), 'utf8'));
@@ -84,7 +86,12 @@ const observe=async(t:Target)=>{
   const subnet=certified.get('subnet') as {subnetId?:Principal}|undefined;
   const actual={moduleHash:Buffer.from(status.module_hash[0]??[]).toString('hex'),controllers:status.settings.controllers.map((p:Principal)=>p.toText()),running:'running' in status.status,cycles:status.cycles,subnetId:String(subnet?.subnetId??''),environment:status.settings.environment_variables};
   verifyUpgradeStatus(t,actual,GROUP2_GOVERNOR);
-  return {moduleHash:actual.moduleHash,settingsHash:digest({...status.settings,controllers:actual.controllers,environment_variables:[...actual.environment].sort((a,b)=>a.name.localeCompare(b.name))}),cycles:String(actual.cycles),legacyLifecycleDisabled:legacyClubLifecycleDisabled(actual.environment)};
+  const settings={...status.settings,controllers:actual.controllers,environment_variables:[...actual.environment].sort((a,b)=>a.name.localeCompare(b.name))};
+  const rawSettingsHash=digest(settings);
+  let cleanupSettingsHash:string|undefined;
+  if(cleanupRelease) cleanupSettingsHash=digest({...settings,environment_variables:cleanupEnvironment(actual.environment,t.name)});
+  const normalized=cleanupRelease?{...settings,environment_variables:settings.environment_variables.filter((r:{name:string})=>r.name!==CLEANUP_RELEASE)}:settings;
+  return {moduleHash:actual.moduleHash,settingsHash:digest(normalized),rawSettingsHash,cleanupSettingsHash,cycles:String(actual.cycles),legacyLifecycleDisabled:legacyClubLifecycleDisabled(actual.environment)};
 };
 const readConfig=async(t:Target)=>{
   const rows=IDL.Vec(IDL.Tuple(IDL.Text,IDL.Text));
@@ -123,6 +130,7 @@ for(const t of targets.filter(t=>t.groupId!=='shared')){
   const permission=groupPermissionRequirement(t.name,own('club_domain'));
   if(permission)requireRow(permission[0],permission[1]);
   if(t.name==='club_domain'){
+    if(cleanupRelease)requireCleanupWiring(t.name,rows,shared.identity_access);
     // The original G1 authority predates group lifecycle wiring. Its empty
     // singleton must be preserved, never configured by an upgrade. Verify
     // disabled settings via controller readback, not a guessed group label.
@@ -165,6 +173,17 @@ const keyGate=(groupId:string,phase:string)=>{
 };
 const observations=[];
 for(const t of targets)observations.push({...t,...await observe(t)});
+if(cleanupRelease) {
+  // PII identity is a protected existing setting, not an upgrade-time setter.
+  // The helper never invents it; the live check below requires it exactly.
+  for(const t of targets.filter(t=>t.name==='pii_access_control')) {
+    const cid=Principal.fromText(t.canisterId);
+    const mgmt=Actor.createActor(mgmtIdl,{agent,canisterId:'aaaaa-aa',effectiveCanisterId:cid} as Parameters<typeof Actor.createActor>[1]) as unknown as {canister_status(a:{canister_id:Principal}):Promise<any>};
+    const s=await mgmt.canister_status({canister_id:cid});
+    const rows=s.settings.environment_variables.filter((r:{name:string})=>r.name==='IGNITE_PRIVATE_PROFILE_IDENTITY');
+    if(rows.length!==1 || rows[0].value!==shared.identity_access)throw Error('Cleanup requires existing exact PII identity setting; no automatic authority changes');
+  }
+}
 if(same){validateJournal(journal,binding);for(const k of journal.keys)writeFileSync(join(directory,`${k.groupId}-original-key.json`),JSON.stringify(k.receipt));}
 else journal=null;
 await gate();
@@ -192,9 +211,24 @@ if(recovery){
   journal.recovery=recovery.recovery;
 }
 await persist();await verifyKeys();
+if(cleanupRelease) {
+  journal.cleanupActivation??=observations.map(s=>({canisterId:s.canisterId,name:s.name,groupId:s.groupId,subnetId:s.subnetId,newHash:s.newHash,oldSettingsHash:s.rawSettingsHash,newSettingsHash:s.cleanupSettingsHash,phase:'ready'}));
+  if(journal.cleanupActivation.length!==targets.length || targets.some(t=>journal.cleanupActivation.filter((s:any)=>s.canisterId===t.canisterId&&s.newSettingsHash===observations.find(o=>o.canisterId===t.canisterId)?.cleanupSettingsHash).length!==1))throw Error('Foreign cleanup activation journal');
+  await persist();
+  if(recovery && journal.cleanupActivation.some((s:any)=>s.phase!=='complete'))throw Error('Recovery cannot activate settings');
+  await activateCleanupSettings(journal.cleanupActivation,{gate,observe,persist,update:async(t:Target)=>{
+    const cid=Principal.fromText(t.canisterId);
+    const mgmt=Actor.createActor(mgmtIdl,{agent,canisterId:'aaaaa-aa',effectiveCanisterId:cid} as Parameters<typeof Actor.createActor>[1]) as unknown as {canister_status(a:{canister_id:Principal}):Promise<any>};
+    const s=await mgmt.canister_status({canister_id:cid});
+    // Never serialize or print environment values, which may contain secrets.
+    const factory=()=>IDL.Service({update_settings:IDL.Func([IDL.Record({canister_id:IDL.Principal,settings:IDL.Record({environment_variables:IDL.Opt(IDL.Vec(IDL.Record({name:IDL.Text,value:IDL.Text})))})})],[],[])});
+    const writer=Actor.createActor(factory,{agent,canisterId:'aaaaa-aa',effectiveCanisterId:cid} as Parameters<typeof Actor.createActor>[1]) as unknown as {update_settings(a:unknown):Promise<void>};
+    await writer.update_settings({canister_id:cid,settings:{environment_variables:[cleanupEnvironment(s.settings.environment_variables,t.name)]}});
+  }});
+}
 // Installation completion is not release completion; backfill/snapshot must also pass.
 const moduleJournal={...journal,complete:false};
-if(!recovery)await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend',gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
+if(!recovery)await executeUpgrades(moduleJournal,{upgradeUnchanged:scope==='full_backend'||cleanupRelease,gate,observe,persist:async()=>{journal.modulesComplete=moduleJournal.complete;await persist();},verifyKeys,install:async(t:Target)=>{
   if(recovery)throw Error('Recovery cannot install any module');
   const r=spawnSync('icp',installArgs(t,resolve(artifacts,t.name)),{cwd:directory,stdio:'inherit'});
   if(r.status!==0)throw Error('Install reply failed/unknown; pending journal retained, no replay');

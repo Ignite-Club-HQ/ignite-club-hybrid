@@ -71,8 +71,10 @@ persistent actor class Main(governorInit : Principal) = this {
   include PrivateNameWriterEndpoints(privateNameWriterGate, Principal.fromActor(this));
 
   func admitAccount(subject : Principal) : async () {
+    if (nameCleanup.locked()) throw Error.reject("Name cleanup pending; membership changes remain locked");
     if (removalReceiver.denied(subject)) throw Error.reject("Account removal fenced");
     let eligible = await accountAdmission.eligible(subject);
+    if (nameCleanup.locked()) throw Error.reject("Name cleanup pending; membership changes remain locked");
     if (removalReceiver.denied(subject) or not eligible) throw Error.reject("Account admission denied or unavailable");
   };
   func denyLegacyAccountQuery() {
@@ -816,6 +818,7 @@ persistent actor class Main(governorInit : Principal) = this {
 
     if (identityAccessCanister != ?caller or Principal.isAnonymous(caller)) return #Err("Identity authority required");
     if (Principal.isAnonymous(user) or user == governor) return #Err("Cannot revoke identity");
+    if (nameCleanup.locked()) return #Err("Name cleanup pending; preserve exact account aliases");
     if (identityUnlinkReceipts.any(func(r) = r.0 == account_id and r.1 == user and r.2 >= version)) return #Ok;
     switch (accounts.find(func(a) = a.id == account_id)) {
       case (?a) { if (a.version > version) return #Err("Account version conflict") };
@@ -4024,7 +4027,12 @@ persistent actor class Main(governorInit : Principal) = this {
         row := { row with account = ?saved }; nameCleanup.save(row);
       };
       let saved = row.account ?? return;
-      if (saved.principals.any(func p = isMember(p, row.club))) return;
+      if (saved.principals.any(func p = isMember(p, row.club))) {
+        // A remaining authorized alias keeps the replica. No purge was sent,
+        // so this no-op is definitive and must not strand the whole club.
+        if (not row.submitted) nameCleanup.finish(row.id);
+        return
+      };
       let original = switch (saved.original_authority) { case (#Existing(value)) value; case _ return };
       let receiver : actor {
         purge_removed_private_club_name : shared (Text, Text, Principal) -> async { #Ok : PrivateNameCleanup.Receipt; #Err : Text };
