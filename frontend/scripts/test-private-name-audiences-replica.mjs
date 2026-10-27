@@ -12,6 +12,7 @@ import { idlFactory as routerIdl } from '../src/lab/bindings/shard_router/declar
 import { idlFactory as competitionIdl } from '../src/lab/bindings/competition_domain/declarations/competition_domain.did.js';
 import { idlFactory as leagueIdl } from '../src/lab/bindings/mini_league_domain/declarations/mini_league_domain.did.js';
 import { idlFactory as messagingIdl } from '../src/lab/bindings/messaging_domain/declarations/messaging_domain.did.js';
+import {prepareVerifiedPrivateNameArtifact} from '../../scripts/private-name-verified-preparation.mjs';
 const root=resolve(import.meta.dirname,'../..');
 const p=n=>Principal.fromUint8Array(Uint8Array.from([n,1]));
 const governor=p(1),viewer=p(2),owner=p(3),outsider=p(4);
@@ -103,6 +104,23 @@ try {
   const clubTransport = TransportSecretKey.random();
   const clubKey = EncryptedVetKey.deserialize(Uint8Array.from(ok(await original.actor.get_private_profile_club_name_vetkey([owner.toText()],clubScope,clubTransport.publicKeyBytes())))).decryptAndVerify(clubTransport,verification,clubInput);
   assert.equal(new TextDecoder().decode(IbeCiphertext.deserialize(Uint8Array.from(clubRows[0].ciphertext)).decrypt(clubKey)),'Paul Cranwell');
+  // Whole-input verified preparation uses real SDK decryption for BOTH exact
+  // original and shared club domains before any artifact can be returned.
+  original.actor.setPrincipal(owner);
+  const personTransport=TransportSecretKey.random();
+  const personKeys=ok(await original.actor.get_encrypted_pii_vetkeys_batch([owner.toText()],'display_name',personTransport.publicKeyBytes()));
+  const personKey=EncryptedVetKey.deserialize(Uint8Array.from(personKeys[0][0])).decryptAndVerify(personTransport,verification,input);
+  const preparedInput={identityId:identity.canisterId.toText(),operator:governor.toText(),deploymentHash:'a'.repeat(64),inventoryHash:'b'.repeat(64),historyRevision:'1',sinks:[{id:original.canisterId.toText(),publicKey:Array.from(await original.actor.pii_vetkey_verification_key())}],rows:[{accountId:accounts.get(owner.toText()),subject:owner.toText(),sink:original.canisterId.toText(),name:'Paul Cranwell',clubs:['club-1']}]};
+  const preparedAccounts={request:{operation_id:'names:club-name-preparation-sdk-fixture',generation:1n,inventory_digest:Array(32).fill(1)},revision:'1',rows:[{accountId:accounts.get(owner.toText()),principals:[owner.toText()],version:'1',status:'Active',sourceDigest:Array(32).fill(2),profile:{display_name:reference},originalAuthority:{kind:'Existing',sink:original.canisterId.toText(),subject:owner.toText()}}]};
+  const verificationDeps={accounts:preparedAccounts,assertEvidence:async()=>true,resolveAuthority:async()=>({sink:original.canisterId.toText(),subject:owner.toText()}),decryptCiphertext:async r=>new TextDecoder('utf-8',{fatal:true}).decode(IbeCiphertext.deserialize(r.ciphertext).decrypt(r.club===null?personKey:clubKey))};
+  const verifiedPlan=await prepareVerifiedPrivateNameArtifact(preparedInput,verificationDeps);
+  assert.equal(verifiedPlan.body.rows.length,1);assert.equal(JSON.stringify(verifiedPlan).includes('Paul Cranwell'),false);
+  await assert.rejects(prepareVerifiedPrivateNameArtifact(preparedInput,{...verificationDeps,resolveAuthority:async()=>null}),/authority unresolved/);
+  await assert.rejects(prepareVerifiedPrivateNameArtifact({...preparedInput,rows:[]},verificationDeps),/Named account omitted/);
+  await assert.rejects(prepareVerifiedPrivateNameArtifact(preparedInput,{...verificationDeps,decryptCiphertext:async r=>new TextDecoder().decode(IbeCiphertext.deserialize(r.ciphertext).decrypt(personKey))}),/cryptographic preflight refused/);
+  await assert.rejects(prepareVerifiedPrivateNameArtifact(preparedInput,{...verificationDeps,decryptCiphertext:async()=>'Wrong personal name'}),/cryptographic preflight mismatch/);
+  console.log('PASS: real whole-plan original/club SDK preflight; unresolved authority, omitted account, wrong-domain key and wrong plaintext refuse without returning an artifact. Fixture exclusion is not production proof.');
+  original.actor.setPrincipal(viewer);
   assert.ok('Err' in await original.actor.get_private_profile_club_name_vetkey([owner.toText()],scope('family',groups[1].club.canisterId,'child-1'),clubTransport.publicKeyBytes()));
   original.actor.setPrincipal(outsider);
   assert.ok('Err' in await original.actor.get_private_profile_club_name_vetkey([owner.toText()],clubScope,clubTransport.publicKeyBytes()));
