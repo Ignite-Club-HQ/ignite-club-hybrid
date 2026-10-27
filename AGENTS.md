@@ -77,6 +77,6 @@ it. Skills are authoritative — prefer them over general knowledge.
 
 - ICP events atomically commit dates, duties and reminders under caller receipts; consensus supplies audiences, unknown relays stay locked.
 - Vault recovery reads owner-wide intents and exact decrypted hash markers before strict grants/store acknowledgement; unknown outcomes retain locks/cursors. Erasure scrubs shared ancestors without orphaning others. Cleanup needs age/allowance or erasure receipts; backups commit validated pages to writable sinks, retaining Blob fallback where unsupported. Why: prevent guessed recovery, data loss and partial exports.
-- Names stay rehearsal-only; person keys/fences stay. Memories 31–32 bind approvals/receipts; unknowns never resend. Preparation drains original leases and holds all writers/registries through v2 signed same-request activation. Read scripts/, frontend/, backend/identity_access/AGENTS.md. Why: local locks never authorize release.
+- Names stay rehearsal-only; v2 approval holds all writers/registries. Rehearsal-off leases count but never prove legacy drain. Lifecycle uses exact bytes/typed absence; receipts need governed append/CAS. Read scripts/, frontend/, backend/identity_access/AGENTS.md. Why: local evidence never authorizes release.
 
 
