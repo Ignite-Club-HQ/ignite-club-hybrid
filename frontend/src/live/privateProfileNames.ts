@@ -118,7 +118,7 @@ export async function preparePrivateOwnClubName(ctx: FeatureBackendContext, club
   if (row.master_key_id !== `${CLUB_NAME_SCHEME_PREFIX}${club}` || row.ciphertext.length !== ciphertext.length || ciphertext.some((b, i) => row.ciphertext[i] !== b)) throw new Error('Club name preparation readback mismatch.');
 }
 
-/** Normal-save connection, disposable rehearsal only. Original replacement
+/** Normal-save connection under the dedicated club-display release. Original replacement
  * already invalidates old copies. Each refresh compares its saved original
  * atomically, so concurrent edits cannot attach stale copies to a new name.
  * Club discovery supplies current destinations, never reader grants. */

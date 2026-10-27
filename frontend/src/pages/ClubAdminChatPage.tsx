@@ -1364,6 +1364,7 @@ function SupabaseClubAdminChatPage() {
 
   useEffect(() => {
     if (!user?.id || !conversationId || !conversation?.id) return;
+    if (privateChatNames && !isMember) return;
     // Only store a title that is actually authoritative for this account — a
     // placeholder ("Club Admin" / "Member") must not become the remembered name.
     const authoritative = isMember ? !!club?.name : !!resolvedMemberName;
