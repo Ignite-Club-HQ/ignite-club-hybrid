@@ -298,7 +298,7 @@ export default function EditProfilePage() {
         const identity = await getCurrentInternetIdentity();
         saveSessionActive();
         if (!identity) throw new Error("You need to sign in again.");
-        await saveIcpIdentityProfile(identity, user.id, {
+        const savedProfile = await saveIcpIdentityProfile(identity, user.id, {
           displayName: displayName.trim(),
           avatarRef: avatarUrl.trim() || null,
         });
@@ -311,6 +311,7 @@ export default function EditProfilePage() {
           import("@/live/privateProfileNames"),
         ]);
         const nameContext = { identity, target: getActiveIcpTarget() };
+        if (!savedProfile.privateNameMaintained) {
         await preparePrivateOwnProfileName(nameContext, displayName.trim());
         saveSessionActive();
         await refreshPrivateOwnClubNames(nameContext, displayName.trim(), async () => {
@@ -318,6 +319,7 @@ export default function EditProfilePage() {
           const grants = await getLiveMyRoleGrants(nameContext);
           return grants.flatMap(grant => grant.club ?? []);
         }, saveSessionActive);
+        }
         // Optional contact email (own PII record, upsert semantics). Powers
         // competition welcome emails for existing members in ICP mode.
         // An unavailable initial email read is not permission to erase it.
