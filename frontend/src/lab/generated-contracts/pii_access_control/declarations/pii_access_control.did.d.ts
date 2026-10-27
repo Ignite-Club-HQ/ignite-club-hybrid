@@ -167,6 +167,11 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'purge_private_club_name_lifecycle' : ActorMethod<
+    [Principal, string, Uint8Array],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'read_account_audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
   'read_account_my_guardian_children' : ActorMethod<[], Array<string>>,
   'read_account_removal_drain' : ActorMethod<
@@ -180,6 +185,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'read_group_opening_configuration' : ActorMethod<[], Array<[string, string]>>,
+  'read_private_club_name_lifecycle' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : [] | [EncryptedPii] } |
+      { 'Err' : string }
+  >,
   'read_private_club_name_preparation' : ActorMethod<
     [Principal, string],
     { 'Ok' : EncryptedPii } |
@@ -209,6 +219,11 @@ export interface Main {
   'read_private_name_writer_window' : ActorMethod<
     [Request],
     { 'Ok' : Receipt__1 } |
+      { 'Err' : string }
+  >,
+  'refresh_private_club_name_lifecycle' : ActorMethod<
+    [Principal, string, Uint8Array, Uint8Array],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'register_conversion_name' : ActorMethod<

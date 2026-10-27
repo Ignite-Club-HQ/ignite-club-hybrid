@@ -146,7 +146,7 @@ type Main =
        memory_bytes: nat;
        stable_bytes: nat;
      }) query;
-   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -176,6 +176,11 @@ type Main =
                                            Err: text;
                                            Ok: nat;
                                          });
+   purge_private_club_name_lifecycle: (subject: principal, club: text,
+    expectedCiphertext: vec nat8) -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
    read_account_audit_access: (filter: AuditFilter) -> (vec AuditRecord);
    read_account_my_guardian_children: () -> (vec text);
    read_account_removal_drain: (request: Request__1) ->
@@ -192,6 +197,11 @@ type Main =
                                                   text;
                                                   text;
                                                 });
+   read_private_club_name_lifecycle: (subject: principal, club: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EncryptedPii;
+     });
    read_private_club_name_preparation: (subject: principal, club: text) ->
     (variant {
        Err: text;
@@ -221,6 +231,12 @@ type Main =
        Err: text;
        Ok: Receipt__1;
      });
+   refresh_private_club_name_lifecycle: (subject: principal, club: text,
+    originalCiphertext: vec nat8, ciphertext: vec nat8) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    register_conversion_name: (request: Request, subject: principal, club:
     opt text, ciphertext: vec nat8) -> (variant {
                                           Err: text;
@@ -236,7 +252,7 @@ type Main =
                     Err: text;
                     Ok: EncryptedPii;
                   });
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;

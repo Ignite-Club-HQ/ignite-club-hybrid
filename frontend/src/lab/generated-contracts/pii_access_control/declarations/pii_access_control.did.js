@@ -227,6 +227,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'purge_private_club_name_lifecycle' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'read_account_audit_access' : IDL.Func(
         [AuditFilter],
         [IDL.Vec(AuditRecord)],
@@ -246,6 +251,11 @@ export const idlFactory = ({ IDL }) => {
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
+    'read_private_club_name_lifecycle' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(EncryptedPii), 'Err' : IDL.Text })],
         [],
       ),
     'read_private_club_name_preparation' : IDL.Func(
@@ -280,6 +290,11 @@ export const idlFactory = ({ IDL }) => {
     'read_private_name_writer_window' : IDL.Func(
         [Request],
         [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [],
+      ),
+    'refresh_private_club_name_lifecycle' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'register_conversion_name' : IDL.Func(
