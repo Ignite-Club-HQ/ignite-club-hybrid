@@ -13,6 +13,7 @@ import { hapticSelectionTick } from "@/lib/haptics";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
 import { useAuth } from "@/hooks/useAuth";
 import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
+import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { currentChatScope } from "@/live/chatScope";
 
@@ -455,7 +456,8 @@ const AllReactionsContent = memo(function AllReactionsContent({
   isOpen,
 }: AllReactionsContentProps) {
   const { user } = useAuth();
-  const privateNames = privateProfileSearchRehearsalEnabled() && isFeatureRoutedToIcp("messaging");
+  const clubThread = typeof window !== 'undefined' && !window.location.pathname.startsWith('/messages/dm/') && window.location.pathname !== '/messages/broadcast';
+  const privateNames = (privateProfileSearchRehearsalEnabled() || (clubThread && privateClubNameDisplaysEnabled())) && isFeatureRoutedToIcp("messaging");
   const chatScope = currentChatScope();
   const conversationId = chatScope && ('conversationId' in chatScope ? chatScope.conversationId
     : 'teamId' in chatScope ? chatScope.teamId : 'clubId' in chatScope ? chatScope.clubId : 'shared' in chatScope && chatScope.shared === 'app' ? 'broadcast' : undefined);

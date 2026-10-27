@@ -70,7 +70,8 @@ export async function saveIcpIdentityProfile(
       nameToSave = await preparePrivateOwnProfileName({ identity, target }, input.displayName);
       active();
       const { refreshPrivateOwnClubNames } = await import('./privateProfileNames');
-      await refreshPrivateOwnClubNames({ identity, target }, input.displayName, async () => {
+      const { privateClubNameDisplaysEnabled } = await import('./privateClubNameDisplayMode');
+      if (privateClubNameDisplaysEnabled()) await refreshPrivateOwnClubNames({ identity, target }, input.displayName, async () => {
         const { getLiveMyRoleGrants } = await import('./features/membership');
         const grants = await getLiveMyRoleGrants({ identity, target });
         active();

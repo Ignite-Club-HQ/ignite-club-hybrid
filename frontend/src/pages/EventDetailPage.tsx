@@ -93,6 +93,7 @@ import {
 } from "@/live/features/events";
 import { getLiveMyRoleGrants, listLiveRoleGrants } from "@/live/features/membership";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { readRelationshipProfiles } from "@/live/relationshipProfileRead";
 import { getLiveTeamSubscription } from "@/live/features/club";
 import { mapLiveTeamSubscriptionToRow, resolveLiveProAccess, resolveLiveProFootballAccess } from "@/live/features/proAccess";
 import * as fixtureData from "@/lab/fixtureDataLayer";
@@ -398,7 +399,7 @@ export default function EventDetailPage() {
         const adults = [...new Set((baseRsvps ?? []).filter(row => !row.child_id).map(row => row.user_id))];
         const result = await readEventDisplayNames(
           () => resolveLivePiiTextBatch(ctx, children, "name", "event_roster", "Event roster child names"),
-          () => listLiveProfilesByIds(ctx, adults),
+          () => event?.club_id ? readRelationshipProfiles(ctx, adults, { kind: 'club', resource: event.club_id }, signal) : listLiveProfilesByIds(ctx, adults),
         );
         if (signal.aborted) throw new DOMException("Read cancelled", "AbortError");
         return result;
@@ -639,7 +640,7 @@ export default function EventDetailPage() {
     staleTime: 60_000,
     queryFn: () => withFeatureBackend("events", {
       supabase: async () => [],
-      icp: ctx => listLiveProfilesByIds(ctx, dutyAssigneeIds),
+      icp: ctx => event?.club_id ? readRelationshipProfiles(ctx, dutyAssigneeIds, { kind: 'club', resource: event.club_id }) : listLiveProfilesByIds(ctx, dutyAssigneeIds),
     }, event?.club_id ? { clubId: event.club_id } : { eventId: id ?? "" }),
   });
   const duties = useMemo(() => {
@@ -1003,7 +1004,7 @@ export default function EventDetailPage() {
         const STAFF_ROLES = new Set(["team_admin", "coach", "club_admin", "app_admin"]);
         const adultGrants = scoped.filter((g) => STAFF_ROLES.has(g.role) || goingAdultIds.has(g.account_id));
         const profileIds = Array.from(new Set(adultGrants.map((g) => g.account_id)));
-        const profiles = profileIds.length > 0 ? await listLiveProfilesByIds(ctx, profileIds) : [];
+        const profiles = profileIds.length > 0 && event?.club_id ? await readRelationshipProfiles(ctx, profileIds, { kind: 'club', resource: event.club_id }) : [];
         const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
 
         const adultMembers = adultGrants.map((g) => {
@@ -1114,7 +1115,7 @@ export default function EventDetailPage() {
           ? grants.filter((g) => Array.isArray(g.team) && g.team[0] === event.team_id)
           : grants;
         const profileIds = Array.from(new Set(scoped.map((g) => g.account_id)));
-        const profiles = profileIds.length > 0 ? await listLiveProfilesByIds(ctx, profileIds) : [];
+        const profiles = profileIds.length > 0 && event?.club_id ? await readRelationshipProfiles(ctx, profileIds, { kind: 'club', resource: event.club_id }) : [];
         const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
         const rows: EventMemberRoleRow[] = scoped.map((g) => {
           const p = profileMap.get(g.account_id);
