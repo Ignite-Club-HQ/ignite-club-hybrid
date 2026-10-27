@@ -1,3 +1,8 @@
+## Club-key encrypted adult names — 27 October 2026
+- [ ] Implement rehearsal-only club-scoped name replicas and authorized shared-key reads, with account/authority-bound key reuse; preserve restricted-name and email keys.
+- [ ] Adapt protected preparation/conversion and run focused authorization, cache and compatibility checks.
+- [ ] Live rollout remains blocked on separate deployment/conversion approval and signed-in acceptance.
+
 ## Home View rewards responsiveness — 26 October 2026
 - [x] Removed eligibility-dependent no-op clicks: drawer opens locally on first tap; exact active-club catalog warms/loads independently of Home/Pro discovery and reuses confirmed rows. All-club mode selects a sole eligible club when discovery completes; pending/failed directories no longer claim emptiness and expose retry. Directory waits are bounded, failed profile reads propagate, keys isolate account/backend/access state. 48 focused checks pass in each sign-in mode, including held background/read and reopen tests; ICP guards and preview build OK. Browser redirects to /auth with no runtime errors; real signed-in phone timing remains unverified. No deployment or permission changes.
 
