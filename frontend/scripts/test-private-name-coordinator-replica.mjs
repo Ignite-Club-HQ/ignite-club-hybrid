@@ -265,9 +265,11 @@ try {
       await denied(()=>actor.advance_private_name_write_window(id,Principal.fromText(window.sinks[0])));
       const body={kind:'ignite-private-name-admission-v1',approval_id:'fixture-explicit-names',identity:identity.canisterId,operator:governor,request:window.request,plan_hash:artifact.hash,
         rows:artifact.body.rows.map(r=>({account_id:r.accountId,subject:Principal.fromText(r.subject),sink:Principal.fromText(r.sink),source_digest:sourceDigests.get(r.accountId),ciphertext:r.ciphertext,clubs:r.clubs.map(c=>({club:c.id,ciphertext:c.ciphertext}))}))};
-      const method=new Map(identityIdl({IDL})._fields).get('approve_private_name_conversion');assert.ok(method);
-      const bodyType=new Map(method.argTypes[1]._fields).get('body');assert.ok(bodyType);
-      admission={body,signature:Array.from(sign(null,Buffer.from(IDL.encode([bodyType],[body])),fixtureSigningKey))};
+      const chunks=[],add=v=>{const bytes=typeof v==='string'?Buffer.from(v):Buffer.from(v);const length=Buffer.alloc(8);length.writeBigUInt64BE(BigInt(bytes.length));chunks.push(length,bytes);};
+      for(const v of [body.kind,body.approval_id,body.identity.toText(),body.operator.toText(),body.request.operation_id,String(body.request.generation),body.plan_hash])add(v);
+      add(body.request.inventory_digest);add(String(body.rows.length));
+      for(const r of body.rows){for(const v of [r.account_id,r.subject.toText(),r.sink.toText()])add(v);add(r.source_digest);add(r.ciphertext);add(String(r.clubs.length));for(const c of r.clubs){add(c.club);add(c.ciphertext);}}
+      admission={body,signature:Array.from(sign(null,Buffer.concat(chunks),fixtureSigningKey))};
       await denied(()=>actor.approve_private_name_conversion(id,{...admission,signature:Array(64).fill(0)}));
       ok(await actor.approve_private_name_conversion(id,admission));
       await denied(()=>actor.publish_approved_private_name(id,artifact.body.rows[0].accountId));

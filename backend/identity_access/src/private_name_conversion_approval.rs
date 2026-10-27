@@ -35,12 +35,19 @@ fn key()->Outcome<VerifyingKey>{
 }
 fn get(id:&str)->Outcome<SignedApproval>{APPROVALS.with(|m|m.borrow().get(&id.to_string())).map(|b|super::decode(&b)).ok_or("Signed conversion approval required".into())}
 fn source_digest(id:&str)->Outcome<Vec<u8>>{let a=super::get_account(id).ok_or("Exact account required")?;let p=super::get_profile_entry(id).ok_or("Exact profile required")?;Ok(Sha256::digest(super::encode(&(a,p))).to_vec())}
+fn approval_bytes(b:&ApprovalBody)->Vec<u8>{
+    let mut out=Vec::new();let mut add=|bytes:&[u8]|{out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());out.extend_from_slice(bytes);};
+    for s in [&b.kind,&b.approval_id,&b.identity.to_text(),&b.operator.to_text(),&b.request.operation_id,&b.request.generation.to_string(),&b.plan_hash]{add(s.as_bytes());}
+    add(&b.request.inventory_digest);add(b.rows.len().to_string().as_bytes());
+    for r in &b.rows{for s in [&r.account_id,&r.subject.to_text(),&r.sink.to_text()]{add(s.as_bytes());}add(&r.source_digest);add(&r.ciphertext);add(r.clubs.len().to_string().as_bytes());for c in &r.clubs{add(c.club.as_bytes());add(&c.ciphertext);}}
+    out
+}
 fn validate(a:&SignedApproval,w:&WriteWindow,operator:Principal,identity:Principal,k:&VerifyingKey)->Outcome<()>{
     let b=&a.body;
     if b.kind!="ignite-private-name-admission-v1" || b.approval_id.is_empty() || b.approval_id.len()>128 || b.identity!=identity || b.operator!=operator || b.request!=w.request
         || b.plan_hash.len()!=64 || !b.plan_hash.bytes().all(|c|c.is_ascii_digit()||(b'a'..=b'f').contains(&c))
         || b.request.operation_id!=format!("names:club-name-conversion-{}",b.plan_hash) || b.rows.is_empty() || b.rows.len()>4096{return Err("Exact signed conversion binding required".into());}
-    let bytes=candid::encode_one(b).map_err(|_|"Approval encoding refused")?;
+    let bytes=approval_bytes(b);
     if bytes.len()>32*1024*1024{return Err("Approval byte budget exceeded".into());}
     let signature=Signature::from_slice(&a.signature).map_err(|_|"Signed conversion approval required")?;
     k.verify_strict(&bytes,&signature).map_err(|_|"Signed conversion approval required")?;
