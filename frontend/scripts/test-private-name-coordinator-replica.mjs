@@ -215,6 +215,7 @@ try {
   // Full saved-plan execution starts a FRESH real coordinator operation.
   // Lose a reply after a real club ciphertext commit, close the local handle,
   // reopen the immutable artifact/receipts and recover without a repeated write.
+  for(const g of groups)g.pii_access_control.actor.setPrincipal(governor);
   let lockHeld=false,journal;
   const lock={enter:async()=>{lockHeld=true;return true;},assertHeld:async()=>lockHeld,complete:async()=>{lockHeld=false;}};
   const openJournal=()=>openPreparedExecutionJournal(join(directory,'receipts'),{artifact,expectedHash:artifact.hash,assertHeld:()=>harnessExclusive});
