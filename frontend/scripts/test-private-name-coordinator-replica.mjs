@@ -149,8 +149,12 @@ try {
   await pic.tick(3);
   await pic.startCanister({ canisterId: sink0.canisterId, sender: governor });
   const heldReply = IDL.decode(signature.retTypes, (await pic.client.awaitCall(held)).body)[0];
-  console.log('held advance reply:', JSON.stringify(heldReply, (_, v) => typeof v === 'bigint' ? String(v) : v).slice(0, 400));
-  w = ok(heldReply);
+  // The stopped sink's outcome is unknown: the window is retained, not guessed.
+  assert.ok('Err' in heldReply, 'Unknown sink outcome must retain the window');
+  w = ok(await actor.read_private_name_write_window('go-live'));
+  assert.equal(phaseOf(w), 'Releasing'); assert.equal(w.completed.length, 0);
+  // Recovery: completion is an idempotent journaled intent, so retry resolves it.
+  w = ok(await actor.advance_private_name_write_window('go-live', w.sinks[0]));
   assert.equal(w.completed.length, 1);
   w = ok(await actor.advance_private_name_write_window('go-live', w.sinks[1]));
   assert.equal(phaseOf(w), 'Done');
