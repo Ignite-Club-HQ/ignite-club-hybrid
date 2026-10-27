@@ -46,6 +46,11 @@ export interface Main {
   >,
   'audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
   'club_media_lock_version' : ActorMethod<[], bigint>,
+  'complete_private_name_release_fence' : ActorMethod<
+    [Request__1],
+    { 'Ok' : Receipt__1 } |
+      { 'Err' : string }
+  >,
   /**
    * / Public: remaining cycles (shown in admin settings).
    */
@@ -122,6 +127,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'prepare_private_name_release_fence' : ActorMethod<
+    [Request__1],
+    { 'Ok' : Receipt__1 } |
+      { 'Err' : string }
+  >,
   'purge_club_grants' : ActorMethod<
     [string],
     { 'Ok' : number } |
@@ -154,6 +164,11 @@ export interface Main {
           'revision' : bigint,
         }
       } |
+      { 'Err' : string }
+  >,
+  'read_private_name_release_fence' : ActorMethod<
+    [Request__1],
+    { 'Ok' : Receipt__1 } |
       { 'Err' : string }
   >,
   'register_pii' : ActorMethod<
@@ -243,11 +258,22 @@ export interface Receipt {
   'request' : Request,
   'receiver' : Principal,
 }
+export interface Receipt__1 {
+  'request' : Request__1,
+  'completed' : boolean,
+  'release_epoch' : bigint,
+  'receiver' : Principal,
+}
 export interface Request {
   'account_id' : string,
   'inventory_digest' : Uint8Array,
   'subjects' : Array<Principal>,
   'generation' : bigint,
+}
+export interface Request__1 {
+  'inventory_digest' : Uint8Array,
+  'generation' : bigint,
+  'operation_id' : string,
 }
 export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;

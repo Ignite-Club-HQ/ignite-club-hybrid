@@ -11,6 +11,31 @@ and other details must remain viewable in the app.
 
 ### Consolidated completion status — 27 October
 
+Receiver-local fencing now exists in original PII: rehearsal-only identity-bound
+prepare/read/complete endpoints retain exact operation, generation and inventory
+digest, durable completion tombstones, concurrent holds and a monotonic release
+epoch. Both dedicated private-name endpoints capture before their first await
+and check the epoch in the final synchronous release segment. New attempts
+refuse while any hold remains; reopening cannot admit a retained old reply.
+Capacity exhaustion refuses, with no automatic timeout cleanup or eviction.
+
+Fresh disposable real-SDK tests verify first and final held verifier replies for
+ciphertext and keys, fence/reopen ABA, unauthorized callers, committed-but-lost
+acknowledgement readback, exact idempotent retries, concurrent holds, and PII
+upgrade preservation. The verifier is an explicit test fixture, not the real
+cross-group identity resolver; these results certify the sink boundary only.
+The Motoko policy/compiler checks and all 17 generated contracts pass.
+
+The complete writer/coordinator connection is still not implemented. Required
+coverage includes identity account/profile/alias changes; club ACL, guardians,
+teams, lifecycle and import/purge/rekey; messaging block/participants/evidence
+and admin mappings; competition/league roles, entries, guardians and nested
+club checks; authority configuration and recovery. Each reducing mutation must
+first journal and fence the complete pinned original-PII inventory, read back
+all exact acknowledgements, commit while fenced, then reopen with generation
+invalidation. A sink receipt alone cannot establish this. Production stays
+disabled until that coverage and protected release acceptance are verified.
+
 Final local disclosure safeguards now snapshot caller rows, share and confirm
 one pending original-authority lease, validate route bindings after closing
 checks, and retire sibling batches after refusal. Synchronous session retirement
@@ -33,11 +58,11 @@ No such coordinated protocol is implemented or certified here. Client-arrival
 time revocation and recalling previously delivered IBE keys are impossible;
 neither may be promised by a release check. Production remains disabled.
 
-Current fresh checks pass 156 tests per sign-in mode and ICP isolation guards.
-Real-SDK replica
-execution is unavailable in this checkout because the PocketIC executable and
-compiled service artifacts are absent; earlier replica results are not fresh
-verification of this batch. Live signed-in acceptance remains unverified.
+Local display safeguards passed 156 tests per sign-in mode and ICP isolation
+guards in the prior batch. The pinned compiler/PocketIC tooling has now been
+restored for the fresh receiver-boundary SDK tests described above; the full
+real-authority multi-group suite is not newly certified by this fixture.
+Live signed-in acceptance remains unverified.
 
 Unanswered DM headers now reuse the page's already-known shared-club locator
 through the exact owning club's independent name authorization. The chat's two
