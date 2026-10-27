@@ -12,7 +12,7 @@ export function cleanupEnvironment(environment, service) {
   for (const row of environment) {
     if (typeof row.name !== 'string' || typeof row.value !== 'string' || names.has(row.name)) throw Error('Invalid or duplicate environment setting');
     names.add(row.name);
-    if (forbidden(row.name) && row.value !== '0') throw Error('Unrelated rehearsal must remain disabled');
+    if (forbidden(row.name) && row.value !== '0') throw Error(`Unrelated rehearsal must remain disabled: ${row.name}`);
     if (row.name === CLEANUP_RELEASE && !['0','1'].includes(row.value)) throw Error('Unknown cleanup release switch');
   }
   return [...environment.filter(row=>row.name!==CLEANUP_RELEASE),{name:CLEANUP_RELEASE,value:'1'}].sort((a,b)=>a.name.localeCompare(b.name));
