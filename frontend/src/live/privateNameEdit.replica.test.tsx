@@ -16,8 +16,9 @@ vi.mock('./identityAccess', async () => {
   return { connectLiveIdentityAccessClientWithIdentity: async (_target: unknown, identity: any) => {
     const connection = local.fixture.connect('identity_access', identity.getPrincipal());
     return { canisterId: connection.canisterId, client: createIdentityAccessClient(connection.actor) };
-  } };
+  }, isLiveIdentityAccessConfigured: () => true };
 });
+vi.mock('./features/membership', () => ({ getLiveMyRoleGrants: async () => [{ club: [local.fixture.clubId] }] }));
 vi.mock('./featureRouter', () => ({ withFeatureBackend: async (_feature: string, providers: any) => providers.icp(local.context) }));
 vi.mock('./privateProfileSearchMode', () => ({ privateProfileSearchRehearsalEnabled: () => true }));
 vi.mock('./loadBackendRouting', () => ({ isFeatureRoutedToIcp: () => true }));
@@ -39,6 +40,7 @@ import { readRelationshipProfiles } from './relationshipProfileRead';
 import { hydrateRsvpDisplayProfiles } from '../features/events/rsvpDisplayProfiles';
 import { EventAttendeeCard } from '../components/event/EventAttendeeCard';
 import { GroupChatMessageRow } from '../components/chat/GroupChatMessageRow';
+import { saveIcpIdentityProfile } from './identityProfile';
 
 describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable encrypted person-name edit', () => {
   beforeAll(async () => {
@@ -74,9 +76,11 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     await waitFor(() => expect(within(chat.container).getByText(beforeName)).toBeTruthy(), { timeout: 15000 });
     expect(f.counters.clubUnlocks).toBe(1);
 
-    await preparePrivateOwnProfileName(ownerContext as any, afterName);
-    expect(f.ok(await pii.read_private_club_name_lifecycle(f.owner, f.clubId, []))).toEqual([]);
-    await refreshPrivateOwnClubNames(ownerContext as any, afterName, async () => [f.clubId, f.clubId]);
+    // Exercise the shared save used by both Edit Profile and immediate avatar
+    // changes, not just standalone encryption/copy helpers.
+    const saved = await saveIcpIdentityProfile(ownerContext.identity as any, subject, { displayName: afterName }, ownerContext.target as any);
+    expect(saved.privateNameMaintained).toBe(true);
+    expect(saved.displayName).toBe(afterName);
     const newCopy = f.ok(await pii.read_private_club_name_lifecycle(f.owner, f.clubId, []))[0];
     expect(Array.from(newCopy.ciphertext)).not.toEqual(Array.from(oldCopy.ciphertext));
     expect(newCopy.master_key_id).toBe(oldCopy.master_key_id);
@@ -95,6 +99,10 @@ describe.runIf(process.env.IGNITE_NAME_EDIT_REPLICA === '1')('real disposable en
     expect(within(event.container).getByText(afterName)).toBeTruthy();
     expect(within(event.container).queryByText(beforeName)).toBeNull();
     expect(f.counters.clubUnlocks).toBe(1);
+    const unchangedBytes = Array.from(newCopy.ciphertext);
+    await saveIcpIdentityProfile(ownerContext.identity as any, subject, { displayName: afterName, avatarRef: 'acceptance-avatar' }, ownerContext.target as any);
+    expect(Array.from(f.ok(await pii.read_private_club_name_lifecycle(f.owner, f.clubId, []))[0].ciphertext)).toEqual(unchangedBytes);
+    expect(f.ok(await identity.get_profile()).display_name).toBe(reference);
     const denied = f.connect('pii_access_control', f.outsider).actor;
     const audience = { kind: 'club', authority: f.services.club_domain.canisterId, resource: f.clubId, profile_revision: 0n };
     expect('Err' in await denied.get_private_profile_names_batch([subject], audience)).toBe(true);

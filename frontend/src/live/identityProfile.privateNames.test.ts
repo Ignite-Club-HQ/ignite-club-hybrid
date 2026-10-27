@@ -1,0 +1,56 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import { Principal } from '@icp-sdk/core/principal';
+import type { Identity } from '@icp-sdk/core/agent';
+import type { IcpTargetConfig } from './targetRegistry';
+
+const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), dispose: vi.fn(), cache: vi.fn(), rehearsal: vi.fn(), prepare: vi.fn(), refresh: vi.fn(), hydrate: vi.fn(), grants: vi.fn() }));
+vi.mock('./identityAccess', () => ({ isLiveIdentityAccessConfigured: () => true, connectLiveIdentityAccessClientWithIdentity: async () => ({ client: { getProfile: mocks.get, setProfile: mocks.set, dispose: mocks.dispose } }) }));
+vi.mock('./identityProfileCache', () => ({ cacheIcpIdentityProfile: mocks.cache, getCachedIcpIdentityProfile: () => null }));
+vi.mock('./privateProfileSearchMode', () => ({ privateProfileSearchRehearsalEnabled: mocks.rehearsal }));
+vi.mock('./privateProfileNames', () => ({ preparePrivateOwnProfileName: mocks.prepare, refreshPrivateOwnClubNames: mocks.refresh, hydratePrivateProfileNames: mocks.hydrate, privateProfileNameReference: (authority: string, subject: string) => `pii-display-name:v1:${authority}:${subject}` }));
+vi.mock('./features/membership', () => ({ getLiveMyRoleGrants: mocks.grants }));
+import { saveIcpIdentityProfile } from './identityProfile';
+import { retirePrivateProfileSession } from './privateProfileSession';
+
+const subject = Principal.fromUint8Array(Uint8Array.of(3, 1)).toText();
+const sink = 'rrkah-fqaaa-aaaaa-aaaaq-cai';
+const identity = { getPrincipal: () => Principal.fromText(subject) } as Identity;
+const target = { alias: 'test', host: 'http://localhost:4943', canisterIds: { pii_access_control: sink, identity_access: sink } } as IcpTargetConfig;
+const reference = `pii-display-name:v1:${sink}:${subject}`;
+beforeEach(() => {
+  vi.resetAllMocks(); mocks.rehearsal.mockReturnValue(true);
+  mocks.get.mockResolvedValue({ display_name: reference }); mocks.hydrate.mockResolvedValue([{ display_name: 'Before' }]);
+  mocks.prepare.mockResolvedValue(reference); mocks.grants.mockResolvedValue([{ club: ['club-1'] }]);
+  mocks.refresh.mockImplementation(async (_ctx, _name, discover) => { await discover(); });
+  mocks.set.mockImplementation(async name => ({ display_name: name, avatar_ref: [] }));
+});
+it('shared converted-name saves maintain copies and never replace the reference with plaintext', async () => {
+  const result = await saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target);
+  expect(mocks.prepare).toHaveBeenCalledOnce(); expect(mocks.refresh).toHaveBeenCalledOnce();
+  expect(mocks.set).toHaveBeenCalledWith(reference, undefined); expect(result.displayName).toBe('After');
+  expect(mocks.cache.mock.calls[0][1].displayName).toBeNull(); expect(result.privateNameMaintained).toBe(true);
+});
+it('avatar-only saves preserve the reference without another name encryption or key-copy write', async () => {
+  await saveIcpIdentityProfile(identity, subject, { displayName: 'Before', avatarRef: 'avatar' }, target);
+  expect(mocks.set).toHaveBeenCalledWith(reference, 'avatar'); expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.refresh).not.toHaveBeenCalled();
+});
+it('unknown copy update never publishes or caches a completed profile save', async () => {
+  mocks.refresh.mockRejectedValue(Error('Unknown copy reply'));
+  await expect(saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target)).rejects.toThrow('Unknown copy reply');
+  expect(mocks.refresh).toHaveBeenCalledOnce(); expect(mocks.set).not.toHaveBeenCalled(); expect(mocks.cache).not.toHaveBeenCalled(); expect(mocks.dispose).toHaveBeenCalledOnce();
+});
+it('foreign original authority refuses before any profile or private-name mutation', async () => {
+  mocks.get.mockResolvedValue({ display_name: `pii-display-name:v1:foreign:${subject}` });
+  await expect(saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target)).rejects.toThrow('authority');
+  expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.set).not.toHaveBeenCalled();
+});
+it('production saves retain existing behavior with no new name or membership calls', async () => {
+  mocks.rehearsal.mockReturnValue(false);
+  await saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, { ...target, host: 'https://icp-api.io' });
+  expect(mocks.get).not.toHaveBeenCalled(); expect(mocks.set).toHaveBeenCalledWith('After', undefined); expect(mocks.prepare).not.toHaveBeenCalled();
+});
+it('session retirement after read prevents every save mutation', async () => {
+  mocks.get.mockImplementation(async () => { retirePrivateProfileSession(); return { display_name: reference }; });
+  await expect(saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target)).rejects.toThrow('session retired');
+  expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.set).not.toHaveBeenCalled();
+});

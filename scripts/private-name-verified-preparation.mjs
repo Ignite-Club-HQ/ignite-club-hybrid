@@ -14,6 +14,26 @@ export async function prepareVerifiedPrivateNameArtifact(input, {accounts, resol
   const planned = new Map(input.rows.map(row => [row.accountId,row]));
   const existingOriginals = new Map();
   if (planned.size !== input.rows.length) throw Error('Duplicate prepared account');
+  const aliases = new Set(), subjects = new Set();
+  for (const row of input.rows) {
+    if (subjects.has(row.subject)) throw Error('Duplicate prepared subject');
+    subjects.add(row.subject);
+  }
+  // Validate the entire account population before resolving any authority.
+  // An omitted nameless account still participates in alias ownership.
+  for (const account of accounts.rows) {
+    if (!Array.isArray(account.principals) || !account.principals.length || account.principals.length > 8) throw Error('Complete account aliases required');
+    for (const alias of account.principals) {
+      if (typeof alias !== 'string' || !alias || aliases.has(alias)) throw Error('Ambiguous account aliases');
+      aliases.add(alias);
+    }
+    const kind = account.originalAuthority?.kind;
+    const name = account.profile?.display_name;
+    if (!['NoName','Unresolved','Existing'].includes(kind)) throw Error('Explicit original authority required');
+    if (kind === 'NoName' && name) throw Error('Named account cannot disappear from conversion');
+    if (kind === 'Existing' && (!account.principals.includes(account.originalAuthority.subject) || name !== `pii-display-name:v1:${account.originalAuthority.sink}:${account.originalAuthority.subject}`)) throw Error('Original reference authority changed');
+    if (typeof name === 'string' && name.startsWith('pii-display-name:') && kind !== 'Existing') throw Error('Original reference authority unresolved');
+  }
   const seen = new Set();
   for (const account of accounts.rows) {
     if (seen.has(account.accountId) || !Array.isArray(account.principals) || !account.principals.length || !Array.isArray(account.sourceDigest) || account.sourceDigest.length !== 32 || !['Active','Suspended'].includes(account.status) || !/^[0-9]+$/.test(account.version)) throw Error('Complete account metadata required');

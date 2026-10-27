@@ -51,7 +51,7 @@ export function runPrivateNameAcceptance({ root = resolve(dirname(fileURLToPath(
     command('Verify real name-copy update and deletion recovery', process.execPath, ['scripts/test-private-name-lifecycle-replica.mjs'], frontend);
     command('Compile held-edit drain fixture', moc, ['--package', 'core', join(root, 'backend/club_domain/.mops/core@2.6.1/src'), '--default-persistent-actors', '-o', '/tmp/private-name-preparation-fixture.wasm', 'backend/shared/test/privateNamePreparationFixture.mo']);
     command('Verify in-progress edits remain locked', process.execPath, ['scripts/test-private-name-preparation-drain-replica.mjs'], frontend);
-    command('Verify encrypted chat and event name displays', process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--config', 'vitest.legacy.config.mjs', 'src/live/privateNameEdit.replica.test.tsx', 'src/live/privateProfileNames.test.ts', 'src/live/chatRelationshipProfiles.test.ts', 'src/hooks/usePrivateChatProfiles.test.tsx', 'src/features/events/rsvpDisplayProfiles.test.ts', 'src/live/scheduleMembers.test.ts'], frontend);
+    command('Verify encrypted chat and event name displays', process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--config', 'vitest.legacy.config.mjs', 'src/live/privateNameEdit.replica.test.tsx', 'src/live/identityProfile.privateNames.test.ts', 'src/live/privateProfileNames.test.ts', 'src/live/chatRelationshipProfiles.test.ts', 'src/hooks/usePrivateChatProfiles.test.tsx', 'src/features/events/rsvpDisplayProfiles.test.ts', 'src/live/scheduleMembers.test.ts'], frontend);
     command('Verify unchanged ICP production boundaries', process.execPath, ['frontend/scripts/check-icp-guards.mjs']);
     report.passed = true;
     return report;

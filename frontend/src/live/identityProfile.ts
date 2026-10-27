@@ -3,6 +3,9 @@ import type { Profile as CanisterProfile } from "../lab/bindings/identity_access
 import { connectLiveIdentityAccessClientWithIdentity, isLiveIdentityAccessConfigured } from "./identityAccess";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 import { cacheIcpIdentityProfile, getCachedIcpIdentityProfile, type IcpIdentityProfile } from "./identityProfileCache";
+import { privateProfileSearchRehearsalEnabled } from './privateProfileSearchMode';
+import { isLoopbackRehearsalHost } from './accountReadAdapter.mjs';
+import { capturePrivateProfileSession } from './privateProfileSession';
 
 /**
  * Resolves the "current user" profile for an Internet Identity session from
@@ -40,23 +43,62 @@ export async function saveIcpIdentityProfile(
   principal: string,
   input: SaveIcpIdentityProfileInput,
   target: IcpTargetConfig = getActiveIcpTarget(),
-): Promise<IcpIdentityProfile> {
+): Promise<IcpIdentityProfile & { privateNameMaintained?: true }> {
   if (!isLiveIdentityAccessConfigured(target)) {
     throw new Error(`Identity access canister is not configured for ICP target ${target.alias}.`);
   }
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
   try {
-    const canisterProfile = await client.setProfile(input.displayName, input.avatarRef ?? undefined);
+    let nameToSave = input.displayName;
+    let privateNameMaintained = false;
+    const sessionActive = capturePrivateProfileSession();
+    const savedTarget = JSON.stringify(target);
+    const caller = identity.getPrincipal().toText();
+    const active = () => {
+      sessionActive();
+      if (identity.getPrincipal().toText() !== caller || JSON.stringify(target) !== savedTarget) throw Error('Profile save identity or target changed.');
+    };
+    // Every shared profile save (including immediate avatar saves) preserves
+    // converted references. This does not enable conversion on production.
+    if (privateProfileSearchRehearsalEnabled()) {
+      if (!isLoopbackRehearsalHost(target.host)) throw Error('Private profile save requires a loopback rehearsal target.');
+      active();
+      const current = await client.getProfile();
+      active();
+      if (current?.display_name?.startsWith('pii-display-name:')) {
+        const { preparePrivateOwnProfileName, refreshPrivateOwnClubNames, privateProfileNameReference, hydratePrivateProfileNames } = await import('./privateProfileNames');
+        const expected = privateProfileNameReference(target.canisterIds.pii_access_control ?? '', caller);
+        if (current.display_name !== expected) throw Error('Original private name authority must be verified before saving.');
+        const context = { identity, target };
+        const [previousName] = await hydratePrivateProfileNames(context, [current]);
+        active();
+        if (!previousName?.display_name) throw Error('Original private name could not be verified.');
+        if (previousName.display_name !== input.displayName.trim()) {
+          nameToSave = await preparePrivateOwnProfileName(context, input.displayName);
+          active();
+          await refreshPrivateOwnClubNames(context, input.displayName, async () => {
+            const { getLiveMyRoleGrants } = await import('./features/membership');
+            const grants = await getLiveMyRoleGrants(context);
+            active();
+            return grants.flatMap(grant => grant.club ?? []);
+          }, active);
+          active();
+        } else nameToSave = expected;
+        privateNameMaintained = true;
+      }
+    }
+    const canisterProfile = await client.setProfile(nameToSave, input.avatarRef ?? undefined);
+    active();
     const previous = getCachedIcpIdentityProfile(principal);
     const resolved: IcpIdentityProfile = {
       accountId: principal,
-      displayName: canisterProfile?.display_name ?? input.displayName,
+      displayName: privateNameMaintained ? input.displayName.trim() : canisterProfile?.display_name ?? input.displayName,
       avatarRef: canisterProfile?.avatar_ref?.[0] ?? input.avatarRef ?? null,
       roles: previous?.roles ?? [],
       profileMissing: false,
     };
-    cacheIcpIdentityProfile(principal, resolved);
-    return resolved;
+    cacheIcpIdentityProfile(principal, privateNameMaintained ? { ...resolved, displayName: null } : resolved);
+    return privateNameMaintained ? { ...resolved, privateNameMaintained: true } : resolved;
   } finally {
     client.dispose();
   }
@@ -96,7 +138,7 @@ export async function fetchIcpIdentityProfile(
       roles: roles.value,
       profileMissing: !canisterProfile,
     };
-    cacheIcpIdentityProfile(principal, resolved);
+    cacheIcpIdentityProfile(principal, canisterProfile?.display_name?.startsWith('pii-display-name:') ? { ...resolved, displayName: null } : resolved);
     return resolved;
   } finally {
     client.dispose();
