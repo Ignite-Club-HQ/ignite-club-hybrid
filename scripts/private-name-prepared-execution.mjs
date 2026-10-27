@@ -86,14 +86,36 @@ export async function executePreparedPrivateNamePlan({artifact,expectedHash,appr
         return record.ciphertext;
       }});
   };
+  const settleJournal=async()=>{
+    validatePreparedJournal(body,expectedHash,deps.journal);
+    for(const row of body.rows){
+      const pii=deps.piiBySink.get(row.sink);
+      const receipts=[{id:`original:${row.accountId}`,read:()=>pii.readOriginal(row.subject),verify:r=>r?.subject===row.subject && r?.field==='display_name' && equalBytes(r.ciphertext,row.ciphertext)},
+        ...row.clubs.map(club=>({id:`club:${row.accountId}:${club.id}`,read:()=>pii.readClub(row.subject,club.id),verify:r=>r?.subject===row.subject && r?.club===club.id && r?.master_key_id===`vetkey-club-names-v1:${club.id}` && equalBytes(r.ciphertext,club.ciphertext)})),
+        {id:`profile:${row.accountId}`,read:()=>deps.identity.readProfile(row.accountId),verify:r=>r?.account_id===row.accountId && r?.display_name===nameReference(row.sink,row.subject) && r?.principals?.includes(row.subject)}];
+      for(const receipt of receipts){
+        const prior=deps.journal.get(receipt.id);if(!prior)continue;
+        await guard();const stored=await receipt.read();await guard();
+        if(!receipt.verify(stored))throw Error('Prepared journal settlement unresolved; no replay');
+        deps.journal.put(receipt.id,{...prior,phase:'verified'});
+        if(canonical(deps.journal.get(receipt.id))!==canonical({...prior,phase:'verified'}))throw Error('Prepared settlement readback mismatch');
+      }
+    }
+  };
   await reconcile(); // refusal anywhere prevents opening a window
   const guardedCoordinator=Object.fromEntries(['begin','advance','close','read'].map(method=>[method,async(...args)=>{
     await guard();
-    if (method==='close' && (await reconcile()).length!==0) throw Error('Prepared plan incomplete before closing');
+    if (method==='close') {
+      if ((await reconcile()).length!==0) throw Error('Prepared plan incomplete before closing');
+      await settleJournal();
+    }
     const result=await deps.coordinator[method](...args);await guard();
     // An interrupted Closing/Releasing window must not seal/release sinks
     // while a changed or unfinished plan still has pending profile rows.
-    if (method==='begin' && ['Closing','Releasing','Done'].includes(result.phase) && (await reconcile()).length!==0) throw Error('Prepared plan incomplete; closing window retained');
+    if (method==='begin' && ['Closing','Releasing','Done'].includes(result.phase)) {
+      if ((await reconcile()).length!==0) throw Error('Prepared plan incomplete; closing window retained');
+      await settleJournal();
+    }
     return result;
   } ]));
   const window=await withConversionWindow(guardedCoordinator,operationId,body.historyRevision,async()=>{
@@ -104,6 +126,7 @@ export async function executePreparedPrivateNamePlan({artifact,expectedHash,appr
   });
   // Resuming a Closing/Releasing/Done window still requires complete readback.
   if ((await reconcile()).length!==0) throw Error('Prepared plan incomplete after window readback');
+  await settleJournal();
   await guard();
   await deps.executionLock.complete(structuredClone(context));
   return {planHash:expectedHash,operationId,converted:body.rows.length,phase:window.phase};

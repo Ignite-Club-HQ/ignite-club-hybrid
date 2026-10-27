@@ -24,6 +24,12 @@ This is local adapter composition, not authenticated global acceptance. An injec
 
 Before rollout: finish the verified inventory adapter and replica refresh orchestration, verify real signed-in loading/search, verify erasure/purge across original authorities, then obtain separate deployment and exact-plan names-conversion approval. Existing rehearsal flags remain required; fixtures cannot approve release. Restricted audiences still incur individual derivations until separately redesigned.
 
+## Saved-plan execution and interrupted recovery
+
+`scripts/private-name-prepared-execution.mjs` is a local injected driver using the immutable artifact bytes directly, never regenerating encryption. It verifies exact names approval/hash, complete source/profile bindings and ciphertext readbacks before opening a window. Its injected execution lock must durably claim or authenticate the original recovery owner, stay held through every operation and complete only after full final reconciliation. External owner/approval/fence verification remains mandatory and unimplemented for production.
+
+Original, club-copy and reference-publication intents are recorded/read back before single-attempt writes. A lost reply leaves `unknown`; recovery accepts only exact bound ciphertext/profile readback, refusing missing or different outcomes without replay. Converted profiles are reverified, not trusted from a journal marker. Before closing and before advancing resumed Closing/Releasing/Done windows, the full plan must already reconcile and journal receipts settle through exact readbacks. Refusal leaves the lock/window retained. These tests use local injected adapters, not authenticated production acceptance or real multi-canister conversion recovery. The live CLI remains blocked.
+
 ## Privacy and cost limitations
 
 A device that receives a shared key can retain it indefinitely; a 30-day cache expiry or application permission check cannot revoke a copied key or previously received ciphertext. Future cryptographic revocation requires a new key generation and re-encryption. Rotation is not implemented in this local batch. Current checks stop new unauthorized application disclosures, not access to material already obtained.

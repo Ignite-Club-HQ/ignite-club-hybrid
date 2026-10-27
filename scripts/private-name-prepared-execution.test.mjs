@@ -46,7 +46,7 @@ test('profile publication lost reply resolves reference without replay',async()=
   const s=await setup();const original=s.deps.identity.publishReference;let failed=true;
   s.deps.identity.publishReference=async(...args)=>{await original(...args);if(failed){failed=false;throw Error('lost profile');}};
   await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/lost profile/);
-  await executePreparedPrivateNamePlan(s.request,s.deps);assert.equal(s.writes.filter(w=>w==='profile:a1').length,1);
+  await executePreparedPrivateNamePlan(s.request,s.deps);assert.equal(s.writes.filter(w=>w==='profile:a1').length,1);assert.equal(s.entries.get('profile:a1').phase,'verified');
 });
 test('wrong approval, missing actor and foreign journals stop before mutation',async()=>{
   for(const kind of ['approval','actor','journal']){const s=await setup();if(kind==='approval')s.request.approval.plan='c'.repeat(64);if(kind==='actor')s.deps.piiBySink.clear();if(kind==='journal')s.entries.set('foreign',{phase:'verified'});
