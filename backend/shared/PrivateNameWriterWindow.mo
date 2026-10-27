@@ -56,6 +56,10 @@ module {
       intents.add(request.operation_id, { request; closing = false; sealed = false; active = 0 });
       #Ok
     };
+    public func finishPreparation(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
+      switch (preparationReceipt(caller, request, caller)) { case (#Err(e)) return #Err(e); case (#Ok(r)) { if (r.active != 0) return #Err("Preparation work remains unresolved") } };
+      switch (intents.get(request.operation_id)) { case null #Err("Exact preparation receipt required"); case (?i) { intents.add(request.operation_id, { i with closing = true; sealed = true }); #Ok } }
+    };
     public func enter() : { #Ok : ?Release.Request; #Err : Text } {
       if (not enabled) return #Ok(null);
       if (preparationPending()) return #Err("Edits locked for private-name preparation");

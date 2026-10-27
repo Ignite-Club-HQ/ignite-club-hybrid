@@ -52,6 +52,11 @@ pub(crate) fn preparation_receipt_local(request: WriterRequest) -> Result<Writer
     Ok(WriterReceipt{request,receiver:ic_cdk::api::canister_self(),closing:i.closing,sealed:i.sealed,active:active.into()})
 }
 pub fn preparation_receipt(request: WriterRequest) -> Result<WriterReceipt,String> {authorize()?;preparation_receipt_local(request)}
+pub fn finish_preparation(request: WriterRequest) -> Result<(),String> {
+    authorize()?;let r=preparation_receipt_local(request.clone())?;
+    if r.active!=candid::Nat::from(0u8){return Err("Preparation work remains unresolved".into());}
+    let mut i=load(&request.operation_id)?;i.closing=true;i.sealed=true;save(&i);Ok(())
+}
 pub fn open(request: WriterRequest) -> Result<(),String> {
     authorize()?;
     if preparation_pending(){return Err("Preparation lock remains held".into());}
