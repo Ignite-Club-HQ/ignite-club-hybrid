@@ -4,16 +4,11 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ signOut: vi.fn(), navigate: vi.fn() }));
 vi.mock("@/lib/appNavigator", () => ({ navigateApp: state.navigate }));
-vi.mock("@/live/internetIdentityAuth", () => ({
-  warmInternetIdentityAuthClient: async () => undefined,
-  isInternetIdentitySignInReady: () => true,
-  resumeInternetIdentitySession: async () => null,
-  signOutInternetIdentity: state.signOut,
-}));
+vi.mock("@/live/icpAgent", () => ({ clearLiveAgentCache: vi.fn() }));
 vi.mock("@/live/features/events", () => ({ clearListedLiveEvents: vi.fn() }));
 vi.mock("@/live/features/messaging", () => ({ clearWarmLiveLatestPages: vi.fn() }));
-vi.mock("@/live/groupDispatch", () => ({ clearGroupDispatchCache: vi.fn() }));
-vi.mock("@/live/piiVetKeys", () => ({ clearPiiVetKeyCache: async () => undefined }));
+vi.mock("@/live/groupDispatch", () => ({ clearGroupDispatchCache: vi.fn(), wipeGroupOwnerCache: vi.fn() }));
+vi.mock("@/live/piiVetKeys", () => ({ clearPiiVetKeyCache: state.signOut }));
 vi.mock("@/live/identityEntitlementsCache", () => ({ clearIcpEntitlementsCache: vi.fn() }));
 vi.mock("@/live/wsRealtime", () => ({ disconnectChatRealtime: vi.fn() }));
 vi.mock("@/lib/icpQueryCachePersist", () => ({ clearPersistedIcpQueryCache: async () => undefined }));
@@ -23,7 +18,7 @@ beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); });
 
 it("retires page observers before delegation cleanup and navigates to sign-in with replacement", async () => {
   let finishCleanup: (() => void) | undefined;
-  state.signOut.mockImplementation(() => new Promise<void>(resolve => { finishCleanup = resolve; }));
+  state.signOut.mockResolvedValueOnce(undefined).mockImplementation(() => new Promise<void>(resolve => { finishCleanup = resolve; }));
   const client = new QueryClient();
   const cancel = vi.spyOn(client, "cancelQueries");
   let logout: (() => Promise<void>) | undefined;
@@ -35,7 +30,7 @@ it("retires page observers before delegation cleanup and navigates to sign-in wi
   expect(screen.getByText("Protected page")).toBeTruthy();
   let pending: Promise<void> | undefined;
   act(() => { pending = logout?.(); });
-  await waitFor(() => expect(state.signOut).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(state.signOut).toHaveBeenCalledTimes(2));
   expect(screen.queryByText("Protected page")).toBeNull();
   expect(cancel).toHaveBeenCalledTimes(1);
   expect(state.navigate).toHaveBeenCalledWith("/auth", { replace: true });
