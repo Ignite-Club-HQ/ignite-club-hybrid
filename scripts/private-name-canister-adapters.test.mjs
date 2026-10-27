@@ -71,3 +71,13 @@ test('original name evidence preserves nonfirst subject and refuses mismatched r
 test('ambiguous aliases across account pages stop complete inventory',async()=>{
   const b=accountRow('b');b.account.principals=[p('a-one')];await assert.rejects(accountAdapter([accountPage([accountRow(),b],[])]).adapter.listAccounts(),/alias/);
 });
+test('committed generated actor exposes consensus account inventory and lossless evidence wire types',async()=>{
+  const {createRequire}=await import('node:module');const require=createRequire(new URL('../frontend/package.json',import.meta.url));
+  const {Actor,HttpAgent}=require('@icp-sdk/core/agent');const {IDL}=require('@icp-sdk/core/candid');const {Principal}=require('@icp-sdk/core/principal');
+  const {idlFactory}=await import('../frontend/src/lab/bindings/identity_access/declarations/identity_access.did.js');
+  const actor=Actor.createActor(idlFactory,{agent:new HttpAgent({host:'https://ic0.app'}),canisterId:'rkp4c-7iaaa-aaaaa-aaaca-cai'});assert.equal(typeof actor.read_private_name_account_inventory,'function');
+  const fn=new Map(idlFactory({IDL})._fields).get('read_private_name_account_inventory');assert.deepEqual(fn.annotations,[]);
+  const owner=Principal.fromUint8Array(Uint8Array.from([3,1]));const r=accountRow();r.account.principals=[owner];
+  const encoded=IDL.encode(fn.retTypes,[{Ok:accountPage([r],[],1)}]);const decoded=IDL.decode(fn.retTypes,encoded)[0].Ok;
+  assert.equal(decoded.rows[0].account.version,9007199254740993n);assert.deepEqual(decoded.rows[0].profile,[]);assert.ok('Suspended' in decoded.rows[0].account.status);
+});
