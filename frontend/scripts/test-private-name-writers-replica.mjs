@@ -32,7 +32,7 @@ try {
  for(let n=0;n<2;n++){
   const group={};
   for(const [d,idlFactory] of [['club_domain',clubIdl],['messaging_domain',messagingIdl],['competition_domain',competitionIdl],['mini_league_domain',leagueIdl],['pii_access_control',piiIdl]]){
-   const service=await pic.setupCanister({idlFactory,wasm:wasm(d),sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor]),environmentVariables:[...env,{name:'IGNITE_PRIVATE_PROFILE_READS_REHEARSAL',value:'1'},{name:'IGNITE_PRIVATE_PROFILE_IDENTITY',value:identity.canisterId.toText()},{name:'VETKD_KEY_NAME',value:'key_1'}]});
+   const service=await pic.setupCanister({idlFactory,wasm:wasm(d),sender:governor,controllers:[governor],arg:IDL.encode([IDL.Principal],[governor]),environmentVariables:[...env,{name:'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL',value:'1'},{name:'IGNITE_PRIVATE_PROFILE_READS_REHEARSAL',value:'1'},{name:'IGNITE_PRIVATE_PROFILE_IDENTITY',value:identity.canisterId.toText()},{name:'VETKD_KEY_NAME',value:'key_1'}]});
    service.actor.setPrincipal(governor);group[d]=service;
    writers.push({service,write:d==='club_domain'?()=>service.actor.set_identity_access_canister(identity.canisterId):()=>service.actor.set_club_domain_canister(identity.canisterId)});
   }
