@@ -89,3 +89,10 @@ test('exclusive lock refusal prevents all reads and mutations',async()=>{
 test('successful exact reconciliation completes the lock only after release',async()=>{
   const s=await setup();await executePreparedPrivateNamePlan(s.request,s.deps);assert.equal(s.state.phase,'Done');assert.equal(s.lock.held,false);assert.equal(s.lock.complete,1);
 });
+
+test('drift between writer sealing and sink release stops the next advance',async()=>{
+  const s=await setup();const advance=s.deps.coordinator.advance;
+  s.deps.coordinator.advance=async(...args)=>{const result=await advance(...args);if(result.phase==='Releasing')s.clubs.delete('person1:c1');return result;};
+  await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/record binding changed/);
+  assert.equal(s.state.phase,'Releasing');assert.equal(s.order.filter(x=>x==='advance').length,1);assert.equal(s.lock.held,true);assert.equal(s.lock.complete,0);
+});

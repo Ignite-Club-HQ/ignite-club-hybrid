@@ -105,7 +105,7 @@ export async function executePreparedPrivateNamePlan({artifact,expectedHash,appr
   await reconcile(); // refusal anywhere prevents opening a window
   const guardedCoordinator=Object.fromEntries(['begin','advance','close','read'].map(method=>[method,async(...args)=>{
     await guard();
-    if (method==='close') {
+    if (method==='close' || method==='advance') {
       if ((await reconcile()).length!==0) throw Error('Prepared plan incomplete before closing');
       await settleJournal();
     }
