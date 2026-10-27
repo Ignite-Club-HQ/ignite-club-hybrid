@@ -48,30 +48,25 @@ export function readSavedNameApproval(path,binding){
 export function saveSignedNameApproval(path,envelope,binding){
   verifySavedNameApproval(envelope,binding);
   const data=Buffer.from(canonical(envelope));if(data.length>MAX_APPROVAL_BYTES)throw Error('Saved approval exceeds byte budget');
-  let fd;
-  try{fd=openSync(path,constants.O_RDWR|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);}
+  let fd,created=false;
+  try{fd=openSync(path,constants.O_RDWR|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);created=true;}
   catch(error){if(error.code!=='EEXIST')throw error;fd=openSync(path,constants.O_RDWR|constants.O_NOFOLLOW);}
   try{
-    const existing=fstatSync(fd).size;
-    if(existing===0){
-      // An existing empty file may be an interrupted creation; never repair it.
-      if((fstatSync(fd).nlink)!==1)throw Error('Saved approval file changed');
+    if(created){
+      let offset=0;
+      while(offset<data.length){const n=writeSync(fd,data,offset,data.length-offset);if(n<=0)throw Error('Saved approval write incomplete');offset+=n;}
+      fsyncSync(fd);
     }
-    // Exclusive creation flag is tracked separately below to avoid rewriting
-    // an existing interrupted file, even if it is empty.
-  }finally{closeSync(fd);}
-  return persistExclusive(path,data,envelope,binding);
-}
-
-function persistExclusive(path,data,envelope,binding){
-  // saveSignedNameApproval delegates only after validation; existing content
-  // must match exactly. This helper never replaces a file through rename.
-  const fd=openSync(path,constants.O_RDWR|constants.O_NOFOLLOW);
-  try{
     const saved=readBounded(fd);
     if(saved.length===0)throw Error('Interrupted saved approval retained; refuse overwrite');
     if(!saved.equals(data))throw Error('Different saved approval retained');
     verifySavedNameApproval(JSON.parse(saved.toString('utf8')),binding);fsyncSync(fd);
   }finally{closeSync(fd);}
+  let directoryPath=resolve(dirname(path));
+  while(true){
+    const directory=openSync(directoryPath,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);
+    try{fsyncSync(directory);}finally{closeSync(directory);}
+    const parent=dirname(directoryPath);if(parent===directoryPath)break;directoryPath=parent;
+  }
   return readSavedNameApproval(path,binding);
 }
