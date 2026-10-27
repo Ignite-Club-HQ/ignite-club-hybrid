@@ -464,17 +464,19 @@ export type Result_39 = { 'Ok' : RemovalHistoryPage } |
   { 'Err' : string };
 export type Result_4 = { 'Ok' : OwnershipProgress } |
   { 'Err' : string };
-export type Result_40 = { 'Ok' : DirectoryCleanup } |
+export type Result_40 = { 'Ok' : Principal } |
   { 'Err' : string };
-export type Result_41 = { 'Ok' : Entitlement } |
+export type Result_41 = { 'Ok' : DirectoryCleanup } |
   { 'Err' : string };
-export type Result_42 = { 'Ok' : bigint } |
+export type Result_42 = { 'Ok' : Entitlement } |
   { 'Err' : string };
-export type Result_43 = { 'Ok' : PrivacyConsent } |
+export type Result_43 = { 'Ok' : bigint } |
   { 'Err' : string };
-export type Result_44 = { 'Ok' : TermsAcceptance } |
+export type Result_44 = { 'Ok' : PrivacyConsent } |
   { 'Err' : string };
-export type Result_45 = { 'Ok' : Array<Receipt> } |
+export type Result_45 = { 'Ok' : TermsAcceptance } |
+  { 'Err' : string };
+export type Result_46 = { 'Ok' : Array<Receipt> } |
   { 'Err' : string };
 export type Result_5 = { 'Ok' : Progress } |
   { 'Err' : string };
@@ -916,10 +918,15 @@ export interface _SERVICE {
   >,
   'read_removal_inventory_evidence' : ActorMethod<[bigint], Result_36>,
   /**
+   * Authenticated consensus capability: returns only the operator-pinned own-name
+   * authority, never a browser-selected sink or authorization for other people.
+   */
+  'read_secure_name_authority' : ActorMethod<[], Result_40>,
+  /**
    * Subject-bound consensus ownership read; never implicitly registers an account.
    */
   'read_service_account' : ActorMethod<[Principal], Result>,
-  'reclaim_membership_directory' : ActorMethod<[], Result_40>,
+  'reclaim_membership_directory' : ActorMethod<[], Result_41>,
   /**
    * Caller-authenticated: redeems a signed attestation minted by the
    * session-free IAP verification endpoint after it confirms an Apple
@@ -935,7 +942,7 @@ export interface _SERVICE {
    */
   'redeem_entitlement' : ActorMethod<
     [string, string, bigint, string, string],
-    Result_41
+    Result_42
   >,
   'register_account' : ActorMethod<[], Result>,
   /**
@@ -948,7 +955,7 @@ export interface _SERVICE {
    * number of records changed (or that would change when `dry_run`).
    * Any NEW stored principal / principal-text field must be added here.
    */
-  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_42>,
+  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_43>,
   /**
    * Governor-only: revokes a verifier principal.
    */
@@ -1013,7 +1020,7 @@ export interface _SERVICE {
    */
   'set_entitlement' : ActorMethod<
     [Principal, string, string, bigint, string],
-    Result_41
+    Result_42
   >,
   'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_2>,
   'set_exclusion_scoped' : ActorMethod<
@@ -1022,11 +1029,7 @@ export interface _SERVICE {
   >,
   'set_family' : ActorMethod<[string, string], Result_2>,
   'set_group_inventory_binding' : ActorMethod<[Binding, bigint], Result_2>,
-  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_43>,
-  /**
-   * Sets (or replaces) the caller's profile. The account must already exist —
-   * sign-in provisioning calls register_account first.
-   */
+  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_44>,
   'set_profile' : ActorMethod<[string, [] | [string]], Result_15>,
   'set_removal_supplemental_inventory' : ActorMethod<
     [Array<Supplemental>, bigint],
@@ -1039,7 +1042,7 @@ export interface _SERVICE {
    * caller's currently recorded version is rejected, so a stale client can
    * never roll the recorded acceptance backwards.
    */
-  'set_terms_acceptance' : ActorMethod<[number], Result_44>,
+  'set_terms_acceptance' : ActorMethod<[number], Result_45>,
   /**
    * Sets (or clears) the caller's UI theme preference, so it follows the
    * account across devices. Creates a blank profile entry if the caller has
@@ -1051,7 +1054,7 @@ export interface _SERVICE {
    * Fresh, authenticated full-inventory seal verification. This does not erase
    * data, release registry locks, restore histories or activate a group.
    */
-  'verify_account_removal_seals' : ActorMethod<[string], Result_45>,
+  'verify_account_removal_seals' : ActorMethod<[string], Result_46>,
   'verify_private_name_preparation' : ActorMethod<[string], Result_6>,
   'whoami' : ActorMethod<[], Result>,
   'write_approved_private_name' : ActorMethod<
