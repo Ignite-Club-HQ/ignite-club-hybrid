@@ -1,7 +1,7 @@
 // Local durable receipts only. The caller must hold an independently verified
 // exclusive lock; this file is neither production transport nor an anti-rollback anchor.
-import { constants, openSync, closeSync, fstatSync, readSync, writeSync, fsyncSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { constants, openSync, closeSync, fstatSync, readSync, writeSync, fsyncSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonical } from './migrate-club-plan.mjs';
 import { verifyPrivateNameArtifact } from './private-name-plan-artifact.mjs';
@@ -17,7 +17,9 @@ export function openPreparedExecutionJournal(path, { artifact, expectedHash, ass
   if (typeof assertHeld !== 'function') throw Error('Independent exclusive journal lock required');
   const checkLock = () => { if (assertHeld() !== true) throw Error('Independent exclusive journal lock required'); };
   checkLock();
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  // Require a provisioned directory; never create unsynced nested parents.
+  const parent = openSync(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  closeSync(parent);
   const flags = constants.O_RDWR | constants.O_APPEND | constants.O_NOFOLLOW;
   let fd, created = false, closed = false, poisoned = false;
   try { fd = openSync(path, flags | constants.O_CREAT | constants.O_EXCL, 0o600); created = true; }
@@ -59,8 +61,6 @@ export function openPreparedExecutionJournal(path, { artifact, expectedHash, ass
     saved = read();
     if (created) {
       append({ kind: 'private-name-execution-journal-v1', planHash: expectedHash });
-      const directory = openSync(dirname(path), constants.O_RDONLY);
-      try { fsyncSync(directory); } finally { closeSync(directory); }
     }
     if (!saved.endsWith('\n')) throw Error('Interrupted journal retained; refuse repair');
     const lines = saved.slice(0, -1).split('\n');
@@ -75,6 +75,17 @@ export function openPreparedExecutionJournal(path, { artifact, expectedHash, ass
       entries.set(record.id, structuredClone(record.entry));
       validatePreparedJournal(body, expectedHash, adapter);
       sequence = record.sequence; previous = digest;
+    }
+    // Every open (including restart after a interrupted creation) makes the
+    // file and directory entries durable before returning any usable receipt.
+    fsyncSync(fd);
+    let directoryPath = resolve(dirname(path));
+    while (true) {
+      const directory = openSync(directoryPath, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+      try { fsyncSync(directory); } finally { closeSync(directory); }
+      const ancestor = dirname(directoryPath);
+      if (ancestor === directoryPath) break;
+      directoryPath = ancestor;
     }
     checkLock();
   } catch (error) { closeSync(fd); throw error; }

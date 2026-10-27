@@ -34,6 +34,8 @@ Original, club-copy and reference-publication intents are recorded/read back bef
 
 Fresh-window tests now exercise Fencing → Opening → Writing → Closing → Releasing → Done. Preparation advances no longer incorrectly require conversion to have already finished; complete reconciliation remains mandatory before closing, writer sealing or sink release. This is local phase integration, not real multi-canister rollout acceptance.
 
+The journal requires a pre-provisioned parent directory rather than creating nested parents. Every successful open syncs the file and all ancestor directory entries before returning an adapter, including reopening after an interrupted creation; sync refusal stops execution rather than trusting a potentially non-durable intent.
+
 ## Privacy and cost limitations
 
 A device that receives a shared key can retain it indefinitely; a 30-day cache expiry or application permission check cannot revoke a copied key or previously received ciphertext. Future cryptographic revocation requires a new key generation and re-encryption. Rotation is not implemented in this local batch. Current checks stop new unauthorized application disclosures, not access to material already obtained.

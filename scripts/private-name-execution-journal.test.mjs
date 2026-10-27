@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtempSync,rmSync,readFileSync,writeFileSync,appendFileSync,statSync,symlinkSync,truncateSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync,writeFileSync,appendFileSync,statSync,symlinkSync,truncateSync,mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {preparePrivateNameArtifact} from './private-name-plan-artifact.mjs';
@@ -22,6 +22,13 @@ test('exclusive private creation and reopen preserve ciphertext-only unknown int
 });
 test('missing independent lock refuses file creation',async t=>{
   const s=await fixture(t);s.lock.held=false;assert.throws(s.open,/exclusive journal lock/);assert.throws(()=>statSync(s.path),/ENOENT/);
+});
+test('missing parent is not automatically created; provisioned nested directories support reopen',async t=>{
+  const s=await fixture(t),parent=join(s.path+'.directory','nested'),path=join(parent,'receipts');
+  const open=()=>openPreparedExecutionJournal(path,{artifact:s.artifact,expectedHash:s.artifact.hash,assertHeld:()=>true});
+  assert.throws(open,/ENOENT/);assert.throws(()=>statSync(parent),/ENOENT/);
+  mkdirSync(parent,{recursive:true,mode:0o700});let j=open();j.put('original:a1',s.entry);j.close();
+  j=open();assert.deepEqual(j.get('original:a1'),s.entry);j.close();
 });
 test('lost lock prevents persistence and poisons the handle',async t=>{
   const s=await fixture(t),j=s.open();const before=readFileSync(s.path);s.lock.held=false;
