@@ -65,7 +65,7 @@ persistent actor class Main(governorInit : Principal) = this {
   var private_name_writer_intents : Map.Map<Text, PrivateNameWriterWindow.Intent>;
   var private_name_cleanup_rows : Map.Map<Text, PrivateNameCleanup.Intent>;
   transient let nameCleanup = PrivateNameCleanup.Queue(private_name_cleanup_rows);
-  transient let automaticNameCleanup = Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_REHEARSAL") == ?"1";
+  transient let automaticNameCleanup = Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_REHEARSAL") == ?"1" or Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_RELEASE") == ?"1";
   transient var nameCleanupRunning = false;
   transient let privateNameWriterGate = PrivateNameWriterWindow.Gate(Runtime.envVar<system>("IGNITE_PRIVATE_NAME_WRITER_REHEARSAL") == ?"1", accountAdmissionAuthority, private_name_writer_intents, 4096);
   include PrivateNameWriterEndpoints(privateNameWriterGate, Principal.fromActor(this));
@@ -4044,7 +4044,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   transient let nameCleanupTimer = Timer.recurringTimer<system>(#seconds 60, runNameCleanup);
   public shared ({ caller }) func resume_private_name_cleanup() : async { #Ok : Nat; #Err : Text } {
-    if (not isGovernor(caller) or not automaticNameCleanup) return #Err("Governor and cleanup rehearsal required");
+    if (not isGovernor(caller) or not automaticNameCleanup) return #Err("Governor and approved cleanup release required");
     await runNameCleanup(); #Ok(private_name_cleanup_rows.size())
   };
   public shared ({ caller }) func read_private_name_cleanup_pending() : async { #Ok : [PrivateNameCleanup.Intent]; #Err : Text } {

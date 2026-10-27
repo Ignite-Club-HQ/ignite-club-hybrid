@@ -734,16 +734,20 @@ persistent actor class Main(governorInit : Principal) = this {
   func clubNameScheme(club : Text) : Text { "vetkey-club-names-v1:" # club };
 
   func cleanupReceiptKey(caller : Principal, id : Text) : Text { caller.toText() # "\u{1f}" # id };
+  func cleanupVerifier() : ?Principal {
+    if (Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_REHEARSAL") != ?"1" and Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_RELEASE") != ?"1") return null;
+    switch (privateNamesIdentity) { case null null; case (?id) { let p = Principal.fromText(id); if (p.isAnonymous() or p == Principal.fromText("aaaaa-aa")) null else ?p } }
+  };
   public shared ({ caller }) func read_removed_private_club_name_receipt(id : Text, club : Text, subject : Principal) : async { #Ok : ?PrivateNameCleanup.Receipt; #Err : Text } {
-    if (not privateNamesRehearsal or Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_REHEARSAL") != ?"1" or caller.isAnonymous() or id.size() > 256) return #Err("Cleanup rehearsal required");
+    if (cleanupVerifier() == null or caller.isAnonymous() or id.size() > 256) return #Err("Approved cleanup configuration required");
     switch (private_name_cleanup_receipts.get(cleanupReceiptKey(caller, id))) {
       case null #Ok(null);
       case (?saved) { if (saved.caller != caller or saved.receipt.club != club or saved.receipt.subject != subject) return #Err("Cleanup receipt binding changed"); #Ok(?saved.receipt) }
     }
   };
   public shared ({ caller }) func purge_removed_private_club_name(id : Text, club : Text, subject : Principal) : async { #Ok : PrivateNameCleanup.Receipt; #Err : Text } {
-    if (not privateNamesRehearsal or Runtime.envVar<system>("IGNITE_PRIVATE_NAME_CLEANUP_REHEARSAL") != ?"1" or caller.isAnonymous() or id == "" or id.size() > 256 or not validMediaClub(club)) return #Err("Exact cleanup rehearsal required");
-    let verifier = privateNameVerifier() ?? return #Err("Configured cleanup identity required");
+    if (caller.isAnonymous() or id == "" or id.size() > 256 or not validMediaClub(club)) return #Err("Exact approved cleanup required");
+    let verifier = cleanupVerifier() ?? return #Err("Configured cleanup identity required");
     let key = cleanupReceiptKey(caller, id);
     if (private_name_cleanup_receipts.containsKey(key)) return #Err("Read retained cleanup receipt; never replay purge");
     if (private_name_cleanup_receipts.size() >= 4096) return #Err("Cleanup receipt capacity reached; retain intent");
@@ -758,7 +762,7 @@ persistent actor class Main(governorInit : Principal) = this {
       var first : ?PrivateNameCleanup.Account = null;
       for (_ in [0, 1].values()) {
         let account = switch (await (with timeout = 10) identity.authorize_private_name_removal(caller, club, subject, id)) { case (#Ok(value)) value; case (#Err(e)) return #Err(e) };
-        if (privateNameVerifier() != ?verifier or (first != null and first != ?account)) return #Err("Cleanup authorization changed");
+        if (cleanupVerifier() != ?verifier or (first != null and first != ?account)) return #Err("Cleanup authorization changed");
         first := ?account;
       };
       // Exact saved original and replica checks, purge and tombstone commit form

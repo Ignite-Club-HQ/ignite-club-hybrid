@@ -52,7 +52,7 @@ fn verify_removed(proof: &CleanupProof, id: &str, club: &str, account: &CleanupA
 /// the retained operation and atomic all-alias nonmembership, not a browser.
 #[ic_cdk::update]
 async fn authorize_private_name_removal(authority: Principal, club: String, subject: Principal, id: String) -> Outcome<CleanupAccount> {
-    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1") { return Err("Private-name cleanup is not released".into()); }
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL") != Some("1") && option_env!("IGNITE_PRIVATE_NAME_CLEANUP_RELEASE") != Some("1") { return Err("Private-name cleanup is not released".into()); }
     let sink = ic_cdk::api::msg_caller();
     if !super::service_authorities().contains(&sink) || club.is_empty() || club.len()>128 || id.is_empty() || id.len()>256 { return Err("Exact configured cleanup service required".into()); }
     let config = super::directory_config()?;
@@ -86,7 +86,7 @@ async fn authorize_private_name_removal(authority: Principal, club: String, subj
 
 #[ic_cdk::update]
 async fn read_private_name_cleanup_account(subject: Principal) -> Outcome<CleanupAccount> {
-    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL")!=Some("1") { return Err("Private-name cleanup is not released".into()); }
+    if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL")!=Some("1") && option_env!("IGNITE_PRIVATE_NAME_CLEANUP_RELEASE")!=Some("1") { return Err("Private-name cleanup is not released".into()); }
     let caller=ic_cdk::api::msg_caller();
     let config=super::directory_config()?;
     if caller==Principal::anonymous() || !config.sources.iter().any(|(_,p)|*p==caller) { return Err("Registered cleanup club required".into()); }

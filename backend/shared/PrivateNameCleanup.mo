@@ -12,6 +12,7 @@ module {
     public func locked() : Bool { rows.size() > 0 };
     public func enqueue(club : Text, user : Principal, generation : Nat) : Intent {
       let id = generation.toText() # ":" # club # ":" # user.toText();
+      switch (rows.get(id)) { case (?saved) return saved; case null {} };
       let row = { id; club; user; account = null; submitted = false };
       rows.add(id, row); row
     };
