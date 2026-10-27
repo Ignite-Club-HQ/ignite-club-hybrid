@@ -6,7 +6,7 @@ export async function reconcileNameReplicaLifecycle(plan,{assertEvidence,readJou
   if(!plan || !['refresh','purge'].includes(plan.action) || typeof plan.operationId!=='string' || !plan.operationId || !Array.isArray(plan.targets) || !plan.targets.length || plan.targets.length>4096 || [assertEvidence,readJournal,persistJournal,readState,writeSavedReplica,purgeExactReplica].some(fn=>typeof fn!=='function'))throw Error('Exact bounded lifecycle dependencies required');
   plan=structuredClone(plan);const ids=new Set();
   for(const t of plan.targets){
-    if(!t || !['sink','subject','club'].every(k=>typeof t[k]==='string'&&t[k].length>0&&t[k].length<=128) || (plan.action==='refresh'&&!bytes(t.ciphertext)))throw Error('Exact original-authority lifecycle target required');
+    if(!t || canonical(Object.keys(t).sort())!==canonical(['sink','subject','club',...(plan.action==='refresh'?['ciphertext']:[])].sort()) || !['sink','subject','club'].every(k=>typeof t[k]==='string'&&t[k].length>0&&t[k].length<=128) || (plan.action==='refresh'&&!bytes(t.ciphertext)))throw Error('Exact original-authority lifecycle target required');
     const id=canonical([t.sink,t.subject,t.club]);if(ids.has(id))throw Error('Duplicate lifecycle target');ids.add(id);
   }
   const guard=async()=>{if(await assertEvidence(structuredClone(plan))!==true)throw Error('Complete lifecycle exclusion/authority evidence required');};
