@@ -1,11 +1,12 @@
 // Offline, ciphertext-only protected plan artifacts. These helpers do not
 // authenticate evidence, make network calls, or authorize a production release.
 import { createHash } from 'node:crypto';
-import { openSync, closeSync, readFileSync, writeFileSync, fsyncSync, mkdirSync, unlinkSync } from 'node:fs';
+import { openSync, closeSync, readFileSync, writeFileSync, fsyncSync, mkdirSync, unlinkSync, fstatSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { canonical } from './migrate-club-plan.mjs';
 
 const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
+export const MAX_ARTIFACT_BYTES = 16 * 1024 * 1024;
 const bytes = value => Array.isArray(value) && value.length > 0 && value.length <= 1048576 && value.every(b => Number.isInteger(b) && b >= 0 && b <= 255);
 const exactText = value => typeof value === 'string' && value.length > 0 && value.length <= 128 && !/[\u0000-\u001f/]/.test(value);
 
@@ -39,6 +40,9 @@ export function validatePrivateNameArtifact(body) {
  * caller; ciphertext is generated once before approval, never on recovery. */
 export async function preparePrivateNameArtifact({ rows, sinks, identityId, operator, deploymentHash, inventoryHash, historyRevision }, { encryptName, encryptClubName }) {
   if (!Array.isArray(rows) || rows.length > 100000 || !Array.isArray(sinks) || sinks.length > 100) throw Error('Plan inventory exceeds bounds');
+  // Validate every input before any cryptographic or injected adapter work.
+  for (const row of rows) if (!row || typeof row.name !== 'string' || !row.name.trim() || row.name.length > 4096 || !Array.isArray(row.clubs) || row.clubs.length > 100) throw Error('Complete exact account/club/original PII inventory required');
+  validatePrivateNameArtifact({ kind: 'club-name-ciphertext-plan-v1', identityId, operator, deploymentHash, inventoryHash, historyRevision: String(historyRevision), sinks, rows: rows.map(row => ({accountId: row.accountId, subject: row.subject, sink: row.sink, ciphertext: [0], clubs: row.clubs.map(id => ({id, ciphertext: [0]}))})) });
   const sinkMap = new Map(sinks.map(s => [s.id, s]));
   const encrypted = [];
   for (const row of [...rows].sort((a, b) => a.accountId.localeCompare(b.accountId))) {
@@ -57,12 +61,29 @@ export async function preparePrivateNameArtifact({ rows, sinks, identityId, oper
 export function verifyPrivateNameArtifact(artifact, expectedHash) {
   if (typeof expectedHash !== 'string' || !/^[a-f0-9]{64}$/.test(expectedHash) || !artifact || canonical(Object.keys(artifact).sort()) !== canonical(['body', 'hash'])) throw Error('Original protected artifact hash required');
   validatePrivateNameArtifact(artifact.body);
+  if (Buffer.byteLength(canonical(artifact)) > MAX_ARTIFACT_BYTES) throw Error('Protected artifact exceeds byte budget');
   if (artifact.hash !== expectedHash || digest(artifact.body) !== expectedHash) throw Error('Protected artifact changed');
   return structuredClone(artifact.body);
 }
 
 export function readPrivateNameArtifact(path, expectedHash) {
-  return verifyPrivateNameArtifact(JSON.parse(readFileSync(path, 'utf8')), expectedHash);
+  const fd = openSync(path, 'r');
+  try {
+    const status = fstatSync(fd);
+    if (!status.isFile() || status.size > MAX_ARTIFACT_BYTES) throw Error('Protected artifact exceeds byte budget');
+    // One bounded allocation; reject truncated/extended files rather than
+    // reading an unbounded replacement through the path after stat.
+    const buffer = Buffer.alloc(status.size + 1);
+    const { readSync } = fsRead;
+    let count = 0;
+    while (count < buffer.length) {
+      const n = readSync(fd, buffer, count, buffer.length - count, null);
+      if (n === 0) break;
+      count += n;
+    }
+    if (count !== status.size) throw Error('Protected artifact changed during read');
+    return verifyPrivateNameArtifact(JSON.parse(buffer.subarray(0, count).toString('utf8')), expectedHash);
+  } finally { closeSync(fd); }
 }
 
 /** Exclusive creation and fsync: interruptions retain the file and require
@@ -86,7 +107,7 @@ export function savePrivateNameArtifact(path, artifact, expectedHash) {
 /** Entire inventory is reconciled BEFORE a resumed writer gets any work.
  * Plaintext comparison uses authorized decryption injected by the adapter;
  * no plaintext or guessable name hashes are written to disk. */
-export async function reconcilePrivateNameRecovery(body, { profiles, binding, decryptName }) {
+export async function reconcilePrivateNameRecovery(body, { profiles, binding, decryptName, readCiphertext }) {
   validatePrivateNameArtifact(body);
   for (const key of ['identityId', 'operator', 'deploymentHash', 'inventoryHash']) if (binding[key] !== body[key]) throw Error('Recovery deployment/inventory binding changed');
   if (canonical(binding.sinks) !== canonical(body.sinks)) throw Error('Original PII keys changed');
@@ -98,7 +119,16 @@ export async function reconcilePrivateNameRecovery(body, { profiles, binding, de
     const profile = live.get(row.accountId);
     if (!profile || !Array.isArray(profile.principals) || !profile.principals.includes(row.subject)) throw Error('Recovery account/subject binding changed');
     const reference = `pii-display-name:v1:${row.sink}:${row.subject}`;
-    if (profile.display_name === reference) continue;
+    if (profile.display_name === reference) {
+      if (typeof readCiphertext !== 'function') throw Error('Converted ciphertext readback required');
+      const stored = await readCiphertext(row, null);
+      if (!bytes(stored) || canonical(stored) !== canonical(row.ciphertext)) throw Error('Converted original ciphertext mismatch');
+      for (const club of row.clubs) {
+        const copy = await readCiphertext(row, club.id);
+        if (!bytes(copy) || canonical(copy) !== canonical(club.ciphertext)) throw Error('Converted club ciphertext mismatch');
+      }
+      continue;
+    }
     if (typeof profile.display_name !== 'string' || profile.display_name.startsWith('pii-display-name:')) throw Error('Recovery profile reference changed');
     const originalName = await decryptName(row, body.sinks.find(s => s.id === row.sink));
     if (typeof originalName !== 'string' || originalName !== profile.display_name) throw Error('Recovery source name changed');
