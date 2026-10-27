@@ -61,6 +61,15 @@ test('migration readiness upgrades only the club service in every registered gro
   assert.equal(plan.targets[0].canisterId,shared.club_domain);
   assert.equal(plan.targets[1].canisterId,original.canisters.club_domain);
 });
+test('cleanup targets identity once and only PII/club across every group',()=>{
+  assert.deepEqual(SCOPES.private_name_cleanup,['identity_access','pii_access_control','club_domain']);
+  const f=fixture(4),p=planInventory(shared,f.provisions,f.registry,'private_name_cleanup',f.hashes);
+  assert.equal(p.targets.length,9);
+  assert.equal(p.targets.filter(t=>t.name==='identity_access').length,1);
+  for(const g of p.groups)assert.deepEqual(p.targets.filter(t=>t.groupId===g.id).map(t=>t.name),['pii_access_control','club_domain']);
+  assert.equal(p.targets.some(t=>t.name==='shard_router'||t.name==='media_blob_store'),false);
+  assert.throws(()=>planInventory(shared,f.provisions.slice(0,1),f.registry,'private_name_cleanup',f.hashes),/inventory differ/);
+});
 test('migration readiness refuses to omit a registered destination group',()=>{
   const f=fixture(4);
   assert.throws(()=>planInventory(shared,f.provisions.slice(0,1),f.registry,'club_migration',f.hashes),/inventory differ/);

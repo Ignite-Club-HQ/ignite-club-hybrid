@@ -8,6 +8,7 @@ export const SCOPES = Object.freeze({
   full_backend: [...SHARED_SERVICES.filter(name=>name!=='shard_router'), ...GROUP_BUILD_SERVICES, 'shard_router'],
   app_admin: ['identity_access', 'notification_queue'],
   club_migration: ['club_domain'],
+  private_name_cleanup: ['identity_access', 'pii_access_control', 'club_domain'],
   team_invites: ['club_domain', 'mini_league_domain'],
   messaging: ['messaging_domain'],
   competition: ['notification_queue', 'club_domain', 'events_domain', 'competition_domain'],
