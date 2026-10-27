@@ -22,11 +22,11 @@ import {savePrivateNameArtifact,readPrivateNameArtifact} from '../../scripts/pri
 import {openPreparedExecutionJournal} from '../../scripts/private-name-execution-journal.mjs';
 import {executeSavedApprovedNamePlan} from '../../scripts/private-name-approved-execution.mjs';
 import {encryptName,encryptClubName} from '../../scripts/convert-private-names.mjs';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {prepareSignedNameApproval,saveSignedNameApproval,readSavedNameApproval} from '../../scripts/private-name-saved-approval.mjs';
-import {generateKeyPairSync,sign} from 'node:crypto';
+import {generateKeyPairSync,sign,createPrivateKey} from 'node:crypto';
 
 const root = resolve(import.meta.dirname, '../..');
 const p = n => Principal.fromUint8Array(Uint8Array.from([n, 1]));
@@ -182,6 +182,8 @@ try {
   assert.deepEqual(inventory.body.rows.find(r=>r.accountId===convertee.id).clubs,['club-0','club-1']);
   const directory=mkdtempSync(join(tmpdir(),'real-name-conversion-'));
   savePrivateNameArtifact(join(directory,'plan'),artifact,artifact.hash);
+  const sourceDigests=new Map();
+  for(const row of artifact.body.rows)sourceDigests.set(row.accountId,Array.from(ok(await actor.read_private_name_source_digest(row.accountId))));
   actor.setPrincipal(outsider); await denied(() => actor.list_profiles_for_conversion([], 10)); actor.setPrincipal(governor);
 
   // Close, seal every writer, then release sinks with a stopped-sink hold.
@@ -226,7 +228,14 @@ try {
   journal=openJournal();
   const originalPii=piiBySink.get(sink0pre.canisterId.toText());const writeClub=originalPii.writeClub;
   let attempts=0,lost=true;
-  originalPii.writeClub=async(...args)=>{attempts++;const result=await writeClub(...args);if(lost){lost=false;throw Error('Injected lost committed club reply');}return result;};
+  const operationId=`club-name-conversion-${artifact.hash}`;
+  const approvedWrite=async(subject,club)=>{
+    const row=artifact.body.rows.find(r=>r.subject===subject);assert.ok(row);
+    return ok(await actor.write_approved_private_name(operationId,row.accountId,club===null?[]:[club]));
+  };
+  originalPii.writeOriginal=async(subject)=>approvedWrite(subject,null);
+  originalPii.writeClub=async(subject,club)=>{attempts++;const result=await approvedWrite(subject,club);if(lost){lost=false;throw Error('Injected lost committed club reply');}return result;};
+  profileAdapter.publishReference=async account=>ok(await actor.publish_approved_private_name(operationId,account));
   const decryptSaved=async(row,sink)=>{
     // Fixture-only plaintext comparison: records do not exist before initial
     // conversion. Actual SDK decryption is independently asserted below.
@@ -244,10 +253,40 @@ try {
     return readSavedNameApproval(join(directory,`approval-${action}`),binding);
   };
   const request={artifact,expectedHash:artifact.hash,approval:await saveApproval('convert')};
+  // Separate canister admission signature binds the actual immutable request
+  // and exact ciphertext rows. Fixture key comes only from a temporary file.
+  const fixtureSigningKey=createPrivateKey(readFileSync(process.env.PRIVATE_NAME_FIXTURE_SIGNER));
+  const coordinator=deps.coordinator,begin=coordinator.begin;
+  let admission;
+  coordinator.begin=async(id,revision)=>{
+    const window=await begin(id,revision);
+    if(window.phase==='Fencing'){
+      actor.setPrincipal(outsider);await denied(()=>actor.set_profile('Concurrent edit',[]));actor.setPrincipal(governor);
+      await denied(()=>actor.advance_private_name_write_window(id,Principal.fromText(window.sinks[0])));
+      const body={kind:'ignite-private-name-admission-v1',approval_id:'fixture-explicit-names',identity:identity.canisterId,operator:governor,request:window.request,plan_hash:artifact.hash,
+        rows:artifact.body.rows.map(r=>({account_id:r.accountId,subject:Principal.fromText(r.subject),sink:Principal.fromText(r.sink),source_digest:sourceDigests.get(r.accountId),ciphertext:r.ciphertext,clubs:r.clubs.map(c=>({club:c.id,ciphertext:c.ciphertext}))}))};
+      const method=new Map(identityIdl({IDL})._fields).get('approve_private_name_conversion');assert.ok(method);
+      const bodyType=new Map(method.argTypes[1]._fields).get('body');assert.ok(bodyType);
+      admission={body,signature:Array.from(sign(null,Buffer.from(IDL.encode([bodyType],[body])),fixtureSigningKey))};
+      await denied(()=>actor.approve_private_name_conversion(id,{...admission,signature:Array(64).fill(0)}));
+      ok(await actor.approve_private_name_conversion(id,admission));
+      await denied(()=>actor.publish_approved_private_name(id,artifact.body.rows[0].accountId));
+    }
+    return window;
+  };
   try {
     await assert.rejects(executeSavedApprovedNamePlan({...request,approvalPath:join(directory,'approval-convert'),approvalBinding:approvalBinding('convert')},deps),/Injected lost committed club reply/);
-    const operationId=`club-name-conversion-${artifact.hash}`;
     assert.equal((await deps.coordinator.read(operationId)).phase,'Writing');assert.equal(lockHeld,true);
+    // The committed unknown reply retains both backend exclusion and exact
+    // approval through a real coordinator upgrade, not only local disk reopen.
+    actor.setPrincipal(outsider);await denied(()=>actor.set_profile('Conflicting edit',[]));actor.setPrincipal(governor);
+    await denied(()=>groups[0].club_domain.actor.set_identity_access_canister(outsider));
+    await denied(()=>groups[0].pii_access_control.actor.register_pii(outsider.toText(),'display_name',[1],outsider));
+    await denied(()=>actor.close_private_name_write_window(operationId));
+    await pic.upgradeCanister({canisterId:identity.canisterId,wasm:rustWasm('identity_access'),sender:governor});actor.setPrincipal(governor);
+    assert.equal((await deps.coordinator.read(operationId)).phase,'Writing');
+    ok(await actor.approve_private_name_conversion(operationId,admission));
+    actor.setPrincipal(outsider);await denied(()=>actor.set_profile('After restart edit',[]));actor.setPrincipal(governor);
     journal.close();const savedBody=readPrivateNameArtifact(join(directory,'plan'),artifact.hash);
     assert.deepEqual(savedBody,artifact.body);journal=openJournal();deps.journal=journal;
     request.approval=await saveApproval('recover');
@@ -264,6 +303,6 @@ try {
       assert.equal(new TextDecoder().decode(IbeCiphertext.deserialize(Uint8Array.from(row.ciphertext)).decrypt(key)),profiles.find(p=>p.account_id===row.accountId).display_name);
     }
     sink0pre.actor.setPrincipal(governor);
-    console.log('PASS: real two-group single-alias fixture profile/membership inventory, immutable randomized ciphertext, signed fixture approvals, fresh prepared conversion, disk-reopened committed-reply recovery without replay, exact original/club/profile readbacks and post-conversion SDK decryption; 2 sinks/11 writers plus upgrade/stopped-sink recovery. Production account completeness, plaintext reconciliation, exclusivity and protected approval transport remain blocked.');
+    console.log('PASS: real two-group signed exact-row conversion admission, preapproval/forged-signature refusal, ordinary profile/club/PII edit exclusion, incomplete publication/close refusal, persisted approval and edit locks through upgrade, disk-reopened committed-reply recovery without replay, exact ciphertext/profile readbacks and SDK decryption. Production completeness, pre-inventory drain, protected signer transport and management exclusion remain blocked.');
   } finally {journal?.close();harnessExclusive=false;rmSync(directory,{recursive:true,force:true});}
 } finally { if (pic) await pic.tearDown(); await server.stop(); }
