@@ -1807,39 +1807,80 @@ fn account_id(principal: Principal) -> String {
         &hex[20..]
     )
 }
+/// The account id is SHA-256 of the creating principal, so the derived
+/// account was provably created by this principal. Every legitimate removal
+/// of a sign-in ID (revoke, rekey) leaves a durable denial, and erasure /
+/// removal / deletion leave their own markers. If none of those exist, the
+/// principal was never legitimately removed and may re-attach to its original
+/// account (restoring profile, clubs and roles) instead of being locked out.
+fn reclaimable_original_account(principal: Principal) -> Option<Account> {
+    let derived = account_id(principal);
+    let existing = get_account(&derived)?;
+    if existing.principals.contains(&principal) { return Some(existing); }
+    if principal_denial(principal).is_some() || account_is_erased(&derived) || removal_intent(&derived).is_some()
+        || link_lifecycle().pending.iter().any(|job| job.account_id == derived)
+        || DELETION_TICKETS.with(|m| m.borrow().contains_key(&derived))
+        || existing.principals.len() >= MAX_PRINCIPALS {
+        return None;
+    }
+    Some(existing)
+}
+fn reattach_original_account(principal: Principal, mut existing: Account) -> Outcome<String> {
+    if !existing.principals.contains(&principal) {
+        existing.principals.push(principal);
+        existing.version = existing.version.checked_add(1).ok_or("Account version exhausted")?;
+        put_account(&existing);
+    }
+    index_principal(principal, &existing.id);
+    account_for(principal)?;
+    Ok(existing.id)
+}
+/// A duplicate created by an earlier recovery attempt: only this sign-in ID,
+/// no roles, families, exclusions, bindings or purchases. A draft profile is
+/// discarded in favour of the original account's profile.
+fn is_bare_duplicate(state: &CoreState, account: &Account, principal: Principal) -> bool {
+    let id = &account.id;
+    account.principals == vec![principal]
+        && !state.roles.iter().any(|g| &g.account_id == id)
+        && !state.families.iter().any(|f| &f.account_id == id)
+        && !state.exclusions.iter().any(|e| &e.account_id == id)
+        && !state.external_bindings.iter().any(|b| &b.account_id == id)
+        && !all_entitlements().iter().any(|e| e.principal == principal)
+        && !account_is_erased(id) && removal_intent(id).is_none()
+        && !DELETION_TICKETS.with(|m| m.borrow().contains_key(id))
+        && !link_lifecycle().pending.iter().any(|job| &job.account_id == id)
+}
 fn ensure_account(principal: Principal) -> Outcome<String> {
     authenticated(principal)?;
     if principal_is_denied(principal) { return Err("Identity revoked; surviving-account relink required".into()); }
     if let Some(account) = find_account_by_principal(principal) {
+        // Earlier recovery may have parked this sign-in on a fresh, empty
+        // account while the original still exists: move it back.
+        if account.id != account_id(principal) {
+            if let Some(original) = reclaimable_original_account(principal) {
+                let mut state = state();
+                if !original.principals.contains(&principal) && is_bare_duplicate(&state, &account, principal) {
+                    let dup = account.id.clone();
+                    remove_account(&dup);
+                    PROFILES.with(|m| m.borrow_mut().remove(&dup));
+                    state.privacy_consents.retain(|c| c.account_id != dup);
+                    state.terms_acceptances.retain(|t| t.account_id != dup);
+                    state.challenges.retain(|c| c.account_id != dup);
+                    store(&state);
+                    return reattach_original_account(principal, original);
+                }
+            }
+        }
         account_for(principal)?;
         return Ok(account.id);
     }
     if principal_denial(principal).is_some() { return Err("Previous identity authorization requires surviving account".into()); }
+    let derived = account_id(principal);
+    if let Some(original) = reclaimable_original_account(principal) {
+        return reattach_original_account(principal, original);
+    }
     if account_count() >= MAX_ACCOUNTS as u64 {
         return Err("Account quota reached".into());
-    }
-    let derived = account_id(principal);
-    if let Some(mut existing) = get_account(&derived) {
-        // Self-heal a lost principal index entry: the account derived from this
-        // principal still lists it as a live alias, so the caller IS that
-        // account. Re-index instead of locking the owner out.
-        if existing.principals.contains(&principal) {
-            index_principal(principal, &derived);
-            account_for(principal)?;
-            return Ok(derived);
-        }
-        // Orphaned derived account (no sign-in IDs left, not erased, no
-        // pending lifecycle work): only this principal can ever own it.
-        if existing.principals.is_empty() && !account_is_erased(&derived)
-            && !link_lifecycle().pending.iter().any(|job| job.account_id == derived)
-            && !DELETION_TICKETS.with(|m| m.borrow().contains_key(&derived)) {
-            existing.principals.push(principal);
-            existing.version = existing.version.checked_add(1).ok_or("Account version exhausted")?;
-            put_account(&existing);
-            index_principal(principal, &derived);
-            account_for(principal)?;
-            return Ok(derived);
-        }
     }
     // The derived slot belongs to another live account (the caller was
     // unlinked from it). Never join it; give this unindexed, undenied
