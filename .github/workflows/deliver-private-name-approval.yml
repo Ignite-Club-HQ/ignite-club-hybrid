@@ -78,7 +78,7 @@ jobs:
           node scripts/ensure-frontend-deps.mjs
           npx --yes tsx@4.21.0 --version
       - name: Test delivery-only safeguards
-        run: node --test scripts/private-name-approval-delivery.test.mjs scripts/private-name-github-protection.test.mjs
+        run: node --test scripts/private-name-approval-delivery.test.mjs scripts/private-name-approval-receipt-store.test.mjs scripts/private-name-governed-delivery.test.mjs scripts/private-name-github-protection.test.mjs
       - name: Verify actual GitHub protections before restoring governor credentials
         env:
           GH_TOKEN: ${{ github.token }}

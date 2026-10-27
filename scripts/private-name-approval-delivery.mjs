@@ -50,13 +50,22 @@ export async function deliverNameApproval({artifact,binding,action},{readWindow,
   const current=await readApproval(operationId);await guard();
   if(current){
     if(canonical(current)!==canonical(receipt))throw Error('Different retained approval; no overwrite');
+    // A canister receipt may predate this store. Still retain both immutable
+    // events; observing a receipt never grants permission to submit again.
+    if(!prior){
+      const intent={binding:immutable,phase:'unknown'};
+      await persistJournal(intent);
+      if(canonical(await readJournal())!==canonical(intent))throw Error('Durable delivery intent readback required');
+      await guard();
+    }
     await persistJournal({binding:immutable,phase:'verified'});return {operationId,approvalId:binding.approvalId,phase:'verified',submitted:false};
   }
   // Never resend a retained unknown intent, even if the canister returns None.
   if(prior || action==='reconcile')throw Error('Approval delivery unresolved; retain intent without replay');
   if(window.phase!=='Fencing')throw Error('Approval must arrive before conversion opens');
   const intent={binding:immutable,phase:'unknown'};
-  await persistJournal(intent);
+  const claimed=await persistJournal(intent);
+  if(claimed?.created!==true)throw Error('Approval delivery intent not exclusively claimed; reconcile without replay');
   if(canonical(await readJournal())!==canonical(intent))throw Error('Durable delivery intent readback required');
   await guard();await submitApproval(operationId,approval);await guard();
   const retained=await readApproval(operationId);await guard();

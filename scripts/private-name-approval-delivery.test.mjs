@@ -13,7 +13,7 @@ function fixture(preparation=false){
   const receipt=verifyAdmissionArtifact(artifact,binding).receipt;
   let journal=null,retained=null,calls=0;
   const events=[];
-  const deps={assertTarget:async()=>true,readWindow:async()=>({request:body.request,phase:'Fencing'}),readApproval:async()=>retained,readJournal:async()=>journal,persistJournal:async j=>{events.push(j.phase);journal=structuredClone(j);},submitApproval:async()=>{events.push('submit');calls++;retained=receipt;}};
+  const deps={assertTarget:async()=>true,readWindow:async()=>({request:body.request,phase:'Fencing'}),readApproval:async()=>retained,readJournal:async()=>journal,persistJournal:async j=>{const created=journal===null;events.push(j.phase);journal=structuredClone(j);return {created};},submitApproval:async()=>{events.push('submit');calls++;retained=receipt;}};
   return {artifact,binding,body,approval,receipt,deps,events,get journal(){return journal;},get calls(){return calls;},set retained(v){retained=v;},set journal(v){journal=v;}};
 }
 test('original exact-row owner signature verifies with lossless generation and body/signature receipt',()=>{
@@ -43,7 +43,7 @@ test('unknown absent outcome retains intent and never replays, even with deliver
 });
 test('journal sync/readback failure prevents submission',async()=>{
   const f=fixture();f.deps.persistJournal=async()=>{throw Error('durability refused');};await assert.rejects(deliverNameApproval({...f,action:'deliver'},f.deps),/durability/);assert.equal(f.calls,0);
-  f.deps.persistJournal=async()=>{};await assert.rejects(deliverNameApproval({...f,action:'deliver'},f.deps),/readback/);assert.equal(f.calls,0);
+  f.deps.persistJournal=async()=>({created:true});await assert.rejects(deliverNameApproval({...f,action:'deliver'},f.deps),/readback/);assert.equal(f.calls,0);
 });
 test('wrong window, changed target and different retained approval never mutate',async()=>{
   for(const change of ['window','target','retained']){const f=fixture();if(change==='window')f.deps.readWindow=async()=>({request:{...f.body.request,generation:'2'},phase:'Fencing'});if(change==='target')f.deps.assertTarget=async()=>false;if(change==='retained')f.retained={...f.receipt,approval_id:'other'};
@@ -75,4 +75,10 @@ test('changed preparation identity or v1 signature cannot authorize an independe
 });
 test('lost preparation approval reply reconciles without resubmission',async()=>{
   const f=fixture(true),submit=f.deps.submitApproval;f.deps.submitApproval=async()=>{await submit();throw Error('lost preparation reply');};await assert.rejects(deliverNameApproval({...f,action:'deliver'},f.deps));assert.equal(f.journal.phase,'unknown');await deliverNameApproval({...f,action:'reconcile'},f.deps);assert.equal(f.calls,1);
+});
+test('only explicit exclusive first-intent acknowledgement permits submission',async()=>{
+  for(const acknowledgement of [undefined,null,{},true,{created:false},{created:1}]){
+    const f=fixture(),persist=f.deps.persistJournal;f.deps.persistJournal=async j=>{await persist(j);return acknowledgement;};
+    await assert.rejects(deliverNameApproval({...f,action:'deliver'},f.deps),/not exclusively claimed/);assert.equal(f.calls,0);assert.equal(f.journal.phase,'unknown');
+  }
 });
