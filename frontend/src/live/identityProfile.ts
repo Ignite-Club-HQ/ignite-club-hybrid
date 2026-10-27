@@ -138,7 +138,7 @@ export async function fetchIcpIdentityProfile(
       roles: roles.value,
       profileMissing: !canisterProfile,
     };
-    cacheIcpIdentityProfile(principal, resolved);
+    cacheIcpIdentityProfile(principal, canisterProfile?.display_name?.startsWith('pii-display-name:') ? { ...resolved, displayName: null } : resolved);
     return resolved;
   } finally {
     client.dispose();
