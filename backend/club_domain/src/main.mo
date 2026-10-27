@@ -49,6 +49,7 @@ import MembershipSourceRetention "membershipSourceRetention";
 import SubscriptionPolicy "subscriptionPolicy";
 import ProfileMembership "profileMembership";
 import PrivateNameCleanup "../../shared/PrivateNameCleanup";
+import TeamInviteScope "teamInviteScope";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.
@@ -721,7 +722,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
 
   func inviteTeamValid(club : Text, team : Text) : Bool {
-    acl.teams.any(func t = t.id == team and t.club == club) and not teams.any(func t = t.id == team and (t.club_id != club or t.deleted_at_ms != null or not t.is_active))
+    TeamInviteScope.valid(club, team, teams, acl.teams)
   };
   func validTeamInviteRole(role : Text) : Bool { role == "player" or role == "parent" or role == "coach" or role == "team_admin" };
   func localInviteRoleAllowed(caller : Principal, club : Text, team : Text, role : Text) : Bool {
