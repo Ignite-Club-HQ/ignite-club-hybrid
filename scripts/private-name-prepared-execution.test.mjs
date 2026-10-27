@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import {preparePrivateNameArtifact} from './private-name-plan-artifact.mjs';
 import {executePreparedPrivateNamePlan} from './private-name-prepared-execution.mjs';
 import {CONFIRM_CONVERT,CONFIRM_RECOVER} from './convert-private-names.mjs';
+import {openPreparedExecutionJournal} from './private-name-execution-journal.mjs';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 async function setup(){
   const artifact=await preparePrivateNameArtifact({identityId:'identity',operator:'governor',deploymentHash:'a'.repeat(64),inventoryHash:'b'.repeat(64),historyRevision:'7',sinks:[{id:'pii',publicKey:[1]}],rows:[{accountId:'a1',subject:'person1',name:'Paul',sink:'pii',clubs:['c1','c2']},{accountId:'a2',subject:'person2',name:'Other',sink:'pii',clubs:[]}]},{encryptName:async(_k,p)=>p==='person1'?[2]:[3],encryptClubName:async(_k,c)=>c==='c1'?[4]:[5]});
@@ -23,6 +27,49 @@ test('saved original and club ciphertext executes in order then verifies before 
   assert.deepEqual(s.writes,['original:person1','club:c1','club:c2','profile:a1','original:person2','profile:a2']);
   assert.deepEqual(s.originals.get('person1').ciphertext,[2]);assert.deepEqual(s.clubs.get('person1:c2').ciphertext,[5]);
   assert.equal(JSON.stringify([...s.entries]).includes('Paul'),false);assert.deepEqual(s.order,['begin','close','advance','advance']);
+});
+test('fresh Fencing and Opening advances precede conversion; release still follows verification',async()=>{
+  const s=await setup();s.state.phase='Fencing';
+  s.deps.coordinator.advance=async()=>{
+    s.order.push(`advance:${s.state.phase}`);
+    if(s.state.phase==='Fencing')s.state.phase='Opening';
+    else if(s.state.phase==='Opening')s.state.phase='Writing';
+    else if(s.state.phase==='Closing')s.state.phase='Releasing';
+    else if(s.state.phase==='Releasing')s.state.phase='Done';
+    return structuredClone(s.state);
+  };
+  await executePreparedPrivateNamePlan(s.request,s.deps);
+  assert.deepEqual(s.order,['begin','advance:Fencing','advance:Opening','close','advance:Closing','advance:Releasing']);
+  assert.equal(s.writes.length,6);assert.equal(s.state.phase,'Done');
+});
+test('saved disk receipts survive restart and settle a committed lost reply without replay',async()=>{
+  const s=await setup(),directory=mkdtempSync(join(tmpdir(),'name-execution-'));
+  const open=()=>openPreparedExecutionJournal(join(directory,'receipts'),{artifact:s.request.artifact,expectedHash:s.request.expectedHash,assertHeld:()=>true});
+  let journal=open();s.deps.journal=journal;
+  const write=s.pii.writeClub;let first=true;
+  s.pii.writeClub=async(...args)=>{await write(...args);if(first){first=false;throw Error('lost disk-run reply');}};
+  try {
+    await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/lost disk-run reply/);
+    assert.equal(journal.get('club:a1:c1').phase,'unknown');journal.close();
+    journal=open();s.deps.journal=journal;
+    s.request.approval.action='recover';s.request.approval.confirmation=CONFIRM_RECOVER;
+    await executePreparedPrivateNamePlan(s.request,s.deps);
+    assert.equal(s.writes.filter(w=>w==='club:c1').length,1);
+    assert.equal(journal.get('club:a1:c1').phase,'verified');assert.equal(s.state.phase,'Done');
+  } finally {journal.close();rmSync(directory,{recursive:true,force:true});}
+});
+test('restart with saved unknown absent write does not retry or release the retained window',async()=>{
+  const s=await setup(),directory=mkdtempSync(join(tmpdir(),'name-unknown-'));
+  const open=()=>openPreparedExecutionJournal(join(directory,'receipts'),{artifact:s.request.artifact,expectedHash:s.request.expectedHash,assertHeld:()=>true});
+  let journal=open(),attempts=0;s.deps.journal=journal;
+  s.pii.writeOriginal=async()=>{attempts++;throw Error('unknown uncommitted');};
+  try {
+    await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/unknown uncommitted/);journal.close();
+    journal=open();s.deps.journal=journal;s.request.approval.action='recover';s.request.approval.confirmation=CONFIRM_RECOVER;
+    await assert.rejects(executePreparedPrivateNamePlan(s.request,s.deps),/no replay/);
+    assert.equal(attempts,1);assert.equal(s.state.phase,'Writing');assert.equal(s.order.includes('close'),false);
+    assert.equal(s.lock.held,true);assert.equal(journal.get('original:a1').phase,'unknown');
+  } finally {journal.close();rmSync(directory,{recursive:true,force:true});}
 });
 test('partial conversion recovery retains the full original plan and never rewrites completed rows',async()=>{
   const s=await setup();let failed=true;const original=s.pii.writeOriginal;
