@@ -2042,6 +2042,12 @@ fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Prof
         return Err("Avatar reference must be at most 512 characters".into());
     }
     let existing = get_profile_entry(&account_id);
+    if !private_profile_reference::preserves_private_name(
+        existing.as_ref().map(|profile| profile.display_name.as_str()),
+        &display_name,
+    ) {
+        return Err("Encrypted name must be updated at its original private-name authority".into());
+    }
     let profile = Profile {
         account_id: account_id.clone(),
         display_name: display_name.trim().to_string(),
