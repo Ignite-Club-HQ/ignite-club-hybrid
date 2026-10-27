@@ -24,7 +24,6 @@ thread_local! {
     static GENERATION: RefCell<StableCell<u64,super::Memory>> = RefCell::new(StableCell::init(super::memory(29),0));
 }
 fn get(id:&str)->Outcome<WriteWindow>{JOURNAL.with(|m|m.borrow().get(&id.to_string())).map(|b|super::decode(&b)).ok_or("Exact private-name write window required".into())}
-fn save(w:&WriteWindow){JOURNAL.with(|m|m.borrow_mut().insert(w.request.operation_id.clone(),super::encode(w)));}
 pub(super) fn pending()->bool{JOURNAL.with(|m|m.borrow().iter().any(|e|super::decode::<WriteWindow>(&e.value()).phase!=WritePhase::Done))}
 fn access()->Outcome<()> {
     if option_env!("IGNITE_PRIVATE_PROFILE_READS_REHEARSAL")!=Some("1") || !super::private_name_writer_window::enabled() || !super::account_group_rehearsal_enabled(){return Err("All-writer private-name rehearsal required".into());}
@@ -36,15 +35,15 @@ fn create(id:String,generation:u64,inventory:super::group_inventory::RemovalInve
     super::group_inventory::validate_complete(&inventory.groups.snapshot,&inventory.groups.binding,&clubs,&[],&inventory.supplemental,&inventory.media)?;
     let domains=["club_domain","messaging_domain","competition_domain","mini_league_domain"];
     let mut sinks=BTreeSet::new();let mut writers=BTreeSet::from([identity]);
-    for d in inventory.groups.snapshot.groups.iter().flat_map(|g|&g.domains){if d.domain=="pii_access_control"{sinks.insert(d.canister);}if domains.contains(&d.domain.as_str()){writers.insert(d.canister);}}
-    for d in &inventory.supplemental{if d.domain=="pii_access_control"{sinks.insert(d.canister);}if domains.contains(&d.domain.as_str()){writers.insert(d.canister);}}
+    for d in inventory.groups.snapshot.groups.iter().flat_map(|g|&g.domains){if d.domain=="pii_access_control"{sinks.insert(d.canister);writers.insert(d.canister);}if domains.contains(&d.domain.as_str()){writers.insert(d.canister);}}
+    for d in &inventory.supplemental{if d.domain=="pii_access_control"{sinks.insert(d.canister);writers.insert(d.canister);}if domains.contains(&d.domain.as_str()){writers.insert(d.canister);}}
     // Registries remain closed for the entire rehearsal, not opened for
     // ordinary writes. Their topology cannot escape the pinned inventory.
     if !inventory.supplemental.iter().any(|d|d.domain=="identity_access"&&d.canister==identity)
         || !inventory.supplemental.iter().any(|d|d.domain=="placement_registry") {
         return Err("Explicit identity and placement registry inventory required".into());
     }
-    if sinks.is_empty()||sinks.len()>256||writers.len()>256||sinks.iter().any(|p|writers.contains(p)){return Err("Bounded distinct writer and original-PII inventory required".into());}
+    if sinks.is_empty()||sinks.len()>256||writers.len()>256{return Err("Bounded writer and original-PII inventory required".into());}
     let request=WriterRequest{operation_id:format!("names:{id}"),generation,inventory_digest:Sha256::digest(super::encode(&inventory)).to_vec()};
     Ok(WriteWindow{request,phase:WritePhase::Fencing,inventory,sinks:sinks.into_iter().collect(),writers:writers.into_iter().collect(),prepared:vec![],opened:vec![],sealed:vec![],completed:vec![]})
 }
