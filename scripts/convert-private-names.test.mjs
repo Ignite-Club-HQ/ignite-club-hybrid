@@ -100,7 +100,8 @@ test('ciphertext mismatch refuses to publish the reference', async () => {
   deps.pii.get_encrypted_pii_batch = async () => [{ pii_id: SUBJECT, field_id: 'display_name', ciphertext: [1, 2, 3] }];
   let converted = false;
   deps.identity.convert_profile_name = async () => { converted = true; return { display_name: 'x' }; };
-  await assert.rejects(() => convertOneAccount(SINK, await testKey(), { accountId: 'acct-2', name: 'A', subject: SUBJECT }, deps), /ciphertext mismatch/);
+  const key = await testKey();
+  await assert.rejects(() => convertOneAccount(SINK, key, { accountId: 'acct-2', name: 'A', subject: SUBJECT }, deps), /ciphertext mismatch/);
   assert.equal(converted, false);
   assert.equal(deps.journal.get('acct-2').phase, 'registered');
 });
@@ -108,7 +109,8 @@ test('ciphertext mismatch refuses to publish the reference', async () => {
 test('unknown outcomes are retained and stop the run', async () => {
   const { deps } = fakeDeps();
   deps.journal.put('acct-3', { phase: 'unknown' });
-  await assert.rejects(() => convertOneAccount(SINK, await testKey(), { accountId: 'acct-3', name: 'A', subject: SUBJECT }, deps), /Unknown outcome retained/);
+  const key = await testKey();
+  await assert.rejects(() => convertOneAccount(SINK, key, { accountId: 'acct-3', name: 'A', subject: SUBJECT }, deps), /Unknown outcome retained/);
 });
 
 test('window driver fences sinks before writers and seals before release', async () => {
