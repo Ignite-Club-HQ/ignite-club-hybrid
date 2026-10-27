@@ -39,7 +39,8 @@ try {
     [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }] });
   await pic.upgradeCanister({ canisterId: identity.canisterId, wasm: rustWasm('identity_access'), sender: governor, arg: init });
   const topologyEnv = [{ name: 'IGNITE_PRIVATE_NAME_WRITER_REHEARSAL', value: '1' }, { name: 'IGNITE_ACCOUNT_SERVICE_IDENTITY', value: identity.canisterId.toText() }];
-  const router = await pic.setupCanister({ idlFactory: routerIdl, wasm: rustWasm('shard_router'), sender: governor, controllers: [governor], arg: init, environmentVariables: topologyEnv });
+  // Router registers the group inventory before its writes close.
+  const router = await pic.setupCanister({ idlFactory: routerIdl, wasm: rustWasm('shard_router'), sender: governor, controllers: [governor], arg: init });
   const placement = await pic.setupCanister({ idlFactory: placementIdl, wasm: rustWasm('placement_registry'), sender: governor, controllers: [governor], arg: init, environmentVariables: topologyEnv });
   router.actor.setPrincipal(governor);
   const subnet = await pic.getCanisterSubnetId(router.canisterId); assert.ok(subnet);
@@ -83,6 +84,8 @@ try {
   supplemental.push({ group_id: 'g0', domain: 'placement_registry', canister: placement.canisterId, subnet });
 
   const actor = identity.actor;
+  // Group inventory is pinned; router topology writes now close.
+  await pic.updateCanisterSettings({ canisterId: router.canisterId, sender: governor, environmentVariables: topologyEnv });
   ok(await actor.set_club_authorities(groups.map(g => g.club_domain.canisterId)));
   ok(await actor.set_service_authorities(mediaStores.map(s => s.canisterId)));
   let binding = { registry: router.canisterId, registry_revision: await router.actor.version(), target_alias: 'local',
