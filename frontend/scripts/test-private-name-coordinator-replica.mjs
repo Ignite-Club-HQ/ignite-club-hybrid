@@ -271,6 +271,8 @@ try {
       for(const r of body.rows){for(const v of [r.account_id,r.subject.toText(),r.sink.toText()])add(v);add(r.source_digest);add(r.ciphertext);add(String(r.clubs.length));for(const c of r.clubs){add(c.club);add(c.ciphertext);}}
       admission={body,signature:Array.from(sign(null,Buffer.concat(chunks),fixtureSigningKey))};
       await denied(()=>actor.approve_private_name_conversion(id,{...admission,signature:Array(64).fill(0)}));
+      await denied(()=>actor.approve_private_name_conversion(id,{...admission,body:{...admission.body,operator:outsider}}));
+      await denied(()=>actor.approve_private_name_conversion(id,{...admission,body:{...admission.body,request:{...admission.body.request,generation:admission.body.request.generation+1n}}}));
       ok(await actor.approve_private_name_conversion(id,admission));
       await denied(()=>actor.publish_approved_private_name(id,artifact.body.rows[0].accountId));
     }
@@ -285,6 +287,7 @@ try {
     await denied(()=>groups[0].club_domain.actor.set_identity_access_canister(outsider));
     await denied(()=>groups[0].pii_access_control.actor.register_pii(outsider.toText(),'display_name',[1],outsider));
     await denied(()=>actor.close_private_name_write_window(operationId));
+    await denied(()=>actor.publish_approved_private_name(operationId,artifact.body.rows[0].accountId));
     await pic.upgradeCanister({canisterId:identity.canisterId,wasm:rustWasm('identity_access'),sender:governor});actor.setPrincipal(governor);
     assert.equal((await deps.coordinator.read(operationId)).phase,'Writing');
     ok(await actor.approve_private_name_conversion(operationId,admission));
