@@ -38,8 +38,9 @@ try {
   await pic.updateCanisterSettings({ canisterId: identity.canisterId, sender: governor, environmentVariables:
     [{ name: 'IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL', value: '1' }] });
   await pic.upgradeCanister({ canisterId: identity.canisterId, wasm: rustWasm('identity_access'), sender: governor, arg: init });
-  const router = await pic.setupCanister({ idlFactory: routerIdl, wasm: rustWasm('shard_router'), sender: governor, controllers: [governor], arg: init });
-  const placement = await pic.setupCanister({ idlFactory: placementIdl, wasm: rustWasm('placement_registry'), sender: governor, controllers: [governor], arg: init });
+  const topologyEnv = [{ name: 'IGNITE_PRIVATE_NAME_WRITER_REHEARSAL', value: '1' }, { name: 'IGNITE_ACCOUNT_SERVICE_IDENTITY', value: identity.canisterId.toText() }];
+  const router = await pic.setupCanister({ idlFactory: routerIdl, wasm: rustWasm('shard_router'), sender: governor, controllers: [governor], arg: init, environmentVariables: topologyEnv });
+  const placement = await pic.setupCanister({ idlFactory: placementIdl, wasm: rustWasm('placement_registry'), sender: governor, controllers: [governor], arg: init, environmentVariables: topologyEnv });
   router.actor.setPrincipal(governor);
   const subnet = await pic.getCanisterSubnetId(router.canisterId); assert.ok(subnet);
 
