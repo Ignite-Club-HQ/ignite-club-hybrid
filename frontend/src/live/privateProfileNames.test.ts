@@ -17,7 +17,7 @@ const ctx = { identity: { getPrincipal: () => Principal.fromText(subject) }, tar
 const reference = privateProfileNameReference(authority, subject);
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mocks.encrypt.mockResolvedValue(new Uint8Array([9, 8]));
   mocks.register.mockResolvedValue({ Ok: {} });
   mocks.read.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: "display_name", ciphertext: [9, 8] }] });
@@ -29,6 +29,7 @@ beforeEach(() => {
 });
 
 describe('essential own-name copy maintenance', () => {
+  const ctx = { identity: { getPrincipal: () => Principal.fromText(subject) }, target: { host: 'http://localhost:4943', canisterIds: { pii_access_control: authority } } } as FeatureBackendContext;
   const discover = () => Promise.resolve(['club-1', 'club-1', 'club-2']);
   const enable = () => {
     mocks.rehearsal.mockReturnValue(true);
@@ -42,11 +43,11 @@ describe('essential own-name copy maintenance', () => {
   it('refreshes each club once against exact original bytes and verifies all copies', async () => {
     enable();await refreshPrivateOwnClubNames(ctx, ' Paul Cranwell ', discover);
     expect(mocks.refresh.mock.calls).toEqual([
-      [Principal.fromText(subject), 'club-1', [9, 8], [9, 8]],
-      [Principal.fromText(subject), 'club-2', [9, 8], [9, 8]],
+      [Principal.fromText(subject), 'club-1', new Uint8Array([9, 8]), new Uint8Array([9, 8])],
+      [Principal.fromText(subject), 'club-2', new Uint8Array([9, 8]), new Uint8Array([9, 8])],
     ]);
     expect(mocks.lifecycleRead).toHaveBeenCalledTimes(2);
-    expect(mocks.lifecycleRead).toHaveBeenCalledWith(Principal.fromText(subject), 'club-1', [[9, 8]]);
+    expect(mocks.lifecycleRead).toHaveBeenCalledWith(Principal.fromText(subject), 'club-1', [new Uint8Array([9, 8])]);
     expect(mocks.register).not.toHaveBeenCalled();
   });
   it('stops before replica writes when original plaintext differs', async () => {
@@ -71,6 +72,17 @@ describe('essential own-name copy maintenance', () => {
   });
   it('bounds destinations before any crypto or replica mutation', async () => {
     enable();await expect(refreshPrivateOwnClubNames(ctx, 'Paul Cranwell', async () => Array(101).fill('club'))).rejects.toThrow('Bounded exact');expect(mocks.encrypt).not.toHaveBeenCalled();expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it('refuses remote writes even when the frontend rehearsal switch is enabled', async () => {
+    enable();const discover = vi.fn(async () => ['club-1']);
+    await expect(refreshPrivateOwnClubNames({ ...ctx, target: { ...ctx.target, host: 'https://icp-api.io' } }, 'Paul Cranwell', discover)).rejects.toThrow('loopback rehearsal target');expect(discover).not.toHaveBeenCalled();expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it('retains the save session across preparation and maintenance entry', async () => {
+    enable();const { capturePrivateProfileSession } = await import('./privateProfileSession');const saveActive = capturePrivateProfileSession();retirePrivateProfileSession();const discover = vi.fn(async () => ['club-1']);
+    await expect(refreshPrivateOwnClubNames(ctx, 'Paul Cranwell', discover, saveActive)).rejects.toThrow('session retired');expect(discover).not.toHaveBeenCalled();expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it('stops before verification when session retires during final write', async () => {
+    enable();mocks.refresh.mockImplementationOnce(async () => { retirePrivateProfileSession();return { Ok: null }; });await expect(refreshPrivateOwnClubNames(ctx, 'Paul Cranwell', async () => ['club-1'])).rejects.toThrow('session retired');expect(mocks.lifecycleRead).not.toHaveBeenCalled();
   });
 });
 
