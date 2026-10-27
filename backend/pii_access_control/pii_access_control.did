@@ -201,6 +201,11 @@ type Main =
        Err: text;
        Ok: Receipt__1;
      });
+   register_conversion_name: (request: Request, subject: principal, club:
+    opt text, ciphertext: vec nat8) -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
    register_pii: (pii_id: text, field_id: text, ciphertext: vec nat8,
     domain_owner: principal) -> (variant {
                                    Err: text;
