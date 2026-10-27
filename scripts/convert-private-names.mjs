@@ -15,9 +15,8 @@
 //   Never derive randomness from a guessable plaintext name.
 // - The stored ciphertext is byte-compared against the journaled
 //   encryption BEFORE the reference is published; a mismatch stops the run.
-// - register_pii / convert_profile_name are each retried once with identical
-//   terms; any other unknown outcome is RETAINED in the journal and stops the
-//   run — never replayed, never skipped.
+// - Original/club PII writes are single-attempt and pre-journaled unknown;
+//   lost replies stop rather than replay. Reference publication is idempotent.
 // - Final reconciliation re-pages every profile: zero plaintext names may
 //   remain and every reference must bind an inventoried original PII sink.
 
