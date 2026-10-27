@@ -92,7 +92,9 @@ try {
   // Group inventory is pinned; router topology writes now close.
   await pic.updateCanisterSettings({ canisterId: router.canisterId, sender: governor, environmentVariables: topologyEnv });
   ok(await actor.set_club_authorities(groups.map(g => g.club_domain.canisterId)));
-  ok(await actor.set_service_authorities(mediaStores.map(s => s.canisterId)));
+  ok(await actor.set_service_authorities([
+    ...groups.flatMap(g => [g.club_domain.canisterId, g.messaging_domain.canisterId, g.competition_domain.canisterId, g.mini_league_domain.canisterId, g.pii_access_control.canisterId]),
+    ...mediaStores.map(s => s.canisterId)]));
   let binding = { registry: router.canisterId, registry_revision: await router.actor.version(), target_alias: 'local',
     deployment_id: 'isolated-replica', deployment_revision: 1n, host: 'https://isolated.invalid', network_kind: 'public_mainnet' };
   const revision = async () => ok(await actor.read_removal_history_manifest()).revision;
