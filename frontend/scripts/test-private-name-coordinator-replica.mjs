@@ -154,9 +154,7 @@ try {
   sink0pre.actor.setPrincipal(governor);
   ok(await sink0pre.actor.register_pii(subject, field, ciphertext, outsider));
   const readback = ok(await sink0pre.actor.get_encrypted_pii_batch([subject], field, 'profile_display', 'conversion readback'));
-  console.log('ciphertext lens', ciphertext.length, readback[0].ciphertext.length, 'rows', readback.length,
-    'head', JSON.stringify(ciphertext.slice(0, 8)), JSON.stringify(readback[0].ciphertext.slice(0, 8)));
-  assert.deepEqual(readback[0].ciphertext, ciphertext, 'Stored ciphertext must be the exact deterministic encryption');
+  assert.deepEqual(Array.from(readback[0].ciphertext), ciphertext, 'Stored ciphertext must be the exact deterministic encryption');
   const reference = `pii-display-name:v1:${sink0pre.canisterId.toText()}:${subject}`;
   const converted = ok(await actor.convert_profile_name(convertee.id, reference));
   assert.equal(converted.display_name, reference);
