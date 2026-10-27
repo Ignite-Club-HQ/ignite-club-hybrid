@@ -4,7 +4,7 @@ import AccountAdmission "../../shared/AccountAdmission";
 import BroadcastErasure "../../shared/BroadcastErasure";
 import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
-import RemovalEndpoints "../../shared/RemovalEndpoints";
+import RemovalEndpoints "../../shared/PrivateNameRemovalEndpoints";
 import Map "mo:core/Map";
 import EmailOutbox "../../shared/EmailOutbox";
 import Error "mo:core/Error";

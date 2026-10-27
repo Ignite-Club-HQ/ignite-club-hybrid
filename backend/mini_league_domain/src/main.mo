@@ -3,7 +3,7 @@ import PrivateNameWriterEndpoints "../../shared/PrivateNameWriterEndpoints";
 import AccountAdmission "../../shared/AccountAdmission";
 import OpeningConfiguration "../../shared/OpeningConfiguration";
 import RemovalReceiver "../../shared/RemovalReceiver";
-import RemovalEndpoints "../../shared/RemovalEndpoints";
+import RemovalEndpoints "../../shared/PrivateNameRemovalEndpoints";
 import Map "mo:core/Map";
 import Error "mo:core/Error";
 import PrimMem "mo:⛔";
