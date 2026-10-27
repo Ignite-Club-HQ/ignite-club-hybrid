@@ -102,3 +102,16 @@ test('unknown source edge variants never certify a silently incomplete inventory
   const {inputs,deps}=setup();deps.actors.get('source-1').read_membership_source_page=async()=>({Ok:{revision:8n,scanned:1n,edges:[{NewMembership:{}}],next:[]}});
   await assert.rejects(collectPrivateNameClubInventory(inputs,deps),/Malformed/);
 });
+
+test('fence verification receives exact account subjects without plaintext names',async()=>{
+  const {inputs,deps}=setup(); let checks=0;
+  deps.assertFence=async(context)=>{
+    checks++;assert.deepEqual(context.accounts,[{accountId:'a1',subject:'person-1'},{accountId:'a2',subject:'person-2'}]);assert.equal(JSON.stringify(context).includes('Paul'),false);return true;
+  };
+  await collectPrivateNameClubInventory(inputs,deps);assert.equal(checks,17);
+});
+test('per-source scan budget refuses oversized traversals even within call budget',async()=>{
+  const {inputs,deps}=setup();let offset=0n;
+  deps.actors.get('source-1').read_membership_source_page=async()=>({Ok:{revision:8n,scanned:100n,edges:[],next:[{revision:8n,phase:0n,offset:++offset,nested:0n}]}});
+  await assert.rejects(collectPrivateNameClubInventory(inputs,deps),/scan budget/);
+});

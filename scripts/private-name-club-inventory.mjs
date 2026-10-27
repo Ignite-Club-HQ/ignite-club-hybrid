@@ -53,7 +53,7 @@ export async function collectPrivateNameClubInventory({ accounts, sources, ident
     if (!account || !text(account.accountId) || !text(account.subject) || accountIds.has(account.accountId) || subjects.has(account.subject)) throw Error('Unambiguous distinct account subjects required');
     subjects.add(account.subject); accountIds.add(account.accountId);
   }
-  const context = structuredClone({ identityId, operator, deploymentHash, historyRevision: String(historyRevision), sources });
+  const context = structuredClone({ identityId, operator, deploymentHash, historyRevision: String(historyRevision), sources, accounts: accounts.map(({accountId,subject}) => ({accountId,subject})) });
   let calls = 0;
   // assertFence must authenticate complete registered-plus-original-G1 source
   // coverage, account aliases/eligibility, management lifecycle, topology and
@@ -79,6 +79,7 @@ export async function collectPrivateNameClubInventory({ accounts, sources, ident
       const count = nat(page.scanned);
       if (count > 100n || !Array.isArray(page.edges) || page.edges.length > Number(count) || !Array.isArray(page.next) || page.next.length > 1) throw Error('Invalid bounded source page');
       scanned += Number(count);
+      if (!Number.isSafeInteger(scanned) || scanned > 1000000) throw Error('Membership source scan budget exceeded');
       for (const edge of page.edges) {
         if (!edge || Object.keys(edge).length !== 1 || !['Club','Role','Parent','Guardian','ChildTeam','Team','Excluded'].includes(Object.keys(edge)[0])) throw Error('Malformed source edge');
         if (!Object.hasOwn(edge, 'Club')) continue; // roles/children never grant access here
@@ -126,7 +127,7 @@ export async function prepareInventoriedPrivateNameArtifact(input, deps) {
   const inventory = await collectPrivateNameClubInventory(input, deps);
   const byId = new Map(inventory.body.rows.map(row => [row.accountId, row]));
   const artifact = await preparePrivateNameArtifact({ ...input, inventoryHash: inventory.hash, rows: input.accounts.map(account => ({accountId: account.accountId, subject: account.subject, name: account.name, sink: account.sink, clubs: byId.get(account.accountId).clubs})) }, deps);
-  const context = {identityId: input.identityId, operator: input.operator, deploymentHash: input.deploymentHash, historyRevision: String(input.historyRevision), sources: structuredClone(input.sources)};
+  const context = {identityId: input.identityId, operator: input.operator, deploymentHash: input.deploymentHash, historyRevision: String(input.historyRevision), sources: structuredClone(input.sources), accounts: input.accounts.map(({accountId,subject}) => ({accountId,subject}))};
   if (await deps.assertFence(context) !== true) throw Error('External inventory fence changed during encryption');
   return {artifact, inventory};
 }
