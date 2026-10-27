@@ -61,7 +61,7 @@ mod tests {
     }
 
     #[test]
-    fn_first_private_save_and_legacy_names_are_not_bulk_conversion() {
+    fn first_private_save_and_legacy_names_are_not_bulk_conversion() {
         let owner = Principal::from_slice(&[2, 1]);
         let reference = format!("pii-display-name:v1:{owner}:{owner}");
         assert!(preserves_private_name(None, &reference));
