@@ -3,7 +3,9 @@ import { Principal } from '@icp-sdk/core/principal';
 import type { Identity } from '@icp-sdk/core/agent';
 import type { IcpTargetConfig } from './targetRegistry';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), dispose: vi.fn(), cache: vi.fn(), rehearsal: vi.fn(), prepare: vi.fn(), refresh: vi.fn(), hydrate: vi.fn(), grants: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), dispose: vi.fn(), cache: vi.fn(), rehearsal: vi.fn(), prepare: vi.fn(), refresh: vi.fn(), hydrate: vi.fn(), grants: vi.fn(), evidence: vi.fn(), resolve: vi.fn(), confirm: vi.fn() }));
+vi.mock('./privateProfileEvidence', () => ({ readPrivateProfileEvidence: mocks.evidence }));
+vi.mock('./privateProfileAuthority', () => ({ createLivePrivateProfileAuthorityResolver: () => mocks.resolve }));
 vi.mock('./identityAccess', () => ({ isLiveIdentityAccessConfigured: () => true, connectLiveIdentityAccessClientWithIdentity: async () => ({ client: { getProfile: mocks.get, setProfile: mocks.set, dispose: mocks.dispose } }) }));
 vi.mock('./identityProfileCache', () => ({ cacheIcpIdentityProfile: mocks.cache, getCachedIcpIdentityProfile: () => null }));
 vi.mock('./privateProfileSearchMode', () => ({ privateProfileSearchRehearsalEnabled: mocks.rehearsal }));
@@ -53,4 +55,19 @@ it('session retirement after read prevents every save mutation', async () => {
   mocks.get.mockImplementation(async () => { retirePrivateProfileSession(); return { display_name: reference }; });
   await expect(saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target)).rejects.toThrow('session retired');
   expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.set).not.toHaveBeenCalled();
+});
+it('verified foreign originals save only at their original PII route and preserve the reference', async () => {
+  const foreign = 'ryjl3-tyaaa-aaaaa-aaaba-cai';
+  const foreignReference = `pii-display-name:v1:${foreign}:${subject}`;
+  const routed = { identity, target: { ...target, canisterIds: { ...target.canisterIds, pii_access_control: foreign } } };
+  mocks.get.mockResolvedValue({ display_name: foreignReference }); mocks.evidence.mockResolvedValue({ verified: true });
+  mocks.resolve.mockResolvedValue({ context: routed, confirm: mocks.confirm }); mocks.prepare.mockResolvedValue(foreignReference);
+  await saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target);
+  expect(mocks.prepare).toHaveBeenCalledWith(routed, 'After'); expect(mocks.set).toHaveBeenCalledWith(foreignReference, undefined); expect(mocks.confirm).toHaveBeenCalledTimes(3);
+});
+it('missing foreign evidence or changed closing authority prevents name/profile writes', async () => {
+  const foreign = 'ryjl3-tyaaa-aaaaa-aaaba-cai'; mocks.get.mockResolvedValue({ display_name: `pii-display-name:v1:${foreign}:${subject}` });
+  await expect(saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target)).rejects.toThrow('evidence'); expect(mocks.prepare).not.toHaveBeenCalled();
+  mocks.evidence.mockResolvedValue({ verified: true }); mocks.resolve.mockResolvedValue({ context: { identity, target: { ...target, canisterIds: { ...target.canisterIds, pii_access_control: foreign } } }, confirm: mocks.confirm }); mocks.confirm.mockRejectedValue(Error('Authority drift'));
+  await expect(saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target)).rejects.toThrow('Authority drift'); expect(mocks.prepare).not.toHaveBeenCalled(); expect(mocks.set).not.toHaveBeenCalled();
 });
