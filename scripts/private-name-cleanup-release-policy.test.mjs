@@ -42,3 +42,16 @@ test('unknown absent activation stays locked without retry',async()=>{
   await assert.rejects(activateCleanupSettings(steps,{gate:async()=>{},observe:async()=>({rawSettingsHash:'old'}),persist:async()=>{},update:async()=>{writes++;}}),/without replay/);
   assert.equal(writes,0);assert.equal(steps[0].phase,'pending');
 });
+import { canonicalSettingRows, supersedableSettingsStage } from './private-name-cleanup-release-policy.mjs';
+test('setting fingerprints ignore decoded key order',()=>{
+  const decoded=[{value:'1',name:'B'},{value:'x',name:'A'}], built=[{name:'A',value:'x'},{name:'B',value:'1'}];
+  assert.equal(JSON.stringify(canonicalSettingRows(decoded)),JSON.stringify(canonicalSettingRows(built)));
+});
+test('interrupted settings-only stage is superseded only when pending writes are fully applied',()=>{
+  const journal={complete:false,binding:{scope:'secure_name_save'},steps:[{phase:'ready'}],cleanupActivation:[{canisterId:'a',phase:'pending'},{canisterId:'b',phase:'ready'}]};
+  assert.equal(supersedableSettingsStage(journal,'secure_name_save',id=>id==='a'),true);
+  assert.equal(supersedableSettingsStage(journal,'secure_name_save',()=>false),false);
+  assert.equal(supersedableSettingsStage(journal,'private_club_name_display',()=>true),false);
+  assert.equal(supersedableSettingsStage({...journal,steps:[{phase:'pending'}]},'secure_name_save',()=>true),false);
+  assert.equal(supersedableSettingsStage({...journal,modulesComplete:true},'secure_name_save',()=>true),false);
+});

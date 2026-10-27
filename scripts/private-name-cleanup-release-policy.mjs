@@ -35,3 +35,15 @@ export async function activateCleanupSettings(steps, transport) {
     step.phase='complete'; await transport.persist();
   }
 }
+// Candid decodes setting rows as {value,name}; locally built rows are
+// {name,value}. Fingerprints must never depend on that key order.
+export const canonicalSettingRows = rows => rows.map(r=>({name:r.name,value:r.value})).sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0);
+/** An interrupted settings-only stage (no module installed) may be superseded by
+ * a fresh checked plan, but only when every pending settings write is already
+ * fully applied on the live canister. Anything else keeps the old rule. */
+export function supersedableSettingsStage(journal, scope, settled) {
+  if(!journal || journal.complete===true || journal.binding?.scope!==scope || journal.modulesComplete===true) return false;
+  if(!Array.isArray(journal.steps) || journal.steps.some(s=>s.phase!=='ready')) return false;
+  if(!Array.isArray(journal.cleanupActivation) || journal.galleryAuthorities || journal.publication) return false;
+  return journal.cleanupActivation.every(s=>s.phase==='ready' || (['pending','complete'].includes(s.phase) && settled(s.canisterId)===true));
+}

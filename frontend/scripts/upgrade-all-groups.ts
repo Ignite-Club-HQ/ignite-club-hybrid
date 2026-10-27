@@ -24,7 +24,7 @@ import { GROUP2_GOVERNOR, verifyUpgradeStatus, wasmHash } from '../../scripts/gr
 import { placementOperatorEvidenceIdl, normalizePlacementOperatorEvidence } from '../../scripts/placement-upgrade-evidence.mjs';
 import { legacyClubLifecycleDisabled, validateClubIdentityWiring, groupPermissionRequirement } from '../../scripts/all-group-wiring-policy.mjs';
 import { digest, validateRequest, planInventory, installArgs, validateJournal, requireSettledPredecessor, requireSettledNarrowRelease, assertCheckedPlan, executeUpgrades, requireCompletedRecovery, galleryAuthorities, verifyCompletedRecovery, normalizePlan } from '../../scripts/all-group-upgrade-policy.mjs';
-import { CLEANUP_RELEASE, cleanupEnvironment, requireCleanupWiring, activateCleanupSettings } from '../../scripts/private-name-cleanup-release-policy.mjs';
+import { CLEANUP_RELEASE, cleanupEnvironment, requireCleanupWiring, activateCleanupSettings, canonicalSettingRows, supersedableSettingsStage } from '../../scripts/private-name-cleanup-release-policy.mjs';
 import { isSecureNameScope, secureNameEnvironment, secureNameChangedSettings } from '../../scripts/secure-name-release-policy.mjs';
 import { settlePublishedEvidence } from '../../scripts/all-group-publication.mjs';
 
@@ -94,12 +94,12 @@ const observe=async(t:Target)=>{
   const subnet=certified.get('subnet') as {subnetId?:Principal}|undefined;
   const actual={moduleHash:Buffer.from(status.module_hash[0]??[]).toString('hex'),controllers:status.settings.controllers.map((p:Principal)=>p.toText()),running:'running' in status.status,cycles:status.cycles,subnetId:String(subnet?.subnetId??''),environment:status.settings.environment_variables};
   verifyUpgradeStatus(t,actual,GROUP2_GOVERNOR);
-  const settings={...status.settings,controllers:actual.controllers,environment_variables:[...actual.environment].sort((a,b)=>a.name.localeCompare(b.name))};
+  const settings={...status.settings,controllers:actual.controllers,environment_variables:canonicalSettingRows(actual.environment)};
   const rawSettingsHash=digest(settings);
   let cleanupSettingsHash:string|undefined;
-  if(settingsRelease) cleanupSettingsHash=digest({...settings,environment_variables:releaseEnvironment(actual.environment,t.name)});
+  if(settingsRelease) cleanupSettingsHash=digest({...settings,environment_variables:canonicalSettingRows(releaseEnvironment(actual.environment,t.name))});
   const normalized=settingsRelease?{...settings,environment_variables:settings.environment_variables.filter((r:{name:string})=>!changedSettings(t.name).includes(r.name))}:settings;
-  return {moduleHash:actual.moduleHash,settingsHash:digest(normalized),rawSettingsHash,cleanupSettingsHash,cycles:String(actual.cycles),legacyLifecycleDisabled:legacyClubLifecycleDisabled(actual.environment)};
+  return {moduleHash:actual.moduleHash,settingsHash:digest(normalized),rawSettingsHash,cleanupSettingsHash,settingsSettled:settingsRelease?cleanupSettingsHash===rawSettingsHash:undefined,cycles:String(actual.cycles),legacyLifecycleDisabled:legacyClubLifecycleDisabled(actual.environment)};
 };
 const readConfig=async(t:Target)=>{
   const rows=IDL.Vec(IDL.Tuple(IDL.Text,IDL.Text));
@@ -193,7 +193,8 @@ if(journal&&!same){
     journal.published=true;
     stored=persistGroup2Journal(api,path,branch,stored,journal,'publication settled');
   }
-  requireSettledPredecessor(journal);
+  const settledNow=new Map(observations.map(o=>[o.canisterId,o.settingsSettled]));
+  if(!(settingsRelease&&supersedableSettingsStage(journal,scope,(id:string)=>settledNow.get(id)))) requireSettledPredecessor(journal);
 }
 const gate=async()=>{
   const current=await registry();
