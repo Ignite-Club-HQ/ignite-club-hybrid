@@ -49,7 +49,7 @@ fn create(id:String,generation:u64,inventory:super::group_inventory::RemovalInve
 }
 impl WriteWindow {
     fn sink_receipt(&self,target:Principal,r:&SinkReceipt,completed:bool)->Outcome<()> {
-        if !self.sinks.contains(&target)||r.receiver!=target||r.request.operation_id!=self.request.operation_id||r.request.generation!=self.request.generation||r.request.inventory_digest!=self.request.inventory_digest||r.completed!=completed||r.release_epoch==candid::Nat::from(0u8){return Err("Private-name sink receipt mismatch".into());}
+        if !self.sinks.contains(&target)||r.receiver!=target||r.request.operation_id!=self.request.operation_id||r.request.generation!=self.request.generation||r.request.inventory_digest!=self.request.inventory_digest||r.completed!=completed||r.release_epoch!=candid::Nat::from(0u8){return Err("Private-name sink receipt mismatch".into());}
         if completed&&self.prepared.iter().find(|p|p.receiver==target).is_none_or(|p|r.release_epoch<=p.release_epoch){return Err("Private-name completion epoch did not advance".into());}Ok(())
     }
     fn writer_receipt(&self,target:Principal,r:&WriterReceipt,sealed:bool)->Outcome<()> {
