@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { privateNameTestEnvironment, NAME_TEST_CANISTERS } from './test-private-name-workflow.mjs';
+import { privateNameTestEnvironment, NAME_TEST_CANISTERS, runPrivateNameAcceptance } from './test-private-name-workflow.mjs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 test('isolated acceptance never inherits production credentials or production signer configuration', () => {
   const env = privateNameTestEnvironment({ PATH: '/tools', HOME: '/home/test', DEPLOYER_PEM: 'must-not-pass', GH_TOKEN: 'must-not-pass', DEPLOY_IDENTITY_PEM: 'must-not-pass', IGNITE_PRIVATE_NAME_APPROVER_PUBLIC_KEY: 'production', SUPABASE_SERVICE_ROLE_KEY: 'must-not-pass' }, 'a'.repeat(64), '/tmp/fixture.pem');
@@ -17,4 +20,21 @@ test('acceptance builds exactly the six required disposable Motoko services', ()
 test('missing disposable signer refuses before compilation', () => {
   assert.throws(() => privateNameTestEnvironment({}, 'production', '/tmp/key'), /Disposable signer/);
   assert.throws(() => privateNameTestEnvironment({}, 'a'.repeat(64), ''), /Disposable signer/);
+});
+test('failed acceptance retains a failed report, deletes fixture signing key and never runs later steps', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'name-workflow-rule-'));
+  const reportPath = join(directory, 'report.json');
+  let calls = 0, signer;
+  try {
+    assert.throws(() => runPrivateNameAcceptance({ reportPath, run: (_executable, _args, options) => {
+      calls++; signer = options.env.PRIVATE_NAME_FIXTURE_SIGNER;
+      assert.equal(existsSync(signer), true);
+      return { status: 1 };
+    } }), /no production action/);
+    assert.equal(calls, 1); assert.equal(existsSync(signer), false);
+    const report = JSON.parse(readFileSync(reportPath));
+    assert.equal(report.passed, false); assert.equal(report.productionChanged, false);
+    assert.equal(report.deploymentAuthorized, false); assert.equal(report.conversionAuthorized, false);
+    assert.equal(report.steps.length, 1); assert.equal(report.steps[0].passed, false);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
