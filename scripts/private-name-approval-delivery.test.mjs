@@ -57,3 +57,11 @@ test('protected workflow uses existing governor and original artifact only, with
   const runner=readFileSync(new URL('../frontend/scripts/deliver-private-name-approval.ts',import.meta.url),'utf8');
   assert.doesNotMatch(runner,/actor\.(begin_private|advance_private|close_private|write_approved|publish_approved)/);assert.match(runner,/actor\.approve_private_name_conversion/);assert.match(runner,/read_private_name_conversion_approval/);
 });
+test('changed artifact pin cannot bypass a retained delivery for the same operation',async()=>{
+  const f=fixture();f.deps.submitApproval=async()=>{throw Error('unknown');};await assert.rejects(deliverNameApproval({...f,action:'deliver'},f.deps));
+  const artifact=Buffer.from(JSON.stringify(f.approval,null,2));
+  await assert.rejects(deliverNameApproval({artifact,binding:{...f.binding,artifactHash:hash(artifact)},action:'deliver'},f.deps),/intent differs/);assert.equal(f.journal.phase,'unknown');
+});
+test('approved artifact ingress budget refuses oversized payloads before parsing or transport',()=>{
+  const f=fixture(),raw=Buffer.alloc(1500001);assert.throws(()=>verifyAdmissionArtifact(raw,{...f.binding,artifactHash:hash(raw)}),/bounded/);
+});
