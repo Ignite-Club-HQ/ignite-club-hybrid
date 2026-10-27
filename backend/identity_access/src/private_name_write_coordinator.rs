@@ -108,6 +108,10 @@ fn begin_private_name_preparation(operation_id:String, expected_history_revision
     if JOURNAL.with(|m|m.borrow().len())>=4096{return Err("Private-name write journal capacity reached".into());}
     let generation=GENERATION.with(|m|m.borrow().get().checked_add(1)).ok_or("Private-name write generation exhausted")?;
     let mut w=create(operation_id.clone(),generation,candidate,ic_cdk::api::canister_self())?;
+    let mut participants=w.writers.iter().copied().collect::<BTreeSet<_>>();
+    participants.insert(w.inventory.groups.binding.registry);
+    for d in &w.inventory.supplemental{if d.domain=="placement_registry"{participants.insert(d.canister);}}
+    if participants.len()>256{return Err("Preparation participant budget exceeded".into());}w.writers=participants.into_iter().collect();
     w.phase=WritePhase::Preparing;
     super::private_name_writer_window::freeze_local(w.request.clone())?;
     GENERATION.with(|m|m.borrow_mut().set(generation));save_at(&operation_id,&w);Ok(w)
@@ -171,7 +175,7 @@ async fn advance_private_name_write_window(operation_id:String,target:Principal)
         WritePhase::Opening|WritePhase::Closing=>{
             if !w.writers.contains(&target){return Err("Exact participating writer required".into());}
             let prepared=super::private_name_writer_window::preparation(&w.request);
-            let method=if phase==WritePhase::Opening && prepared{"freeze_private_name_preparation"}else if phase==WritePhase::Opening{"open_private_name_writer_window"}else if prepared{"finish_private_name_preparation"}else{"seal_private_name_writer_window"};
+            let method=if phase==WritePhase::Opening && prepared{"activate_private_name_preparation"}else if phase==WritePhase::Opening{"open_private_name_writer_window"}else if prepared{"finish_private_name_preparation"}else{"seal_private_name_writer_window"};
             let _=ic_cdk::call::Call::bounded_wait(target,method).with_arg(&w.request).await;
             let reader=if prepared{"read_private_name_preparation"}else{"read_private_name_writer_window"};
             let reply=ic_cdk::call::Call::bounded_wait(target,reader).with_arg(&w.request).await.map_err(|_|"Private-name writer outcome unknown; retain window")?;

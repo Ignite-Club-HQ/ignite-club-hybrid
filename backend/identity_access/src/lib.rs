@@ -20,6 +20,8 @@ fn read_private_name_preparation(request: WriterRequest) -> Result<WriterReceipt
 #[ic_cdk::update]
 fn finish_private_name_preparation(request: WriterRequest) -> Result<(), String> { private_name_writer_window::finish_preparation(request) }
 #[ic_cdk::update]
+fn activate_private_name_preparation(request: WriterRequest) -> Result<(), String> { private_name_writer_window::activate_preparation(request) }
+#[ic_cdk::update]
 fn open_private_name_writer_window(request: WriterRequest) -> Result<(), String> { private_name_writer_window::open(request) }
 #[ic_cdk::update]
 fn seal_private_name_writer_window(request: WriterRequest) -> Result<(), String> { private_name_writer_window::seal(request) }

@@ -49,7 +49,9 @@ fn row(account: Account, profile: Option<Profile>, sinks: &[Principal]) -> Outco
 }
 fn require_locked(w: &super::private_name_write_coordinator::WriteWindow) -> Outcome<()> {
     use super::private_name_write_coordinator::WritePhase;
-    if !super::private_name_writer_window::exclusive(&w.request) || w.phase != WritePhase::Writing
+    let prep=super::private_name_writer_window::preparation(&w.request);
+    let allowed=if prep{matches!(w.phase,WritePhase::AwaitingApproval|WritePhase::Fencing)}else{super::private_name_writer_window::exclusive(&w.request)&&w.phase==WritePhase::Writing};
+    if !allowed
         || w.opened.len() != w.writers.len()
         || w.writers.iter().any(|target| w.opened.iter().filter(|r| r.receiver == *target && r.request == w.request && !r.closing && !r.sealed && r.active == candid::Nat::from(0u8)).count() != 1) {
         return Err("Exact drained exclusive conversion window required".into());

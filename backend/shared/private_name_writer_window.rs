@@ -52,8 +52,15 @@ pub(crate) fn preparation_receipt_local(request: WriterRequest) -> Result<Writer
     Ok(WriterReceipt{request,receiver:ic_cdk::api::canister_self(),closing:i.closing,sealed:i.sealed,active:active.into()})
 }
 pub fn preparation_receipt(request: WriterRequest) -> Result<WriterReceipt,String> {authorize()?;preparation_receipt_local(request)}
+fn approved_key(request:&WriterRequest)->String{format!("approved:{}",request.operation_id)}
+pub fn activate_preparation(request:WriterRequest)->Result<(),String>{
+    authorize()?;let r=preparation_receipt_local(request.clone())?;
+    if r.closing||r.sealed||r.active!=candid::Nat::from(0u8){return Err("Exact drained preparation required".into());}
+    INTENTS.with(|m|m.borrow_mut().insert(approved_key(&request),crate::encode(&WriterIntent{request,closing:true,sealed:true,active:0})));Ok(())
+}
 pub fn finish_preparation(request: WriterRequest) -> Result<(),String> {
     authorize()?;let r=preparation_receipt_local(request.clone())?;
+    if INTENTS.with(|m|m.borrow().get(&approved_key(&request))).is_none(){return Err("Signed preparation activation required".into());}
     if r.active!=candid::Nat::from(0u8){return Err("Preparation work remains unresolved".into());}
     let mut i=load(&request.operation_id)?;i.closing=true;i.sealed=true;save(&i);Ok(())
 }
@@ -93,6 +100,7 @@ pub fn enter() -> Result<Lease,String> {
 // Internal identity publication uses this only after exact signed-row checks.
 pub fn enter_conversion(request: &WriterRequest) -> Result<Lease,String> {
     if !enabled() || !(exclusive(request)||preparation(request)){return Err("Approved conversion window required".into());}
+    if preparation(request) && INTENTS.with(|m|m.borrow().get(&approved_key(request))).is_none(){return Err("Signed preparation activation required".into());}
     let mut i=if preparation(request){load(&request.operation_id)?}else{current().ok_or("Exact open conversion window required")?};
     if i.request!=*request || i.closing || i.active>=4096{return Err("Exact open conversion window required".into());}
     i.active+=1;save(&i);Ok(Lease(Some(i.request)))

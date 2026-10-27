@@ -57,8 +57,14 @@ module {
       #Ok
     };
     public func finishPreparation(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
+      if (intents.get("approved:" # request.operation_id) == null) return #Err("Signed preparation activation required");
       switch (preparationReceipt(caller, request, caller)) { case (#Err(e)) return #Err(e); case (#Ok(r)) { if (r.active != 0) return #Err("Preparation work remains unresolved") } };
       switch (intents.get(request.operation_id)) { case null #Err("Exact preparation receipt required"); case (?i) { intents.add(request.operation_id, { i with closing = true; sealed = true }); #Ok } }
+    };
+    public func activatePreparation(caller : Principal, request : Release.Request) : { #Ok; #Err : Text } {
+      switch (preparationReceipt(caller, request, caller)) { case (#Err(e)) return #Err(e); case (#Ok(r)) { if (r.active != 0 or r.closing or r.sealed) return #Err("Exact drained preparation required") } };
+      if (intents.get("approved:" # request.operation_id) == null and intents.size() >= capacity) return #Err("Preparation activation capacity reached");
+      intents.add("approved:" # request.operation_id, { request; active = 0; closing = true; sealed = true }); #Ok
     };
     public func enter() : { #Ok : ?Release.Request; #Err : Text } {
       if (not enabled) return #Ok(null);
@@ -77,6 +83,7 @@ module {
     // mutations. Ordinary governor/owner methods never receive this lease.
     public func enterConversion(caller : Principal, request : Release.Request) : { #Ok : ?Release.Request; #Err : Text } {
       if (not authorized(caller) or not (exclusive(request) or preparation(request))) return #Err("Approved conversion coordinator required");
+      if (preparation(request) and intents.get("approved:" # request.operation_id) == null) return #Err("Signed preparation activation required");
       switch (if (preparation(request)) intents.get(request.operation_id) else current()) {
         case (?intent) {
           if (intent.request != request or intent.closing or intent.active >= 4096) return #Err("Exact open conversion window required");

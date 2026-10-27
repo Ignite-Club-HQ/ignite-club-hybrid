@@ -46,9 +46,10 @@ fn approval_bytes(b:&ApprovalBody)->Vec<u8>{
 }
 fn validate(a:&SignedApproval,w:&WriteWindow,operator:Principal,identity:Principal,k:&VerifyingKey)->Outcome<()>{
     let b=&a.body;
-    if b.kind!="ignite-private-name-admission-v1" || b.approval_id.is_empty() || b.approval_id.len()>128 || b.identity!=identity || b.operator!=operator || b.request!=w.request
+    let prep=super::private_name_writer_window::preparation(&w.request);
+    if b.kind!=if prep{"ignite-private-name-preparation-admission-v2"}else{"ignite-private-name-admission-v1"} || b.approval_id.is_empty() || b.approval_id.len()>128 || b.identity!=identity || b.operator!=operator || b.request!=w.request
         || b.plan_hash.len()!=64 || !b.plan_hash.bytes().all(|c|c.is_ascii_digit()||(b'a'..=b'f').contains(&c))
-        || b.request.operation_id!=format!("names:club-name-conversion-{}",b.plan_hash) || b.rows.is_empty() || b.rows.len()>4096{return Err("Exact signed conversion binding required".into());}
+        || (!prep && b.request.operation_id!=format!("names:club-name-conversion-{}",b.plan_hash)) || b.rows.is_empty() || b.rows.len()>4096{return Err("Exact signed conversion binding required".into());}
     let bytes=approval_bytes(b);
     if bytes.len()>32*1024*1024{return Err("Approval byte budget exceeded".into());}
     let signature=Signature::from_slice(&a.signature).map_err(|_|"Signed conversion approval required")?;
