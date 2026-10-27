@@ -283,7 +283,7 @@ try {
       const deliveryBinding={artifactHash:createHash('sha256').update(signedBytes).digest('hex'),planHash:artifact.hash,identityId:identity.canisterId.toText(),operator:governor.toText(),approvalId:body.approval_id,approverKey:publicHex,targetModule:'a'.repeat(64),artifactCommit:'b'.repeat(40),canonicalPrincipal:v=>Principal.fromText(v).toText()};
       let receiptJournal=null,deliveryCalls=0;
       const normalizeRequest=r=>({...r,generation:String(r.generation),inventory_digest:Array.from(r.inventory_digest)});
-      const deliveryDeps={assertTarget:async()=>true,readWindow:async()=>({request:normalizeRequest(window.request),phase:'Fencing'}),readJournal:async()=>receiptJournal,persistJournal:async j=>{receiptJournal=structuredClone(j);},
+      const deliveryDeps={assertTarget:async()=>true,readWindow:async()=>({request:normalizeRequest(window.request),phase:'Fencing'}),readJournal:async()=>receiptJournal,persistJournal:async j=>{const created=receiptJournal===null;receiptJournal=structuredClone(j);return {created};},
         readApproval:async()=>{const r=ok(await actor.read_private_name_conversion_approval(id));return r.length?{...r[0],request:normalizeRequest(r[0].request),identity:r[0].identity.toText(),operator:r[0].operator.toText(),signed_digest:Array.from(r[0].signed_digest)}:null;},
         submitApproval:async()=>{deliveryCalls++;ok(await actor.approve_private_name_conversion(id,admission));throw Error('Lost approval delivery reply');}};
       assert.equal((await deliveryDeps.readApproval()),null);

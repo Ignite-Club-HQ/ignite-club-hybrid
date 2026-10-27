@@ -65,7 +65,7 @@ export async function deliverNameApproval({artifact,binding,action},{readWindow,
   if(window.phase!=='Fencing')throw Error('Approval must arrive before conversion opens');
   const intent={binding:immutable,phase:'unknown'};
   const claimed=await persistJournal(intent);
-  if(claimed?.created===false)throw Error('Approval delivery intent already retained; reconcile without replay');
+  if(claimed?.created!==true)throw Error('Approval delivery intent not exclusively claimed; reconcile without replay');
   if(canonical(await readJournal())!==canonical(intent))throw Error('Durable delivery intent readback required');
   await guard();await submitApproval(operationId,approval);await guard();
   const retained=await readApproval(operationId);await guard();
