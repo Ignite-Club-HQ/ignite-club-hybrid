@@ -32,7 +32,19 @@ assert next == ?second;
 assert restored.open(owner, { second with generation = 3 : Nat64 }) == #Err("Immutable private-name writer conflict");
 restored.leave(next);
 assert restored.seal(owner, second) == #Ok;
-assert Writer.Gate(false, null, Map.empty<Text, Writer.Intent>(), 1).enter() == #Ok(null);
+let ordinaryState = Map.empty<Text, Writer.Intent>();
+let ordinary = Writer.Gate(false, null, ordinaryState, 10);
+let ordinaryLease = switch (ordinary.enter()) { case (#Ok(k)) k; case _ { assert false; null } };
+assert ordinaryLease != null;
+let tracked = Writer.Gate(true, ?owner, ordinaryState, 10);
+let baselinePreparation = { request with operation_id = "names:club-name-preparation-baseline" };
+assert tracked.freeze(owner, baselinePreparation) == #Ok;
+switch (tracked.preparationReceipt(owner, baselinePreparation, owner)) { case (#Ok(r)) assert r.active == 1; case _ assert false };
+assert tracked.activatePreparation(owner, baselinePreparation) == #Err("Exact drained preparation required");
+// Disabling rehearsal cannot bypass a retained preparation lock.
+assert ordinary.enter() == #Err("Edits locked for private-name preparation");
+ordinary.leave(ordinaryLease);
+switch (tracked.preparationReceipt(owner, baselinePreparation, owner)) { case (#Ok(r)) assert r.active == 0; case _ assert false };
 // Interrupted recovery: a window sealed while work was in flight seals itself
 // when the last retained callback finishes, without any repeated seal call.
 let recovered = Writer.Gate(true, ?owner, Map.empty<Text, Writer.Intent>(), 3);
