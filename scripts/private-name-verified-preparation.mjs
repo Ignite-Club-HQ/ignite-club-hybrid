@@ -13,6 +13,10 @@ export async function prepareCompletePrivateNameArtifact(input, deps) {
   input = structuredClone(input);
   const accounts = structuredClone(await deps.accountInventory.listAccounts());
   if (!accounts?.request || !Array.isArray(accounts.rows)) throw Error('Complete locked account evidence required');
+  const guard = async () => {
+    if (typeof deps.assertEvidence !== 'function' || await deps.assertEvidence({request:structuredClone(accounts.request),revision:accounts.revision,identityId:input.identityId,deploymentHash:input.deploymentHash,sinks:structuredClone(input.sinks)}) !== true) throw Error('Verified complete account evidence required');
+  };
+  await guard();
   const inventoryAccounts = [], rows = [];
   const resolved = new Map();
   for (const account of accounts.rows) {
@@ -25,14 +29,17 @@ export async function prepareCompletePrivateNameArtifact(input, deps) {
       continue;
     }
     const authority = await deps.resolveAuthority(structuredClone(account), structuredClone(accounts.request));
+    await guard();
     if (!authority || !account.principals.includes(authority.subject) || !input.sinks.some(s => s.id === authority.sink)) throw Error('Authenticated original name authority unresolved');
     const name = await deps.readName(structuredClone(account), structuredClone(authority), structuredClone(accounts.request));
+    await guard();
     if (typeof name !== 'string' || !name.trim()) throw Error('Authorized original personal name required');
     resolved.set(account.accountId, structuredClone(authority));
     inventoryAccounts.push({accountId:account.accountId,subject:authority.subject,principals:account.principals,status:account.status,version:account.version,profilePresent:true,sourceDigest:account.sourceDigest,sink:authority.sink});
     rows.push({accountId:account.accountId,subject:authority.subject,sink:authority.sink,name,clubs:[]});
   }
   const inventory = await collectPrivateNameClubInventory({...input,accounts:inventoryAccounts,historyRevision:accounts.revision}, deps);
+  await guard();
   const memberships = new Map(inventory.body.rows.map(row => [row.accountId,row.clubs]));
   const artifact = await prepareVerifiedPrivateNameArtifact({...input,historyRevision:accounts.revision,inventoryHash:inventory.hash,rows:rows.map(row => ({...row,clubs:memberships.get(row.accountId)}))}, {
     ...deps,accounts,resolveAuthority:async (account,request) => {
