@@ -18,7 +18,9 @@ export function secureNameEnvironment(environment, service, scope, {identity, or
   for(const row of environment) {
     if(typeof row.name!=='string'||typeof row.value!=='string'||seen.has(row.name))throw Error('Invalid or duplicate secure-name setting');
     seen.add(row.name);
-    if(row.name.includes('REHEARSAL') && row.value!=='0')throw Error('Rehearsal must remain disabled');
+    // IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL is the live account admission
+    // release switch (historical name), not a rehearsal; it stays as set.
+    if(row.name.includes('REHEARSAL') && row.name!=='IGNITE_ACCOUNT_GROUP_LOCAL_REHEARSAL' && row.value!=='0')throw Error(`Rehearsal must remain disabled: ${row.name}`);
     if([SAVE_RELEASE,DISPLAY_RELEASE].includes(row.name)&&!['0','1'].includes(row.value))throw Error('Unknown name release switch');
   }
   const exact=(name,value,required=false)=>{
