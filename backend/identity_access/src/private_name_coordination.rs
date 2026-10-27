@@ -83,7 +83,7 @@ fn unchanged(intent: &Intent) -> Outcome<()> {
         return Err("Frozen private-name inventory changed; retain fences".into());
     }
     let mut expected = intent.account.clone();
-    if intent.phase != Phase::Preparing { expected.status = AccountStatus::Suspended; }
+    if intent.phase != Phase::Preparing { expected.status = AccountStatus::Suspended; expected.version = expected.version.checked_add(1).ok_or("Account version exhausted")?; }
     if super::get_account(&expected.id).as_ref() != Some(&expected) { return Err("Private-name account changed; retain fences".into()); }
     Ok(())
 }
@@ -118,6 +118,15 @@ async fn begin_private_name_suspension(operation_id: String, account_id: String,
     if INTENTS.with(|m| m.borrow().len()) >= CAPACITY { return Err("Private-name intent capacity reached".into()); }
     let generation = GENERATION.with(|m| m.borrow().get().checked_add(1)).ok_or("Private-name generation exhausted")?;
     let intent = create(operation_id, generation, account, inventory)?;
+    if let Some(profile) = super::get_profile_entry(&intent.account.id) {
+        if profile.display_name.starts_with("pii-display-name:") {
+            let parts = profile.display_name.split(':').collect::<Vec<_>>();
+            if parts.len() != 4 || parts[1] != "v1" || !super::private_profile_reference::valid(&profile.display_name, &intent.account.principals)
+                || Principal::from_text(parts[2]).ok().is_none_or(|p| !intent.targets.contains(&p)) {
+                return Err("Subject original PII authority omitted from inventory".into());
+            }
+        }
+    }
     GENERATION.with(|m| m.borrow_mut().set(generation)); save(&intent); Ok(intent)
 }
 #[ic_cdk::update]
@@ -181,4 +190,5 @@ async fn complete_private_name_suspension_sink(operation_id: String, target: Pri
     #[test] fn delayed_prepare_cannot_overwrite_committed_state() {let mut i=fixture();let t=i.targets[0];i.record(t,receipt(&i,t,false),false).unwrap();i.phase=Phase::Committed;assert!(i.record(t,receipt(&i,t,false),false).is_err());}
     #[test] fn acknowledged_boundary_survives_later_global_epochs() {let mut i=fixture();let t=i.targets[0];let first=receipt(&i,t,false);i.record(t,first.clone(),false).unwrap();let mut later=first.clone();later.release_epoch=9u8.into();i.record(t,later,false).unwrap();assert_eq!(i.prepared,vec![first]);}
     #[test] fn stable_roundtrip_retains_unknown_and_completed_intents() {let mut i=fixture();let t=i.targets[0];i.record(t,receipt(&i,t,false),false).unwrap();let restored:Intent=super::super::decode(&super::super::encode(&i));assert_eq!(restored,i);assert!(restored.can_commit().is_err()); i.phase=Phase::Done;assert_eq!(super::super::decode::<Intent>(&super::super::encode(&i)),i);}
+    #[test] fn overlapping_callback_merges_preserve_both_receipts() {let mut i=fixture();let a=i.targets[0];let b=i.targets[1];let ra=receipt(&i,a,false);let rb=receipt(&i,b,false);i.record(a,ra.clone(),false).unwrap();i.record(b,rb.clone(),false).unwrap();i.record(a,ra,false).unwrap();assert_eq!(i.prepared.len(),2);assert!(i.prepared.contains(&rb));}
 }
