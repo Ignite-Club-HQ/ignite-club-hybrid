@@ -14,4 +14,4 @@ assert Policy.aliases(browser, snapshot, true, 100, func p = p == browser) == []
 assert Policy.aliases(browser, snapshot, true, 100, func p = p == app) == [browser];
 let suspended = ?{ account = { id = "same-account"; principals = [browser, app]; version = 5 : Nat64; status = #Suspended }; observed = 100 : Int };
 assert Policy.aliases(browser, suspended, true, 100, none) == [browser];
-assert Policy.aliases(Principal.anonymous(), snapshot, true, 100, none) == [];
+assert Policy.aliases(Principal.anonymous(), snapshot, true, 100, none) == [];assert Policy.aliases(browser, null, true, 100, none) == [browser];
