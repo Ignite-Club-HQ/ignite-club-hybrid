@@ -16,7 +16,7 @@ for (const key of ['POCKET_IC_BIN', 'IDENTITY_ACCESS_WASM', 'CLUB_DOMAIN_WASM', 
   assert.ok(process.env[key], `${key} required; never silently skip this proof`);
 const p = n => Principal.fromUint8Array(Uint8Array.from([n, 7, 7]));
 const governor = p(1), person = p(2), friend = p(3);
-const ok = r => { assert.ok(r && 'Ok' in r, JSON.stringify(r?.Err ?? r)); return r.Ok; };
+const ok = r => { assert.ok(r && 'Ok' in r, String(r?.Err ?? Object.keys(r ?? {}))); return r.Ok; };
 const text = v => JSON.stringify(v, (_k, x) => typeof x === 'bigint' ? x.toString()
   : x && typeof x === 'object' && typeof x.toText === 'function' && x._isPrincipal ? x.toText() : x);
 const steps = [];
