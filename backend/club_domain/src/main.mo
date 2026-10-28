@@ -38,6 +38,7 @@ import MediaQuotaCutover "mediaQuotaCutover";
 import MediaRetainedQuota "mediaRetainedQuota";
 import MediaRetainedCutover "mediaRetainedCutover";
 import MediaJournalRetirement "mediaJournalRetirement";
+import InviteEmail "inviteEmail";
 import MediaJournalToken "../../shared/MediaJournalToken";
 import MediaGrowthReservations "mediaGrowthReservations";
 import MembershipPage "membershipPage";
@@ -384,6 +385,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // governor-only, reads are public so an unauthenticated boot can fetch the
   // routing config. Never store secrets here — state is replica-visible.
   var appConfig : [(Text, Text)];
+  // Resend sender for invite emails. Governor-set, never returned by any
+  // method. Recipient addresses are never stored; only sent invite ids.
+  var invite_email_sender : ?InviteEmail.Sender;
+  var invite_emails_sent : [Text];
 
   // Per-club home country (ISO two-letter code), mirroring the Supabase
   // clubs.home_country column. Fixed at creation: club admins can set it
