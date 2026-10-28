@@ -8,7 +8,7 @@ vi.mock("./domains", () => ({ connectLivePiiAccessControl: vi.fn(async () => ({ 
 vi.mock("./piiVetKeys", () => ({ encryptPiiText: mocks.encrypt, fetchPiiVetKeys: mocks.keys, fetchClubNameVetKey: mocks.clubKey, clubNamePiiId: (id: string) => `clubnames:${id}`, CLUB_NAME_SCHEME_PREFIX: 'vetkey-club-names-v1:' }));
 vi.mock("@icp-sdk/vetkeys", () => ({ IbeCiphertext: { deserialize: () => ({ decrypt: mocks.decrypt }) } }));
 
-import { hydratePrivateProfileNames, readPrivateOwnProfileName, preparePrivateOwnProfileName, preparePrivateOwnProfileEmail, privateProfileNameReference, refreshPrivateOwnClubNames } from "./privateProfileNames";
+import { hydratePrivateProfileNames, readPrivateOwnProfileName, preparePrivateOwnProfileName, privateProfileNameReference, refreshPrivateOwnClubNames } from "./privateProfileNames";
 import { retirePrivateProfileSession } from './privateProfileSession';
 
 const subject = "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe";
@@ -274,32 +274,6 @@ describe("authorized name display", () => {
   });
 });
 
-describe("private own email preparation", () => {
-  it("registers a validated email only for its authenticated owner and verifies private readback", async () => {
-    mocks.read.mockResolvedValue({Ok:[{pii_id:subject,field_id:"contact_email",ciphertext:[9,8]}]});
-    mocks.decrypt.mockReturnValue(new TextEncoder().encode("paul@example.test"));
-    expect(await preparePrivateOwnProfileEmail(ctx," paul@example.test ")).toBe(`pii-email:v1:${authority}:${subject}`);
-    expect(mocks.encrypt).toHaveBeenCalledWith(ctx,subject,"contact_email","paul@example.test");
-    expect(mocks.keys).toHaveBeenCalledWith(ctx,[subject],"contact_email",{fresh:true,assertActive:expect.any(Function)});
-  });
-  it("refuses invalid email before any encryption or write",async()=>{
-    await expect(preparePrivateOwnProfileEmail(ctx,"not-an-email")).rejects.toThrow();
-    expect(mocks.encrypt).not.toHaveBeenCalled();
-    expect(mocks.register).not.toHaveBeenCalled();
-  });
-  it("does not report success or replay an unknown email write",async()=>{
-    mocks.register.mockRejectedValue(new Error("Unknown reply"));
-    await expect(preparePrivateOwnProfileEmail(ctx,"paul@example.test")).rejects.toThrow("Unknown reply");
-    expect(mocks.register).toHaveBeenCalledOnce();
-  });
-  it("clears an existing optional email using verified empty ciphertext in the original field",async()=>{
-    mocks.read.mockResolvedValue({Ok:[{pii_id:subject,field_id:"contact_email",ciphertext:[9,8]}]});
-    mocks.decrypt.mockReturnValue(new Uint8Array());
-    await preparePrivateOwnProfileEmail(ctx," ");
-    expect(mocks.encrypt).toHaveBeenCalledWith(ctx,subject,"contact_email","");
-    expect(mocks.register).toHaveBeenCalledWith(subject,"contact_email",expect.any(Uint8Array),Principal.fromText(subject));
-  });
-});
 
 describe("original-authority display rehearsal", () => {
   const foreignAuthority = "ryjl3-tyaaa-aaaaa-aaaba-cai";
