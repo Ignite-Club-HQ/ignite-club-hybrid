@@ -40,6 +40,7 @@ try {
     assert.equal(await group.actor.read_account_is_club_member(browser, group.name), true);
     assert.equal(await group.actor.read_account_is_club_member(browser, 'unrelated-club'), false);
     ok(await group.actor.read_account_get_club_roster(group.name));
+    ok(await group.actor.set_club_kind(group.name, 'club'));
     group.actor.setPrincipal(outsider);
     assert.deepEqual(await group.actor.read_account_my_role_grants(), []);
     await refused(() => group.actor.read_account_get_club_roster(group.name));
@@ -52,6 +53,9 @@ try {
   groups[0].actor.setPrincipal(browser); assert.deepEqual(await groups[0].actor.read_account_my_role_grants(), []);
   assert.equal(await groups[0].actor.read_account_is_club_member(browser, groups[0].name), false);
   groups[1].actor.setPrincipal(browser); assert.equal((await groups[1].actor.read_account_my_role_grants()).length, 2);
+  await pic.stopCanister({ canisterId: identity.canisterId, sender: governor });
+  await refused(() => groups[1].actor.read_account_my_role_grants());
+  await pic.startCanister({ canisterId: identity.canisterId, sender: governor });
   identity.actor.setPrincipal(app); ok(await identity.actor.revoke(browser, 1n));
   await refused(() => groups[1].actor.read_account_my_role_grants());
   console.log('PASS: real two-group linked discovery/rosters, stored owners preserved, unrelated caller/club denial, suspension, club-only removal and unlink denial.');

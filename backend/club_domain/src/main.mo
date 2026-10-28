@@ -88,6 +88,7 @@ persistent actor class Main(governorInit : Principal) = this {
       if (AccountUnlinkFence.rejects(current.id, current.version, current.principals, identityUnlinkReceipts)) throw Error.reject("Revoked linked account snapshot");
       // Time.now is constant only within this execution segment. No query,
       // later message or callback may reuse these aliases as permission.
+      if (linkedMembershipSnapshots.size() >= 256) linkedMembershipSnapshots.clear();
       linkedMembershipSnapshots.add(subject, { account = current; observed = Time.now() });
     };
   };
@@ -746,7 +747,7 @@ persistent actor class Main(governorInit : Principal) = this {
   };
   func validTeamInviteRole(role : Text) : Bool { role == "player" or role == "parent" or role == "coach" or role == "team_admin" };
   func localInviteRoleAllowed(caller : Principal, club : Text, team : Text, role : Text) : Bool {
-    validTeamInviteRole(role) and canManageTeam(caller, club, ?team) and ((role != "coach" and role != "team_admin") or isAdmin(caller, club) or acl.roles.any(func g = g.user == caller and g.club == ?club and g.team == ?team and g.role == "team_admin"))
+    validTeamInviteRole(role) and canManageTeam(caller, club, ?team) and ((role != "coach" and role != "team_admin") or isAdmin(caller, club) or acl.roles.any(func g = ownsMembershipPrincipal(caller, g.user) and g.club == ?club and g.team == ?team and g.role == "team_admin"))
   };
   func canCreateTeamRosterInvite(caller : Principal, club_id : Text, team_id : Text, role : Text) : async Bool {
     if (not validTeamInviteRole(role) or not inviteTeamValid(club_id, team_id) or isExcluded(caller, club_id) or removalReceiver.denied(caller)) return false;

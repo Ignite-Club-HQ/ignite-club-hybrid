@@ -479,7 +479,9 @@ fn set_service_authorities(authorities: Vec<Principal>) -> Outcome<()> {
 fn service_account(caller: Principal, subject: Principal) -> Outcome<Account> {
     if !account_group_rehearsal_enabled() { return Err("Service admission not released".into()); }
     if !service_authorities().contains(&caller) { return Err("Configured service reader required".into()); }
-    account_for_write(subject)
+    let account = effective_account(account_for_write(subject)?, &link_lifecycle());
+    if !account.principals.contains(&subject) { return Err("Identity revocation pending".into()); }
+    Ok(account)
 }
 /// Subject-bound consensus ownership read; never implicitly registers an account.
 #[ic_cdk::update]
