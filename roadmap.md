@@ -6,7 +6,8 @@
 ## Linked Internet Identity membership access — 28 October 2026
 - [x] Club/team consensus admission now reads current configured identity-service aliases, retaining original role owners, exact team scopes, account-wide club exclusions and exact-only legacy queries. Identity filters pending/denied aliases; transient observations are bounded and cannot authorize later callbacks. Revoked/relinked logins remain exact-only, preserving no-resurrection rules.
 - [x] Real disposable two-group acceptance passes: linked discovery, roster access, club/team edits, unchanged stored owners, unrelated caller/club/team denial, suspension, authority outage, club-only removal and unlink. Existing real two-group interrupted unlink/upgrade/relink acceptance also passes; 188 identity tests, 17 cross-group frontend tests and Motoko rules pass; ICP guards and preview OK.
-- [ ] Release through existing all-group workflow (`full_backend`) and confirm Paul's browser/Android clubs; no mainnet deployment or user session used here. Existing broader adapter contract test also exposes a pre-existing messaging open_conversation/polls twin mismatch, not changed by this membership fix.
+- [x] Released via `full_backend` run 40632764493 (success).
+- [ ] Clubs still blank: every Paul club lives on original Group 1, whose club service runs with account linking switched off (lifecycle settings disabled), so linked recognition never activates there. Waiting on Paul: move access to current sign-in (existing Move account workflow) or enable Group 1 linking (larger release).
 
 ## Internet Identity forced email switch — 28 October 2026
 - [x] Confirmed screenshot's toast originates in ClubBackendEnforcement: it remapped canister club countries through email defaults after successful II sign-in. Confirmed ICP accounts now retain their provider and authorized memberships without that inference; email-mode routing is unchanged.
