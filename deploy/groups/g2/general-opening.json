@@ -17,19 +17,19 @@
       "name": "club_domain",
       "canisterId": "yfwyv-nyaaa-aaaal-qxpyq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "48a990ef21290e73c7a8e5c38c840b2399c351ea0f3169e88fef3debd86a7ac2"
+      "moduleHash": "da18dd831b5f3162e5eca3fc967552b21965222acdbd8a2677f2350d4d33976a"
     },
     {
       "name": "events_domain",
       "canisterId": "ymvtj-3qaaa-aaaal-qxpza-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "ee0bdcc39c1af96cc8c745d9b8493951495f94d3b6e37ff4caee7a9ff0d36e7a"
+      "moduleHash": "3fa50d1aef1526f0099da55cf549c6be53d40ad06499011b28a5d708b3fc37fd"
     },
     {
       "name": "messaging_domain",
       "canisterId": "yluv5-wiaaa-aaaal-qxpzq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "moduleHash": "d3f7bcc8bb12f717b54b9af2bb7bc96615afc78e3e9322978b96e86228e8a258"
+      "moduleHash": "4f07009858a53c904b80d7f8501a2f9afbd36b71831ada26ffe70df14962e689"
     },
     {
       "name": "vault_domain",

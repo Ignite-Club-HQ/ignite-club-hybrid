@@ -1,6 +1,6 @@
 {
-  "sourceRevision": "9f06853733576782f49f34096a6969f11dce1e20",
-  "planHash": "a07eca44656a47b5a54d48a214617b588d439c6795f60aacbbb12d841a9a4780",
+  "sourceRevision": "ae35d6e157447ecc24af466bf8af8588d0cedb7a",
+  "planHash": "c8a6233c977b57c6dca3aaf2edef833feaaaecf77a2b06c274598a13cf249a6f",
   "groups": [
     "g1",
     "g2"
@@ -39,42 +39,42 @@
       "name": "club_domain",
       "canisterId": "mzzzv-taaaa-aaaal-qxlrq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "newHash": "48a990ef21290e73c7a8e5c38c840b2399c351ea0f3169e88fef3debd86a7ac2"
+      "newHash": "da18dd831b5f3162e5eca3fc967552b21965222acdbd8a2677f2350d4d33976a"
     },
     {
       "groupId": "g2",
       "name": "club_domain",
       "canisterId": "yfwyv-nyaaa-aaaal-qxpyq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "newHash": "48a990ef21290e73c7a8e5c38c840b2399c351ea0f3169e88fef3debd86a7ac2"
+      "newHash": "da18dd831b5f3162e5eca3fc967552b21965222acdbd8a2677f2350d4d33976a"
     },
     {
       "groupId": "g1",
       "name": "events_domain",
       "canisterId": "m6y7b-6yaaa-aaaal-qxlra-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "newHash": "ee0bdcc39c1af96cc8c745d9b8493951495f94d3b6e37ff4caee7a9ff0d36e7a"
+      "newHash": "3fa50d1aef1526f0099da55cf549c6be53d40ad06499011b28a5d708b3fc37fd"
     },
     {
       "groupId": "g2",
       "name": "events_domain",
       "canisterId": "ymvtj-3qaaa-aaaal-qxpza-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "newHash": "ee0bdcc39c1af96cc8c745d9b8493951495f94d3b6e37ff4caee7a9ff0d36e7a"
+      "newHash": "3fa50d1aef1526f0099da55cf549c6be53d40ad06499011b28a5d708b3fc37fd"
     },
     {
       "groupId": "g1",
       "name": "messaging_domain",
       "canisterId": "mx3u5-iqaaa-aaaal-qxlqq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "newHash": "d3f7bcc8bb12f717b54b9af2bb7bc96615afc78e3e9322978b96e86228e8a258"
+      "newHash": "4f07009858a53c904b80d7f8501a2f9afbd36b71831ada26ffe70df14962e689"
     },
     {
       "groupId": "g2",
       "name": "messaging_domain",
       "canisterId": "yluv5-wiaaa-aaaal-qxpzq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "newHash": "d3f7bcc8bb12f717b54b9af2bb7bc96615afc78e3e9322978b96e86228e8a258"
+      "newHash": "4f07009858a53c904b80d7f8501a2f9afbd36b71831ada26ffe70df14962e689"
     },
     {
       "groupId": "g1",
