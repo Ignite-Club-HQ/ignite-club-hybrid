@@ -50,7 +50,7 @@ export async function loadScheduleFixtures(ctx: FeatureBackendContext, scope: Fi
   };
   const readCompetition = (competition: Competition, managed: boolean): Promise<void> => {
     const hit = jobs.get(competition.id);
-    if (hit) return managed ? hit.then(() => undefined) : hit;
+    if (hit) return hit;
     pending++;
     const job = (async () => {
       try {
