@@ -145,7 +145,7 @@ export function applyPendingInboxPreview(
       previousDm: row.last_message ?? null,
       previousUpdatedAt: row.updated_at,
     });
-    client.setQueryData(query.queryKey, moveDirectConversationToTop(data, preview));
+    client.setQueryData(query.queryKey, moveDirectConversationToTop(data, { ...preview, conversation_id: targetId }));
     return;
   }
 
@@ -179,7 +179,7 @@ export function settlePendingInboxPreview(
   if (!userId || !targetId) return;
   if (scope === "dm" && saved) {
     client.setQueryData([dmPrefix, userId], (old: { id: string }[] | undefined) =>
-      moveDirectConversationToTop(old, { ...saved, author_id: userId }),
+      moveDirectConversationToTop(old, { ...saved, author_id: userId, conversation_id: targetId }),
     );
   }
   removeMarkEverywhere(markMapFor(client), markKey(scope, userId, targetId));
