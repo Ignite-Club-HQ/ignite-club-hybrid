@@ -159,6 +159,17 @@ interface Team {
 
 export default function HomePage() {
   const { user, profile, refreshProfile, initialized, profileNamePending } = useAuth();
+  // Quietly prepare "Invite people" choices so the sheet opens instantly.
+  useEffect(() => {
+    if (!user?.id || !isFeatureRoutedToIcp("membership")) return;
+    const t = window.setTimeout(() => {
+      void withFeatureBackend("membership", {
+        supabase: async () => null,
+        icp: async ctx => (await import("@/live/leagueInviteTargets")).readLiveInviteTargets(ctx),
+      }, { shared: "person" }).catch(() => {});
+    }, 3000);
+    return () => window.clearTimeout(t);
+  }, [user?.id]);
   const isIcp = resolveAuthBackend() === "icp";
   
   usePageTitle("Home");
