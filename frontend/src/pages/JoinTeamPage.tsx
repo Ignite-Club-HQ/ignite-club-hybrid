@@ -1356,7 +1356,7 @@ function SupabaseJoinTeamPage() {
               const me = ctx.identity.getPrincipal();
               const child = await club.createLiveChildForParentOnTeam(ctx, clubId, invite.team_id!, me);
               const childId = (child as any).id as string;
-              await vault.registerLiveChildNamePii(ctx, childId, childName, me);
+              await vault.registerLiveChildNamePii(ctx, childId, childName, me, clubId);
               await vault.grantLiveClubChildNameRead(ctx, childId, clubId);
             },
           }, writeOnce({ teamId: invite.team_id ?? '' }));
@@ -2146,7 +2146,7 @@ function SupabaseJoinTeamPage() {
                   const me = ctx.identity.getPrincipal();
                   const child = await club.createLiveChildForParentOnTeam(ctx, clubId, invite.team_id!, me);
                   const childId = (child as any).id as string;
-                  await vault.registerLiveChildNamePii(ctx, childId, addedLabel, me);
+                  await vault.registerLiveChildNamePii(ctx, childId, addedLabel, me, clubId);
                   await vault.grantLiveClubChildNameRead(ctx, childId, clubId);
                   return true;
                 },

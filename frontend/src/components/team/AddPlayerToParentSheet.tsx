@@ -213,7 +213,7 @@ export default function AddPlayerToParentSheet({
           const childId = (child as any).id as string;
           // Names live on pii_access_control, not club_domain — register the
           // name and grant the parent read access (best effort).
-          await registerLiveChildNamePii(ctx, childId, trimmed, parentPrincipal);
+          await registerLiveChildNamePii(ctx, childId, trimmed, parentPrincipal, clubId);
           // Club-scoped read grant so coaches/members can render the name
           // on rosters (verified live via club_domain at read time).
           await grantLiveClubChildNameRead(ctx, childId, clubId);
