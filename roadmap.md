@@ -1,3 +1,7 @@
+## Retained keys for child, guest and Player-of-the-Match names — 28 October 2026
+- [ ] Verify the shared encrypted-name reader reuses 30-day device keys after sign-out, refreshes authorized ciphertext on each read, and refuses removed access; preserve fresh write checks and adult audience restrictions.
+- [ ] Deploy web app and confirm on a real signed-in test club; no backend upgrade is required for this caching change.
+
 ## Invite emails without storing addresses — 28 October 2026
 - [x] Club service sends invite emails through Resend once and keeps no address; app warns admins if a send fails.
 - [ ] Paul: add GitHub secret RESEND_API_KEY (send-only Resend key).
