@@ -1,6 +1,7 @@
 ## Team invite QR controls — 28 October 2026
-- [ ] Pass resolved team/club manager permission and owning club into the invite link card; preserve player-only restrictions and canister authorization.
-- [ ] Run invite permission and link-creation regressions in both modes. Live phone verification requires Paul's Internet Identity session and Deploy web app.
+- [x] Pass resolved team/club manager permission and owning club into the invite link card; preserve player-only restrictions and canister authorization.
+- [x] Nine invite permission and mounted ICP link-creation regressions pass under each backend configuration; preview build OK.
+- [ ] Deploy web app, then confirm QR creation on Paul's real signed-in phone; no usable Internet Identity session was available for live verification here. No backend upgrade required.
 
 ## ChatGPT plugin write permissions — 28 October 2026
 - [x] Record Paul's requested policy: plugin writes only for verified Paul Cranwell or app_admin accounts; other callers retain only reads allowed by existing resource permissions. Club/team admin alone is insufficient. No old rewards merge.
