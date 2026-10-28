@@ -12,6 +12,11 @@ import { maskSharedPitchNames, sharedPitchNameRefs, resolveSharedPitchNames } fr
 // id can be recovered by stripping the two trailing segments. Used to seed
 // club-scoped PII read grants without threading clubId through every caller.
 // Returns null when the id doesn't match the expected shape (best effort).
+function teamAudience(teamId: string | null | undefined, clubId?: string | null): SharedAudience | undefined {
+  const club = clubId || (teamId ? clubIdFromTeamId(teamId) : null);
+  return teamId && club ? { kind: "teamnames", scope: teamId, club } : undefined;
+}
+
 function clubIdFromTeamId(teamId: string): string | null {
   if (!teamId.startsWith("team-")) return null;
   const rest = teamId.slice(5);
@@ -33,7 +38,7 @@ async function registerFillInNameRef(
   name: string,
 ): Promise<string> {
   const ref = `fillin:${eventId}:${crypto.randomUUID()}`;
-  await registerLivePiiText(ctx, ref, "name", name);
+  await registerLivePiiText(ctx, ref, "name", name, teamAudience(teamId));
   const clubId = clubIdFromTeamId(teamId);
   if (clubId) await grantLiveClubPiiRead(ctx, ref, "name", clubId);
   return ref;
@@ -45,7 +50,7 @@ async function registerMvpNameRef(
   name: string,
 ): Promise<string> {
   const ref = `mvp:${input.eventId ?? `${input.teamId}:${crypto.randomUUID()}`}`;
-  await registerLivePiiText(ctx, ref, "name", name);
+  await registerLivePiiText(ctx, ref, "name", name, teamAudience(input.teamId));
   const clubId = clubIdFromTeamId(input.teamId);
   if (clubId) await grantLiveClubPiiRead(ctx, ref, "name", clubId);
   return ref;
@@ -1883,7 +1888,7 @@ async function registerJsonNameRefs(
   await Promise.all(
     entries.map(async ({ key, name }) => {
       const ref = `${prefix}${scope}:${key}`;
-      await registerLivePiiText(ctx, ref, "name", name);
+      await registerLivePiiText(ctx, ref, "name", name, teamAudience(teamId, clubId));
       if (clubId) await grantLiveClubPiiRead(ctx, ref, "name", clubId);
       refs.set(key, ref);
     }),
@@ -2049,7 +2054,7 @@ export async function syncLiveActiveGame(
     await Promise.all([...masked.names].map(async ([ref, name]) => {
       const cacheKey = `${namespace}:${ref}`;
       if (pitchNameRegistrations.get(cacheKey) === name) return;
-      await registerLivePiiText(ctx, ref, 'name', name);
+      await registerLivePiiText(ctx, ref, 'name', name, teamAudience(input.teamId, input.sharedBoard?.clubId));
       await grantLiveClubPiiRead(ctx, ref, 'name', input.sharedBoard?.clubId ?? '');
       pitchNameRegistrations.set(cacheKey, name);
     }));
@@ -2069,7 +2074,7 @@ export async function syncLiveActiveGame(
         named.map(async (p) => {
           const ref = `${PITCH_NAME_REF_PREFIX}${input.teamId}:${p.id}`;
           if (pitchNameRegistrations.get(ref) !== p.name.trim()) {
-            await registerLivePiiText(ctx, ref, "name", p.name.trim());
+            await registerLivePiiText(ctx, ref, "name", p.name.trim(), teamAudience(input.teamId, clubId));
             if (clubId) await grantLiveClubPiiRead(ctx, ref, "name", clubId);
             pitchNameRegistrations.set(ref, p.name.trim());
           }

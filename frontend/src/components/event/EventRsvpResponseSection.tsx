@@ -380,6 +380,7 @@ export function EventRsvpResponseSection({
         <EventGuestsManager
           eventId={event.id}
           clubId={event.club_id}
+          teamId={event.team_id ?? null}
           maxGuestsPerMember={event.max_guests_per_member || 2}
           isAdmin={canManageEvent}
         />
