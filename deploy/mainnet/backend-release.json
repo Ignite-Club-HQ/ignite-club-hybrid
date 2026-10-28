@@ -1,6 +1,6 @@
 {
-  "sourceRevision": "ac081a82636e24d3867a486a4b6c28bd2c7a20f6",
-  "planHash": "c1a3e1904023ce47ed52715de5a63187664859d04aca464eb6ab66d2777fd14a",
+  "sourceRevision": "9f06853733576782f49f34096a6969f11dce1e20",
+  "planHash": "a07eca44656a47b5a54d48a214617b588d439c6795f60aacbbb12d841a9a4780",
   "groups": [
     "g1",
     "g2"
@@ -39,14 +39,14 @@
       "name": "club_domain",
       "canisterId": "mzzzv-taaaa-aaaal-qxlrq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "newHash": "6c7ef5b0ba803573ef5eddf43a5f5f81e3fcc17d6dd52c84ef813ca6c0f2fb19"
+      "newHash": "48a990ef21290e73c7a8e5c38c840b2399c351ea0f3169e88fef3debd86a7ac2"
     },
     {
       "groupId": "g2",
       "name": "club_domain",
       "canisterId": "yfwyv-nyaaa-aaaal-qxpyq-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "newHash": "6c7ef5b0ba803573ef5eddf43a5f5f81e3fcc17d6dd52c84ef813ca6c0f2fb19"
+      "newHash": "48a990ef21290e73c7a8e5c38c840b2399c351ea0f3169e88fef3debd86a7ac2"
     },
     {
       "groupId": "g1",
