@@ -9,7 +9,7 @@ export function useCarouselResumeRecovery(userId: string | undefined, clubId: st
     if (!userId) return;
     let disposed = false;
     let removeNative: (() => void) | undefined;
-    const recover = createCarouselResumeRecovery(client, ['my-teams-premium-v2', userId, clubId]);
+    const recover = createCarouselResumeRecovery(client, ['my-teams-premium-v2', userId]);
     const onReturn = () => {
       if (!disposed && document.visibilityState !== 'hidden' && navigator.onLine !== false) void recover().catch(() => undefined);
     };
