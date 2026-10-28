@@ -26,8 +26,9 @@ import { clearDeviceCachedPhotos, forgetStoredClubKey, loadStoredClubKey, storeC
  * separator); it must stay byte-identical with ibeIdentity in
  * backend/pii_access_control/src/main.mo.
  *
- * Derived vetKeys are cached in memory for the session and, for records that
- * opt in (retainOwnKey), on device for 30 days — each derivation is a paid
+ * Ordinary record reads retain vetKeys on device for 30 days and in memory
+ * for the session; fresh verification and other-person audience reads do not.
+ * Own-name reads may explicitly opt in with retainOwnKey. Each derivation is a paid
  * vetkd_derive_key call on the canister. In-memory caches are cleared on
  * sign-out via clearPiiVetKeyCache; device key copies survive so the next
  * sign-in opens without re-deriving, and stay removable through the explicit
