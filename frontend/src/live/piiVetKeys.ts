@@ -225,10 +225,14 @@ export async function tryDecryptClubMedia(
   clubId: string,
   ciphertext: Uint8Array,
 ): Promise<Uint8Array | null> {
+  // Check support and load the key together; on first open these were two
+  // round trips in a row before any photo could show.
+  const keyRequest = fetchClubMediaVetKey(ctx, clubId);
+  keyRequest.catch(() => {});
   if (!(await isClubMediaLockSupported(ctx))) return null;
   let key: VetKey;
   try {
-    key = await fetchClubMediaVetKey(ctx, clubId);
+    key = await keyRequest;
   } catch {
     return null;
   }
@@ -237,6 +241,13 @@ export async function tryDecryptClubMedia(
   } catch {
     return null;
   }
+}
+
+/** Starts loading the club photo key early (device copy when saved, else one
+ * shared derivation) so it overlaps listing and photo downloads. Never throws.
+ * Call only for clubs that actually have locked photos to show. */
+export function prewarmClubMediaKey(ctx: FeatureBackendContext, clubId: string): void {
+  void isClubMediaLockSupported(ctx).then(ok => ok ? fetchClubMediaVetKey(ctx, clubId) : null).catch(() => {});
 }
 
 /** Unlocks a saved (still-encrypted) club photo with the key already saved on

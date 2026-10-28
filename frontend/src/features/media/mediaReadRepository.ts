@@ -111,7 +111,14 @@ export async function fetchMediaFeedPage(
         nextCursor: page.length === options.pageSize ? options.offset + options.pageSize : undefined,
       };
       };
-      const settled = await settleAll(clubIds.map(clubId => withReadDeadline(readContentInScope(ctx, "media", { clubId }, scoped => listLiveAssets(scoped, clubId)), "Club photos", 20_000, options.signal).then(assets => {
+      const settled = await settleAll(clubIds.map(clubId => withReadDeadline(readContentInScope(ctx, "media", { clubId }, scoped => listLiveAssets(scoped, clubId).then(assets => {
+        // Photos to show: start this club's photo key now, in parallel with
+        // rendering and downloads, instead of after the first download.
+        if (assets.some(asset => !asset.deleted && liveAssetSource(asset).kind === "icp-blob")) {
+          void import("@/live/piiVetKeys").then(m => m.prewarmClubMediaKey(scoped, clubId)).catch(() => {});
+        }
+        return assets;
+      })), "Club photos", 20_000, options.signal).then(assets => {
         assertReadNotAborted(options.signal);
         loaded.set(clubId, assets);
         options.onProgress?.(mapPage(true));
