@@ -3469,8 +3469,11 @@ persistent actor class Main(governorInit : Principal) = this {
   // require club admin — the roster includes every member's role grants.
   public query ({ caller }) func list_role_grants(club : Text) : async { #Ok : [Types.AccountRole]; #Err : Text } {
     denyLegacyAccountQuery();
-    if (not isAdmin(caller, club)) return #Err("Club admin required");
-    #Ok(accountRoles.filter(func(grant) = grant.club == ?club or grant.club == null))
+    // Members see their own club's roster (account ids + roles, no names) so
+    // they can message people; app-wide grants stay admin-only.
+    if (isAdmin(caller, club)) return #Ok(accountRoles.filter(func(grant) = grant.club == ?club or grant.club == null));
+    if (not isMember(caller, club)) return #Err("Club membership required");
+    #Ok(accountRoles.filter(func(grant) = grant.club == ?club))
   };
 
   // Team-scoped roster read for the team page member list: any member of the
@@ -8907,8 +8910,11 @@ persistent actor class Main(governorInit : Principal) = this {
     if (not removalReceiver.enter(caller)) throw Error.reject("Account removal fenced or operation capacity reached");
     try {
     await admitAccount(caller);
-    if (not isAdmin(caller, club)) return #Err("Club admin required");
-    #Ok(accountRoles.filter(func(grant) = grant.club == ?club or grant.club == null))
+    // Members see their own club's roster (account ids + roles, no names) so
+    // they can message people; app-wide grants stay admin-only.
+    if (isAdmin(caller, club)) return #Ok(accountRoles.filter(func(grant) = grant.club == ?club or grant.club == null));
+    if (not isMember(caller, club)) return #Err("Club membership required");
+    #Ok(accountRoles.filter(func(grant) = grant.club == ?club))
   
     } finally { removalReceiver.leave(caller) };
   
