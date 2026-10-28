@@ -60,6 +60,7 @@ export function clearPiiVetKeyCache(): void {
   vetKeyCache.clear();
   clubNameKeyCache.clear();
   clubMediaKeyCache.clear();
+  sharedKeyCache.clear();
   clubMediaLockSupported.clear();
   void import("./mediaDecrypt").then(m => m.clearIcpPhotoResolutionCache());
   void clearDeviceCachedPhotos();
@@ -406,4 +407,110 @@ export async function decryptPiiText(
   ciphertext: Uint8Array,
 ): Promise<string> {
   return textDecoder.decode(await decryptPiiValue(ctx, piiId, fieldId, ciphertext));
+}
+
+// ==================== Shared audience keys ====================
+// Children's names (club), guest/fill-in/POTM names (team) and
+// role-restricted Vault files (role audience) share one key per audience
+// instead of one paid key per record. Ciphertext carries a marker naming its
+// audience; the canister re-checks membership before and after derivation.
+
+export type SharedAudienceKind = 'clubchildren' | 'teamnames' | 'vaultrole';
+export type SharedAudience = { kind: SharedAudienceKind; scope: string; club: string };
+
+const SHARED_MAGIC = textEncoder.encode('IGSK1\n');
+const SHARED_FIELD = 'shared';
+const sharedKeyCache = new Map<string, Promise<VetKey>>();
+
+/** Canonical Vault role audience: "<club>|<team or empty>|<sorted roles>". */
+export function vaultRoleScope(club: string, team: string | null | undefined, roles: readonly string[]): string {
+  const clean = [...new Set(roles.map(r => r.trim()).filter(Boolean))].sort();
+  return `${club}|${team ?? ''}|${clean.join(',')}`;
+}
+
+function validAudience(a: SharedAudience): boolean {
+  return ['clubchildren', 'teamnames', 'vaultrole'].includes(a.kind) && !!a.scope && a.scope.length <= 512
+    && !!a.club && a.club.length <= 64 && !/[\u001f:\n]/.test(a.club) && !/\n/.test(a.scope);
+}
+
+export function sharedAudiencePiiId(a: SharedAudience): string {
+  return `${a.kind}:${a.scope}`;
+}
+
+/** Wraps ciphertext with its audience marker. */
+export function wrapSharedCiphertext(a: SharedAudience, ciphertext: Uint8Array): Uint8Array {
+  const head = textEncoder.encode(JSON.stringify({ k: a.kind, s: a.scope, c: a.club }) + '\n');
+  const out = new Uint8Array(SHARED_MAGIC.length + head.length + ciphertext.length);
+  out.set(SHARED_MAGIC, 0); out.set(head, SHARED_MAGIC.length); out.set(ciphertext, SHARED_MAGIC.length + head.length);
+  return out;
+}
+
+/** Audience + inner ciphertext, or null for per-record ciphertext. */
+export function parseSharedCiphertext(bytes: Uint8Array): { audience: SharedAudience; ciphertext: Uint8Array } | null {
+  if (bytes.length < SHARED_MAGIC.length + 3) return null;
+  for (let i = 0; i < SHARED_MAGIC.length; i++) if (bytes[i] !== SHARED_MAGIC[i]) return null;
+  const end = bytes.indexOf(10, SHARED_MAGIC.length);
+  if (end < 0 || end - SHARED_MAGIC.length > 700) return null;
+  try {
+    const j = JSON.parse(textDecoder.decode(bytes.subarray(SHARED_MAGIC.length, end))) as { k: SharedAudienceKind; s: string; c: string };
+    const audience: SharedAudience = { kind: j.k, scope: j.s, club: j.c };
+    if (!validAudience(audience)) return null;
+    return { audience, ciphertext: bytes.subarray(end + 1) };
+  } catch { return null; }
+}
+
+/** Device slot; begins with the club id so pruneStoredClubKeys drops it on leaving. */
+export function sharedKeySlot(a: SharedAudience): string {
+  return `shared:${a.club}:${a.kind}:${a.scope}`;
+}
+
+export async function encryptSharedValue(ctx: FeatureBackendContext, a: SharedAudience, plaintext: Uint8Array): Promise<Uint8Array> {
+  if (!validAudience(a)) throw new Error('Invalid shared audience.');
+  const { key } = await getPiiVerificationKey(ctx);
+  const ct = IbeCiphertext.encrypt(key, IbeIdentity.fromBytes(piiIbeIdentity(sharedAudiencePiiId(a), SHARED_FIELD)), plaintext, IbeSeed.random());
+  return wrapSharedCiphertext(a, ct.serialize());
+}
+
+/** One paid derivation per audience per 30 days on this device. */
+export function fetchSharedAudienceVetKey(ctx: FeatureBackendContext, a: SharedAudience): Promise<VetKey> {
+  if (!validAudience(a)) return Promise.reject(new Error('Invalid shared audience.'));
+  const principal = ctx.identity.getPrincipal().toText();
+  const cacheKey = `${ctx.target.host}|${ctx.target.canisterIds.pii_access_control ?? ''}|${principal}|${sharedKeySlot(a)}`;
+  let pending = sharedKeyCache.get(cacheKey);
+  if (!pending) {
+    pending = (async () => {
+      const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+      const cid = canisterId.toText();
+      const slot = sharedKeySlot(a);
+      const stored = loadStoredClubKey(cid, principal, slot);
+      if (stored) {
+        try { return VetKey.deserialize(stored); } catch { forgetStoredClubKey(cid, principal, slot); }
+      }
+      const { key: verification } = await getPiiVerificationKey(ctx);
+      const transport = TransportSecretKey.random();
+      const bytes = await unwrapCandid((actor as unknown as {
+        get_shared_audience_vetkey: (k: string, s: string, t: Uint8Array) => Promise<{ Ok: Uint8Array | number[] } | { Err: string }>;
+      }).get_shared_audience_vetkey(a.kind, a.scope, transport.publicKeyBytes()), 'Unlock shared details');
+      const key = EncryptedVetKey.deserialize(Uint8Array.from(bytes)).decryptAndVerify(transport, verification, piiIbeIdentity(sharedAudiencePiiId(a), SHARED_FIELD));
+      storeClubKey(cid, principal, slot, key.serialize());
+      return key;
+    })();
+    if (sharedKeyCache.size >= 128) {
+      const oldest = sharedKeyCache.keys().next().value;
+      if (oldest !== undefined) sharedKeyCache.delete(oldest);
+    }
+    sharedKeyCache.set(cacheKey, pending);
+    pending.catch(() => sharedKeyCache.delete(cacheKey));
+  }
+  return pending;
+}
+
+/** Decrypts marker-wrapped ciphertext; null when not shared or not permitted. */
+export async function tryDecryptShared(ctx: FeatureBackendContext, bytes: Uint8Array): Promise<Uint8Array | null> {
+  const parsed = parseSharedCiphertext(bytes);
+  if (!parsed) return null;
+  try {
+    const key = await fetchSharedAudienceVetKey(ctx, parsed.audience);
+    return IbeCiphertext.deserialize(parsed.ciphertext).decrypt(key);
+  } catch { return null; }
 }
