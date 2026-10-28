@@ -43,7 +43,7 @@ function getOrdinalSuffix(n: number): string {
 }
 
 export default function ProfilePage() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, profileNamePending } = useAuth();
   const isIcpAuth = resolveAuthBackend() === "icp";
   const useIcpLab = isFeatureRoutedToIcp("membership");
   const notificationNudge = useNotificationNudge(user?.id, "settings");
@@ -594,7 +594,7 @@ export default function ProfilePage() {
           className="flex-1 text-left min-w-0"
           aria-label="Edit profile"
         >
-          <h1 className="text-2xl font-bold truncate">{profile?.display_name}</h1>
+          <h1 className="text-2xl font-bold truncate">{profileNamePending ? "" : profile?.display_name}</h1>
           {!isIcpAuth && <p className="text-sm text-muted-foreground truncate">{user?.email}</p>}
         </button>
       </div>
