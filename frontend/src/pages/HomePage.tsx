@@ -602,6 +602,8 @@ export default function HomePage() {
       return { memberships, events: limited as Event[] };
   };
 
+  const incompleteHomeRetriesRef = useRef(0);
+  useEffect(() => { incompleteHomeRetriesRef.current = 0; }, [user?.id]);
   const { data: membershipAndEvents, isLoading, isFetching, isFetched } = useQuery({
     queryKey: eventKeys.home(user?.id),
     queryFn: async ({ signal }) => {
@@ -647,6 +649,16 @@ export default function HomePage() {
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
     refetchOnReconnect: "always",
+    // Right after sign-in some club reads can fail while access is still
+    // settling, leaving a partial (often empty) Next Up. staleTime would then
+    // hold that result until Home remounts, so quietly re-read a few times.
+    refetchInterval: (query) => {
+      const data = query.state.data as { incomplete?: boolean } | undefined;
+      if (!data?.incomplete) { incompleteHomeRetriesRef.current = 0; return false; }
+      if (incompleteHomeRetriesRef.current >= 4) return false;
+      incompleteHomeRetriesRef.current += 1;
+      return 3000 * incompleteHomeRetriesRef.current;
+    },
   });
 
   // Persist the latest snapshot whenever the query resolves so the next cold
