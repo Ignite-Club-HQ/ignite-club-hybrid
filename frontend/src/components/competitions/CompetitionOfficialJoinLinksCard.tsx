@@ -109,10 +109,8 @@ export function CompetitionOfficialJoinLinksCard({
   const revokeLink = useMutation({
     mutationFn: () => withFeatureBackend("competitions", {
       supabase: async () => {
-        const { error } = await (supabase as any).rpc("revoke_competition_role_link", {
-          _competition_id: competitionId,
-          _role: role,
-        });
+        const { error } = await (supabase as any).from("competition_role_links").delete()
+          .eq("competition_id", competitionId).eq("role", toDbRole(role));
         if (error) throw error;
       },
       icp: async (ctx) => revokeLiveCompetitionOfficialLink(ctx, competitionId, role),
