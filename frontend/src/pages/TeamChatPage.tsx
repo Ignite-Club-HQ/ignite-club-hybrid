@@ -1880,9 +1880,13 @@ export default function TeamChatPage() {
     teamId: teamId ?? null,
     clubId: team?.club_id ?? null,
   });
-  const { withinMatchWindow: galleryWindowOpen } = useRecentMatchWindow({
+  const { withinMatchWindow: recentMatchWindow } = useRecentMatchWindow({
     teamId: teamId ?? null,
   });
+  // Arriving from the "add it to the team gallery" reminder always offers the
+  // action on your own photos, even outside the post-match window.
+  const [fromGalleryReminder] = useState(() => searchParams.get("gallery") === "1");
+  const galleryWindowOpen = recentMatchWindow || fromGalleryReminder;
 
   const handleCancelEdit = useCallback(() => {
     setEditingMessage(null);
