@@ -127,6 +127,16 @@ export async function uploadVaultItem(
     const privatePath = storagePath.replace(/^(clubs\/[^/]+\/)/, "$1vault/");
     const name = (options.name.trim() || "Untitled").slice(0, 160);
     const mime = (options.file.type || "application/octet-stream").slice(0, 128);
+    // Role-limited folders lock the file to their role audience (one key per
+    // audience); unlimited folders keep the existing club grant path.
+    const teamScope = options.view.type === "team" ? options.view.teamId : null;
+    let audience: import("@/live/piiVetKeys").SharedAudience | undefined;
+    if (options.folderId && options.view.type !== "competition") {
+      const [{ getLiveVaultFolder }, { vaultRoleScope }] = await Promise.all([import("@/live/features/vault"), import("@/live/piiVetKeys")]);
+      const folder = await getLiveVaultFolder(ctx, options.folderId);
+      const roles = (folder?.restricted_roles ?? []).filter(Boolean);
+      if (roles.length) audience = { kind: "vaultrole", scope: vaultRoleScope(clubId, teamScope, roles), club: clubId };
+    }
     const blobUpload = dependencies.tryBlobUpload
       ? await dependencies.tryBlobUpload({
           context: ctx,
@@ -135,6 +145,7 @@ export async function uploadVaultItem(
           file: options.file,
           mime: options.file.type || "application/octet-stream",
           lock: "own",
+          audience,
           competitionId: options.view.type === "competition" ? options.view.competitionId : undefined,
           beforeUpload: async (ref) => beginLiveVaultUpload(ctx, {
             id: registrationId, folder_id: options.folderId ?? "", club: clubId,
