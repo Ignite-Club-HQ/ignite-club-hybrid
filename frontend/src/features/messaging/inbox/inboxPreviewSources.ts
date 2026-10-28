@@ -356,15 +356,6 @@ async function fetchIcpChatGroupsWithMessages() {
   const adminClubIds = new Set(roleGrants.filter((g) => g.role === "club_admin").map(clubOf));
   const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
   const { listLiveGroupsByClub } = await import("@/live/features/messaging");
-  const setupErrors: string[] = [];
-  const friendly = (err: unknown) => {
-    const m = err instanceof Error ? err.message : String(err);
-    // Infrastructure trouble (zero fuel, frozen or stopped canisters) is never named to users.
-    if (/could not perform remote call|out of cycles|IC0207|is stopped|frozen|destination invalid/i.test(m)) return "isn't responding right now — please try again later";
-    if (/access forbidden|not authori|denied/i.test(m)) return "your access to this club's chats couldn't be confirmed";
-    if (/timeout|network|fetch failed|unavailable/i.test(m)) return "the club's chats didn't respond in time";
-    return "couldn't be set up just now — please try again later";
-  };
   await Promise.all(liveClubs.filter((c) => adminClubIds.has(c.id)).map(async (c) => {
     try {
       const failed = await readContentInScope(ctx, "messaging", { clubId: c.id }, (scoped) => ensureLiveDefaultClubChats(scoped, c.id));
@@ -376,10 +367,10 @@ async function fetchIcpChatGroupsWithMessages() {
     }
   }));
   const perClub = await Promise.all(liveClubs.map(async (club) => {
-    const rows = await readContentInScope(ctx, "messaging", { clubId: club.id }, (scoped) => listLiveGroupsByClub(scoped, club.id)).catch((err) => {
-      if (adminClubIds.has(club.id)) setupErrors.push(`${club.name}: ${friendly(err)}`);
-      return [];
-    });
+    // A failed directory refresh is not a setup failure or an empty club.
+    // Reject the query so React Query retains its last successful inbox and
+    // retries the authorized read instead of caching missing chats as success.
+    const rows = await readContentInScope(ctx, "messaging", { clubId: club.id }, (scoped) => listLiveGroupsByClub(scoped, club.id));
     return rows
       .filter((g) => g.isMember && !g.teamId && g.kind === "group")
       .map((g) => ({
@@ -417,7 +408,7 @@ async function fetchIcpChatGroupsWithMessages() {
       } as unknown as InboxPreview;
     } catch { /* one unreadable chat must not blank the rest */ }
   }));
-  return { groups: hideEmptyDefaultCopies(groups, (id) => !!latestMessages[id]), latestMessages, setupErrors };
+  return { groups: hideEmptyDefaultCopies(groups, (id) => !!latestMessages[id]), latestMessages };
 }
 
 export async function fetchChatGroupsWithMessages(client: InboxDataClient, userId: string) {
