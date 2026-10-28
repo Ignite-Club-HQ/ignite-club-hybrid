@@ -1,0 +1,43 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import { Principal } from '@icp-sdk/core/principal';
+import type { Identity } from '@icp-sdk/core/agent';
+import type { IcpTargetConfig } from './targetRegistry';
+
+const mocks = vi.hoisted(() => ({ connect: vi.fn(), get: vi.fn(), roles: vi.fn(), dispose: vi.fn(), cache: vi.fn(), unlock: vi.fn() }));
+vi.mock('./identityAccess', () => ({ isLiveIdentityAccessConfigured: () => true, connectLiveIdentityAccessClientWithIdentity: mocks.connect }));
+vi.mock('./identityProfileCache', () => ({ cacheIcpIdentityProfile: mocks.cache }));
+vi.mock('./privateProfileNames', () => ({ readPrivateOwnProfileName: mocks.unlock }));
+import { fetchIcpIdentityProfile } from './identityProfile';
+
+const principal = Principal.fromUint8Array(Uint8Array.of(3, 1)).toText();
+const identity = { getPrincipal: () => Principal.fromText(principal) } as Identity;
+const authority = 'rrkah-fqaaa-aaaaa-aaaaq-cai';
+const target = { alias: 'test', host: 'https://icp-api.io', canisterIds: { identity_access: authority, pii_access_control: authority } } as IcpTargetConfig;
+const reference = `pii-display-name:v1:${authority}:${principal}`;
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.connect.mockResolvedValue({ client: { getProfile: mocks.get, myRoles: mocks.roles, dispose: mocks.dispose } });
+  mocks.get.mockResolvedValue({ display_name: reference, avatar_ref: [] });
+  mocks.roles.mockResolvedValue([]);
+  mocks.unlock.mockResolvedValue('Saved name');
+});
+it('reopens a saved encrypted profile without persisting its decrypted name', async () => {
+  const result = await fetchIcpIdentityProfile(identity, principal, target);
+  expect(result.displayName).toBe('Saved name'); expect(result.profileMissing).toBe(false);
+  expect(mocks.unlock).toHaveBeenCalledWith({ identity, target }, reference);
+  expect(mocks.cache).toHaveBeenCalledWith(principal, { ...result, displayName: null });
+});
+it('never reads or caches a profile for a different signed-in caller', async () => {
+  await expect(fetchIcpIdentityProfile(identity, authority, target)).rejects.toThrow('signed-in identity');
+  expect(mocks.connect).not.toHaveBeenCalled(); expect(mocks.cache).not.toHaveBeenCalled();
+});
+it('an unlock refusal is retryable failure, not a missing profile', async () => {
+  mocks.unlock.mockRejectedValue(Error('Private display name unlock timed out.'));
+  await expect(fetchIcpIdentityProfile(identity, principal, target)).rejects.toThrow('timed out');
+  expect(mocks.cache).not.toHaveBeenCalled(); expect(mocks.dispose).toHaveBeenCalledOnce();
+});
+it('only a genuinely absent server profile is reported missing', async () => {
+  mocks.get.mockResolvedValue(null);
+  expect((await fetchIcpIdentityProfile(identity, principal, target)).profileMissing).toBe(true);
+  expect(mocks.unlock).not.toHaveBeenCalled();
+});
