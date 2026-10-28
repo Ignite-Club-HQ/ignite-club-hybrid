@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { Navigate, Link, useSearchParams } from "react-router-dom";
+import { AppSplash } from "@/components/AppSplash";
 import { Flame, Mail, Lock, Loader2, Eye, EyeOff, Fingerprint, CheckCircle2, Circle, XCircle, WifiOff } from "lucide-react";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { Button } from "@/components/ui/button";
@@ -580,10 +581,7 @@ export default function AuthPage() {
 
   if (authLoading) {
     return (
-      <div className="flex flex-col items-center justify-center bg-background gap-3" style={authShellStyle}>
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground">{useIcpLab ? "Signing you in…" : "Checking authentication..."}</p>
-      </div>
+      <AppSplash message={useIcpLab ? "Signing you in…" : "Checking authentication..."} />
     );
   }
 
@@ -591,10 +589,7 @@ export default function AuthPage() {
 
   if (shouldHoldAuthenticatedRedirect) {
     return (
-      <div className="flex flex-col items-center justify-center bg-background gap-3" style={authShellStyle}>
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground">{useIcpLab ? "Signing you in…" : "Finishing sign in..."}</p>
-      </div>
+      <AppSplash message={useIcpLab ? "Signing you in…" : "Finishing sign in..."} />
     );
   }
 
@@ -608,10 +603,7 @@ export default function AuthPage() {
     // the very next render will pick a target. Show the "Finishing sign in"
     // loader instead of rendering the sign-in form to a logged-in user.
     return (
-      <div className="flex flex-col items-center justify-center bg-background gap-3" style={authShellStyle}>
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground">{useIcpLab ? "Signing you in…" : "Finishing sign in..."}</p>
-      </div>
+      <AppSplash message={useIcpLab ? "Signing you in…" : "Finishing sign in..."} />
     );
   }
 
