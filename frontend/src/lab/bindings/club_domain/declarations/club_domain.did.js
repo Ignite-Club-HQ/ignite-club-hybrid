@@ -1827,6 +1827,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'pii_canister_status' : IDL.Func([], [IDL.Opt(IDL.Principal)], ['query']),
     'prepare_account_removal' : IDL.Func(
         [Request__1],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

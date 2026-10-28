@@ -1394,6 +1394,9 @@ type Main =
        Err: text;
        Ok;
      });
+   /// Read-only: which private-details service this club service trusts.
+   /// Used by the upgrade workflow to confirm the link before release.
+   pii_canister_status: () -> (opt principal) query;
    prepare_account_removal: (request: Request__1) ->
     (variant {
        Err: text;

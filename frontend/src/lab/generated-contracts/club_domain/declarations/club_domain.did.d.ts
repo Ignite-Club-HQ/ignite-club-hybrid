@@ -1222,6 +1222,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  /**
+   * / Read-only: which private-details service this club service trusts.
+   * / Used by the upgrade workflow to confirm the link before release.
+   */
+  'pii_canister_status' : ActorMethod<[], [] | [Principal]>,
   'prepare_account_removal' : ActorMethod<
     [Request__1],
     { 'Ok' : null } |
