@@ -1,5 +1,5 @@
 ## Chat warning after profile-name edit — 29 October 2026
-- [ ] Distinguish chat-list refresh failure from setup failure, keep the last successful inbox on failed refresh, and verify recovery without changing profile or chat permissions.
+- [x] Failed club chat-list reads now reject refresh instead of caching missing chats and reporting setup failure; existing successful inbox results survive and recover on successful reads. Removed the obsolete setup banner. All 33 focused regressions pass in each backend mode; preview build OK. Profile save does not explicitly refresh this query, so the screenshot alone does not establish that editing the name caused the underlying read failure. Permissions unchanged.
 - [ ] Deploy web app and confirm on Paul's signed-in phone; no Internet Identity session is available here.
 
 ## Home club member-list warming — 29 October 2026
