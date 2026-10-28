@@ -158,7 +158,7 @@ interface Team {
 }
 
 export default function HomePage() {
-  const { user, profile, refreshProfile, initialized } = useAuth();
+  const { user, profile, refreshProfile, initialized, profileNamePending } = useAuth();
   const isIcp = resolveAuthBackend() === "icp";
   
   usePageTitle("Home");
@@ -2144,7 +2144,9 @@ export default function HomePage() {
   // This prevents the "double flash" issue on login where the page loads, then shows loading, then loads again
 
   const activeClubName = userClubs?.find((c: any) => c.id === activeClubFilter)?.name || clubs?.find(c => c.id === activeClubFilter)?.name;
-  const firstName = profile?.display_name?.split(' ')[0] || 'there';
+  // While an ICP profile's encrypted name is still unlocking, display_name is
+  // a "…" placeholder — render the greeting without a name until it resolves.
+  const firstName = profileNamePending ? '' : profile?.display_name?.split(' ')[0] || 'there';
 
   // Gate first paint of the widget area on the primary memberships query so
   // every widget mounts together and fades in as a single, cohesive surface

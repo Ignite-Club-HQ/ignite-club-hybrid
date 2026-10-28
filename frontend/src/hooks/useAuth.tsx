@@ -53,6 +53,13 @@ interface AuthContextType {
   /** 'restoring' until the stored session has been resolved one way or the other. */
   sessionRestoration: "restoring" | "authenticated" | "signed_out";
   profileResolved: boolean; // True only after profile has been fetched from server at least once
+  /**
+   * Internet Identity only: true while a known existing profile's encrypted
+   * name is still unlocking. While true, display_name holds a "…" placeholder
+   * that must not be rendered — hide the name (and avatar initial) until this
+   * clears. Undefined for the Supabase provider (name arrives with the row).
+   */
+  profileNamePending?: boolean;
   unreadCount: number;
   unreadMessagesCount: number;
   signUp: (email: string, password: string) => Promise<{ error: Error | null; needsEmailConfirmation?: boolean }>;
@@ -1585,6 +1592,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     initialized: true,
     sessionRestoration: principal ? "authenticated" as const : "signed_out" as const,
     profileResolved: !principal || icpProfileResolved,
+    profileNamePending: Boolean(principal) && icpNamePending && !icpDisplayName,
     unreadCount: 0,
     unreadMessagesCount: 0,
     signUp: async () => ({ error: (await signInWithIcp()).error, needsEmailConfirmation: false }),

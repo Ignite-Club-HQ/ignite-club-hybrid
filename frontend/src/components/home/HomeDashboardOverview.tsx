@@ -117,7 +117,7 @@ export function HomeDashboardOverview({
       <div className="px-1 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-foreground">
-            Welcome, {firstName}! 👋
+            Welcome{firstName ? `, ${firstName}` : ""}! 👋
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Here's what's coming up
