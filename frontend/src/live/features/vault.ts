@@ -29,8 +29,11 @@ export async function registerLivePii(
   fieldId: string,
   plaintext: Uint8Array,
   domainOwner: Principal,
+  audience?: SharedAudience,
 ) {
-  const ciphertext = await encryptPiiValue(ctx, piiId, fieldId, plaintext);
+  const ciphertext = audience
+    ? await encryptSharedValue(ctx, audience, plaintext)
+    : await encryptPiiValue(ctx, piiId, fieldId, plaintext);
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   return unwrapCandid(
     actor.register_pii(piiId, fieldId, ciphertext, domainOwner),
@@ -236,10 +239,17 @@ export async function resolveLivePiiTextBatch(
   try {
     const rows = await getLiveEncryptedPiiBatch(ctx, piiIds, fieldId, operation, purpose);
     if (rows.length === 0) return out;
-    const readableIds = rows.map((row) => row.pii_id);
-    const vetKeys = await fetchPiiVetKeys(ctx, readableIds, fieldId);
     const decoder = new TextDecoder();
-    for (const row of rows) {
+    const perRecord: typeof rows = [];
+    await Promise.all(rows.map(async (row) => {
+      const bytes = Uint8Array.from(row.ciphertext);
+      if (!parseSharedCiphertext(bytes)) { perRecord.push(row); return; }
+      const plain = await tryDecryptShared(ctx, bytes);
+      if (plain) out.set(row.pii_id, decoder.decode(plain));
+    }));
+    if (perRecord.length === 0) return out;
+    const vetKeys = await fetchPiiVetKeys(ctx, perRecord.map((row) => row.pii_id), fieldId);
+    for (const row of perRecord) {
       const vetKey = vetKeys.get(row.pii_id);
       if (!vetKey) continue; // ciphertext readable but no key grant — treat as no access
       try {
