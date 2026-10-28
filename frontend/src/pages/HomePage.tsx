@@ -99,6 +99,7 @@ import {
   isHomeEventForMember,
 } from "@/components/home/homeEventSelection";
 import { HomeDashboardSections } from "@/components/home/HomeDashboardSections";
+import { useHomeClubMembers } from "@/components/home/useHomeClubMembers";
 
 export {
   getEventLocalDateKey,
@@ -676,6 +677,7 @@ export default function HomePage() {
   // Derive memberships and events from consolidated query
   const userMemberships = membershipAndEvents?.memberships;
   const allEvents = membershipAndEvents?.events;
+  useHomeClubMembers(user?.id, userMemberships?.clubIds, activeClubFilter);
 
   // Listen for server-side schedule refresh broadcasts so the home dashboard
   // re-fetches events automatically when an admin pushes a refresh.

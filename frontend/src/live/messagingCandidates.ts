@@ -2,6 +2,7 @@ import { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "./featureRouter";
 import { listLiveRoleGrants } from "./features/membership";
 import { getCachedIcpIdentityProfile } from "./identityProfileCache";
+import { withReadDeadline } from "./readDeadline";
 
 /**
  * Shared candidate-resolution helper for the messaging "pick people" dialogs
@@ -53,10 +54,11 @@ export function shortPrincipalLabel(principalText: string): string {
 const ROSTER_TTL_MS = 3 * 60_000;
 const rosterMemo = new Map<string, { at: number; read: Promise<Awaited<ReturnType<typeof listLiveRoleGrants>>> }>();
 function rememberedRoleGrants(ctx: FeatureBackendContext, caller: string, clubId: string) {
-  const key = `${caller}|${clubId}`;
+  const key = JSON.stringify([caller, ctx.target.host, ctx.target.networkKind,
+    Object.entries(ctx.target.canisterIds).sort(([a], [b]) => a.localeCompare(b)), clubId]);
   const hit = rosterMemo.get(key);
   if (hit && Date.now() - hit.at < ROSTER_TTL_MS) return hit.read;
-  const read = listLiveRoleGrants(ctx, clubId);
+  const read = withReadDeadline(listLiveRoleGrants(ctx, clubId), "Club members", 20_000);
   rosterMemo.set(key, { at: Date.now(), read });
   read.catch(() => { if (rosterMemo.get(key)?.read === read) rosterMemo.delete(key); });
   if (rosterMemo.size > 50) rosterMemo.delete(rosterMemo.keys().next().value as string);

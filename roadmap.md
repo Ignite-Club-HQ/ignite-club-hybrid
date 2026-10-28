@@ -1,3 +1,8 @@
+## Home club member-list warming — 29 October 2026
+- [x] Warm the selected club and Home membership clubs through the existing New Message/Invite people roster memo, with two concurrent bounded reads and foreground/online recovery; preserve scoped authorization and memory-only storage.
+- [x] All 21 focused Home/roster/picker regressions pass in each of ICP and Supabase modes; preview build OK. Tests confirm selected-club priority, two-read concurrency, shared cache reuse, destination/account isolation and timeout recovery.
+- [ ] Deploy web app and confirm New Message/Invite people opening on Paul's signed-in phone; a real Internet Identity session is unavailable here. No backend change required by this task.
+
 ## Team invite QR controls — 28 October 2026
 - [x] Pass resolved team/club manager permission and owning club into the invite link card; preserve player-only restrictions and canister authorization.
 - [x] Nine invite permission and mounted ICP link-creation regressions pass under each backend configuration; preview build OK.
