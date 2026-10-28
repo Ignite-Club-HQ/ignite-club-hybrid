@@ -1676,7 +1676,7 @@ export default function ClubChatPage() {
     onSuccess: (result, variables, context) => {
       settlePendingInboxPreview(queryClient, "club", user?.id, clubId);
       if (result?.confirmedMessage) {
-        applyConfirmedInboxPreview(queryConfirirmInboxPreviewPlaceholder, "club", user?.id, clubId, result.confirmedMessage);
+        applyConfirmedInboxPreview(queryClient, "club", user?.id, clubId, result.confirmedMessage);
         if (clubId) recordOwnSentConversation(`club-${clubId}`);
       }
       if (result?.confirmedMessage && context?.tempId) {
