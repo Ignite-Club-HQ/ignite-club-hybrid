@@ -33,7 +33,7 @@ module {
         case (?t) { if (c.teamClub(t) != ?club) return false };
         case null {};
       };
-      for (r in clubWide.vals()) { if (c.hasRole(r, club, null)) return true };
+      for (r in clubWide.values()) { if (c.hasRole(r, club, null)) return true };
       for (role in Text.split(parts[2], #char ',')) {
         if (role != "" and c.hasRole(role, club, team)) return true;
       };
