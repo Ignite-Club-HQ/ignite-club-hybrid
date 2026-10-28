@@ -12,7 +12,22 @@ function optional<T>(p: Promise<T[]>, ms = 8000): Promise<T[]> {
   });
 }
 
-export async function readLiveInviteTargets(ctx: FeatureBackendContext) {
+// Home warms this quietly so the Invite sheet opens with its answer ready.
+// Memory only, per signed-in principal, briefly reused.
+const WARM_MS = 2 * 60_000;
+let warm: { key: string; at: number; read: Promise<Awaited<ReturnType<typeof readInviteTargetsNow>>> } | null = null;
+export function readLiveInviteTargets(ctx: FeatureBackendContext) {
+  const key = ctx.identity.getPrincipal().toText();
+  if (warm && warm.key === key && Date.now() - warm.at < WARM_MS) return warm.read;
+  const read = readInviteTargetsNow(ctx);
+  const entry = { key, at: Date.now(), read };
+  warm = entry;
+  read.catch(() => { if (warm === entry) warm = null; });
+  return read;
+}
+export function __resetInviteTargetsWarm() { warm = null; }
+
+async function readInviteTargetsNow(ctx: FeatureBackendContext) {
   const { getLiveMyRoleGrants } = await import('./features/membership');
   const grantsP = getLiveMyRoleGrants(ctx);
   const [grants, miniLeagues, competitions] = await Promise.all([
