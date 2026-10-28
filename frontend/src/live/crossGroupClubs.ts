@@ -63,5 +63,9 @@ export async function readClubsInOwnGroups(
 /** All the caller's active clubs across every group. */
 export async function listMyClubsAcrossGroups(ctx: FeatureBackendContext): Promise<Settled<LiveClubRow>> {
   const grants = (await getLiveMyRoleGrants(ctx)) as unknown as Grant[];
-  return readClubsInOwnGroups(ctx, grants.map(grantClubId).filter((c): c is string => !!c));
+  const clubIds = grants.map(grantClubId).filter((c): c is string => !!c);
+  // Removal cleanup: drop saved club keys for clubs this sign-in no longer
+  // belongs to, so a removed member's device stops opening that club's names/photos.
+  pruneStoredClubKeys(ctx.identity.getPrincipal().toText(), clubIds);
+  return readClubsInOwnGroups(ctx, clubIds);
 }

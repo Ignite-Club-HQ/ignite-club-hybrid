@@ -70,6 +70,36 @@ export function forgetStoredClubKey(canisterId: string, principal: string, clubI
   }
 }
 
+/** Club id a stored key belongs to, or null for person-scoped keys (pii:...). */
+export function storedKeyClubId(slot: string): string | null {
+  if (slot.startsWith("pii:")) return null;
+  const marker = ":clubnames:";
+  const i = slot.lastIndexOf(marker);
+  if (slot.startsWith("private-club-name:")) return i >= 0 ? slot.slice(i + marker.length) : null;
+  return slot || null; // club photo keys are stored under the bare club id
+}
+
+/** Removes this sign-in's saved club name/photo keys for clubs not in `clubIds`. */
+export function pruneStoredClubKeys(principal: string, clubIds: readonly string[]): number {
+  const keep = new Set(clubIds);
+  let removed = 0;
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const name = localStorage.key(i);
+      if (!name?.startsWith(CLUB_KEY_PREFIX)) continue;
+      const rest = name.slice(CLUB_KEY_PREFIX.length);
+      const first = rest.indexOf(":");
+      const second = first < 0 ? -1 : rest.indexOf(":", first + 1);
+      if (second < 0 || rest.slice(first + 1, second) !== principal) continue;
+      const club = storedKeyClubId(rest.slice(second + 1));
+      if (club && !keep.has(club)) { localStorage.removeItem(name); removed++; }
+    }
+  } catch {
+    /* ignore */
+  }
+  return removed;
+}
+
 function photoCacheName(principal: string): string {
   return `${PHOTO_CACHE_PREFIX}${principal}`;
 }
