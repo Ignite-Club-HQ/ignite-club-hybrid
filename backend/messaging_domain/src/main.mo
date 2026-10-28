@@ -2088,6 +2088,8 @@ persistent actor class Main(governorInit : Principal) = this {
     removed += conversations.size() - keepConversations.size();
     mediaEvidenceRevision += 1;
     conversations := keepConversations.map(func(c) = { c with participants = c.participants.filter(func(p) = not p.equal(caller)) });
+    let keepLinks = dmLinks.filter(func(l) = not l.a.equal(caller) and not l.b.equal(caller));
+    removed += dmLinks.size() - keepLinks.size(); dmLinks := keepLinks;
     #Ok(Nat32.fromNat(removed))
   
     } finally { privateNameWriterGate.leave(privateWriterLease) };
