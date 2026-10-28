@@ -102,7 +102,7 @@ export async function getIcpNotificationRoute(
     case "media_chat_photo_reminder":
       // Open the team chat where the photo was shared: its own photos carry
       // the "Add to gallery" action, so nothing needs re-picking.
-      return `/messages/${encodeURIComponent(relatedId)}`;
+      return `/messages/${encodeURIComponent(relatedId)}?gallery=1`;
     case "event_invite":
     case "event_cancelled":
     case "event_updated":
