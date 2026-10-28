@@ -232,6 +232,35 @@ export function partitionInboxByReadState(
   };
 }
 
+/**
+ * Float conversations the user just sent a message to to the top of their
+ * current section. Read/unread grouping is preserved: a bumped unread row
+ * leads the Unread section, a bumped read row leads Recent, and rows never
+ * cross sections. Non-bumped rows keep their existing relative order.
+ * `bumpedKeys` is most-recently-sent first.
+ */
+export function bumpOwnSentRows<T extends { key: string }>(
+  sections: { unread: readonly T[]; recent: readonly T[] },
+  bumpedKeys: readonly string[],
+): T[] {
+  const all = [...sections.unread, ...sections.recent];
+  if (bumpedKeys.length === 0) return all;
+  const rank = new Map(bumpedKeys.map((key, index) => [key, index]));
+  const reorder = (rows: readonly T[]): T[] =>
+    rows
+      .map((row, index) => ({ row, index }))
+      .sort((a, b) => {
+        const ra = rank.get(a.row.key);
+        const rb = rank.get(b.row.key);
+        if (ra === undefined && rb === undefined) return a.index - b.index;
+        if (ra === undefined) return 1;
+        if (rb === undefined) return -1;
+        return ra - rb;
+      })
+      .map((entry) => entry.row);
+  return [...reorder(sections.unread), ...reorder(sections.recent)];
+}
+
 export function resolveOperationalConversationDisclosure(
   recent: readonly InboxConversation[],
   options: OperationalDisclosureOptions,
