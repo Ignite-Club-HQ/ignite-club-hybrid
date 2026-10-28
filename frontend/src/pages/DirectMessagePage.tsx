@@ -1,5 +1,10 @@
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
 import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
+import {
+  applyPendingInboxPreview,
+  discardPendingInboxPreview,
+  settlePendingInboxPreview,
+} from "@/features/messaging/inbox/pendingInboxPreview";
 import { dmBlockMessage, fetchDmBlockReason } from "@/lib/dmBlockReason";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react";
@@ -1242,6 +1247,9 @@ export default function DirectMessagePage() {
     onMutate: async ({ text, imageUrl, replyToId }) => {
       // Mutation-specific temp id so overlapping sends roll back independently.
       const tempId = createSendTempId();
+      // Inbox preview + row float show the message while it is still sending.
+      applyPendingInboxPreview(queryClient, "dm", user?.id, conversationId, { text, image_url: imageUrl || null });
+      if (conversationId) recordOwnSentConversation(`dm-${conversationId}`);
       const sentAtMs = Date.now();
       const previousReplyTo = replyTo;
       const optimisticMessage: DirectMessage = {
@@ -1273,6 +1281,11 @@ export default function DirectMessagePage() {
 
     onSuccess: async (newMessage) => {
       const currentReplyTo = replyToRef.current;
+      settlePendingInboxPreview(queryClient, "dm", user?.id, conversationId, {
+        text: newMessage.text,
+        image_url: newMessage.image_url ?? null,
+        created_at: newMessage.created_at,
+      });
       if (conversationId) recordOwnSentConversation(`dm-${conversationId}`);
       
       // Update the query cache with the new message to replace optimistic one
@@ -1341,6 +1354,9 @@ export default function DirectMessagePage() {
       // Offline sends are queued, not failed.
       if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
+      // The send left the pending preview state either way from here on.
+      settlePendingInboxPreview(queryClient, "dm", user?.id, conversationId);
+
       // Check if the message actually arrived via realtime before showing error
       const currentData = queryClient.getQueryData<{ messages: DirectMessage[] }>(["dm-messages", conversationId]);
       const messageExists =
@@ -1356,6 +1372,7 @@ export default function DirectMessagePage() {
             return { ...old, messages: (old.messages || []).filter((m: DirectMessage) => m.id !== context.tempId) };
           });
         }
+        discardPendingInboxPreview(queryClient, "dm", user?.id, conversationId);
         restoreFailedSendComposer({
           context,
           setText: setMessage,

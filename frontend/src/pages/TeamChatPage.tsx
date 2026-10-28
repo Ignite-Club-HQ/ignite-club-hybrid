@@ -2,6 +2,11 @@ import { prefetchMessagePolls } from "@/lib/pollReadRepository";
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, Suspense } from "react";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
+import {
+  applyPendingInboxPreview,
+  discardPendingInboxPreview,
+  settlePendingInboxPreview,
+} from "@/features/messaging/inbox/pendingInboxPreview";
 import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
 import { chatSendFailureReason } from "@/lib/chatSendFailure";
 import { withReadDeadline } from "@/live/readDeadline";
@@ -1679,6 +1684,10 @@ export default function TeamChatPage() {
       const previousReplyingTo = replyingTo;
       const { baseText: unsentText, pollId: unsentPollId } = splitPollMarkup(text);
 
+      // Inbox preview + row float show the message while it is still sending.
+      applyPendingInboxPreview(queryClient, "team", user?.id, teamId, { text, image_url: image_url ?? null });
+      if (teamId) recordOwnSentConversation(`team-${teamId}`);
+
 
       const optimisticMessage: Message = {
         id: tempId,
@@ -1740,6 +1749,9 @@ export default function TeamChatPage() {
       // If offline, don't revert - message is queued
       if (!navigator.onLine) return;
 
+      // The send left the pending preview state either way from here on.
+      settlePendingInboxPreview(queryClient, "team", user?.id, teamId);
+
       // If the insert actually landed and arrived via realtime, treat it as a
       // success: no failure toast and no draft restoration.
       const current = queryClient.getQueryData<{ messages: Message[] }>(["team-messages", teamId]);
@@ -1761,6 +1773,7 @@ export default function TeamChatPage() {
         });
         setLocalMessages((prev) => (prev ? prev.filter((m) => m.id !== tempId) : prev));
       }
+      discardPendingInboxPreview(queryClient, "team", user?.id, teamId);
 
       // Restore each composer field only when its slot is still empty.
       restoreFailedSendComposer({
@@ -1776,6 +1789,7 @@ export default function TeamChatPage() {
     },
 
     onSuccess: (result, variables, context) => {
+      settlePendingInboxPreview(queryClient, "team", user?.id, teamId);
       if (result?.confirmedMessage) {
         applyConfirmedInboxPreview(queryClient, "team", user?.id, teamId, result.confirmedMessage);
         if (teamId) recordOwnSentConversation(`team-${teamId}`);
