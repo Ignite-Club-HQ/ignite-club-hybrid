@@ -3,7 +3,7 @@ import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { prefetchMessagePolls } from "@/lib/pollReadRepository";
 import { markChatFetch } from "@/hooks/useChatPerfMarks";
 import { splitPageWindow } from "@/lib/chatPageWindow";
-import { getCachedMessages, cacheMessages } from "@/lib/messageCache";
+import { getCachedMessages, cacheMessages, isCachedThreadComplete } from "@/lib/messageCache";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
 import { isUsableCachedThread } from "@/lib/chatThreadLoadState";
@@ -352,7 +352,8 @@ const getGroupMessagesPlaceholderData = (
 
   const cachedData = getCachedGroupMessages(groupId);
   // A genuine one-message thread is usable; a notification-preload stub is not.
-  if (!isUsableCachedThread(cachedData.messages as any)) return undefined;
+  // A saved copy from a real read is usable even when the chat is empty.
+  if (!isUsableCachedThread(cachedData.messages as any) && !isCachedThreadComplete("group", groupId)) return undefined;
 
   return { ...cachedData, hasOlderMessages: false, fromCache: true };
 };

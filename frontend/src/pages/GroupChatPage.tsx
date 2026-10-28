@@ -127,7 +127,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
 import { useChatProfileWorkset } from "@/hooks/useChatProfileWorkset";
 import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
-import { shouldRefetchMessages } from "@/lib/messageCache";
+import { shouldRefetchMessages, isCachedThreadComplete } from "@/lib/messageCache";
 import {
   classifyChatThreadState,
   nextEmptyRetryDelay,
@@ -715,6 +715,8 @@ export default function GroupChatPage() {
     },
     [applyRealtimeReactionDelete, queryClient, groupId],
   );
+  // A saved copy of a genuinely empty chat paints at once; the read refreshes it.
+  const [savedEmptyThread] = useState(() => !!groupId && isCachedThreadComplete("group", groupId) && getCachedGroupMessages(groupId).messages.length === 0);
   const hasMeaningfulLocal = isUsableCachedThread(localMessages as any);
 
   // Authoritative fetched count (null = query never produced data).
@@ -762,7 +764,9 @@ export default function GroupChatPage() {
       setRecoveryExhausted(false);
       return;
     }
-    const needsRecovery = messagesIsError || fetchedCount === 0;
+    // An empty answer is only suspicious when the inbox shows a message here;
+    // otherwise re-reading a genuinely empty chat just keeps it loading.
+    const needsRecovery = messagesIsError || (fetchedCount === 0 && inboxSaysHasMessage);
     if (!needsRecovery) return;
     if (recoveryTimerRef.current) return;
 
@@ -783,7 +787,7 @@ export default function GroupChatPage() {
         recoveryTimerRef.current = null;
       }
     };
-  }, [groupId, authReady, fetchedCount, messagesIsError, messagesFetchStatus, refetchMessages]);
+  }, [groupId, authReady, fetchedCount, messagesIsError, messagesFetchStatus, refetchMessages, inboxSaysHasMessage]);
 
   useEffect(
     () => () => {
@@ -800,7 +804,7 @@ export default function GroupChatPage() {
     status: messagesStatus,
     fetchStatus: messagesFetchStatus,
     isError: messagesIsError,
-    hasUsableCached: hasMeaningfulLocal,
+    hasUsableCached: hasMeaningfulLocal || (savedEmptyThread && !inboxSaysHasMessage),
     fetchedCount,
     inboxSaysHasMessage,
     recoveryExhausted,
