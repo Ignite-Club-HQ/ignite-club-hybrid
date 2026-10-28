@@ -474,6 +474,15 @@ export default function GroupChatPage() {
       const { resolveIcpChatAdmin } = await import("@/lib/icpChatAdmin");
       const icp = await resolveIcpChatAdmin({ clubId: group.club_id, teamId: group.team_id, teamRoles: ["team_admin"] });
       if (icp !== null) return icp;
+
+      // Club admins can also rename groups that include members of their
+      // club (server-enforced); mirrors production's UI rule.
+      const { data: canRename } = await (supabase as any).rpc("club_admin_can_rename_group", {
+        _user_id: user!.id,
+        _group_id: group.id,
+        _club_id: group.club_id,
+      });
+      if (canRename) return true;
       
       // Run all role checks in parallel
       const [teamRoleResult, clubRoleResult, appAdminResult] = await Promise.all([
