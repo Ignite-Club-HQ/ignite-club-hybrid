@@ -2,21 +2,24 @@
  * On-device caches that make club photos load fast on repeat visits:
  *  - club photo keys (48-byte vetKeys) persisted for CLUB_KEY_TTL_MS, so a
  *    returning member skips the paid, slow key fetch entirely;
- *  - decrypted photo bytes in the Cache API, so a photo seen before opens
- *    without downloading or decrypting again.
- * Both are scoped to the signed-in principal. Decrypted photo bytes are wiped
+ *  - still-encrypted club photo bytes in the Cache API, so a photo seen before
+ *    opens without downloading; it is unlocked in memory with the saved club
+ *    key only when shown. No viewable photo is ever written to the device.
+ * Both are scoped to the signed-in principal. Saved photo copies are wiped
  * on sign-out; key copies stay for their 30-day life, because a key decrypts
  * nothing by itself — the ciphertext is read again through an authorized read
  * on every open. The explicit "remove saved copies" action calls
- * clearStoredDeviceKeys(). Trade-off: a member removed from a club keeps
- * photo access on that device until their cached key expires.
+ * clearStoredDeviceKeys(). Removal: pruneStoredClubKeys plus
+ * pruneCachedPhotosForClubs drop a removed club's key and saved photos.
  */
 
 import { VIEWED_PHOTO_CACHE_BYTES } from '@/lib/deviceCacheBudget';
 
 const CLUB_KEY_PREFIX = "ignite.clubkey.v1:";
 export const CLUB_KEY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const PHOTO_CACHE_PREFIX = "ignite-media-v1:";
+const PHOTO_CACHE_PREFIX = "ignite-media-v2:";
+// Any earlier generation held viewable (decrypted) photos: always delete it.
+const ANY_PHOTO_CACHE = "ignite-media-v";
 const PHOTO_CACHE_MAX_BYTES = 8 * 1024 * 1024;
 const PHOTO_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_PHOTOS = 100;
@@ -107,7 +110,11 @@ function photoRequest(canisterId: string, path: string): string {
   return `https://ignite-media.local/${canisterId}/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-export async function readCachedPhoto(principal: string, canisterId: string, path: string): Promise<Blob | null> {
+export interface CachedPhotoLock { clubId: string; piiCanisterId: string }
+export interface CachedPhoto extends CachedPhotoLock { ciphertext: Uint8Array }
+
+/** Still-encrypted saved copy plus the club key slot that unlocks it. */
+export async function readCachedPhoto(principal: string, canisterId: string, path: string): Promise<CachedPhoto | null> {
   if (typeof caches === "undefined") return null;
   try {
     const cache = await caches.open(photoCacheName(principal));
@@ -116,7 +123,10 @@ export async function readCachedPhoto(principal: string, canisterId: string, pat
       await cache.delete(photoRequest(canisterId, path));
       return null;
     }
-    return hit ? await hit.blob() : null;
+    if (!hit) return null;
+    const clubId = hit.headers.get('x-ignite-club'), piiCanisterId = hit.headers.get('x-ignite-pii');
+    if (!clubId || !piiCanisterId) { await cache.delete(photoRequest(canisterId, path)); return null; }
+    return { ciphertext: new Uint8Array(await hit.arrayBuffer()), clubId, piiCanisterId };
   } catch {
     return null;
   }
@@ -125,7 +135,8 @@ export async function readCachedPhoto(principal: string, canisterId: string, pat
 async function trimPhotos(incomingBytes: number, incomingCount: number): Promise<void> {
   const rows: Array<{ cache: Cache; request: Request; bytes: number; savedAt: number }> = [];
   for (const name of await caches.keys()) {
-    if (!name.startsWith(PHOTO_CACHE_PREFIX)) continue;
+    if (!name.startsWith(ANY_PHOTO_CACHE)) continue;
+    if (!name.startsWith(PHOTO_CACHE_PREFIX)) { await caches.delete(name); continue; }
     const cache = await caches.open(name);
     for (const request of await cache.keys()) {
       const response = await cache.match(request);
@@ -148,7 +159,8 @@ async function trimPhotos(incomingBytes: number, incomingCount: number): Promise
   }
 }
 
-export function writeCachedPhoto(principal: string, canisterId: string, path: string, bytes: ArrayBuffer): Promise<void> {
+/** Saves the ENCRYPTED bytes only; never pass decrypted photo bytes here. */
+export function writeCachedPhoto(principal: string, canisterId: string, path: string, bytes: ArrayBuffer, lock: CachedPhotoLock): Promise<void> {
   if (typeof caches === 'undefined' || bytes.byteLength > PHOTO_CACHE_MAX_BYTES) return Promise.resolve();
   const epoch = photoEpoch;
   photoWork = photoWork.then(async () => {
@@ -160,6 +172,7 @@ export function writeCachedPhoto(principal: string, canisterId: string, path: st
     if (epoch !== photoEpoch) return;
     await cache.put(request, new Response(bytes, { headers: {
       'x-ignite-bytes': String(bytes.byteLength), 'x-ignite-saved-at': String(Date.now()),
+      'x-ignite-club': lock.clubId, 'x-ignite-pii': lock.piiCanisterId,
     } }));
   }).catch(() => { /* unavailable or full: live photo is unaffected */ });
   return photoWork;
@@ -171,9 +184,23 @@ export function clearDeviceCachedPhotos(): Promise<void> {
   photoWork = photoWork.then(async () => {
     if (typeof caches === 'undefined') return;
     for (const name of await caches.keys()) {
-      if (name.startsWith(PHOTO_CACHE_PREFIX)) await caches.delete(name);
+      if (name.startsWith(ANY_PHOTO_CACHE)) await caches.delete(name);
     }
   });
+  return photoWork;
+}
+
+/** Removal cleanup: deletes this sign-in's saved photos for clubs not in `clubIds`. */
+export function pruneCachedPhotosForClubs(principal: string, clubIds: readonly string[]): Promise<void> {
+  const keep = new Set(clubIds);
+  photoWork = photoWork.then(async () => {
+    if (typeof caches === 'undefined') return;
+    const cache = await caches.open(photoCacheName(principal));
+    for (const request of await cache.keys()) {
+      const club = (await cache.match(request))?.headers.get('x-ignite-club');
+      if (!club || !keep.has(club)) await cache.delete(request);
+    }
+  }).catch(() => { /* best effort */ });
   return photoWork;
 }
 
@@ -197,7 +224,7 @@ export function clearStoredDeviceKeys(): void {
   }
 }
 
-/** Removes every saved club key copy and decrypted photo. */
+/** Removes every saved club key copy and saved photo copy. */
 export async function clearDeviceMediaCaches(): Promise<void> {
   clearStoredDeviceKeys();
   try {

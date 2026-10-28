@@ -1,4 +1,4 @@
-import { pruneStoredClubKeys } from './deviceMediaCache';
+import { pruneCachedPhotosForClubs, pruneStoredClubKeys } from './deviceMediaCache';
 /** Caller's clubs/teams read from each club's own group (Group 1 clubs from the
  * original services, newer groups from theirs), all at once. One slow or
  * refusing club never empties the list: its row is simply missing and
@@ -68,5 +68,6 @@ export async function listMyClubsAcrossGroups(ctx: FeatureBackendContext): Promi
   // Removal cleanup: drop saved club keys for clubs this sign-in no longer
   // belongs to, so a removed member's device stops opening that club's names/photos.
   pruneStoredClubKeys(ctx.identity.getPrincipal().toText(), clubIds);
+  void pruneCachedPhotosForClubs(ctx.identity.getPrincipal().toText(), clubIds);
   return readClubsInOwnGroups(ctx, clubIds);
 }

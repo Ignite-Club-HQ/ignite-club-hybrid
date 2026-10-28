@@ -3,7 +3,7 @@ import { hasOwnerTestRouting, readOwnerTestRouteCached } from './ownerTestRoutin
 import { getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { blobAssetUrl, listBlobStoreCanisterIds } from "./mediaStorage";
-import { clubIdFromMediaPath, decryptPiiValue, tryDecryptClubMedia } from "./piiVetKeys";
+import { clubIdFromMediaPath, decryptClubMediaWithSavedKey, decryptPiiValue, tryDecryptClubMedia } from "./piiVetKeys";
 import { readCachedPhoto, writeCachedPhoto } from "./deviceMediaCache";
 import type { IcpTargetConfig } from "./targetRegistry";
 
@@ -38,6 +38,17 @@ export function icpPhotoResolutionScope(): string {
 }
 
 const ICP_GATEWAY_HOSTS = ["icp0.io", "raw.icp0.io"];
+
+/** Opens a saved encrypted copy, unlocking it in memory with the saved club key. */
+async function openSavedPhoto(principal: string, canisterId: string, path: string): Promise<string | null> {
+  const saved = await readCachedPhoto(principal, canisterId, path).catch(() => null);
+  if (!saved || saved.clubId !== clubIdFromMediaPath(path)) return null;
+  const plain = decryptClubMediaWithSavedKey(saved.piiCanisterId, principal, saved.clubId, saved.ciphertext);
+  if (!plain) return null;
+  const buffer = new ArrayBuffer(plain.byteLength);
+  new Uint8Array(buffer).set(plain);
+  return URL.createObjectURL(new Blob([buffer]));
+}
 
 /** Principal from the stored Internet Identity session, without awaiting
  * session restoration. Enough to key the on-device photo cache; never used
@@ -98,8 +109,7 @@ export async function readCachedIcpBlobObjectUrl(url: string): Promise<string | 
   if (!principal) return null;
   const match = parseIcpBlobUrl(url, getActiveIcpTarget());
   if (!match) return null;
-  const cached = await readCachedPhoto(principal, match.canisterId, match.path).catch(() => null);
-  return cached ? URL.createObjectURL(cached) : null;
+  return openSavedPhoto(principal, match.canisterId, match.path);
 }
 
 /**
@@ -137,8 +147,8 @@ async function resolveUncachedIcpBlobObjectUrl(url: string): Promise<string | nu
   if (!candidate) return null;
   const storedPrincipal = storedSessionPrincipal();
   if (storedPrincipal) {
-    const cached = await readCachedPhoto(storedPrincipal, candidate.canisterId, candidate.path);
-    if (cached) return URL.createObjectURL(cached);
+    const cached = await openSavedPhoto(storedPrincipal, candidate.canisterId, candidate.path);
+    if (cached) return cached;
   }
   const routeIdentity = await getCurrentInternetIdentityConfirmed();
   const general = routeIdentity ? await routingActive({ target, identity: routeIdentity }) : false;
@@ -176,8 +186,8 @@ async function resolveUncachedIcpBlobObjectUrl(url: string): Promise<string | nu
   }
   const principal = identity.getPrincipal().toText();
   if (principal !== storedPrincipal) {
-    const cached = await readCachedPhoto(principal, match.canisterId, match.path);
-    if (cached) return URL.createObjectURL(cached);
+    const cached = await openSavedPhoto(principal, match.canisterId, match.path);
+    if (cached) return cached;
   }
   // Always fetch via the routable raw subdomain, whatever form was stored.
   const response = await fetch(blobAssetUrl(match.canisterId, match.path));
@@ -189,15 +199,21 @@ async function resolveUncachedIcpBlobObjectUrl(url: string): Promise<string | nu
   // Club photos: try the shared per-club key first (one derivation per club
   // per session); photos locked before the change fall back to their own key.
   const clubId = clubIdFromMediaPath(match.path);
-  const plaintext =
-    (clubId ? await tryDecryptClubMedia(ctx, clubId, ciphertext) : null) ??
-    (await decryptPiiValue(ctx, match.path, MEDIA_BLOB_PII_FIELD, ciphertext));
+  const clubPlain = clubId ? await tryDecryptClubMedia(ctx, clubId, ciphertext) : null;
+  const plaintext = clubPlain ?? (await decryptPiiValue(ctx, match.path, MEDIA_BLOB_PII_FIELD, ciphertext));
   // Copy into a plain ArrayBuffer — BlobPart rejects views over a
   // SharedArrayBuffer-backed buffer, and the decrypted bytes come back as a
   // Uint8Array<ArrayBufferLike>.
   const buffer = new ArrayBuffer(plaintext.byteLength);
   new Uint8Array(buffer).set(plaintext);
-  void writeCachedPhoto(principal, match.canisterId, match.path, buffer);
+  // Save only the still-encrypted bytes, and only for club-key photos that the
+  // saved club key can reopen offline (older per-photo locks are not saved).
+  const piiCanisterId = target?.canisterIds.pii_access_control;
+  if (clubPlain && clubId && piiCanisterId) {
+    const sealed = new ArrayBuffer(ciphertext.byteLength);
+    new Uint8Array(sealed).set(ciphertext);
+    void writeCachedPhoto(principal, match.canisterId, match.path, sealed, { clubId, piiCanisterId });
+  }
   return URL.createObjectURL(new Blob([buffer]));
 
 
