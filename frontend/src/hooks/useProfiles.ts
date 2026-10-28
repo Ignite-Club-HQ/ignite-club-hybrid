@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { CachedProfile, cacheProfiles, fetchProfilesWithCache, getProfileFromCache, getProfilesFromCache, onProfileCacheUpdate, selectCachedProfilesByIds } from "@/lib/profileCache";
+import { CachedProfile, cacheProfiles, fetchClubProfilesWithCache, fetchProfilesWithCache, getProfileFromCache, getProfilesFromCache, onProfileCacheUpdate, selectCachedProfilesByIds } from "@/lib/profileCache";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
@@ -9,7 +9,9 @@ import { supabase } from "@/integrations/supabase/client";
  * 
  * NEW: Automatically refreshes profiles when app becomes visible (e.g., phone unlock)
  */
-export function useProfiles(ids: string[]) {
+export function useProfiles(ids: string[], clubId?: string | null) {
+  const clubRef = useRef(clubId);
+  clubRef.current = clubId;
   const [profiles, setProfiles] = useState<Map<string, CachedProfile>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const lastFetchRef = useRef<number>(0);
@@ -33,13 +35,14 @@ export function useProfiles(ids: string[]) {
     }
     
     // Determine what needs fetching
-    const needsFetch = forceRefresh ? uniqueIds : missing;
+    const unnamed = clubRef.current ? [...cached.values()].filter(p => !p.display_name).map(p => p.id) : [];
+    const needsFetch = forceRefresh ? uniqueIds : [...missing, ...unnamed];
     const needsBackgroundRefresh = forceRefresh ? [] : stale;
     
     if (needsFetch.length > 0) {
       setIsLoading(true);
       try {
-        const allProfiles = await fetchProfilesWithCache(uniqueIds, { allowStale: true, timeout: 15000 });
+        const allProfiles = await fetchClubProfilesWithCache(clubRef.current, uniqueIds, { allowStale: true, timeout: 15000 });
         setProfiles(allProfiles);
         lastFetchRef.current = Date.now();
       } finally {
@@ -47,7 +50,7 @@ export function useProfiles(ids: string[]) {
       }
     } else if (needsBackgroundRefresh.length > 0) {
       // Stale profiles exist - refresh in background without loading state
-      fetchProfilesWithCache(uniqueIds, { allowStale: true, timeout: 15000 })
+      fetchClubProfilesWithCache(clubRef.current, uniqueIds, { allowStale: true, timeout: 15000 })
         .then(allProfiles => {
           setProfiles(allProfiles);
           lastFetchRef.current = Date.now();
@@ -58,7 +61,7 @@ export function useProfiles(ids: string[]) {
   // Initial fetch on mount/ids change
   useEffect(() => {
     fetchProfiles(false);
-  }, [ids.join(","), fetchProfiles]);
+  }, [ids.join(","), clubId, fetchProfiles]);
 
   // Listen for profile cache updates (e.g., when user edits their own profile)
   useEffect(() => {
@@ -68,7 +71,7 @@ export function useProfiles(ids: string[]) {
         setProfiles(prev => {
           const updated = new Map(prev);
           const cached = getProfileFromCache(updatedId);
-          if (cached) updated.set(updatedId, cached);
+          if (cached && (cached.display_name || !updated.get(updatedId)?.display_name)) updated.set(updatedId, cached);
           return updated;
         });
       }

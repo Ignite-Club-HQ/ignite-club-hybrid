@@ -63,7 +63,7 @@ export interface ProfileSummary {
  * player of the match) hydrate names through this reader instead of showing
  * "Unknown" for every adult.
  */
-export async function readProfileSummaries(ids: string[]): Promise<Map<string, ProfileSummary>> {
+export async function readProfileSummaries(ids: string[], clubId?: string | null): Promise<Map<string, ProfileSummary>> {
   const unique = [...new Set(ids.filter(Boolean))];
   if (unique.length === 0) return new Map();
   return withFeatureBackend('membership', {
@@ -77,7 +77,7 @@ export async function readProfileSummaries(ids: string[]): Promise<Map<string, P
     },
     icp: async (ctx) => {
       const { listLiveProfilesByIds } = await import('@/live/features/identityAccessClient');
-      const profiles = await listLiveProfilesByIds(ctx, unique);
+      const profiles = await listLiveProfilesByIds(ctx, unique, clubId ? { clubId } : undefined);
       return new Map((profiles as any[]).map((p) => [p.account_id as string, {
         display_name: p.display_name ?? null,
         avatar_url: p.avatar_ref?.[0] ?? null,

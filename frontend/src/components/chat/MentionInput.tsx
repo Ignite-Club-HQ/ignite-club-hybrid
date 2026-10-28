@@ -544,7 +544,7 @@ export function MentionInput({
 
             if (icpUserIds.length === 0) return [] as SuggestedUser[];
 
-            const profiles = await listLiveProfilesByIds(ctx, icpUserIds);
+            const profiles = await listLiveProfilesByIds(ctx, icpUserIds, clubId ? { clubId } : undefined);
             const needle = mentionSearch.toLowerCase();
             return profiles
               .filter((p) => p.display_name && p.display_name.toLowerCase().includes(needle))

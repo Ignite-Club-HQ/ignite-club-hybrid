@@ -1389,7 +1389,7 @@ export default function EventDetailPage() {
           const allUserIds = [...new Set([...parentIds, ...adminIds])].filter((uid) => !appAdminIds.has(uid));
           if (!allUserIds.length) return [];
 
-          const profiles = await listLiveProfilesByIds(ctx, allUserIds);
+          const profiles = await listLiveProfilesByIds(ctx, allUserIds, { clubId: leagueClubId });
           return profiles
             .map((p: any) => ({ id: p.account_id, display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null }))
             .sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));

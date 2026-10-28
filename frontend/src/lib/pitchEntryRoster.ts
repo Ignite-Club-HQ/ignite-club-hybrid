@@ -18,7 +18,7 @@ export async function readIcpPitchRoster(teamId: string) {
         readContentInScope(ctx, 'events', { clubId: team.club_id }, scoped => listLiveChildTeamAssignments(scoped, team.club_id, teamId)),
       ]);
       const [profiles, names] = await Promise.all([
-        listLiveProfilesByIds(ctx, [...new Set(grants.map(g => g.account_id.replace(/^principal:/, '')))]),
+        listLiveProfilesByIds(ctx, [...new Set(grants.map(g => g.account_id.replace(/^principal:/, '')))], { clubId: team.club_id }),
         readMembershipInScope(ctx, { clubId: team.club_id }, scoped => resolveLivePiiTextBatch(scoped, assignments.map(a => a.child_id), 'name', 'Read pitch roster', 'Team player names')),
       ]);
       const byUser = new Map(profiles.map(p => [p.account_id, p]));

@@ -61,7 +61,7 @@ export function AssignTeamAdminSection({
             return (await Promise.all(teams.map(team => listLiveTeamRoleGrants(ctx, team.id)))).flat();
           })();
           const ids = [...new Set(roles.map(role => role.account_id))];
-          const profiles = await listLiveProfilesByIds(ctx, ids);
+          const profiles = await listLiveProfilesByIds(ctx, ids, { clubId });
           return profiles.filter(p => p.display_name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
             .map(p => ({ id: p.account_id, display_name: p.display_name, avatar_url: p.avatar_ref ?? null }));
         },

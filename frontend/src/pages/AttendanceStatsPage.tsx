@@ -326,7 +326,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
           icp: async (ctx) => {
             const grants = await listLiveTeamRoleGrants(ctx, teamId!);
             const wanted = grants.filter((g) => ["player", "parent", "coach", "team_admin"].includes(g.role));
-            const profiles = await listLiveProfilesByIds(ctx, wanted.map((g) => g.account_id)).catch(() => []);
+            const profiles = await listLiveProfilesByIds(ctx, wanted.map((g) => g.account_id), team?.club_id ? { clubId: team.club_id } : undefined).catch(() => []);
             type LiveProfile = { id: string; display_name?: string | null; avatar_ref?: [] | [string] };
             const byId = new Map<string, LiveProfile>();
             (profiles as LiveProfile[]).forEach((p) => { byId.set(p.id, p); });

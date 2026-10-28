@@ -1141,7 +1141,7 @@ function MediaPostArticle({ post: base, principal, userId, profile, index, onRea
         const reactions: LiveReactionView[] = rawReactions.map(r => ({ user_id: r.user.toText(), reaction_type: r.kind }));
         const comments = rawComments.filter(c => !c.deleted).map(galleryCommentFromReceipt);
         const ids = [...new Set([base.ownerId, ...reactions.map(r => r.user_id), ...comments.map(c => c.user_id)])];
-        const profiles = await listLiveProfilesByIds(ctx, ids);
+        const profiles = await listLiveProfilesByIds(ctx, ids, { clubId: base.clubId });
         const directory = mediaProfileDirectory(profiles as unknown as Parameters<typeof mediaProfileDirectory>[0]);
         return { reactions: reactions.map(r => ({ ...r, profiles: directory.get(r.user_id) })),
           comments: comments.map(c => ({ ...c, profiles: directory.get(c.user_id) })),

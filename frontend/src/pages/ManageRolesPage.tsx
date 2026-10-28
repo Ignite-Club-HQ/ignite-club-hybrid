@@ -169,7 +169,7 @@ function SupabaseManageRolesPage() {
         // the canister — verify against the deployed club_domain.
         icp: async (ctx) => {
           const grants = await listLiveRoleGrants(ctx, clubId!);
-          const profiles = await roleMemberProfiles(grants.map(g => g.account_id));
+          const profiles = await roleMemberProfiles(grants.map(g => g.account_id), clubId);
           return (grants as any[]).map((g) => ({
             id: `${g.account_id}-${g.role}-${g.team[0] ?? "club"}`,
             role: g.role,
@@ -197,7 +197,7 @@ function SupabaseManageRolesPage() {
         // Supabase profile id — no display name/avatar join on the canister.
         icp: async (ctx) => {
           const rows = await listLiveRoleRequests(ctx, clubId!);
-          const profiles = await roleMemberProfiles(rows.filter(r => r.status === "pending").map(r => r.account_id));
+          const profiles = await roleMemberProfiles(rows.filter(r => r.status === "pending").map(r => r.account_id), clubId);
           return (rows as any[])
             .filter((r) => r.status === "pending")
             .map((r) => ({
