@@ -25,6 +25,8 @@ try {
     ok(await group.actor.add_role_grant(app, name, 'club_admin', []));
     ok(await group.actor.add_role_grant(app, name, 'team_admin', ['u9']));
   }
+  identity.actor.setPrincipal(governor); ok(await identity.actor.set_club_authorities(groups.map(g => g.canisterId)));
+  for (const group of groups) { group.actor.setPrincipal(governor); ok(await group.actor.set_identity_access_canister(identity.canisterId)); }
   identity.actor.setPrincipal(app); const account = ok(await identity.actor.register_account());
   const challenge = ok(await identity.actor.begin_link(browser)); identity.actor.setPrincipal(browser); ok(await identity.actor.accept_link(challenge.id));
   identity.actor.setPrincipal(outsider); ok(await identity.actor.register_account());
