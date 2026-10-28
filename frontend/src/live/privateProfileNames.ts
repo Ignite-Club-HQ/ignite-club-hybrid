@@ -85,6 +85,9 @@ export async function readPrivateOwnProfileName(ctx: FeatureBackendContext, refe
   let timer: ReturnType<typeof setTimeout> | undefined;
   const guard = () => { if (retired) throw new Error('Private profile read retired.'); active(); };
   try {
+    // Overlap the (public) verification-key load with the ciphertext read;
+    // a first unlock on this device otherwise pays both one after another.
+    (await import('./piiVetKeys')).prewarmPiiVerificationKey(ctx);
     const names = await Promise.race([
       readNames(ctx, [ref.subject], FIELD, guard, undefined, ref.subject === caller),
       new Promise<never>((_, reject) => { timer = setTimeout(() => { retired = true; reject(new Error('Private display name unlock timed out.')); }, 30000); }),
