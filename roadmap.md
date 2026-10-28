@@ -1,3 +1,7 @@
+## Internet Identity forced email switch — 28 October 2026
+- [ ] Stop post-login club-country inference from signing out a confirmed Internet Identity account; preserve authenticated membership and email-mode routing.
+- [ ] Run mounted sign-in-switch regressions and existing auth/logout tests; real phone sign-in remains dependent on frontend publication and Paul's passkey.
+
 ## Private-club display release check — 27 October 2026, 20:13 UTC
 - [x] Corrected missing PII display verifier initialization using only the existing secure-save identity pin; foreign identities still refuse, unrelated settings remain unchanged.
 - [x] Approved original G1 link now journals before/after whole-wiring hashes and acknowledges exact readback; final checks accept only that recorded transition, unknown outcomes stop without replay.
