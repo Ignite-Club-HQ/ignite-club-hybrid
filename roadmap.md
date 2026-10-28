@@ -1,3 +1,9 @@
+## Faster sign-in with retained key copies — 28 October 2026
+- [x] Sign-out now clears decrypted photo bytes but keeps saved key copies for their 30-day life, and an own-name read reuses its saved key instead of re-deriving every sign-in; audience-scoped reads of another person's name never reuse or save a key, and every read still re-fetches ciphertext through authorization. The explicit "remove saved copies" action removes key copies too.
+- [x] Key-cache, device-cache, private-name, profile-fetch, logout and storage-settings regressions pass (106 focused, 80 in ICP mode, 1249 live-suite passed); ICP guard check passes and preview build OK.
+- [ ] Deploy frontend and time Paul's real sign-out/sign-in; live confirmation needs his Internet Identity session.
+- [ ] Unrelated pre-existing check fails: messaging's account chat read omits the legacy twin's `polls` field, so the local rehearsal read adapter refuses it. Needs a backend signature decision; no live change and no frontend effect.
+
 ## Profile retry after logout — 28 October 2026
 - [x] Identified the six-second optional name-enrichment deadline on required own-profile reopening; added a separate thirty-second guarded read, caller-bound profile fetch and a sign-out escape from the retry screen. No account, name or club records changed.
 - [x] Focused profile/private-name/logout/navigation regressions and preview checks pass; no live records changed.

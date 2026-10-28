@@ -4,8 +4,11 @@
  *    returning member skips the paid, slow key fetch entirely;
  *  - decrypted photo bytes in the Cache API, so a photo seen before opens
  *    without downloading or decrypting again.
- * Both are scoped to the signed-in principal and wiped on sign-out
- * (clearDeviceMediaCaches). Trade-off: a member removed from a club keeps
+ * Both are scoped to the signed-in principal. Decrypted photo bytes are wiped
+ * on sign-out; key copies stay for their 30-day life, because a key decrypts
+ * nothing by itself — the ciphertext is read again through an authorized read
+ * on every open. The explicit "remove saved copies" action calls
+ * clearStoredDeviceKeys(). Trade-off: a member removed from a club keeps
  * photo access on that device until their cached key expires.
  */
 
@@ -151,8 +154,9 @@ export function pruneDeviceCachedPhotos(): Promise<void> {
   return photoWork;
 }
 
-/** Wipes every cached club key and decrypted photo — call on sign-out. */
-export async function clearDeviceMediaCaches(): Promise<void> {
+/** Removes every saved key copy (photo bytes untouched) — the explicit
+ * "remove saved copies" action, so retained keys stay removable. */
+export function clearStoredDeviceKeys(): void {
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
@@ -161,6 +165,11 @@ export async function clearDeviceMediaCaches(): Promise<void> {
   } catch {
     /* ignore */
   }
+}
+
+/** Removes every saved club key copy and decrypted photo. */
+export async function clearDeviceMediaCaches(): Promise<void> {
+  clearStoredDeviceKeys();
   try {
     await clearDeviceCachedPhotos();
   } catch {

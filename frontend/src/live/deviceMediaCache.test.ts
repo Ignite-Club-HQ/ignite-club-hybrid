@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearDeviceCachedPhotos, readCachedPhoto, writeCachedPhoto } from './deviceMediaCache';
+import { clearDeviceCachedPhotos, clearStoredDeviceKeys, readCachedPhoto, writeCachedPhoto } from './deviceMediaCache';
 import { VIEWED_PHOTO_CACHE_BYTES } from '@/lib/deviceCacheBudget';
 function photoStorage() {
   const stores = new Map<string, Map<string, Response>>();
@@ -67,5 +67,18 @@ describe('bounded viewed-photo storage', () => {
     expect(await readCachedPhoto('alice', 'store', 'photo')).toBeNull();
     expect(localStorage.getItem('ignite.clubkey.v1:alice')).toBe('key');
     expect(stores.has('app-code')).toBe(true);
+  });
+});
+describe('saved key copies', () => {
+  it('removes key copies without touching photo bytes or unrelated storage', async () => {
+    const stores = photoStorage();
+    localStorage.setItem('ignite.clubkey.v1:alice', 'key');
+    localStorage.setItem('ignite-drafts', 'draft');
+    await writeCachedPhoto('alice', 'store', 'photo', new ArrayBuffer(1));
+    clearStoredDeviceKeys();
+    expect(localStorage.getItem('ignite.clubkey.v1:alice')).toBeNull();
+    expect(localStorage.getItem('ignite-drafts')).toBe('draft');
+    expect(await readCachedPhoto('alice', 'store', 'photo')).not.toBeNull();
+    expect(stores.has('ignite-media-v1:alice')).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ connect: vi.fn() }));
 vi.mock('./domains', () => ({ connectLivePiiAccessControl: mocks.connect }));
-vi.mock('./deviceMediaCache', () => ({ clearDeviceMediaCaches: vi.fn(), forgetStoredClubKey: vi.fn(), loadStoredClubKey: () => null, storeClubKey: vi.fn() }));
+vi.mock('./deviceMediaCache', () => ({ clearDeviceMediaCaches: vi.fn(), clearDeviceCachedPhotos: vi.fn(), clearStoredDeviceKeys: vi.fn(), forgetStoredClubKey: vi.fn(), loadStoredClubKey: () => null, storeClubKey: vi.fn() }));
 import { clearPiiVetKeyCache, isClubMediaLockSupported } from './piiVetKeys';
 describe('group-scoped encryption capability cache', () => {
   beforeEach(() => { clearPiiVetKeyCache(); mocks.connect.mockReset(); });
