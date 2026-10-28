@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearDeviceCachedPhotos, readCachedPhoto, writeCachedPhoto } from './deviceMediaCache';
+import { clearDeviceCachedPhotos, clearStoredDeviceKeys, readCachedPhoto, writeCachedPhoto } from './deviceMediaCache';
 import { VIEWED_PHOTO_CACHE_BYTES } from '@/lib/deviceCacheBudget';
 function photoStorage() {
   const stores = new Map<string, Map<string, Response>>();

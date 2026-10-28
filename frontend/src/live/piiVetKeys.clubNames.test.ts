@@ -3,7 +3,7 @@ import { Principal } from '@icp-sdk/core/principal';
 import type { FeatureBackendContext } from './featureRouter';
 const mocks = vi.hoisted(() => ({ derive: vi.fn(), load: vi.fn(), store: vi.fn(), decrypt: vi.fn() }));
 vi.mock('./domains', () => ({ connectLivePiiAccessControl: async (target: {canisterIds: {pii_access_control: string}}) => ({canisterId: Principal.fromText(target.canisterIds.pii_access_control), actor: {pii_vetkey_verification_key: async () => [1], get_private_profile_club_name_vetkey: mocks.derive}}) }));
-vi.mock('./deviceMediaCache', () => ({loadStoredClubKey: mocks.load, storeClubKey: mocks.store, forgetStoredClubKey: vi.fn(), clearDeviceMediaCaches: vi.fn()}));
+vi.mock('./deviceMediaCache', () => ({loadStoredClubKey: mocks.load, storeClubKey: mocks.store, forgetStoredClubKey: vi.fn(), clearDeviceMediaCaches: vi.fn(), clearDeviceCachedPhotos: vi.fn(), clearStoredDeviceKeys: vi.fn()}));
 vi.mock('./mediaDecrypt', () => ({clearIcpPhotoResolutionCache: vi.fn()}));
 vi.mock('@icp-sdk/vetkeys', () => ({DerivedPublicKey: {deserialize: () => 'public'}, EncryptedVetKey: {deserialize: () => ({decryptAndVerify: mocks.decrypt})}, TransportSecretKey: {random: () => ({publicKeyBytes: () => new Uint8Array(48)})}, VetKey: {deserialize: () => ({serialize: () => new Uint8Array([8])})}, IbeCiphertext: {}, IbeIdentity: {}, IbeSeed: {}}));
 import {fetchClubNameVetKey, clearPiiVetKeyCache} from './piiVetKeys';
