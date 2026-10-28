@@ -645,6 +645,7 @@ function SupabaseClubAdminChatPage() {
     messagesIsError,
     messagesFetchStatus,
     refetchMessages,
+    inboxFallback?.hasMessage,
   ]);
 
   useEffect(
