@@ -52,8 +52,8 @@ type Mark = {
   previousUpdatedAt: string | undefined;
 };
 
-const clients = new WeakMap<QueryClient, Map<string, Map<string, Mark>>>();
-const timestamp = (preview?: InboxPreviewMessage) => Date.parse(preview?.created_at ?? "") || 0;
+let clients = new WeakMap<QueryClient, Map<string, Map<string, Mark>>>();
+const timestamp = (preview?: { created_at?: string | null }) => Date.parse(preview?.created_at ?? "") || 0;
 const markKey = (scope: AnyScope, userId: string, targetId: string) => `${scope}:${userId}:${targetId}`;
 
 function markMapFor(client: QueryClient): Map<string, Map<string, Mark>> {
@@ -71,27 +71,40 @@ function markMapFor(client: QueryClient): Map<string, Map<string, Mark>> {
       const pending = ownedMarks.get(event.query.queryHash);
       if (!pending) return;
       const data = event.query.state.data;
-      let changed = false;
+      let dropped = false;
       for (const [key, mark] of pending) {
-        const [scope, userId, targetId] = key.split(":") as [AnyScope, string, string];
+        const [scope, , targetId] = key.split(":") as [AnyScope, string, string];
         if (scope === "dm") {
-          const row = (data as { id: string }[] | undefined)?.find?.((row) => row.id === targetId);
-          const last = (row as { last_message?: { created_at?: string } } | undefined)?.last_message;
-          if (timestamp(last as unknown as InboxPreviewMessage) > timestamp(mark.preview)) {
-            pending.delete(key);
-          }
+          const row = Array.isArray(data)
+            ? (data as { id: string; last_message?: { created_at?: string } }[]).find((row) => row.id === targetId)
+            : undefined;
+          if (timestamp(row?.last_message) > timestamp(mark.preview)) pending.delete(key);
           continue;
         }
         const current = (data as { latestMessages?: Record<string, InboxPreviewMessage> } | undefined)?.latestMessages?.[targetId];
         if (timestamp(current) > timestamp(mark.preview)) {
           pending.delete(key);
-          changed = true;
+          dropped = true;
         }
       }
-      if (changed && pending.size === 0) ownedMarks.delete(event.query.queryHash);
+      if (dropped && pending.size === 0) ownedMarks.delete(event.query.queryHash);
     });
   }
   return marks;
+}
+
+function registerMark(marks: Map<string, Map<string, Mark>>, queryHash: string, key: string, mark: Mark): void {
+  let pending = marks.get(queryHash);
+  if (!pending) marks.set(queryHash, (pending = new Map()));
+  pending.set(key, mark);
+  if (pending.size > 300) {
+    const oldest = pending.keys().next().value;
+    if (oldest) pending.delete(oldest);
+  }
+}
+
+function removeMarkEverywhere(marks: Map<string, Map<string, Mark>>, key: string): void {
+  for (const pending of marks.values()) pending.delete(key);
 }
 
 /** Write the pending preview into the inbox caches so the row updates at once. */
@@ -108,50 +121,43 @@ export function applyPendingInboxPreview(
     "You",
     scope === "dm" ? { author_id: userId } : {},
   );
+  const marks = markMapFor(client);
 
   if (scope === "dm") {
     const key = [dmPrefix, userId];
-    const data = client.getQueryData<{ id: string; updated_at?: string; last_message?: DmPrevious | null }[]>(key);
+    const query = client.getQueryCache().find({ queryKey: key, exact: true });
+    const data = query?.state.data as { id: string; updated_at?: string; last_message?: DmPrevious | null }[] | undefined;
     const row = data?.find((row) => row.id === targetId);
-    if (!data || !row) return;
-    const marks = markMapFor(client);
-    const query = client.getQueryCache().find({ queryKey: key, exact: true })!;
-    let pending = marks.get(query.queryHash);
-    if (!pending) marks.set(query.queryHash, (pending = new Map()));
-    pending.set(markKey(scope, userId, targetId), {
+    if (!query || !data || !row) return;
+    registerMark(marks, query.queryHash, markKey(scope, userId, targetId), {
       preview,
       previous: null,
       previousDm: row.last_message ?? null,
       previousUpdatedAt: row.updated_at,
     });
-    if (pending.size > 300) {
-      const oldest = pending.keys().next().value;
-      if (oldest) pending.delete(oldest);
-    }
-    client.setQueryData(key, (old: typeof data) => moveDirectConversationToTop(old, preview));
+    client.setQueryData(query.queryKey, moveDirectConversationToTop(data, preview));
     return;
   }
 
   const key = [prefixes[scope], userId];
   const query = client.getQueryCache().find({ queryKey: key, exact: true });
-  const data = query?.state.data as { [key: string]: { id: string }[] | undefined; latestMessages?: Record<string, InboxPreviewMessage> } | undefined;
+  const data = query?.state.data as
+    | { [key: string]: { id: string }[] | undefined; latestMessages?: Record<string, InboxPreviewMessage> }
+    | undefined;
   if (!query || !data?.[collections[scope]]?.some((row) => row.id === targetId)) return;
-  const previous = data.latestMessages?.[targetId] ?? null;
-  const marks = markMapFor(client);
-  let pending = marks.get(query.queryHash);
-  if (!pending) marks.set(query.queryHash, (pending = new Map()));
-  pending.set(markKey(scope, userId, targetId), { preview, previous, previousDm: null, previousUpdatedAt: undefined });
-  if (pending.size > 300) {
-    const oldest = pending.keys().next().value;
-    if (oldest) pending.delete(oldest);
-  }
+  registerMark(marks, query.queryHash, markKey(scope, userId, targetId), {
+    preview,
+    previous: data.latestMessages?.[targetId] ?? null,
+    previousDm: null,
+    previousUpdatedAt: undefined,
+  });
   client.setQueryData(query.queryKey, mergeLatestMessagesPreview(data, targetId, preview));
 }
 
 /**
  * The send was acknowledged: drop the pending mark so the confirmed copy and
- * later refetches own the preview. For DMs the acknowledged row can replace
- * the pending copy straight away (no confirmed-preview path exists there).
+ * later refetches own the preview. For DMs the acknowledged row replaces the
+ * pending copy straight away (no confirmed-preview path exists there).
  */
 export function settlePendingInboxPreview(
   client: QueryClient,
@@ -161,15 +167,12 @@ export function settlePendingInboxPreview(
   saved?: PendingDmSaved,
 ): void {
   if (!userId || !targetId) return;
-  const key = markKey(scope, userId, targetId);
-  if (scope === "dm") {
-    if (saved) {
-      client.setQueryData([dmPrefix, userId], (old: { id: string }[] | undefined) =>
-        moveDirectConversationToTop(old, { ...saved, author_id: userId }),
-      );
-    }
+  if (scope === "dm" && saved) {
+    client.setQueryData([dmPrefix, userId], (old: { id: string }[] | undefined) =>
+      moveDirectConversationToTop(old, { ...saved, author_id: userId }),
+    );
   }
-  for (const pending of markMapFor(client).values()) pending.delete(key);
+  removeMarkEverywhere(markMapFor(client), markKey(scope, userId, targetId));
 }
 
 /** The send failed (and is not offline-queued): restore the previous preview. */
@@ -182,7 +185,6 @@ export function discardPendingInboxPreview(
   if (!userId || !targetId) return;
   const key = markKey(scope, userId, targetId);
   const marks = markMapFor(client);
-  const mark = marks.get(key) ?? [...marks.values()].flatMap((m) => [...m.entries()]).find(([k]) => k === key)?.[1];
   const found = (() => {
     for (const pending of marks.values()) {
       const mark = pending.get(key);
@@ -191,22 +193,17 @@ export function discardPendingInboxPreview(
     return undefined;
   })();
   if (!found) return;
-  for (const pending of marks.values()) pending.delete(key);
+  removeMarkEverywhere(marks, key);
 
   if (scope === "dm") {
     client.setQueryData([dmPrefix, userId], (old: { id: string; updated_at?: string; last_message?: DmPrevious | null }[] | undefined) => {
       if (!Array.isArray(old)) return old;
-      return old.map((row) =>
-        row.id === targetId
-          ? { ...row, updated_at: found.previousUpdatedAt, last_message: found.previousDm }
-          : row,
-      );
+      return old.map((row) => (row.id === targetId ? { ...row, updated_at: found.previousUpdatedAt, last_message: found.previousDm } : row));
     });
     return;
   }
 
-  const queryKey = [prefixes[scope], userId];
-  client.setQueryData(queryKey, (old: { latestMessages?: Record<string, InboxPreviewMessage> } | undefined) => {
+  client.setQueryData([prefixes[scope], userId], (old: { latestMessages?: Record<string, InboxPreviewMessage> } | undefined) => {
     if (!old?.latestMessages) return old;
     const latestMessages = { ...old.latestMessages };
     if (found.previous) latestMessages[targetId] = found.previous;
@@ -217,5 +214,5 @@ export function discardPendingInboxPreview(
 
 /** Test-only: drop every pending mark (keeps current cache contents). */
 export function resetPendingInboxPreviewsForTests(): void {
-  clients = new WeakMap() as never;
+  clients = new WeakMap();
 }
