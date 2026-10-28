@@ -1412,7 +1412,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
           }
           return;
         }
-        const fetched = await withIcpTimeout(fetchIcpIdentityProfile(identity, principal), 20000);
+        const fetched = await withIcpTimeout(fetchIcpIdentityProfile(identity, principal), 45000);
         if (!cancelled && icpProfileRequestRef.current === requestId) {
           setIcpProfile(fetched);
           setIcpProfileResolved(true);
@@ -1666,7 +1666,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
           await clearDeadIcpSession();
           return;
         }
-        const fetched = await withIcpTimeout(fetchIcpIdentityProfile(identity, principal), 20000);
+        const fetched = await withIcpTimeout(fetchIcpIdentityProfile(identity, principal), 45000);
         if (signingOutRef.current || requestId !== icpProfileRequestRef.current) return;
         setIcpProfile(fetched);
         setIcpProfileResolved(true);

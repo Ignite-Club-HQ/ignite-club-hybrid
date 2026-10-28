@@ -8,7 +8,7 @@ vi.mock("./domains", () => ({ connectLivePiiAccessControl: vi.fn(async () => ({ 
 vi.mock("./piiVetKeys", () => ({ encryptPiiText: mocks.encrypt, fetchPiiVetKeys: mocks.keys, fetchClubNameVetKey: mocks.clubKey, clubNamePiiId: (id: string) => `clubnames:${id}`, CLUB_NAME_SCHEME_PREFIX: 'vetkey-club-names-v1:' }));
 vi.mock("@icp-sdk/vetkeys", () => ({ IbeCiphertext: { deserialize: () => ({ decrypt: mocks.decrypt }) } }));
 
-import { hydratePrivateProfileNames, preparePrivateOwnProfileName, preparePrivateOwnProfileEmail, privateProfileNameReference, refreshPrivateOwnClubNames } from "./privateProfileNames";
+import { hydratePrivateProfileNames, readPrivateOwnProfileName, preparePrivateOwnProfileName, preparePrivateOwnProfileEmail, privateProfileNameReference, refreshPrivateOwnClubNames } from "./privateProfileNames";
 import { retirePrivateProfileSession } from './privateProfileSession';
 
 const subject = "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe";
@@ -115,6 +115,38 @@ describe("private profile name preparation", () => {
 });
 
 describe("authorized name display", () => {
+  it('allows a cold own-name key unlock beyond the six-second enrichment deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.keys.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve(new Map([[subject, 'authorized-key']])), 7000)));
+      const pending = readPrivateOwnProfileName(ctx, reference);
+      await vi.advanceTimersByTimeAsync(7000);
+      expect(await pending).toBe('Paul Cranwell');
+      expect(mocks.keys).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+  it('reports an own-name denial without replacing the saved reference or retrying writes', async () => {
+    mocks.read.mockResolvedValue({ Err: 'Access denied' });
+    await expect(readPrivateOwnProfileName(ctx, reference)).rejects.toThrow('Access denied');
+    expect(mocks.keys).not.toHaveBeenCalled(); expect(mocks.register).not.toHaveBeenCalled();
+  });
+  it('never guesses a different original authority for an own-name unlock', async () => {
+    await expect(readPrivateOwnProfileName(ctx, privateProfileNameReference('ryjl3-tyaaa-aaaaa-aaaba-cai', subject))).rejects.toThrow('authority');
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it('retires a stalled own-name read at thirty seconds and prevents late key derivation', async () => {
+    vi.useFakeTimers();
+    try {
+      let release: (value: unknown) => void = () => {};
+      mocks.read.mockImplementation(() => new Promise(resolve => { release = resolve; }));
+      const pending = readPrivateOwnProfileName(ctx, reference);
+      const rejected = expect(pending).rejects.toThrow('timed out');
+      await vi.advanceTimersByTimeAsync(30000); await rejected;
+      release({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9] }] });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.keys).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
   it('uses one shared key for club rows and rechecks the exact ciphertext after decryption', async () => {
     const audience = { kind: 'club' as const, authority: Principal.fromText(authority), resource: 'club-1', profile_revision: 0n };
     mocks.scopedRead.mockResolvedValue({ Ok: [{ pii_id: subject, field_id: 'display_name', ciphertext: [9], master_key_id: 'vetkey-club-names-v1:club-1' }] });

@@ -1,3 +1,7 @@
+## Profile retry after logout — 28 October 2026
+- [x] Identified the six-second optional name-enrichment deadline on required own-profile reopening; added a separate thirty-second guarded read, caller-bound profile fetch and a sign-out escape from the retry screen. No account, name or club records changed.
+- [ ] Verify focused regression tests and preview; deploy frontend and confirm Paul's real sign-in can reopen the saved encrypted name. Live confirmation needs Paul's Internet Identity session.
+
 ## Unexpected multiple sign-in IDs — 28 October 2026
 - [x] Audited browser/native origins, source history, public live declarations and the supplied post-move account export; documented proven two-domain behavior versus unproven historical principal attribution in docs/sign-in-principal-audit-2026-10-28.md. All 17 existing origin/redirect/native bridge tests pass in jsdom. No live changes.
 - [ ] Pin consistent production sign-in configuration only after a real signed-in check identifies the origin producing retained mbrvi; then verify the same II on browser/Android reads the same account/clubs. Blocked on that session evidence; blindly switching origins risks another new principal.

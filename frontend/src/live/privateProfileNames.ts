@@ -75,6 +75,37 @@ function parseReference(value: string): { authority: string; subject: string } |
   }
 }
 
+/** Own-profile reopening is required data, not optional roster enrichment.
+ * Preserve the original owner/authority and give fresh key derivation time to
+ * finish; never turn a denied read into an absent profile. */
+export async function readPrivateOwnProfileName(ctx: FeatureBackendContext, reference: string): Promise<string> {
+  const ref = reference.startsWith(PREFIX) ? parseReference(reference) : null;
+  if (!ref || ref.authority !== ctx.target.canisterIds.pii_access_control) throw new Error('Saved private-name authority does not match the configured original authority.');
+  const activeSession = capturePrivateProfileSession();
+  const identity = ctx.identity;
+  const caller = identity.getPrincipal().toText();
+  const target = JSON.stringify(ctx.target);
+  const active = () => {
+    activeSession();
+    if (ctx.identity !== identity || identity.getPrincipal().toText() !== caller || JSON.stringify(ctx.target) !== target) throw new Error('Private profile read cancelled or changed.');
+  };
+  // Account aliases are authorized by the existing original PII service;
+  // do not invent a new key subject or rewrite a saved reference here.
+  let retired = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const guard = () => { if (retired) throw new Error('Private profile read retired.'); active(); };
+  try {
+    const names = await Promise.race([
+      readNames(ctx, [ref.subject], FIELD, guard),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => { retired = true; reject(new Error('Private display name unlock timed out.')); }, 30000); }),
+    ]);
+    guard();
+    const name = names.get(ref.subject);
+    if (!name) throw new Error('Private display name could not be unlocked yet.');
+    return name;
+  } finally { retired = true; clearTimeout(timer); }
+}
+
 /** Strict preparation only; does not publish the reference or erase plaintext.
  * No automatic retry after an unknown write. Always encrypt under the supplied
  * original authority and write only the authenticated caller's own name. */
