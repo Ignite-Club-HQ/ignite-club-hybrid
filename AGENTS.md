@@ -23,7 +23,7 @@
 - ICP images wait for restored auth, share account-scoped unlocks and retry after cooldown/foreground recovery. Why: avoid false startup failures and duplicate unlocks.
 - Documents use decrypted URLs, preserve MIME/extensions and cache native blobs; ICP URLs are ciphertext.
 - ICP rewards verify roles via governor-configured club_domain; catalog/settings reads refresh caller role mirrors first. Why: club creation needs no manual points-service grant.
-- ICP messaging uses authorized DM/window/presence APIs, scoped previews and encrypted files; labels never block attachments. Gallery sends check absence, repair only missing chats, confirm presence and use single-attempt club writes. Why: prevent leakage, stalled threads and unknown-send replay.
+- ICP messaging uses authorized reads and encrypted files; labels never block attachments. Gallery sends repair only absent chats and write once. Conversation wire twins share bounded polls; regenerate bindings and schemas together. Why: preserve access, exact signatures and unknown-send safety.
 - Club setup uses active membership backend; palettes/logo count separately from entitlement; sponsor/theme saves invalidate it. Why: ICP free setup has no Supabase rows.
 
 <!-- ic-skills:managed:start -->

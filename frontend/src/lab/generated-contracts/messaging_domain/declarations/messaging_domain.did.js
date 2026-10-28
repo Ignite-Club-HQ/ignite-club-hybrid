@@ -1068,6 +1068,7 @@ export const idlFactory = ({ IDL }) => {
             'Ok' : IDL.Record({
               'page' : MessagePage,
               'pins' : IDL.Opt(IDL.Vec(PinnedMessage)),
+              'polls' : IDL.Vec(PollResults),
               'reactions' : IDL.Vec(Reaction),
             }),
             'Err' : IDL.Text,
