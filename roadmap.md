@@ -8,7 +8,7 @@
 - [x] Real disposable two-group acceptance passes: linked discovery, roster access, club/team edits, unchanged stored owners, unrelated caller/club/team denial, suspension, authority outage, club-only removal and unlink. Existing real two-group interrupted unlink/upgrade/relink acceptance also passes; 188 identity tests, 17 cross-group frontend tests and Motoko rules pass; ICP guards and preview OK.
 - [x] Released via `full_backend` run 40632764493 (success).
 - [x] Fresh read-only run 40640262331 confirms both recorded principals share active account version 2 with profile, no exclusions, and intact club/team role grants: 20 in Group 1 and 2 in Group 2. No memberships changed. Paul confirms Android now shows mbrvi, the same ID as the browser; this is not evidence that original tavrz discovery fails.
-- [ ] Diagnose empty discovery for mbrvi across both groups. Original role owners remain tavrz (except Group 1 Test); Group 1 linked admission is disabled, but Group 2 still needs signed-in directory/source-reader evidence. Hold actual access changes; do not promise that moving Group 1 access alone fixes Group 2. No usable II session is available here.
+- [ ] Restore Paul's clubs on mbrvi: Move account workflow now defaults tavrz → mbrvi and covers Group 1 + Group 2 domain services before identity_access. Waits on Paul running the dry run, then confirm = yes, then signing in to check. Nothing moved yet.
 
 ## Internet Identity forced email switch — 28 October 2026
 - [x] Confirmed screenshot's toast originates in ClubBackendEnforcement: it remapped canister club countries through email defaults after successful II sign-in. Confirmed ICP accounts now retain their provider and authorized memberships without that inference; email-mode routing is unchanged.
