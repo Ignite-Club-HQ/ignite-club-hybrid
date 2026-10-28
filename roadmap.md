@@ -1,3 +1,7 @@
+## Chat warning after profile-name edit — 29 October 2026
+- [ ] Distinguish chat-list refresh failure from setup failure, keep the last successful inbox on failed refresh, and verify recovery without changing profile or chat permissions.
+- [ ] Deploy web app and confirm on Paul's signed-in phone; no Internet Identity session is available here.
+
 ## Home club member-list warming — 29 October 2026
 - [x] Warm the selected club and Home membership clubs through the existing New Message/Invite people roster memo, with two concurrent bounded reads and foreground/online recovery; preserve scoped authorization and memory-only storage.
 - [x] All 21 focused Home/roster/picker regressions pass in each of ICP and Supabase modes; preview build OK. Tests confirm selected-club priority, two-read concurrency, shared cache reuse, destination/account isolation and timeout recovery.
