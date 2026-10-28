@@ -1,3 +1,8 @@
+## Linked Internet Identity membership access — 28 October 2026
+- [ ] Recognise current authoritative account aliases in club/team consensus reads and writes, without moving roles or broadening legacy query access.
+- [ ] Verify linked positive access, unrelated/team-scope denial, exclusions, unlink, suspension and unavailable authority on disposable canisters.
+- [ ] Release through the existing all-group workflow and confirm Paul's browser/Android clubs; requires a live release and Paul's sign-in.
+
 ## Internet Identity forced email switch — 28 October 2026
 - [x] Confirmed screenshot's toast originates in ClubBackendEnforcement: it remapped canister club countries through email defaults after successful II sign-in. Confirmed ICP accounts now retain their provider and authorized memberships without that inference; email-mode routing is unchanged.
 - [x] Mounted sign-in-switch regressions and existing auth/logout/routing tests pass: 45 tests in each backend mode; ICP guards and preview build OK.
