@@ -185,8 +185,9 @@ export async function fetchIcpIdentityProfile(
     } catch { /* ignore */ }
     if (savedRef) {
       const { readPrivateOwnProfileName } = await import("./privateProfileNames");
-      const reuse = speculative && hintedRef === savedRef ? await speculative.catch(() => null) : null;
-      displayName = reuse ?? await readPrivateOwnProfileName({ identity, target }, savedRef);
+      displayName = speculative && hintedRef === savedRef
+        ? await speculative
+        : await readPrivateOwnProfileName({ identity, target }, savedRef);
     }
     const resolved: IcpIdentityProfile = {
       accountId: principal,

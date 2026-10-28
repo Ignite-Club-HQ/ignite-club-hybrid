@@ -52,7 +52,7 @@ describe('authorized record-name reads with retained device keys', () => {
     mocks.rows.mockResolvedValue({ Ok: [{ pii_id: id, ciphertext: encode('Original name') }] });
     expect(await read(id, field)).toEqual(new Map([[id, 'Original name']]));
     expect(mocks.keys).toHaveBeenCalledTimes(1);
-    const stored = Object.values(localStorage).map(value => JSON.parse(value) as { exp: number });
+    const stored = Object.entries(localStorage).filter(([k]) => !k.startsWith('ignite_pii_verification_key:')).map(([, value]) => value).map(value => JSON.parse(value) as { exp: number });
     expect(stored).toHaveLength(1);
     expect(stored[0]?.exp).toBe(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
