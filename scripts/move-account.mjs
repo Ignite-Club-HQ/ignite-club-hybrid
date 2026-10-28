@@ -29,6 +29,13 @@ if (oldP.toText() === newP.toText()) throw new Error("Old and new sign-in IDs ar
 
 const idsPath = process.env.IDS_FILE || "deploy/mainnet/.icp/data/mappings/ic.ids.json";
 const ids = JSON.parse(readFileSync(idsPath, "utf8"));
+// Group 2 (and later groups) keep their own club services; move those too, before
+// identity_access, so no group's access is left behind under the old sign-in ID.
+const extraGroups = [];
+for (const file of (process.env.GROUP_FILES || "").split(",").map((f) => f.trim()).filter(Boolean)) {
+  const g = JSON.parse(readFileSync(file, "utf8"));
+  extraGroups.push({ label: g.groupId || file, ids: g.canisters || {} });
+}
 
 // Order matters: identity_access last (it unlinks the old ID from the account).
 const CANISTERS = [
@@ -65,12 +72,19 @@ const rustIdl = () =>
     rekey_principal: IDL.Func([IDL.Principal, IDL.Principal, IDL.Bool], [IDL.Variant({ Ok: IDL.Nat64, Err: IDL.Text })], []),
   });
 
-async function call(name, dryRun) {
-  const canisterId = ids[name];
+const TARGETS = [];
+for (const name of CANISTERS.filter((n) => n !== "identity_access")) TARGETS.push({ name, label: `g1 ${name}`, canisterId: ids[name] });
+for (const g of extraGroups) for (const name of CANISTERS.filter((n) => n !== "identity_access")) {
+  if (g.ids[name]) TARGETS.push({ name, label: `${g.label} ${name}`, canisterId: g.ids[name] });
+}
+TARGETS.push({ name: "identity_access", label: "identity_access", canisterId: ids.identity_access });
+
+async function call(target, dryRun) {
+  const { name: kind, label: name, canisterId } = target;
   if (!canisterId) return { name, skipped: "no canister id" };
-  const actor = Actor.createActor(name === "identity_access" ? rustIdl : motokoIdl, { agent, canisterId });
+  const actor = Actor.createActor(kind === "identity_access" ? rustIdl : motokoIdl, { agent, canisterId });
   try {
-    const r = merge && MERGE_CANISTERS.has(name) ? await actor.merge_principal(oldP, newP, dryRun) : await actor.rekey_principal(oldP, newP, dryRun);
+    const r = merge && MERGE_CANISTERS.has(kind) ? await actor.merge_principal(oldP, newP, dryRun) : await actor.rekey_principal(oldP, newP, dryRun);
     const err = r.err ?? r.Err;
     if (err !== undefined) return { name, err };
     return { name, count: Number(r.ok ?? r.Ok) };
@@ -86,15 +100,15 @@ async function call(name, dryRun) {
 function print(results, label) {
   console.log(`== ${label} ==`);
   for (const r of results) {
-    if (r.skipped) console.log(`  ${r.name.padEnd(20)} skipped (${r.skipped})`);
-    else if (r.err) console.log(`  ${r.name.padEnd(20)} REFUSED: ${r.err}`);
-    else console.log(`  ${r.name.padEnd(20)} ${r.count} record(s)`);
+    if (r.skipped) console.log(`  ${r.name.padEnd(32)} skipped (${r.skipped})`);
+    else if (r.err) console.log(`  ${r.name.padEnd(32)} REFUSED: ${r.err}`);
+    else console.log(`  ${r.name.padEnd(32)} ${r.count} record(s)`);
   }
   console.log("");
 }
 
 const dry = [];
-for (const name of CANISTERS) dry.push(await call(name, true));
+for (const t of TARGETS) dry.push(await call(t, true));
 print(dry, "Dry run (nothing written)");
 const refused = dry.filter((r) => r.err);
 if (refused.length) {
@@ -107,12 +121,12 @@ if (!confirm) {
 }
 
 const done = [];
-for (const name of CANISTERS) {
-  const r = await call(name, false);
+for (const t of TARGETS) {
+  const r = await call(t, false);
   done.push(r);
   if (r.err) {
     print(done, "Move (stopped)");
-    console.log(`::error::${name} failed — safe to re-run; canisters already moved will report 0.`);
+    console.log(`::error::${r.name} failed — safe to re-run; canisters already moved will report 0.`);
     process.exit(1);
   }
 }
