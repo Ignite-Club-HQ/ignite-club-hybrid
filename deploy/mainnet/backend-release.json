@@ -1,6 +1,6 @@
 {
-  "sourceRevision": "40970b78f51d8c9cc750e6460a27028ff5c711f7",
-  "planHash": "9ed5bbe1e933d5e9b9ff7b797322a7a1381e77f867502fa6431d2c9e7c2b84c2",
+  "sourceRevision": "60c8886b3b9cf8a5d232f31881c783c8188b6a22",
+  "planHash": "4b29ef1872e9b8258d55bd35f54bbb7f623589467b93ad74abedc310f256d652",
   "groups": [
     "g1",
     "g2"
@@ -11,7 +11,7 @@
       "name": "identity_access",
       "canisterId": "mq2sj-fiaaa-aaaal-qxlqa-cai",
       "subnetId": "e66qm-3cydn-nkf4i-ml4rb-4ro6o-srm5s-x5hwq-hnprz-3meqp-s7vks-5qe",
-      "newHash": "32673ef4ecb99af1f79ef160705a5e41feab1166645f54f982fef04cafdf249b"
+      "newHash": "c2bdab85104dee73f94305837aa59193b7e78ca385bef54c30e60cb35a265544"
     },
     {
       "groupId": "shared",
