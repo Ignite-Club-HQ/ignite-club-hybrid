@@ -1,3 +1,9 @@
+## Invite emails without storing addresses — 28 October 2026
+- [x] Club service sends invite emails through Resend once and keeps no address; app warns admins if a send fails.
+- [ ] Paul: add GitHub secret RESEND_API_KEY (send-only Resend key).
+- [ ] Paul: run Upgrade backend (all mainnet groups) with full_backend, then Deploy web app (ICP frontend).
+- [ ] Paul: run Set invite email sender (ICP) with a sender on a Resend-verified domain; then email-invite yourself to a test team.
+
 ## Own name after sign-in — 28 October 2026
 - [x] Sign-in re-opens the saved encrypted name and remembers it for the session; a screen that fetched the caller's own row before that unlock finished could keep a blank copy for an hour, so the unlocked name now replaces every saved copy of the caller's own row (principal text, `principal:` form and derived account id) without inventing rows or touching anyone else's.
 - [x] ownPrivateName, shared name-cache, private-name and profile-fetch regressions pass (82 focused); preview build OK.
