@@ -1,3 +1,7 @@
+## Team invite QR controls — 28 October 2026
+- [ ] Pass resolved team/club manager permission and owning club into the invite link card; preserve player-only restrictions and canister authorization.
+- [ ] Run invite permission and link-creation regressions in both modes. Live phone verification requires Paul's Internet Identity session and Deploy web app.
+
 ## ChatGPT plugin write permissions — 28 October 2026
 - [x] Record Paul's requested policy: plugin writes only for verified Paul Cranwell or app_admin accounts; other callers retain only reads allowed by existing resource permissions. Club/team admin alone is insufficient. No old rewards merge.
 - [x] Audit existing integration: ic-architecture publishes domain canisters directly and ii-derivation-origin requests the same app principal; there is no separate MCP tool handler or trusted plugin-origin signal. Existing canister updates are also ordinary UI writes.

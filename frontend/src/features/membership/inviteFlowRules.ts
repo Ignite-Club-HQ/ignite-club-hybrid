@@ -6,3 +6,8 @@ export function needsInviteChildEntry(roles: readonly string[], hasPresetChild: 
 export function allowedInviteRole<T extends string>(preferred: T, allowed: readonly T[]): T | undefined {
   return allowed.includes(preferred) ? preferred : allowed[0];
 }
+
+/** The team page supplies resolved manager access; player-only access is not management. */
+export function canManageTeamInviteLinks(canBulkInvite: boolean, playersOnly: boolean): boolean {
+  return canBulkInvite && !playersOnly;
+}
