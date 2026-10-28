@@ -69,7 +69,15 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
             };
           },
           supabase: async () => null,
-        }, scope)), "Photo update read", 20_000, signal);
+        }, scope)), "Photo update read", 45_000, signal).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn("[GalleryLinkCard] photo update read failed", { cardId, message });
+          // Discovery reports a card no group holds for this account as
+          // "not found or not authorized": that is a removed/unshared card,
+          // not a retryable failure.
+          if (/not found or not authorized/i.test(message)) return null;
+          throw error;
+        });
       }
       const { data } = await supabase
         .from("gallery_chat_cards")
@@ -93,7 +101,9 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
     },
     enabled: !!cardId && !!user && sessionRestoration === 'authenticated',
     staleTime: 30 * 1000,
-    retry: isIcp ? false : undefined,
+    // One quiet retry covers cold group discovery right after resume.
+    retry: isIcp ? 1 : undefined,
+    retryDelay: 2_000,
   });
 
   const { data: teamLabel } = useQuery({
@@ -148,7 +158,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
   if (!card) {
     return (
       <div className={`flex ${isPromptHint ? "h-[76px]" : "h-[240px]"} max-w-[320px] items-center rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-xs text-muted-foreground`}>
-        {isError ? <div>Couldn’t open this photo update.<Button variant="ghost" size="sm" onClick={() => void refetch()}>Try again</Button></div> : "Gallery update unavailable"}
+        {isError ? <div>Couldn’t open this photo update.<Button variant="ghost" size="sm" onClick={() => void refetch()}>Try again</Button></div> : "This photo update is no longer available."}
       </div>
     );
   }
