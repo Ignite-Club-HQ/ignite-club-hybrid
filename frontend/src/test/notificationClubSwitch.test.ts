@@ -22,6 +22,13 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
+// These cases exercise the Supabase (email sign-in) lookups; pin that mode so
+// the suite behaves the same under IGNITE_TEST_BACKEND_MODE=icp.
+vi.mock("@/live/authBackendMode", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/live/authBackendMode")>()),
+  resolveAuthBackend: () => "supabase",
+}));
+
 import {
   resolveNotificationClubId,
   requestClubSwitchForNotification,
