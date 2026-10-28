@@ -1,4 +1,5 @@
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
+import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
 import { dmBlockMessage, fetchDmBlockReason } from "@/lib/dmBlockReason";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react";
