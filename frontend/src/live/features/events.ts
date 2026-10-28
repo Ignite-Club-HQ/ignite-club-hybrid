@@ -5,6 +5,7 @@ import { batched, groupBy } from "./batching";
 
 type EventsActor = Awaited<ReturnType<typeof connectLiveEventsDomain>>["actor"];
 const eventsConn = (ctx: FeatureBackendContext) => () => connectLiveEventsDomain(ctx.target, ctx.identity);
+import type { SharedAudience } from "../piiVetKeys";
 import { grantLiveClubPiiRead, registerLivePiiText, resolveLivePiiTextBatch } from "./vault";
 import { maskSharedPitchNames, sharedPitchNameRefs, resolveSharedPitchNames } from '@/lib/sharedPitchPrivacy';
 

@@ -298,10 +298,15 @@ export async function registerLiveChildNamePii(
   childId: string,
   childName: string,
   parent: Principal,
+  clubId?: string | null,
 ): Promise<void> {
   const owner = ctx.identity.getPrincipal();
   try {
-    await registerLivePii(ctx, childId, "name", textEncoder.encode(childName), owner);
+    // With a club, the name is locked to the club-children key: one key per
+    // club opens every child's name for that club's members.
+    await registerLivePii(ctx, childId, "name", textEncoder.encode(childName), owner,
+      clubId ? { kind: "clubchildren", scope: clubId, club: clubId } : undefined);
+    if (clubId) await grantLiveClubPiiRead(ctx, childId, "name", clubId);
     await grantLivePiiRead(ctx, childId, "name", parent);
   } catch (error) {
     console.error("[vault] child name PII registration failed", {
