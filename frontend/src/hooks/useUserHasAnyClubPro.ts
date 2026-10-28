@@ -27,6 +27,32 @@ export function useUserHasAnyClubPro() {
   const { user } = useAuth();
   const isIcp = resolveAuthBackend() === "icp";
   const icp = useIcpEntitlements({ enabled: isIcp });
+  // Club Pro on ICP lives on each club's subscription record, which the
+  // personal-entitlement lookup above never sees — check the caller's clubs.
+  const icpClubs = useQuery({
+    queryKey: ["icp-user-has-any-club-pro", user?.id],
+    enabled: isIcp && !!user?.id,
+    staleTime: 60_000,
+    queryFn: async (): Promise<boolean> => {
+      const [{ withFeatureBackend }, { getLiveMyRoleGrants }, { getLiveClubSubscription }] = await Promise.all([
+        import("@/live/featureRouter"),
+        import("@/live/features/membership"),
+        import("@/live/features/club"),
+      ]);
+      const grants = (await withFeatureBackend("membership", {
+        supabase: async () => [], icp: getLiveMyRoleGrants,
+      }, { shared: "person" })) as Array<{ club?: [] | [string] }>;
+      const clubIds = [...new Set(grants.map((g) => g.club?.[0]).filter((id): id is string => !!id))].slice(0, 20);
+      const answers = await Promise.all(clubIds.map((clubId) => withFeatureBackend("membership", {
+        supabase: async () => false,
+        icp: async (ctx) => {
+          const sub = await getLiveClubSubscription(ctx, clubId);
+          return Boolean(sub?.is_pro || sub?.is_pro_football || sub?.admin_pro_override || sub?.admin_pro_football_override);
+        },
+      }, { clubId }).catch(() => false)));
+      return answers.some(Boolean);
+    },
+  });
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["user-has-any-club-pro", user?.id],
@@ -79,8 +105,8 @@ export function useUserHasAnyClubPro() {
   // entitlement is truly unknown.
   if (isIcp) {
     return {
-      hasAnyClubPro: icp.isPro,
-      isLoading: icp.isLoading,
+      hasAnyClubPro: icp.isPro || icpClubs.data === true,
+      isLoading: !icp.isPro && icpClubs.data !== true && (icp.isLoading || icpClubs.isLoading),
       isError: icp.isError,
       error: null,
     };
