@@ -1272,6 +1272,7 @@ export default function DirectMessagePage() {
 
     onSuccess: async (newMessage) => {
       const currentReplyTo = replyToRef.current;
+      if (conversationId) recordOwnSentConversation(`dm-${conversationId}`);
       
       // Update the query cache with the new message to replace optimistic one
       queryClient.setQueryData(
