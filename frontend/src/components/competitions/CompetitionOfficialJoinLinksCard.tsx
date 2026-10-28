@@ -33,6 +33,10 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[char]!));
 
+// Production's competition_role_links table stores "committee" (not "committee_member").
+const toDbRole = (role: OfficialRole) => (role === "committee_member" ? "committee" : role);
+const fromDbRole = (role: string): OfficialRole => (role === "committee" ? "committee_member" : role as OfficialRole);
+
 function newToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
@@ -60,10 +64,10 @@ export function CompetitionOfficialJoinLinksCard({
         const { data, error } = await (supabase as any)
           .from("competition_role_links")
           .select("id, token, role")
-          .eq("competition_id", competitionId)
-          .is("revoked_at", null);
+          .eq("competition_id", competitionId);
         if (error) throw error;
-        return (data ?? []) as OfficialLink[];
+        return ((data ?? []) as { id: string; token: string; role: string }[])
+          .map((link) => ({ ...link, role: fromDbRole(link.role) }));
       },
       icp: async (ctx) => (await listLiveCompetitionJoinLinks(ctx, competitionId))
         .filter((link) => !link.revoked && link.team_id.length === 0 && roles.some((item) => item.id === link.role))
@@ -78,13 +82,18 @@ export function CompetitionOfficialJoinLinksCard({
       const token = newToken();
       return withFeatureBackend("competitions", {
         supabase: async () => {
-          const { data, error } = await (supabase as any).rpc("create_competition_role_link", {
-            _competition_id: competitionId,
-            _role: role,
-            _token: token,
-          });
+          const db = supabase as any;
+          const { data: auth } = await supabase.auth.getUser();
+          if (!auth.user) throw new Error("Please sign in again.");
+          const dbRole = toDbRole(role);
+          const { error: deleteError } = await db.from("competition_role_links").delete()
+            .eq("competition_id", competitionId).eq("role", dbRole);
+          if (deleteError) throw deleteError;
+          const { data, error } = await db.from("competition_role_links")
+            .insert({ competition_id: competitionId, role: dbRole, token, created_by: auth.user.id })
+            .select("id, token, role").single();
           if (error) throw error;
-          return data as OfficialLink;
+          return { ...data, role: fromDbRole(data.role) } as OfficialLink;
         },
         icp: async (ctx) => createLiveCompetitionOfficialLink(ctx, competitionId, role, token),
       }, writeOnce({ competitionId }));
@@ -100,10 +109,8 @@ export function CompetitionOfficialJoinLinksCard({
   const revokeLink = useMutation({
     mutationFn: () => withFeatureBackend("competitions", {
       supabase: async () => {
-        const { error } = await (supabase as any).rpc("revoke_competition_role_link", {
-          _competition_id: competitionId,
-          _role: role,
-        });
+        const { error } = await (supabase as any).from("competition_role_links").delete()
+          .eq("competition_id", competitionId).eq("role", toDbRole(role));
         if (error) throw error;
       },
       icp: async (ctx) => revokeLiveCompetitionOfficialLink(ctx, competitionId, role),
