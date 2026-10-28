@@ -284,6 +284,7 @@ export default function EditProfilePage() {
 
     if (isIcpLive) {
       let publicProfileSaved = false;
+      let savedIcpProfile: Awaited<ReturnType<typeof import("@/live/identityProfile").saveIcpIdentityProfile>> | null = null;
       try {
         const trimmedEmail = contactEmail.trim();
         if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
@@ -303,6 +304,7 @@ export default function EditProfilePage() {
           avatarRef: avatarUrl.trim() || null,
         });
         publicProfileSaved = true;
+        savedIcpProfile = savedProfile;
         // Mirror the display name into pii_access_control (pii_id = caller
         // principal text, field_id = "display_name", owner = the user).
         // Strict readback, still no private-reference publication or cutover.
@@ -341,7 +343,9 @@ export default function EditProfilePage() {
         return;
       }
 
-      await refreshProfile();
+      // Use the acknowledged save (plain name in memory) rather than an
+      // immediate re-read, which could briefly miss the private name.
+      await refreshProfile(savedIcpProfile ?? undefined);
       setSaving(false);
       toast({ title: "Profile updated!" });
       navigate("/profile");
