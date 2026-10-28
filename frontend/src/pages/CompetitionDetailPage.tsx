@@ -530,12 +530,6 @@ function SupabaseCompetitionDetailPage() {
         const identity = await getCurrentInternetIdentity();
         if (!identity) throw new Error("Internet Identity session required");
         await respondLiveEntryInvite({ identity, target: getActiveIcpTarget() } as any, competitionId, teamId, status === "accepted");
-        if (status === "accepted") {
-          // Parity with the Supabase welcome email below: self-registered,
-          // best effort, needs the member's contact email on file.
-          const { maybeSendLiveMemberWelcomeEmail } = await import("@/live/features/memberWelcomeEmail");
-          await maybeSendLiveMemberWelcomeEmail({ identity, target: getActiveIcpTarget() } as any, competitionId);
-        }
       } catch (error: any) {
         toast({ title: "Failed to update", description: error?.message ?? "Unknown error", variant: "destructive" });
         return;

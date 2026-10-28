@@ -40,8 +40,6 @@ export default function EditProfilePage() {
   const [saving, setSaving] = useState(false);
   const [leaderboardOptOut, setLeaderboardOptOut] = useState(false);
   const [country, setCountry] = useState<string>("");
-  const [contactEmail, setContactEmail] = useState("");
-  const [contactEmailChanged, setContactEmailChanged] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -52,29 +50,6 @@ export default function EditProfilePage() {
     }
   }, [profile]);
 
-  // ICP mode collects no account email; the optional contact email lives in
-  // the member's own encrypted PII record and powers e.g. competition
-  // welcome emails after their team accepts an entry.
-  useEffect(() => {
-    if (!isIcpLive) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [{ getCurrentInternetIdentity }, { getActiveIcpTarget }, { readLiveContactEmail }] = await Promise.all([
-          import("@/live/internetIdentityAuth"),
-          import("@/live/targetRegistry"),
-          import("@/live/features/memberWelcomeEmail"),
-        ]);
-        const identity = await getCurrentInternetIdentity();
-        if (!identity) return;
-        const email = await readLiveContactEmail({ identity, target: getActiveIcpTarget() } as any);
-        if (!cancelled && email) setContactEmail(email);
-      } catch {
-        // No contact email on file — leave the field empty.
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isIcpLive]);
 
   const isNative = shouldUseNativePicker();
 
@@ -286,10 +261,6 @@ export default function EditProfilePage() {
       let publicProfileSaved = false;
       let savedIcpProfile: Awaited<ReturnType<typeof import("@/live/identityProfile").saveIcpIdentityProfile>> | null = null;
       try {
-        const trimmedEmail = contactEmail.trim();
-        if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-          throw new Error("Enter a valid email address, or leave it empty.");
-        }
         const [{ getCurrentInternetIdentity }, { saveIcpIdentityProfile }, { capturePrivateProfileSession }] = await Promise.all([
           import("@/live/internetIdentityAuth"),
           import("@/live/identityProfile"),
@@ -321,13 +292,6 @@ export default function EditProfilePage() {
             const grants = await getLiveMyRoleGrants(nameContext);
             return grants.flatMap(grant => grant.club ?? []);
           }, saveSessionActive);
-        }
-        // Optional contact email (own PII record, upsert semantics). Powers
-        // competition welcome emails for existing members in ICP mode.
-        // An unavailable initial email read is not permission to erase it.
-        if (contactEmailChanged) {
-          const { saveLiveContactEmail } = await import("@/live/features/memberWelcomeEmail");
-          await saveLiveContactEmail({ identity, target: getActiveIcpTarget() }, trimmedEmail);
         }
         // Re-sync avatar club grants — covers clubs joined after the photo
         // was uploaded. Best-effort (never throws).
@@ -484,24 +448,6 @@ export default function EditProfilePage() {
               <Input value={user?.email || ""} disabled className="bg-muted" />
               <p className="text-xs text-muted-foreground">
                 Email cannot be changed
-              </p>
-            </div>
-          )}
-
-          {/* ICP mode: optional contact email, stored encrypted in the
-              member's own PII record. Used for competition welcome emails. */}
-          {isIcpLive && (
-            <div className="space-y-2">
-              <Label htmlFor="contact-email">Contact email (optional)</Label>
-              <Input
-                id="contact-email"
-                type="email"
-                value={contactEmail}
-                onChange={(e) => { setContactEmailChanged(true); setContactEmail(e.target.value); }}
-                placeholder="you@example.com"
-              />
-              <p className="text-xs text-muted-foreground">
-                Used for club and competition welcome emails. Stored encrypted; only you can read it.
               </p>
             </div>
           )}

@@ -4,7 +4,6 @@ import type { FeatureBackendContext } from "./featureRouter";
 import { connectLivePiiAccessControl } from "./domains";
 import { encryptPiiText, fetchPiiVetKeys, fetchClubNameVetKey, clubNamePiiId, CLUB_NAME_SCHEME_PREFIX } from "./piiVetKeys";
 import { unwrapCandid } from "./features/candid";
-import { z } from "zod";
 import type { PrivateProfileAuthorityResolver } from "./privateProfileAuthority";
 import type { PrivateProfileAudience } from './privateProfileAudience';
 import { capturePrivateProfileSession } from './privateProfileSession';
@@ -19,17 +18,7 @@ const FIELD = "display_name";
 const BATCH_SIZE = 100;
 const READ_TIMEOUT_MS = 6000;
 
-const emailSchema = z.string().trim().email().max(254);
-
-/** Preparation only: never publishes an email or broadens its reader grants. */
-export async function preparePrivateOwnProfileEmail(ctx: FeatureBackendContext, email: string): Promise<string> {
-  // Empty ciphertext deliberately clears the existing contact_email value;
-  // the existing welcome reader interprets an empty decrypted value as unset.
-  const value = email.trim() ? emailSchema.parse(email) : "";
-  return prepareOwnField(ctx, "contact_email", value);
-}
-
-async function prepareOwnField(ctx: FeatureBackendContext, field: "contact_email" | "display_name", value: string): Promise<string> {
+async function prepareOwnField(ctx: FeatureBackendContext, value: string): Promise<string> {
   const authority = ctx.target.canisterIds.pii_access_control;
   if (!authority) throw new Error("Private profile authority is not configured.");
   const subject = canonicalPrincipal(ctx.identity.getPrincipal().toText());
@@ -41,16 +30,16 @@ async function prepareOwnField(ctx: FeatureBackendContext, field: "contact_email
     if (ctx.identity !== identity || ctx.identity.getPrincipal().toText() !== subject || JSON.stringify(ctx.target) !== target) throw new Error("Private profile write identity or authority changed.");
   };
   canonicalPrincipal(authority);
-  const ciphertext = await encryptPiiText(ctx, subject, field, value);
+  const ciphertext = await encryptPiiText(ctx, subject, FIELD, value);
   active();
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   active();
-  await unwrapCandid(actor.register_pii(subject, field, ciphertext, ctx.identity.getPrincipal()), "Save private profile field");
+  await unwrapCandid(actor.register_pii(subject, FIELD, ciphertext, ctx.identity.getPrincipal()), "Save private profile field");
   active();
-  const values = await readNames(ctx, [subject], field, active, undefined, field === FIELD);
+  const values = await readNames(ctx, [subject], FIELD, active, undefined, true);
   active();
   if (values.get(subject) !== value) throw new Error("Private profile readback was not confirmed.");
-  return field === FIELD ? privateProfileNameReference(authority, subject) : `pii-email:v1:${authority}:${subject}`;
+  return privateProfileNameReference(authority, subject);
 }
 
 function canonicalPrincipal(value: string): string {
@@ -119,7 +108,7 @@ export async function preparePrivateOwnProfileName(
   if (!value || new TextEncoder().encode(value).length > 512) {
     throw new Error("A display name of at most 512 bytes is required.");
   }
-  return prepareOwnField(ctx, FIELD, value);
+  return prepareOwnField(ctx, value);
 }
 
 /** Explicit rehearsal preparation only; does not publish a profile reference.
