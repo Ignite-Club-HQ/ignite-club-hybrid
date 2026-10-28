@@ -1,6 +1,7 @@
 ## Internet Identity forced email switch — 28 October 2026
-- [ ] Stop post-login club-country inference from signing out a confirmed Internet Identity account; preserve authenticated membership and email-mode routing.
-- [ ] Run mounted sign-in-switch regressions and existing auth/logout tests; real phone sign-in remains dependent on frontend publication and Paul's passkey.
+- [x] Confirmed screenshot's toast originates in ClubBackendEnforcement: it remapped canister club countries through email defaults after successful II sign-in. Confirmed ICP accounts now retain their provider and authorized memberships without that inference; email-mode routing is unchanged.
+- [x] Mounted sign-in-switch regressions and existing auth/logout/routing tests pass: 45 tests in each backend mode; ICP guards and preview build OK.
+- [ ] Publish the frontend correction and confirm Paul's real phone sign-in; no passkey/session is available here and no backend upgrade is needed for this change.
 
 ## Private-club display release check — 27 October 2026, 20:13 UTC
 - [x] Corrected missing PII display verifier initialization using only the existing secure-save identity pin; foreign identities still refuse, unrelated settings remain unchanged.

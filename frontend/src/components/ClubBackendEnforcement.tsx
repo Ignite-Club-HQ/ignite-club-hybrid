@@ -3,10 +3,7 @@ import { useOptionalAuth } from "@/hooks/useAuth";
 import { AppSplash } from "@/components/AppSplash";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  getCurrentInternetIdentityConfirmed,
-  signOutInternetIdentity,
-} from "@/live/internetIdentityAuth";
+import { getCurrentInternetIdentityConfirmed } from "@/live/internetIdentityAuth";
 // features/membership is imported lazily at the call site so the ICP SDK
 // stays out of the entry chunk (this component mounts at app start).
 import { getActiveIcpTarget } from "@/live/targetRegistry";
@@ -185,12 +182,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         const config = getBackendRoutingConfig();
         let homeCountries: Record<string, string | null> = {};
         try {
-          if (identity) {
-            const { getLiveClubHomeCountries } = await import("@/live/features/club");
-            homeCountries = await getLiveClubHomeCountries({ identity, target: getActiveIcpTarget() }, clubIds);
-          } else {
-            homeCountries = await fetchSupabaseHomeCountries(clubIds);
-          }
+          homeCountries = await fetchSupabaseHomeCountries(clubIds);
         } catch (error) {
           membershipKnown = false;
           console.warn("[club-backend] Could not load club home countries.", error);
@@ -215,7 +207,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         }
         // The person deliberately picked email sign-in on this device
         // (?auth=email): honour it — their data is read from Supabase.
-        if (provider === "supabase" && readAuthChoice() === "supabase") {
+        if (readAuthChoice() === "supabase") {
           sessionStorage.removeItem(ENFORCED_KEY);
           settle();
           return;
@@ -255,13 +247,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
               ? "Your club uses Internet Identity. Signing you out so you can sign in with it."
               : "Your club uses email sign-in. Signing you out so you can sign in with it.",
         });
-        if (provider === "icp") {
-          const { disconnectChatRealtime } = await import("@/live/wsRealtime");
-          disconnectChatRealtime();
-          await signOutInternetIdentity();
-        } else {
-          await supabase.auth.signOut();
-        }
+        await supabase.auth.signOut();
         // Deliberately NOT settling: keep the loader up until the reload
         // replaces the page, so no wrong-backend query can fire in between.
         // Reload the ROOT, not the current URL: the published/preview hosting
