@@ -55,6 +55,13 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
   const once = async <T,>(source: string, attempt: () => Promise<T>): Promise<T> => {
     try { return await attempt(); } catch (first) {
       assertReadNotAborted(signal);
+      const firstText = first instanceof Error ? first.message : String(first);
+      // A stall already spent its deadline and a refusal is a real answer:
+      // report those at once instead of doubling the wait.
+      if (/timed?\s*out|deadline|expired|denied|unauthori[sz]ed|forbidden|not a member|membership/i.test(firstText)) {
+        console.warn('[schedule] source failed', source, firstText);
+        throw first;
+      }
       await new Promise(resolve => setTimeout(resolve, 750));
       assertReadNotAborted(signal);
       try { return await attempt(); } catch (error) {
