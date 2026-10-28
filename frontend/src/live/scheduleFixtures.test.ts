@@ -57,4 +57,16 @@ describe('independent foreign-host fixture sources', () => {
     const result = await loadScheduleFixtures(ctx, scope);
     expect(result.events).toEqual([]); expect(result.failed).toHaveLength(3); expect(result.incomplete).toBe(true);
   });
+  it('does not warn when another club\'s public competition only lets participants read fixtures', async () => {
+    mocks.matches.mockRejectedValue(new Error('Competition access forbidden'));
+    const result = await loadScheduleFixtures(ctx, scope);
+    expect(result.failed).toEqual([]);
+    expect(result.incomplete).toBe(false);
+  });
+  it('still reports a refused competition the member entered', async () => {
+    mocks.public.mockResolvedValue([]);
+    mocks.entered.mockResolvedValue([competition]);
+    mocks.matches.mockRejectedValue(new Error('Competition access forbidden'));
+    expect((await loadScheduleFixtures(ctx, scope)).failed).toEqual(['competition:cup']);
+  });
 });
