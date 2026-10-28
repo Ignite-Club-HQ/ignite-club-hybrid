@@ -1,3 +1,8 @@
+## Clubs blank and slow sign-in — 28 October 2026
+- [x] Live read-only probe: Group 2's club service rejects every membership check with "Linked account authority unavailable" (its identity grant is eligibility-only, so the new linked sign-in lookup always gets no account). One failing group makes the app refuse the whole club list, so Group 1 clubs vanished too and screens kept retrying.
+- [x] Fix: a missing account reply now keeps exact sign-in behaviour instead of rejecting; linked sign-ins still widen access only where the account service shares them. Motoko check and linked-membership test pass.
+- [ ] Paul runs Upgrade backend (all mainnet groups) with full_backend, then signs out/in on the icp0.io app to confirm clubs, team carousel, Next up and Messages load.
+
 ## Settings messaging warnings — 28 October 2026
 - [x] Identified the kept-mounted inbox's unconditional Supabase thread prefetch for broadcast/club messages; disabled it for ICP and fenced delayed reads/publication across provider changes. Existing authorized ICP readers remain unchanged.
 - [x] Mounted prefetch and inbox regressions pass (92 tests in each backend mode), ICP guard check passes and preview build OK.
