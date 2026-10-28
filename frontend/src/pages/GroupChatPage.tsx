@@ -635,7 +635,9 @@ export default function GroupChatPage() {
 
 
     const fromCache = getCachedGroupMessages(groupId).messages;
-    return isUsableCachedThread(fromCache as any) ? fromCache : undefined;
+    if (isUsableCachedThread(fromCache as any)) return fromCache;
+    // A saved copy of a genuinely empty chat shows "No messages yet" at once.
+    return fromCache.length === 0 && isCachedThreadComplete("group", groupId) ? [] : undefined;
   };
 
 
