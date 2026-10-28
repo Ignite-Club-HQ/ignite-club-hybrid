@@ -10,7 +10,7 @@ vi.mock('./generalActivation', () => ({ routingActive: async () => state.active,
 vi.mock('./targetRegistry', () => ({ getActiveIcpTarget: () => state.shared }));
 vi.mock('./internetIdentityAuth', () => ({ getCurrentInternetIdentityConfirmed: state.identity }));
 vi.mock('./groupDispatch', () => ({ clubDispatch: { readAcross: state.readAcross, read: state.read } }));
-vi.mock('./piiVetKeys', () => ({ clubIdFromMediaPath: (path: string) => /^clubs\/([^/]+)\//.exec(path)?.[1] ?? null, decryptClubMediaWithSavedKey: state.saved, tryDecryptClubMedia: async () => null, decryptPiiValue: state.decrypt }));
+vi.mock('./piiVetKeys', () => ({ clubIdFromMediaPath: (path: string) => /^clubs\/([^/]+)\//.exec(path)?.[1] ?? null, decryptClubMediaWithSavedKey: state.saved, tryDecryptClubMedia: async () => null, prewarmClubMediaKey: () => {}, parseSharedCiphertext: () => null, tryDecryptShared: async () => null, decryptPiiValue: state.decrypt }));
 vi.mock('./deviceMediaCache', () => ({ readCachedPhoto: state.cached, writeCachedPhoto: vi.fn() }));
 import { clearIcpPhotoResolutionCache, parseIcpBlobUrl, resolveIcpBlobObjectUrl } from './mediaDecrypt';
 describe('grouped media decryption', () => {
