@@ -2,6 +2,7 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Suspense } from "react";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
+import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
 import { readIcpGroupMetadata } from "@/features/messaging/thread/icpThreadRead";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
@@ -1252,6 +1253,12 @@ export default function GroupChatPage() {
     onSuccess: (result, variables, context) => {
       if (result?.confirmedMessage) {
         applyConfirmedInboxPreview(queryClient, "group", user?.id, groupId, result.confirmedMessage);
+        // League chats share this page; only the key that exists in the
+        // inbox matches, so recording both is safe.
+        if (groupId) {
+          recordOwnSentConversation(`group-${groupId}`);
+          recordOwnSentConversation(`league-${groupId}`);
+        }
       }
       if (result?.confirmedMessage && context?.tempId) {
         confirmPendingSend(queryClient, ["group-messages", groupId], context.tempId, result.confirmedMessage);

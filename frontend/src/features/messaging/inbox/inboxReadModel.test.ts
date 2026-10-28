@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   attachInboxDrafts,
+  bumpOwnSentRows,
   deriveActiveMutedChats,
   filterInboxConversations,
   inboxConversationIdentity,
@@ -298,5 +299,44 @@ describe("messaging inbox read model", () => {
     expect(resolveOperationalConversationDisclosure(stale, {
       now: NOW, showAll: false, typeFilter: "all", hasSearchQuery: true,
     }).hiddenOps).toEqual([]);
+  });
+});
+
+describe("bumpOwnSentRows", () => {
+  it("moves a just-messaged read conversation to the top of Recent", () => {
+    const unread = [conversation("u1", "team", { unreadCount: 2 })];
+    const recent = [
+      conversation("r1", "team"),
+      conversation("r2", "club"),
+      conversation("r3", "dm"),
+    ];
+    const rows = bumpOwnSentRows({ unread, recent }, ["r3"]);
+    expect(rows.map((row) => row.key)).toEqual(["u1", "r3", "r1", "r2"]);
+  });
+
+  it("moves a just-messaged unread conversation to the top of Unread without crossing sections", () => {
+    const unread = [
+      conversation("u1", "team", { unreadCount: 2 }),
+      conversation("u2", "club", { unreadCount: 1 }),
+    ];
+    const recent = [conversation("r1", "team")];
+    const rows = bumpOwnSentRows({ unread, recent }, ["u2"]);
+    expect(rows.map((row) => row.key)).toEqual(["u2", "u1", "r1"]);
+  });
+
+  it("orders multiple bumps most-recently-sent first", () => {
+    const recent = [
+      conversation("r1", "team"),
+      conversation("r2", "club"),
+      conversation("r3", "dm"),
+    ];
+    const rows = bumpOwnSentRows({ unread: [], recent }, ["r2", "r3"]);
+    expect(rows.map((row) => row.key)).toEqual(["r2", "r3", "r1"]);
+  });
+
+  it("keeps the existing order when nothing is bumped or the bump is unknown", () => {
+    const recent = [conversation("r1", "team"), conversation("r2", "club")];
+    expect(bumpOwnSentRows({ unread: [], recent }, []).map((row) => row.key)).toEqual(["r1", "r2"]);
+    expect(bumpOwnSentRows({ unread: [], recent }, ["nope"]).map((row) => row.key)).toEqual(["r1", "r2"]);
   });
 });

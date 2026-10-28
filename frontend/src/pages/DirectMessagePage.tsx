@@ -1,4 +1,5 @@
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
+import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
 import { dmBlockMessage, fetchDmBlockReason } from "@/lib/dmBlockReason";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react";
@@ -1272,6 +1273,7 @@ export default function DirectMessagePage() {
 
     onSuccess: async (newMessage) => {
       const currentReplyTo = replyToRef.current;
+      if (conversationId) recordOwnSentConversation(`dm-${conversationId}`);
       
       // Update the query cache with the new message to replace optimistic one
       queryClient.setQueryData(

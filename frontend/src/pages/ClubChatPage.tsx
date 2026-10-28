@@ -2,6 +2,7 @@ import { prefetchMessagePolls } from "@/lib/pollReadRepository";
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
+import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
 import React, { Suspense, useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from "react";
@@ -1662,6 +1663,7 @@ export default function ClubChatPage() {
     onSuccess: (result, variables, context) => {
       if (result?.confirmedMessage) {
         applyConfirmedInboxPreview(queryClient, "club", user?.id, clubId, result.confirmedMessage);
+        if (clubId) recordOwnSentConversation(`club-${clubId}`);
       }
       if (result?.confirmedMessage && context?.tempId) {
         confirmPendingSend(queryClient, ["club-messages", clubId], context.tempId, result.confirmedMessage);
