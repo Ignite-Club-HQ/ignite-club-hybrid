@@ -1086,3 +1086,9 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [x] Upgrade backend confirms each group's club service → private-details link (sets if empty, stops on mismatch); live after next Upgrade backend
 - [x] Accepted: removed team members keep older guest/Vault keys up to 30 days (owner decision)
 - [ ] Owner: run Upgrade backend (all mainnet groups) + Deploy web app
+
+## Sending messages appear in the inbox preview immediately — 29 October 2026
+- [x] `frontend/src/features/messaging/inbox/pendingInboxPreview.ts`: write the still-sending message into the team/club/group/direct-message inbox caches at send start, protected from background refetches until the send is acknowledged.
+- [x] Wired into TeamChatPage, ClubChatPage, GroupChatPage (incl. league chats) and DirectMessagePage: apply on send, settle on acknowledgement, restore the previous preview when a send fails (offline-queued sends keep the preview).
+- [x] Row floats to the top of its section at send start via `ownSendBump`.
+- [x] Tests: `pendingInboxPreview.test.ts` (11) + full messaging suite (43 files, 391 passed); takes effect after **Deploy web app**.
