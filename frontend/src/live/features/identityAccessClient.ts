@@ -86,11 +86,15 @@ export async function listLiveProfilesByIds(
       }
     }
     if (out.some(profile => profile.display_name?.startsWith("pii-display-name:"))) {
+      // The caller's own name is already unlocked this session; show it
+      // everywhere instead of "Unknown".
+      const { fillOwnPrivateName } = await import("../ownPrivateName");
+      const filled = fillOwnPrivateName(out, caller);
       if (privateOptions?.hydratePrivateNames === false) {
-        return out.map(profile => ({ ...profile, display_name: profile.display_name?.startsWith('pii-display-name:') ? null : profile.display_name }));
+        return filled.map(profile => ({ ...profile, display_name: profile.display_name?.startsWith('pii-display-name:') ? null : profile.display_name }));
       }
       const { hydratePrivateProfileNames } = await import("../privateProfileNames");
-      return privateOptions ? hydratePrivateProfileNames(ctx, out, privateOptions) : hydratePrivateProfileNames(ctx, out);
+      return privateOptions ? hydratePrivateProfileNames(ctx, filled, privateOptions) : hydratePrivateProfileNames(ctx, filled);
     }
     return out;
   } finally {
