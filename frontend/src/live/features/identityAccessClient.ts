@@ -103,7 +103,17 @@ export async function listLiveProfilesByIds(
         return filled.map(profile => ({ ...profile, display_name: profile.display_name?.startsWith('pii-display-name:') ? null : profile.display_name }));
       }
       const { hydratePrivateProfileNames } = await import("../privateProfileNames");
-      return privateOptions ? hydratePrivateProfileNames(ctx, filled, privateOptions) : hydratePrivateProfileNames(ctx, filled);
+      const refIds = new Set(filled.filter(p => p.display_name?.startsWith('pii-display-name:')).map(p => p.account_id));
+      const hydrated = await (privateOptions ? hydratePrivateProfileNames(ctx, filled, privateOptions) : hydratePrivateProfileNames(ctx, filled));
+      if (privateOptions?.audience) return hydrated;
+      // Cross-club screens: unlock remaining names through the caller's own clubs.
+      const unnamed = hydrated.filter(p => refIds.has(p.account_id) && (!p.display_name || p.display_name.startsWith('pii-display-name:'))).map(p => p.account_id);
+      if (!unnamed.length) return hydrated;
+      const { unlockNamesThroughMyClubs } = await import("../clubScopedNames");
+      const names = await unlockNamesThroughMyClubs(ctx, unnamed, privateOptions?.signal).catch(() => new Map<string, string>());
+      return hydrated.map(p => refIds.has(p.account_id) && (!p.display_name || p.display_name.startsWith('pii-display-name:'))
+        ? { ...p, display_name: names.get(p.account_id) ?? null }
+        : p);
     }
     return out;
   } finally {

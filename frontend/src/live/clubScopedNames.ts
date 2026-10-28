@@ -85,4 +85,41 @@ export async function unlockClubScopedNames(
 }
 
 /** Test-only reset. */
-export function __resetClubScopedNames() { remembered.clear(); }
+export function __resetClubScopedNames() { remembered.clear(); myClubs.clear(); }
+
+const MAX_FALLBACK_CLUBS = 12;
+const myClubs = new Map<string, { ids: string[]; at: number }>();
+onPrivateProfileSessionRetired(() => myClubs.clear());
+
+async function callerClubIds(ctx: FeatureBackendContext): Promise<string[]> {
+  const caller = ctx.identity.getPrincipal().toText();
+  const hit = myClubs.get(caller);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.ids;
+  const { getLiveMyRoleGrants } = await import('./features/membership');
+  const { grantClubId } = await import('./crossGroupClubs');
+  const grants = (await getLiveMyRoleGrants(ctx)) as unknown as Parameters<typeof grantClubId>[0][];
+  const ids = [...new Set(grants.map(grantClubId).filter((c): c is string => !!c))].slice(0, MAX_FALLBACK_CLUBS);
+  myClubs.set(caller, { ids, at: Date.now() });
+  return ids;
+}
+
+/**
+ * For screens that span clubs (leaderboards, admin lists, settings): try each
+ * of the caller's own clubs until every person is named. Each club still
+ * authorizes each person; people sharing no club with the caller stay unnamed.
+ */
+export async function unlockNamesThroughMyClubs(
+  ctx: FeatureBackendContext, ids: readonly string[], signal?: AbortSignal,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  let pending = [...new Set(ids)];
+  if (!pending.length) return out;
+  const clubs = await callerClubIds(ctx).catch(() => [] as string[]);
+  for (const clubId of clubs) {
+    if (!pending.length || signal?.aborted) break;
+    const found = await unlockClubScopedNames(ctx, clubId, pending, signal).catch(() => new Map<string, string>());
+    for (const [id, name] of found) out.set(id, name);
+    pending = pending.filter(id => !out.has(id));
+  }
+  return out;
+}
