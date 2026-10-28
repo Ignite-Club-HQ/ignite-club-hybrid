@@ -1252,6 +1252,12 @@ export default function GroupChatPage() {
     onSuccess: (result, variables, context) => {
       if (result?.confirmedMessage) {
         applyConfirmedInboxPreview(queryClient, "group", user?.id, groupId, result.confirmedMessage);
+        // League chats share this page; only the key that exists in the
+        // inbox matches, so recording both is safe.
+        if (groupId) {
+          recordOwnSentConversation(`group-${groupId}`);
+          recordOwnSentConversation(`league-${groupId}`);
+        }
       }
       if (result?.confirmedMessage && context?.tempId) {
         confirmPendingSend(queryClient, ["group-messages", groupId], context.tempId, result.confirmedMessage);

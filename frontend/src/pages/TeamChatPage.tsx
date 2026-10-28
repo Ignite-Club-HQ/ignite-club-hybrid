@@ -1777,6 +1777,7 @@ export default function TeamChatPage() {
     onSuccess: (result, variables, context) => {
       if (result?.confirmedMessage) {
         applyConfirmedInboxPreview(queryClient, "team", user?.id, teamId, result.confirmedMessage);
+        if (teamId) recordOwnSentConversation(`team-${teamId}`);
       }
       if (result?.confirmedMessage && context?.tempId) {
         confirmPendingSend(queryClient, ["team-messages", teamId], context.tempId, result.confirmedMessage);
