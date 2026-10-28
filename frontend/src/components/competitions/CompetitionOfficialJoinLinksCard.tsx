@@ -33,6 +33,10 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[char]!));
 
+// Production's competition_role_links table stores "committee" (not "committee_member").
+const toDbRole = (role: OfficialRole) => (role === "committee_member" ? "committee" : role);
+const fromDbRole = (role: string): OfficialRole => (role === "committee" ? "committee_member" : role as OfficialRole);
+
 function newToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
