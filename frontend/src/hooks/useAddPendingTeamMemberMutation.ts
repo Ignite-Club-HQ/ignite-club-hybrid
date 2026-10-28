@@ -111,6 +111,7 @@ export function useAddPendingTeamMemberMutation({
 
     let secondaryId: string | null = null;
     let invite;
+    let emailDelivery: unknown = "not_requested";
     if (childInputs.length) {
       const fingerprint = JSON.stringify({ clubId, teamId, childInputs, email: inviteEmail, second: selectedSecondParent?.id, secondParentEmail, hasSecond });
       if (!familyOperation.current || familyOperation.current.fingerprint !== fingerprint) {
@@ -124,9 +125,10 @@ export function useAddPendingTeamMemberMutation({
         second: hasSecond, boundSecondary: selectedSecondParent?.id, email: inviteEmail, secondaryEmail: secondParentEmail.trim(),
       });
       invite = result.invite;
+      emailDelivery = result.emailDelivery;
       secondaryId = result.secondary[0]?.id ?? null;
     } else {
-      ({ invite } = await createLivePendingInvite(ctx, {
+      ({ invite, emailDelivery } = await createLivePendingInvite(ctx, {
       kind: "team",
       clubId,
       email: inviteEmail,
@@ -135,6 +137,10 @@ export function useAddPendingTeamMemberMutation({
       }));
     }
     const link = `${window.location.origin}/join/p/${invite.id}`;
+    if (emailDelivery && typeof emailDelivery === "object" && "failed" in emailDelivery) {
+      const { toast } = await import("sonner");
+      toast.warning(`Invite created, but the email didn't send: ${(emailDelivery as { failed: string }).failed}`);
+    }
 
     // Short invite link, same as the Supabase path's short_code: shorter,
     // friendlier URL for sharing (email/internal still use the full link).

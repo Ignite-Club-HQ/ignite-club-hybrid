@@ -4,7 +4,6 @@ import { connectLiveClubDomain } from "../domains";
 import { fetchMyRoleGrantsEverywhere } from "./myRoleGrants";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
-import { registerLivePiiText } from "./vault";
 import { batched as batchedCall } from "./batching";
 
 /**
