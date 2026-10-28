@@ -982,6 +982,8 @@ export default function BroadcastChatPage() {
           if (error) throw error;
         },
         icp: async (ctx) => {
+          // Never let a club-only choice silently go to every club.
+          if (targetClubIds.length > 0) throw new Error("Club-only announcements aren't available yet. This would go to every club.");
           // Fixed "broadcast" conversation id, matching the ["broadcast-messages"]
           // query key / queueMessage targetId convention. Replies persist via
           // the canister's reply_to_id; club targeting stays Supabase-only.
@@ -1352,7 +1354,9 @@ export default function BroadcastChatPage() {
           <ReplyPreview replyingTo={replyingTo} onCancel={() => setReplyingTo(null)} />
           {editingMessage && <EditingBanner text={editingMessage.text} onCancel={handleCancelEdit} />}
           <ScheduledMessagesBanner target={scheduleTarget} />
-          {!editingMessage && (
+          {/* Club-only announcements are not supported on ICP yet: every
+              announcement there reaches all clubs, so don't offer the choice. */}
+          {!editingMessage && !useIcpLab && (
             <BroadcastAudienceSelector
               value={targetClubIds}
               onChange={setTargetClubIds}
