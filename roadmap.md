@@ -1041,10 +1041,12 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [ ] Optional: run **Prove account deletion (isolated only)** workflow
 
 ## Shared-key private details (target ~$40-50/month per 200-member club)
-- [ ] Private-details service: add club-children, team-names and Vault-audience key endpoints, each checking membership/role again after the key is made
-- [ ] Club service: add a team-membership check the private-details service can call (reuse the existing team check)
-- [ ] Children's names: encrypt a club copy under the club-children key; keep parent/guardian access
-- [ ] Guest, fill-in and Player of the Match names: encrypt under the event's team key (team looked up from the event record, never read from the reference)
-- [ ] Vault: encrypt under a role-audience key built from the folder's existing role limits; never fall back to club-wide access
-- [ ] Device key store: keep shared keys for 30 days; delete them when access is lost
-- [ ] Tests (PocketIC + frontend), then Upgrade backend (all mainnet groups) + Deploy web app
+- [x] Private-details service: add club-children, team-names and Vault-audience key endpoints, each checking membership/role again after the key is made
+- [x] Club service: add a team-membership check the private-details service can call (reuse the existing team check)
+- [x] Children's names: encrypt a club copy under the club-children key; keep parent/guardian access
+- [x] Guest, fill-in and Player of the Match names: encrypt under the event's team key (team looked up from the event record, never read from the reference)
+- [x] Vault: encrypt under a role-audience key built from the folder's existing role limits; never fall back to club-wide access
+- [x] Device key store: keep shared keys for 30 days; delete them when access is lost
+- [x] Tests (Motoko unit + frontend)
+- [ ] Children added from Profile before joining a team stay on their own key until re-saved (low cost; optional follow-up)
+- [ ] Owner: run Upgrade backend (all mainnet groups) + Deploy web app
