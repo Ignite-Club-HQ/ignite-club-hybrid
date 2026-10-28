@@ -69,3 +69,16 @@ describe('bounded viewed-photo storage', () => {
     expect(stores.has('app-code')).toBe(true);
   });
 });
+describe('saved key copies', () => {
+  it('removes key copies without touching photo bytes or unrelated storage', async () => {
+    const stores = photoStorage();
+    localStorage.setItem('ignite.clubkey.v1:alice', 'key');
+    localStorage.setItem('ignite-drafts', 'draft');
+    await writeCachedPhoto('alice', 'store', 'photo', new ArrayBuffer(1));
+    clearStoredDeviceKeys();
+    expect(localStorage.getItem('ignite.clubkey.v1:alice')).toBeNull();
+    expect(localStorage.getItem('ignite-drafts')).toBe('draft');
+    expect(await readCachedPhoto('alice', 'store', 'photo')).not.toBeNull();
+    expect(stores.has('ignite-media-v1:alice')).toBe(true);
+  });
+});
