@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     sessionRestoration: "signed_out" as "restoring" | "authenticated" | "signed_out",
     profileResolved: true,
     refreshProfile: vi.fn(),
+    signOut: vi.fn(),
   },
   isNative: false,
   isThemeReady: true,
@@ -129,6 +130,15 @@ describe("AppLayout routing boundaries", () => {
       expect(screen.getByTestId("location")).toHaveTextContent("/auth");
     });
     expect(sessionStorage.getItem("redirectAfterAuth")).toBeNull();
+  });
+
+  it('allows sign-out from a failed profile read without opening profile setup', () => {
+    mocks.auth.user = { id: 'existing-account' };
+    mocks.auth.profileError = true;
+    renderRoute('/');
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(mocks.auth.signOut).toHaveBeenCalledOnce();
+    expect(screen.queryByText('complete profile page')).not.toBeInTheDocument();
   });
 
   it("renders a direct protected deep link unchanged for an authenticated member", () => {

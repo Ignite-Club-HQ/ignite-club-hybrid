@@ -148,6 +148,7 @@ export async function fetchIcpIdentityProfile(
   principal: string,
   target: IcpTargetConfig = getActiveIcpTarget(),
 ): Promise<IcpIdentityProfile> {
+  if (identity.getPrincipal().toText() !== principal) throw new Error('Profile read account does not match the signed-in identity.');
   if (!isLiveIdentityAccessConfigured(target)) {
     throw new Error(`Identity access canister is not configured for ICP target ${target.alias}.`);
   }
@@ -166,12 +167,8 @@ export async function fetchIcpIdentityProfile(
     }
     let displayName: string | null = canisterProfile?.display_name ?? null;
     if (canisterProfile?.display_name?.startsWith("pii-display-name:")) {
-      const { hydratePrivateProfileNames } = await import("./privateProfileNames");
-      const [hydrated] = await hydratePrivateProfileNames({ identity, target }, [canisterProfile]);
-      displayName = hydrated?.display_name ?? null;
-      // A saved private name that could not be unlocked is not a missing
-      // profile; fail transiently so callers never send members to onboarding.
-      if (!displayName) throw new Error("Private display name could not be unlocked yet.");
+      const { readPrivateOwnProfileName } = await import("./privateProfileNames");
+      displayName = await readPrivateOwnProfileName({ identity, target }, canisterProfile.display_name);
     }
     const resolved: IcpIdentityProfile = {
       accountId: principal,

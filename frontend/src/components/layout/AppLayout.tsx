@@ -33,7 +33,7 @@ import { TabPagePlaceholder } from "./TabPagePlaceholder";
 const LazyDeepLinkGate = lazyWithRetry(() => import("@/components/DeepLinkGate"));
 
 export function AppLayout() {
-  const { user, profile, loading, profileLoading, profileError, refreshProfile, initialized, profileResolved, sessionRestoration } = useAuth();
+  const { user, profile, loading, profileLoading, profileError, refreshProfile, signOut, initialized, profileResolved, sessionRestoration } = useAuth();
   useAdMobInit();
   useActivityTracking();
   useTrackPresence(user?.id);
@@ -107,7 +107,6 @@ export function AppLayout() {
       profileError,
       profileResolved,
       hasProfile: !!profile,
-      displayName: profile?.display_name,
       userId: user?.id,
       isThemeReady,
       themeTimeout
@@ -300,13 +299,13 @@ export function AppLayout() {
             <p className="text-xs text-muted-foreground">Auto-retrying in 5 seconds...</p>
             <Button onClick={async () => {
               setRetrying(true);
-              await refreshProfile();
-              setRetrying(false);
+              try { await refreshProfile(); } finally { setRetrying(false); }
             }}>
               Retry Now
             </Button>
           </>
         )}
+        <Button variant="ghost" onClick={() => void signOut()}>Sign out</Button>
       </div>
     );
   }
