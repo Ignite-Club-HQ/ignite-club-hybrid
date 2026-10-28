@@ -54,4 +54,22 @@ for (const t of texts) {
   console.log(`Derived (original) account: ${derived}`);
   for (const id of new Set([derived, ...listing])) console.log(json(describe(id)));
 }
+const groups = [["g1", ids.club_domain]];
+try { const g2 = JSON.parse(readFileSync(process.env.G2_FILE, "utf8")); const c = g2.canisters?.club_domain ?? g2.club_domain; if (typeof c === "string") groups.push(["g2", c]); } catch {}
+const { idlFactory: clubIdl } = await import(process.env.CLUB_IDL_FILE);
+for (const [g, canisterId] of groups) {
+  const club = Actor.createActor(clubIdl, { agent, canisterId });
+  console.log(`\n=== Club service ${g} (${canisterId})`);
+  try {
+    const names = new Map();
+    let after = [];
+    for (;;) { const page = await club.list_clubs(after, 100); const rows = page.Ok ?? []; rows.forEach((c) => names.set(c.id, c.name)); if (rows.length < 100) break; after = [rows[rows.length - 1].id]; }
+    console.log(`Clubs: ${[...names.values()].join(", ") || "none"}`);
+    const a = await club.export_acl();
+    if (a.Err !== undefined) { console.log(`ACL refused: ${a.Err}`); continue; }
+    const mine = a.Ok.acl.roles.filter((r) => texts.includes(r.user.toText()));
+    console.log(`Role grants for these sign-in IDs: ${mine.length}`);
+    for (const r of mine) console.log(json({ user: r.user.toText().slice(0, 5), role: r.role, club: names.get(r.club[0]) ?? r.club[0] ?? null, team: r.team[0] ?? null }));
+  } catch (e) { console.log(`Read failed: ${String(e?.message ?? e).slice(0, 300)}`); }
+}
 console.log(`\nTotal accounts: ${s.accounts.length}. Nothing was changed.`);

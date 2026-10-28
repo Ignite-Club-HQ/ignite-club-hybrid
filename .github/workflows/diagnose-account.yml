@@ -30,9 +30,12 @@ jobs:
           PRINCIPALS: ${{ inputs.principals }}
           IDS_FILE: ${{ github.workspace }}/deploy/mainnet/.icp/data/mappings/ic.ids.json
           IDL_FILE: /tmp/icp-run/identity_access.did.js
+          CLUB_IDL_FILE: /tmp/icp-run/club_domain.did.js
+          G2_FILE: ${{ github.workspace }}/deploy/groups/g2/provision.json
         run: |
           set -euo pipefail
           if [ -z "$DEPLOYER_PEM" ]; then echo "::error::DEPLOYER_PEM secret is not set."; exit 1; fi
           cp scripts/diagnose-account.mjs /tmp/icp-run/
           cp frontend/src/lab/generated-contracts/identity_access/declarations/identity_access.did.js /tmp/icp-run/
+          cp frontend/src/lab/generated-contracts/club_domain/declarations/club_domain.did.js /tmp/icp-run/
           node /tmp/icp-run/diagnose-account.mjs
