@@ -110,6 +110,19 @@ describe("HomeDashboardOverview", () => {
     expect(props.onOpenVault).toHaveBeenCalledTimes(3);
   });
 
+  it("greets with the first name once known", () => {
+    renderOverview({ firstName: "Alex" });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Welcome, Alex!");
+  });
+
+  it("omits the name from the greeting while the encrypted name is still unlocking", () => {
+    renderOverview({ firstName: "" });
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toContain("Welcome!");
+    expect(heading.textContent).not.toContain("Welcome,");
+    expect(heading.textContent).not.toContain("…");
+  });
+
   it("keeps the loading skeleton until child content is ready", () => {
     const { props } = renderOverview({ showContent: false });
     expect(screen.getByText("Dashboard loading")).toBeInTheDocument();
