@@ -331,3 +331,48 @@ export async function selectCachedProfileById(
 }
 
 
+
+// ---------- Club-scoped names ----------
+// Other people's protected names unlock only through a club both people share.
+// Those names are kept out of the shared cache above (memory-only, per club).
+
+/** Like fetchProfilesWithCache, but fills protected names through `clubId`. */
+export async function fetchClubProfilesWithCache(
+  clubId: string | null | undefined,
+  ids: readonly string[],
+  opts: { allowStale?: boolean; timeout?: number } = {},
+): Promise<Map<string, CachedProfile>> {
+  const base = await fetchProfilesWithCache(ids, opts);
+  if (!clubId) return base;
+  const unnamed = Array.from(new Set(ids.filter(Boolean))).filter((id) => !base.get(id)?.display_name);
+  if (unnamed.length === 0) return base;
+  try {
+    const rows = await withTimeout(withFeatureBackend("membership", {
+      supabase: async () => [] as Array<{ account_id: string; display_name: string | null; avatar_ref: [] | [string] }>,
+      icp: async (ctx) => {
+        const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
+        return listLiveProfilesByIds(ctx, unnamed, { clubId });
+      },
+    }, { clubId }), opts.timeout ?? DEFAULT_TIMEOUT_MS, []);
+    const merged = new Map(base);
+    for (const row of rows) {
+      if (!row.display_name) continue;
+      const prev = merged.get(row.account_id);
+      merged.set(row.account_id, { id: row.account_id, display_name: row.display_name, avatar_url: prev?.avatar_url ?? row.avatar_ref?.[0] ?? null });
+    }
+    return merged;
+  } catch {
+    return base;
+  }
+}
+
+/** Club-scoped variant of selectCachedProfilesByIds. */
+export async function selectCachedClubProfilesByIds(
+  clubId: string | null | undefined,
+  ids: readonly (string | null | undefined)[],
+): Promise<CachedProfileResult<CachedProfile[]>> {
+  const clean = ids.filter((v): v is string => typeof v === "string" && v.length > 0);
+  if (clean.length === 0) return { data: [], error: null };
+  const map = await fetchClubProfilesWithCache(clubId, clean);
+  return { data: Array.from(map.values()), error: null };
+}
