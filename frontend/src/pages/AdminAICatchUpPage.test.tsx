@@ -52,6 +52,6 @@ describe("ICP AI recap administration", () => {
   it("reports failed reads rather than empty defaults", async () => {
     m.get.mockRejectedValue(new Error("Connection failed")); m.clubs.mockRejectedValue(new Error("Club read failed")); open();
     expect(await screen.findByText("Could not load rollout setting: Connection failed")).toBeInTheDocument();
-    expect(await screen.findByText("Could not load Pro clubs: Club read failed")).toBeInTheDocument(); expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(await screen.findByText("Could not load Pro clubs right now (Club read failed).")).toBeInTheDocument(); expect(screen.queryByRole("switch")).not.toBeInTheDocument();
   });
 });

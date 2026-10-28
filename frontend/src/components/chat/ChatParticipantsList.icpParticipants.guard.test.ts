@@ -35,6 +35,6 @@ describe("chat participants in ICP mode", () => {
   });
 
   it("resolves member names through the identity_access profile lookup", () => {
-    expect(source).toContain("listLiveProfilesByIds(ctx, ids)");
+    expect(source).toContain("listLiveProfilesByIds(ctx, ids, resolvedClubId ? { clubId: resolvedClubId } : undefined)");
   });
 });

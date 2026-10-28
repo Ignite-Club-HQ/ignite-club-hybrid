@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
-vi.mock('@/lib/profileCache', () => ({ fetchProfilesWithCache: mocks.fetch }));
+vi.mock('@/lib/profileCache', () => ({ fetchClubProfilesWithCache: (_club: unknown, ids: string[]) => mocks.fetch(ids) }));
 import { roleMemberProfiles } from './roleMemberProfiles';
 
 describe('role member display profiles', () => {
