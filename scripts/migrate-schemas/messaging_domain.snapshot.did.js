@@ -8,6 +8,11 @@
 
 
 export const idlFactory = ({ IDL }) => {
+  const Request = IDL.Record({
+    'inventory_digest' : IDL.Vec(IDL.Nat8),
+    'generation' : IDL.Nat64,
+    'operation_id' : IDL.Text,
+  });
   const GroupMetadata = IDL.Record({
     'deleted' : IDL.Bool,
     'members' : IDL.Vec(IDL.Principal),
@@ -172,7 +177,7 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'hide_message_preview' : IDL.Bool,
   });
-  const Receipt__1 = IDL.Record({
+  const Receipt__2 = IDL.Record({
     'conversation_id' : IDL.Text,
     'read' : IDL.Bool,
     'user' : IDL.Principal,
@@ -216,7 +221,7 @@ export const idlFactory = ({ IDL }) => {
     'attachmentMetadata' : IDL.Vec(AttachmentMetadata),
     'dmLinks' : IDL.Vec(DmLink),
     'userMessagingSettings' : IDL.Vec(UserMessagingSettings),
-    'receipts' : IDL.Vec(Receipt__1),
+    'receipts' : IDL.Vec(Receipt__2),
     'reactions' : IDL.Vec(Reaction),
     'roles' : IDL.Vec(RoleGrant),
     'competitionAdmins' : IDL.Vec(CompetitionAdmin),
@@ -263,7 +268,7 @@ export const idlFactory = ({ IDL }) => {
     'kind' : IDL.Text,
     'count' : IDL.Nat64,
   });
-  const Request = IDL.Record({
+  const Request__1 = IDL.Record({
     'account_id' : IDL.Text,
     'inventory_digest' : IDL.Vec(IDL.Nat8),
     'subjects' : IDL.Vec(IDL.Principal),
@@ -277,7 +282,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Receipt = IDL.Record({
     'outstanding' : IDL.Nat,
-    'request' : Request,
+    'request' : Request__1,
     'receiver' : IDL.Principal,
   });
   const ClubUnreadSummary = IDL.Record({
@@ -295,6 +300,20 @@ export const idlFactory = ({ IDL }) => {
     'references' : IDL.Vec(Reference),
     'next' : IDL.Opt(IDL.Nat),
     'scanned' : IDL.Nat,
+    'revision' : IDL.Nat,
+  });
+  const Receipt__1 = IDL.Record({
+    'active' : IDL.Nat,
+    'request' : Request,
+    'sealed' : IDL.Bool,
+    'closing' : IDL.Bool,
+    'receiver' : IDL.Principal,
+  });
+  const Batch = IDL.Record({
+    'requester' : IDL.Principal,
+    'members' : IDL.Vec(IDL.Bool),
+    'subjects' : IDL.Vec(IDL.Principal),
+    'club' : IDL.Text,
     'revision' : IDL.Nat,
   });
   const HttpHeader = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
@@ -378,6 +397,11 @@ export const idlFactory = ({ IDL }) => {
     'polls' : IDL.Opt(IDL.Vec(Poll)),
   });
   const Main = IDL.Service({
+    'activate_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -523,9 +547,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : LinkPreview, 'Err' : IDL.Text })],
         [],
       ),
+    'finish_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'forward_message' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
+        [],
+      ),
+    'freeze_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'generate_chat_recap' : IDL.Func(
@@ -648,6 +682,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'list_blocked_users' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
+    'list_broadcast_message_readers' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt__2), 'Err' : IDL.Text })],
+        [],
+      ),
     'list_club_admin_threads' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(IDL.Record({ 'id' : IDL.Text, 'member' : IDL.Principal }))],
@@ -747,7 +786,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'list_read_receipts' : IDL.Func(
         [IDL.Text],
-        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt__1), 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt__2), 'Err' : IDL.Text })],
         [],
       ),
     'list_typing' : IDL.Func(
@@ -757,7 +796,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'mark_read' : IDL.Func(
         [IDL.Text, IDL.Text],
-        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : Receipt__2, 'Err' : IDL.Text })],
         [],
       ),
     'memory_stats' : IDL.Func(
@@ -799,11 +838,17 @@ export const idlFactory = ({ IDL }) => {
             'Ok' : IDL.Record({
               'page' : MessagePage,
               'pins' : IDL.Opt(IDL.Vec(PinnedMessage)),
+              'polls' : IDL.Vec(PollResults),
               'reactions' : IDL.Vec(Reaction),
             }),
             'Err' : IDL.Text,
           }),
         ],
+        [],
+      ),
+    'open_private_name_writer_window' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'pin_message' : IDL.Func(
@@ -812,7 +857,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'prepare_account_removal' : IDL.Func(
-        [Request],
+        [Request__1],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -994,7 +1039,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'read_account_list_read_receipts' : IDL.Func(
         [IDL.Text],
-        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt__1), 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt__2), 'Err' : IDL.Text })],
         [],
       ),
     'read_account_list_typing' : IDL.Func(
@@ -1029,6 +1074,7 @@ export const idlFactory = ({ IDL }) => {
             'Ok' : IDL.Record({
               'page' : MessagePage,
               'pins' : IDL.Opt(IDL.Vec(PinnedMessage)),
+              'polls' : IDL.Vec(PollResults),
               'reactions' : IDL.Vec(Reaction),
             }),
             'Err' : IDL.Text,
@@ -1047,7 +1093,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'read_account_removal_drain' : IDL.Func(
-        [Request],
+        [Request__1],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
@@ -1079,6 +1125,31 @@ export const idlFactory = ({ IDL }) => {
     'read_group_opening_configuration' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+        [],
+      ),
+    'read_private_name_preparation' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_private_name_writer_window' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : Receipt__1, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_profile_broadcast_batch' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Batch, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_profile_competition_admin_batch' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Batch, 'Err' : IDL.Text })],
+        [],
+      ),
+    'read_profile_direct_batch' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Vec(IDL.Principal), IDL.Opt(IDL.Nat)],
+        [IDL.Variant({ 'Ok' : Batch, 'Err' : IDL.Text })],
         [],
       ),
     'read_vault_chat_access' : IDL.Func(
@@ -1173,8 +1244,13 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'seal_account_removal' : IDL.Func(
-        [Request],
+        [Request__1],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'seal_private_name_writer_window' : IDL.Func(
+        [Request],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'search_messages' : IDL.Func(
