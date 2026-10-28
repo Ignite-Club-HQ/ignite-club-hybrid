@@ -158,7 +158,11 @@ export default function PlayerOfMatchSelector({
             children: isChild ? { id: rawId, name } : null,
           } as any;
         },
-      }, { eventId: eventId }),
+      }, clubId ? { clubId } : { eventId: eventId }),
+    // The owning club is already known: routing by it skips event discovery
+    // across every group, which made this card spin for many seconds.
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const playerOfMatchDisplay = useMemo(() => {
@@ -664,9 +668,16 @@ export default function PlayerOfMatchSelector({
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="p-4 flex justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <Card className="border-amber-500/30 bg-amber-500/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Trophy className="h-5 w-5 text-amber-500" />
+            Player of the Match
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Checking…
         </CardContent>
       </Card>
     );

@@ -1700,7 +1700,7 @@ export default function EventDetailPage() {
         const res = await withFeatureBackend("events", {
           supabase: async () => null as any,
           icp: async (ctx) => (await import("@/live/features/events")).getLiveGameResult(ctx, id!) as Promise<any>,
-        }, { eventId: id! }).catch(() => null);
+        }, event?.club_id ? { clubId: event.club_id } : { eventId: id! }).catch(() => null);
         const r = Array.isArray(res) ? res[0] : res;
         const mvp = r ? (Array.isArray(r.mvp_player_id) ? r.mvp_player_id[0] : r.mvp_player_id) : null;
         return mvp ? { user_id: mvp as string, child_id: mvp as string } : null;
