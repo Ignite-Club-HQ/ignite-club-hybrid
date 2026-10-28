@@ -18,6 +18,10 @@ on:
         description: "Type yes to merge when the new ID already has data"
         required: false
         default: "yes"
+      skip_services:
+        description: "Services to leave untouched, comma separated (e.g. g1 club_points_domain)"
+        required: false
+        default: ""
       confirm:
         description: "Type yes to actually move (otherwise dry run)"
         required: false
@@ -48,6 +52,7 @@ jobs:
           NEW_PRINCIPAL: ${{ inputs.new_principal }}
           CONFIRM: ${{ inputs.confirm }}
           MERGE: ${{ inputs.merge }}
+          SKIP_SERVICES: ${{ inputs.skip_services }}
           IDS_FILE: ${{ github.workspace }}/deploy/mainnet/.icp/data/mappings/ic.ids.json
           GROUP_FILES: ${{ github.workspace }}/deploy/groups/g2/provision.json
         run: |

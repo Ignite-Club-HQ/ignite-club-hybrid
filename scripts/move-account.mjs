@@ -78,9 +78,15 @@ for (const g of extraGroups) for (const name of CANISTERS.filter((n) => n !== "i
   if (g.ids[name]) TARGETS.push({ name, label: `${g.label} ${name}`, canisterId: g.ids[name] });
 }
 TARGETS.push({ name: "identity_access", label: "identity_access", canisterId: ids.identity_access });
+// Optional: leave named services untouched (e.g. "g1 club_points_domain"); their
+// records stay saved under the old ID and can be merged later. identity_access cannot be skipped.
+const skip = new Set((process.env.SKIP_SERVICES || "").split(",").map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean));
+if (skip.has("identity_access")) throw new Error("identity_access cannot be skipped");
+for (const t of TARGETS) if (skip.has(t.label)) t.skip = true;
 
 async function call(target, dryRun) {
   const { name: kind, label: name, canisterId } = target;
+  if (target.skip) return { name, skipped: "skipped on request; records stay under the old ID" };
   if (!canisterId) return { name, skipped: "no canister id" };
   const actor = Actor.createActor(kind === "identity_access" ? rustIdl : motokoIdl, { agent, canisterId });
   try {
