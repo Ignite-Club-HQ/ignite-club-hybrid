@@ -1,3 +1,7 @@
+## Retained keys for child, guest and Player-of-the-Match names — 28 October 2026
+- [x] Verified the shared child/guest/Player-of-the-Match reader already uses retained keys: the earlier claim that those reads force fresh derivation was incorrect. Added read-path tests confirming 30-day retention across sign-out, updated ciphertext display, revoked-access refusal and derivation after expiry; all 92 focused regressions pass. Fresh write checks and adult audience restrictions remain unchanged.
+- [ ] Deploy web app and confirm on a real signed-in test club; no backend upgrade is required for this caching change.
+
 ## Invite emails without storing addresses — 28 October 2026
 - [x] Club service sends invite emails through Resend once and keeps no address; app warns admins if a send fails.
 - [ ] Paul: add GitHub secret RESEND_API_KEY (send-only Resend key).
