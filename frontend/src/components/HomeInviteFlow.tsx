@@ -50,11 +50,18 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+    retry: 1,
     queryFn: async () => {
       if (isFeatureRoutedToIcp("membership")) {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("Internet Identity required"); },
-          icp: async ctx => (await import("@/live/leagueInviteTargets")).readLiveInviteTargets(ctx),
+          icp: async ctx => {
+            // Never hold the sheet open indefinitely on a slow service.
+            const read = (await import("@/live/leagueInviteTargets")).readLiveInviteTargets(ctx);
+            const timeout = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("Invite places took too long to load.")), 25_000));
+            return Promise.race([read, timeout]);
+          },
         }, { shared: "person" });
       }
       const { data: roles } = await supabase
