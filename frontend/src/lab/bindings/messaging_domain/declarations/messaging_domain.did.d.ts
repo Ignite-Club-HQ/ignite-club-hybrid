@@ -724,6 +724,7 @@ export interface Main {
         'Ok' : {
           'page' : MessagePage,
           'pins' : [] | [Array<PinnedMessage>],
+          'polls' : Array<PollResults>,
           'reactions' : Array<Reaction>,
         }
       } |
