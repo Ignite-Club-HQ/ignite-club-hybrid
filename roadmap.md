@@ -8,6 +8,7 @@
 - [x] Real disposable two-group acceptance passes: linked discovery, roster access, club/team edits, unchanged stored owners, unrelated caller/club/team denial, suspension, authority outage, club-only removal and unlink. Existing real two-group interrupted unlink/upgrade/relink acceptance also passes; 188 identity tests, 17 cross-group frontend tests and Motoko rules pass; ICP guards and preview OK.
 - [x] Released via `full_backend` run 40632764493 (success).
 - [ ] Clubs still blank: every Paul club lives on original Group 1, whose club service runs with account linking switched off (lifecycle settings disabled), so linked recognition never activates there. Waiting on Paul: move access to current sign-in (existing Move account workflow) or enable Group 1 linking (larger release).
+- [ ] Group 2 clubs also missing for current sign-in despite linking enabled there; investigate discovery (directory lookup / per-group reads).
 
 ## Internet Identity forced email switch — 28 October 2026
 - [x] Confirmed screenshot's toast originates in ClubBackendEnforcement: it remapped canister club countries through email defaults after successful II sign-in. Confirmed ICP accounts now retain their provider and authorized memberships without that inference; email-mode routing is unchanged.
