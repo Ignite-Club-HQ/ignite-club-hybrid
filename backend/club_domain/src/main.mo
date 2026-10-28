@@ -647,6 +647,9 @@ persistent actor class Main(governorInit : Principal) = this {
       or removedMembers.any(func(member) = member.user == p and member.club == club))
   };
   func membershipAliases(subject : Principal) : [Principal] {
+    // Explicit relinking is not permission to resurrect this login's deleted
+    // club grants. It may use newly granted exact-principal roles only.
+    if (identityUnlinkReceipts.any(func r = r.1 == subject)) return if (removalReceiver.denied(subject) or subject.isAnonymous()) [] else [subject];
     LinkedMembership.aliases(subject, linkedMembershipSnapshots.get(subject), PrimMem.isReplicatedExecution(), Time.now(), removalReceiver.denied)
   };
   func ownsMembershipPrincipal(subject : Principal, stored : Principal) : Bool {
