@@ -52,6 +52,7 @@ import ProfileMembership "profileMembership";
 import PrivateNameCleanup "../../shared/PrivateNameCleanup";
 import TeamInviteScope "teamInviteScope";
 import LinkedMembership "linkedMembership";
+import PiiAudience "piiAudience";
 
 persistent actor class Main(governorInit : Principal) = this {
   // Local rehearsal only. Eligibility never grants resource permissions.

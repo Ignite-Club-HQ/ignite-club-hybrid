@@ -1065,6 +1065,41 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   };
 
+  // Shared audience keys for children's names (club), guest/fill-in/POTM
+  // names (team) and role-restricted Vault files. The club service decides
+  // membership; checked before derivation and again after it.
+  public shared ({ caller }) func get_shared_audience_vetkey(
+    kind : Text, scope : Text, transport_public_key : Blob
+  ) : async { #Ok : Blob; #Err : Text } {
+    if (not removalReceiver.enter(caller)) Runtime.trap("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(caller);
+    auth(caller);
+    let prefix = if (kind == "clubchildren") "clubchildren:" else if (kind == "teamnames") "teamnames:" else if (kind == "vaultrole") "vaultrole:" else return #Err("Invalid audience");
+    if (scope == "" or scope.size() > 512) return #Err("Invalid audience scope");
+    if (transport_public_key.size() != 48) return #Err("Invalid transport key");
+    let configured = club_domain_canister;
+    let cid = switch (configured) { case (?id) id; case null return #Err("Club authority unavailable") };
+    let clubDomain : actor { read_has_pii_audience : shared (Principal, Text, Text) -> async Bool } = actor (cid.toText());
+    let ask = func() : async Bool {
+      if (isGovernor(caller)) return true;
+      try { await (with timeout = 10) clubDomain.read_has_pii_audience(caller, kind, scope) } catch (_) { false }
+    };
+    let pii_id = prefix # scope;
+    let allowed = await ask();
+    log_audit(caller, pii_id, "shared", "vetkey_derive", allowed, "Shared audience vetKey derivation");
+    if (not allowed or club_domain_canister != configured) return #Err("Not in this audience");
+    let encryptedKey = await ManagementCanister.vetKdDeriveKey(
+      ibeIdentity(pii_id, "shared"), vetkdContext(), vetkdKeyId<system>(), transport_public_key
+    );
+    await admitAccount(caller);
+    if (not (await ask())) return #Err("Audience membership changed");
+    if (club_domain_canister != configured) return #Err("Club authority changed");
+    #Ok(encryptedKey)
+    } finally { removalReceiver.leave(caller) };
+  };
+
+
   // ==================== Public Methods ====================
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
