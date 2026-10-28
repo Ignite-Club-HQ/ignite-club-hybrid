@@ -1351,9 +1351,13 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   // Only a cached profile WITH a name counts as resolved: a cached "no profile
   // yet" can be stale (saved elsewhere since) and would bounce an existing
   // member to profile setup before the canister answers.
+  // A cached existing profile whose name is encrypted (the decrypted name is
+  // never stored) also counts: resuming the app must not block on the
+  // network name unlock. A cached "no profile yet" still waits.
   const [icpProfileResolved, setIcpProfileResolved] = useState(() =>
-    Boolean(principal && getCachedIcpIdentityProfile(principal)?.displayName),
+    Boolean(principal && knownCachedIcpProfile(getCachedIcpIdentityProfile(principal))),
   );
+  const [icpNamePending, setIcpNamePending] = useState(false);
   // True when the profile could not be loaded AND there is no cache to render
   // from. Drives the "unable to load / retry" screen instead of an endless
   // spinner or a wrong redirect to profile completion.
@@ -1388,7 +1392,8 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     }
     const cached = getCachedIcpIdentityProfile(principal);
     setIcpProfile(cached);
-    setIcpProfileResolved(Boolean(cached?.displayName));
+    setIcpProfileResolved(knownCachedIcpProfile(cached));
+    setIcpNamePending(Boolean(cached && !cached.displayName && knownCachedIcpProfile(cached)));
     setIcpProfileError(false);
     const requestId = ++icpProfileRequestRef.current;
     let cancelled = false;
@@ -1415,6 +1420,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
         const fetched = await withIcpTimeout(fetchIcpIdentityProfile(identity, principal), 45000);
         if (!cancelled && icpProfileRequestRef.current === requestId) {
           setIcpProfile(fetched);
+          setIcpNamePending(false);
           setIcpProfileResolved(true);
           setIcpProfileError(false);
         }
@@ -1422,7 +1428,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
         console.warn("[Auth] ICP identity profile fetch failed:", error);
         // Keep rendering from cache when there is one; with no cache, surface
         // the retry screen (AppLayout auto-retries via refreshProfile()).
-        if (!cancelled && icpProfileRequestRef.current === requestId && !getCachedIcpIdentityProfile(principal)?.displayName) {
+        if (!cancelled && icpProfileRequestRef.current === requestId && !knownCachedIcpProfile(getCachedIcpIdentityProfile(principal))) {
           setIcpProfileResolved(true);
           setIcpProfileError(true);
         }
@@ -1454,11 +1460,12 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   const profileHidden = icpProfileError && !icpProfile?.displayName;
   const profile = useMemo(() => principal && !profileHidden ? {
     id: principal,
-    display_name: icpDisplayName,
+    // Placeholder only while a known existing profile's private name unlocks.
+    display_name: icpDisplayName ?? (icpNamePending ? "…" : null),
     avatar_url: icpAvatarRef,
     ignite_points: 0,
     theme_preference: null,
-  } : null, [principal, profileHidden, icpDisplayName, icpAvatarRef]);
+  } : null, [principal, profileHidden, icpDisplayName, icpAvatarRef, icpNamePending]);
   // Preload the Internet Identity module and eagerly construct its auth
   // client as soon as this provider mounts (well before the user can click
   // sign-in). The signer transport used by `client.signIn()` only allows
@@ -1681,4 +1688,10 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     decrementUnreadCount: () => {},
   } satisfies AuthContextType;
   return <AuthContext.Provider value={value}>{signingOut ? null : children}</AuthContext.Provider>;
+}
+
+/** An existing account the device has seen before: either a readable name or
+ * a confirmed (encrypted-name) profile. Never a cached "no profile yet". */
+function knownCachedIcpProfile(cached: { displayName: string | null; profileMissing: boolean; accountId: string } | null): boolean {
+  return !!cached && (!!cached.displayName || (!cached.profileMissing && !!cached.accountId));
 }
