@@ -47,7 +47,7 @@ async function prepareOwnField(ctx: FeatureBackendContext, field: "contact_email
   active();
   await unwrapCandid(actor.register_pii(subject, field, ciphertext, ctx.identity.getPrincipal()), "Save private profile field");
   active();
-  const values = await readNames(ctx, [subject], field, active);
+  const values = await readNames(ctx, [subject], field, active, undefined, field === FIELD);
   active();
   if (values.get(subject) !== value) throw new Error("Private profile readback was not confirmed.");
   return field === FIELD ? privateProfileNameReference(authority, subject) : `pii-email:v1:${authority}:${subject}`;
@@ -76,8 +76,9 @@ function parseReference(value: string): { authority: string; subject: string } |
 }
 
 /** Own-profile reopening is required data, not optional roster enrichment.
- * Preserve the original owner/authority and give fresh key derivation time to
- * finish; never turn a denied read into an absent profile. */
+ * Preserve the original owner/authority and give key derivation time to
+ * finish on a device without a saved key copy; never turn a denied read into
+ * an absent profile. */
 export async function readPrivateOwnProfileName(ctx: FeatureBackendContext, reference: string): Promise<string> {
   const ref = reference.startsWith(PREFIX) ? parseReference(reference) : null;
   if (!ref || ref.authority !== ctx.target.canisterIds.pii_access_control) throw new Error('Saved private-name authority does not match the configured original authority.');
@@ -96,7 +97,7 @@ export async function readPrivateOwnProfileName(ctx: FeatureBackendContext, refe
   const guard = () => { if (retired) throw new Error('Private profile read retired.'); active(); };
   try {
     const names = await Promise.race([
-      readNames(ctx, [ref.subject], FIELD, guard),
+      readNames(ctx, [ref.subject], FIELD, guard, undefined, ref.subject === caller),
       new Promise<never>((_, reject) => { timer = setTimeout(() => { retired = true; reject(new Error('Private display name unlock timed out.')); }, 30000); }),
     ]);
     guard();
@@ -210,7 +211,7 @@ export async function refreshPrivateOwnClubNames(
   }
 }
 
-async function readNames(ctx: FeatureBackendContext, subjects: string[], field = FIELD, active: () => void = () => {}, audience?: PrivateProfileAudience): Promise<Map<string, string>> {
+async function readNames(ctx: FeatureBackendContext, subjects: string[], field = FIELD, active: () => void = () => {}, audience?: PrivateProfileAudience, retainOwnKey = false): Promise<Map<string, string>> {
   active();
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   active();
@@ -227,7 +228,7 @@ async function readNames(ctx: FeatureBackendContext, subjects: string[], field =
   const clubRows = validRows.filter(row => row.master_key_id?.startsWith('vetkey-club-names-'));
   if (clubRows.length && (!audience || audience.kind !== 'club' || field !== FIELD || clubRows.some(row => row.master_key_id !== `${CLUB_NAME_SCHEME_PREFIX}${audience.resource}`))) throw new Error('Invalid club name key scope.');
   const individualRows = validRows.filter(row => !clubRows.includes(row));
-  const keys = individualRows.length ? await fetchPiiVetKeys(ctx, individualRows.map(row => row.pii_id), field, { fresh: true, assertActive: active, ...(audience ? { audience } : {}) }) : new Map();
+  const keys = individualRows.length ? await fetchPiiVetKeys(ctx, individualRows.map(row => row.pii_id), field, { fresh: true, assertActive: active, ...(audience ? { audience } : {}), ...(retainOwnKey && !audience ? { retainOwnKey: true } : {}) }) : new Map();
   const clubKey = clubRows.length && audience ? await fetchClubNameVetKey(ctx, clubRows.map(row => row.pii_id), audience, active) : undefined;
   if (audience && keys.size + (clubKey ? clubRows.length : 0) !== validRows.length) throw new Error('Private-name keys were not authorized.');
   active();
