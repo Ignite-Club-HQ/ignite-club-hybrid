@@ -368,9 +368,11 @@ async function fetchIcpChatGroupsWithMessages() {
   await Promise.all(liveClubs.filter((c) => adminClubIds.has(c.id)).map(async (c) => {
     try {
       const failed = await readContentInScope(ctx, "messaging", { clubId: c.id }, (scoped) => ensureLiveDefaultClubChats(scoped, c.id));
-      failed.forEach((f) => { const i = f.indexOf(': '); setupErrors.push(`${c.name} – ${i > 0 ? f.slice(0, i) : 'chat'}: ${friendly(i > 0 ? f.slice(i + 2) : f)}`); });
+      // Default Coaches/Team Admins/Committee top-up is background upkeep:
+      // it retries next session and must not alarm admins whose chats work.
+      if (failed.length) console.warn("[inbox] default club chat upkeep incomplete", { club: c.id, failed });
     } catch (err) {
-      setupErrors.push(`${c.name}: ${friendly(err)}`);
+      console.warn("[inbox] default club chat upkeep failed", { club: c.id, error: err instanceof Error ? err.message : String(err) });
     }
   }));
   const perClub = await Promise.all(liveClubs.map(async (club) => {
