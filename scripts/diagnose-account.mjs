@@ -57,6 +57,8 @@ for (const t of texts) {
 const groups = [["g1", ids.club_domain]];
 try { const g2 = JSON.parse(readFileSync(process.env.G2_FILE, "utf8")); const c = g2.canisters?.club_domain ?? g2.club_domain; if (typeof c === "string") groups.push(["g2", c]); } catch {}
 const { idlFactory: clubIdl } = await import(process.env.CLUB_IDL_FILE);
+let router = null;
+try { const { idlFactory: routerIdl } = await import(process.env.ROUTER_IDL_FILE); router = Actor.createActor(routerIdl, { agent, canisterId: ids.shard_router }); } catch { console.log("Router check unavailable"); }
 for (const [g, canisterId] of groups) {
   const club = Actor.createActor(clubIdl, { agent, canisterId });
   console.log(`\n=== Club service ${g} (${canisterId})`);
@@ -70,6 +72,26 @@ for (const [g, canisterId] of groups) {
     const mine = a.Ok.acl.roles.filter((r) => texts.includes(r.user.toText()));
     console.log(`Role grants for these sign-in IDs: ${mine.length}`);
     for (const r of mine) console.log(json({ user: r.user.toText().slice(0, 5), role: r.role, club: names.get(r.club[0]) ?? r.club[0] ?? null, team: r.team[0] ?? null }));
+    // What the app's club lookup sees for each sign-in ID (read-only).
+    const acl = a.Ok.acl;
+    for (const t of texts) {
+      const own = (p) => p?.toText?.() === t;
+      const appWide = acl.roles.some((r) => own(r.user) && r.club.length === 0);
+      const direct = new Set(acl.roles.filter((r) => own(r.user) && r.club.length).map((r) => r.club[0]));
+      const kids = acl.children.filter((c) => own(c.parent[0]) || acl.guardians.some((g) => g.child === c.id && own(g.user)));
+      const excluded = acl.exclusions.filter((e) => own(e.user)).map((e) => names.get(e.club) ?? e.club);
+      console.log(json({ signIn: t.slice(0, 5), appWideRole: appWide, clubsByRole: [...direct].map((c) => names.get(c) ?? c), familyChildren: kids.length, excludedFrom: excluded }));
+    }
+    try { const st = await club.read_membership_discovery_status(); console.log(`Lookup change status: ${json(st)}`); } catch (e) { console.log(`Lookup status read failed: ${String(e?.message ?? e).slice(0, 200)}`); }
+    if (router) {
+      const ownerClubs = new Set(acl.roles.filter((r) => texts.some((t) => r.user.toText() === t) && r.club.length).map((r) => r.club[0]));
+      for (const id of ownerClubs) {
+        try { const ga = await router.get_group_assignment(id); console.log(`Directory entry ${names.get(id) ?? id}: ${json(ga.Ok?.[0] ?? ga.Err ?? "MISSING")}`); }
+        catch (e) { console.log(`Directory read ${id} failed: ${String(e?.message ?? e).slice(0, 200)}`); }
+      }
+    }
   } catch (e) { console.log(`Read failed: ${String(e?.message ?? e).slice(0, 300)}`); }
 }
+try { const dc = await actor.read_membership_directory_configuration(); console.log(`\nShared lookup configuration: ${json(dc.Ok ? { enabled: dc.Ok.enabled, appEnabled: dc.Ok.app_enabled, generation: dc.Ok.generation, sources: dc.Ok.sources } : dc)}`); }
+catch (e) { console.log(`Shared lookup configuration read failed: ${String(e?.message ?? e).slice(0, 200)}`); }
 console.log(`\nTotal accounts: ${s.accounts.length}. Nothing was changed.`);
