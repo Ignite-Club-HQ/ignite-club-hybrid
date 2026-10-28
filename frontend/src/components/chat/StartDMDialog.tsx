@@ -489,7 +489,25 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
     staleTime: 2 * 60 * 1000,
   });
 
-  const dmableUsers = dmData?.users || [];
+  // Show members straight away, then fill in their protected names for this club.
+  const icpNameIds = useMemo(
+    () => (isIcpMessaging ? (dmData?.users ?? []).map((u) => u.id) : []),
+    [dmData?.users, isIcpMessaging],
+  );
+  const { data: icpNames } = useQuery({
+    queryKey: ["dm-candidate-names", user?.id, activeClubFilter, icpNameIds.join(",")],
+    enabled: isIcpMessaging && !!activeClubFilter && icpNameIds.length > 0,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: ({ signal }) => withFeatureBackend("messaging", {
+      supabase: async () => new Map<string, string>(),
+      icp: async (ctx) => (await import("@/live/clubScopedNames")).unlockClubScopedNames(ctx, activeClubFilter!, icpNameIds, signal),
+    }, { clubId: activeClubFilter! }),
+  });
+  const dmableUsers = useMemo(
+    () => (dmData?.users || []).map((u) => (icpNames?.get(u.id) ? { ...u, display_name: icpNames.get(u.id)! } : u)),
+    [dmData?.users, icpNames],
+  );
   const availableClubs = dmData?.clubs || [];
   const availableTeams = dmData?.teams || [];
 
