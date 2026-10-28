@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { withReadDeadline } from "@/live/readDeadline";
 import { getOrCreateLiveDm } from "@/live/features/messaging";
 import { fetchLiveMessagingCandidates } from "@/live/messagingCandidates";
 import { Principal } from "@icp-sdk/core/principal";
@@ -294,11 +295,13 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
   });
 
   // Fetch users that can be DMed (members of shared Pro clubs + mini-league parents) excluding app admins
-  const { data: dmData, isLoading: loadingUsers } = useQuery({
+  const { data: dmData, isLoading: loadingUsers, isError: usersError, refetch: refetchUsers } = useQuery({
     queryKey: ["dmable-users-with-filters", user?.id, activeClubFilter, isIcpMessaging],
-    queryFn: async () => {
+    // A stalled club read must end with a retry option, never spin forever.
+    retry: isIcpMessaging ? 1 : 3,
+    queryFn: async ({ signal }) => {
       if (isIcpMessaging) {
-        return withFeatureBackend("messaging", {
+        return withReadDeadline(withFeatureBackend("messaging", {
           supabase: async () => ({ users: [] as DMableUser[], clubs: [] as ClubInfo[], teams: [] as TeamInfo[] }),
           icp: async (ctx) => {
             if (!activeClubFilter) return { users: [] as DMableUser[], clubs: [] as ClubInfo[], teams: [] as TeamInfo[] };
@@ -317,7 +320,7 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
             }));
             return { users, clubs: [] as ClubInfo[], teams: [] as TeamInfo[] };
           },
-        }, { clubId: activeClubFilter ?? "" });
+        }, { clubId: activeClubFilter ?? "" }), "Club members", 20_000, signal);
       }
       // Get Pro clubs user is a member of
       const { data: userRoles } = await supabase
@@ -1091,6 +1094,11 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
                   {loadingUsers && filteredUsers.length === 0 ? (
                     <div className="flex justify-center py-8">
                       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : usersError && filteredUsers.length === 0 ? (
+                    <div className="py-8 text-center text-muted-foreground space-y-2">
+                      <p>Couldn't load club members just now.</p>
+                      <Button size="sm" variant="outline" onClick={() => void refetchUsers()}>Try again</Button>
                     </div>
                   ) : filteredUsers.length === 0 ? (
                     <div className="py-8 text-center text-muted-foreground">
