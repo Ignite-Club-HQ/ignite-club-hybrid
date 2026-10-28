@@ -1,0 +1,17 @@
+import Policy "../src/linkedMembership";
+import Principal "mo:core/Principal";
+let browser = Principal.fromText("mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe");
+let app = Principal.fromText("tavrz-s2z7n-5jkdv-dpho3-pvd3c-yog77-euqar-egkuv-xbzei-ftw3d-eqe");
+let outsider = Principal.fromText("2ibo7-dia");
+let snapshot = ?{ account = { id = "same-account"; principals = [browser, app]; version = 4 : Nat64; status = #Active }; observed = 100 : Int };
+let none = func(p : Principal) : Bool { false };
+assert Policy.aliases(browser, snapshot, true, 100, none) == [browser, app];
+assert Policy.aliases(app, snapshot, true, 100, none) == [browser, app];
+assert Policy.aliases(outsider, snapshot, true, 100, none) == [outsider];
+assert Policy.aliases(browser, snapshot, false, 100, none) == [browser];
+assert Policy.aliases(browser, snapshot, true, 101, none) == [browser];
+assert Policy.aliases(browser, snapshot, true, 100, func p = p == browser) == [];
+assert Policy.aliases(browser, snapshot, true, 100, func p = p == app) == [browser];
+let suspended = ?{ account = { id = "same-account"; principals = [browser, app]; version = 5 : Nat64; status = #Suspended }; observed = 100 : Int };
+assert Policy.aliases(browser, suspended, true, 100, none) == [browser];
+assert Policy.aliases(Principal.anonymous(), snapshot, true, 100, none) == [];
