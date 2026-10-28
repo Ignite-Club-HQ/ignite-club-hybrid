@@ -28,6 +28,8 @@ Filters are ANDed; supported operators are eq/ne/gt/gte/lt/lte/contains (case-se
 
 ## Permissions
 
+- Requested plugin policy (2026-10-28): state-changing plugin tools are for verified Paul Cranwell or accounts with the platform `app_admin` role only; other callers may read only resources their existing permissions authorize. This policy is **not implemented** by the current direct-canister integration.
+- ICP MCP derives the same application principal as the ordinary UI and calls the advertised domain methods directly. Those handlers receive no trusted plugin-origin distinction. Adding an owner/admin check to them would also restrict normal UI writes; documentation, a caller-supplied agent flag or a new wrapper while direct domain calls remain advertised cannot enforce a plugin-only boundary. Establish a supported authenticated agent boundary before enabling this policy, verify the current owner identity (not a name or assumed governor), and preserve every operation's existing authorization.
 - Anonymous execute calls are rejected. schema is public metadata only.
 - Events reuse the *same* canView helper as existing event queries: governor, creator, or stored club role; deleted events are excluded. This preserves existing semantics, including the existing local role mirror. OQL does not create a fresh cross-canister membership check or fix stale/missing mirrored roles. Validate revocation and ordinary-member visibility after deployment.
 - Clubs and teams apply existing isMember/isAdmin checks, including existing family/exclusion handling; soft-deleted rows are excluded.
