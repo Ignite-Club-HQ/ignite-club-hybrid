@@ -7,13 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       old_principal:
-        description: "OLD sign-in ID (the one that has the profile)"
-        required: true
-        default: "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe"
-      new_principal:
-        description: "NEW sign-in ID (shown on the create-profile screen)"
+        description: "OLD sign-in ID (the one that owns the club access)"
         required: true
         default: "tavrz-s2z7n-5jkdv-dpho3-pvd3c-yog77-euqar-egkuv-xbzei-ftw3d-eqe"
+      new_principal:
+        description: "NEW sign-in ID (the one you sign in with now)"
+        required: true
+        default: "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe"
       merge:
         description: "Type yes to merge when the new ID already has data"
         required: false
@@ -49,6 +49,7 @@ jobs:
           CONFIRM: ${{ inputs.confirm }}
           MERGE: ${{ inputs.merge }}
           IDS_FILE: ${{ github.workspace }}/deploy/mainnet/.icp/data/mappings/ic.ids.json
+          GROUP_FILES: ${{ github.workspace }}/deploy/groups/g2/provision.json
         run: |
           set -euo pipefail
           if [ -z "$DEPLOYER_PEM" ]; then echo "::error::DEPLOYER_PEM secret is not set."; exit 1; fi
