@@ -139,7 +139,7 @@ import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { writeOnce } from "@/live/clubScope";
-import { ensureLiveClubConversations, isLiveConversationAbsent, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { ensureLiveClubConversations, isLiveConversationAbsent, listLiveLatestMessagesPage, listLiveReactions, sendLiveClubScopedMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
@@ -1653,9 +1653,6 @@ export default function TeamChatPage() {
         icp: async (ctx) => {
           // Team id doubles as the conversation id (deterministic on the
           // messaging canister).
-          if (team?.club_id) {
-            try { await ensureLiveClubConversations(ctx, team.club_id); } catch { /* best-effort self-heal */ }
-          }
           const attachment = image_url
             ? { kind: "image", refId: image_url, url: image_url }
             : (() => {
@@ -1665,7 +1662,7 @@ export default function TeamChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          const saved = await sendLiveMessage(ctx, teamId ?? '', text, sendKey, attachment, reply_to_id);
+          const saved = await sendLiveClubScopedMessage(ctx, team?.club_id, teamId ?? '', text, sendKey, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, teamId!, user!.id).catch(() => { /* best-effort engagement counter */ });
           return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };},
       }, { teamId: teamId ?? '', writeKey: sendKey, attempts: 1 });
