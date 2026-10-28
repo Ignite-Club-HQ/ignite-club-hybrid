@@ -3,7 +3,7 @@ import { hasOwnerTestRouting, readOwnerTestRouteCached } from './ownerTestRoutin
 import { getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { blobAssetUrl, listBlobStoreCanisterIds } from "./mediaStorage";
-import { clubIdFromMediaPath, decryptClubMediaWithSavedKey, decryptPiiValue, parseSharedCiphertext, tryDecryptClubMedia, tryDecryptShared } from "./piiVetKeys";
+import { clubIdFromMediaPath, decryptClubMediaWithSavedKey, decryptPiiValue, parseSharedCiphertext, prewarmClubMediaKey, tryDecryptClubMedia, tryDecryptShared } from "./piiVetKeys";
 import { readCachedPhoto, writeCachedPhoto } from "./deviceMediaCache";
 import type { IcpTargetConfig } from "./targetRegistry";
 
@@ -189,6 +189,9 @@ async function resolveUncachedIcpBlobObjectUrl(url: string): Promise<string | nu
     const cached = await openSavedPhoto(principal, match.canisterId, match.path);
     if (cached) return cached;
   }
+  const earlyClubId = clubIdFromMediaPath(match.path);
+  // Overlap the club key (normally already warm) with the download.
+  if (earlyClubId) prewarmClubMediaKey({ identity, target }, earlyClubId);
   // Always fetch via the routable raw subdomain, whatever form was stored.
   const response = await fetch(blobAssetUrl(match.canisterId, match.path));
   if (!response.ok) {
