@@ -616,7 +616,8 @@ function SupabaseClubAdminChatPage() {
       setRecoveryExhausted(false);
       return;
     }
-    const needsRecovery = messagesIsError || fetchedCount === 0;
+    // Empty is only suspicious when the inbox shows a message in this chat.
+    const needsRecovery = messagesIsError || (fetchedCount === 0 && !!inboxFallback?.hasMessage);
     if (!needsRecovery) return;
     if (recoveryTimerRef.current) return; // never overlap retry timers
 
