@@ -1,0 +1,56 @@
+name: Prove account deletion (isolated only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.0'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install existing dependencies and pinned compilers
+        run: |
+          node scripts/ensure-frontend-deps.mjs
+          bun add -g ic-mops@3.5.1
+          mops toolchain use moc 1.16.1
+          (cd frontend && node node_modules/@dfinity/pic/postinstall.mjs)
+      - name: Build disposable services
+        run: |
+          MOC="$HOME/.cache/mops/moc/1.16.1/moc"
+          for d in club_domain events_domain messaging_domain; do
+            (cd backend/$d && mops install && mkdir -p .mops/.build && "$MOC" $(mops sources) --default-persistent-actors --enhanced-migration src/backend/migrations -o .mops/.build/$d.wasm src/main.mo)
+          done
+          cargo build --locked --release --target wasm32-unknown-unknown -p identity_access
+      - name: Delete a throwaway person and scan every service
+        working-directory: frontend
+        env:
+          DELETION_PROOF_REPORT: ${{ runner.temp }}/deletion-proof.json
+        run: |
+          R="$GITHUB_WORKSPACE"
+          POCKET_IC_BIN="$PWD/node_modules/@dfinity/pic/pocket-ic" \
+          IDENTITY_ACCESS_WASM="$R/target/wasm32-unknown-unknown/release/identity_access.wasm" \
+          CLUB_DOMAIN_WASM="$R/backend/club_domain/.mops/.build/club_domain.wasm" \
+          EVENTS_DOMAIN_WASM="$R/backend/events_domain/.mops/.build/events_domain.wasm" \
+          MESSAGING_DOMAIN_WASM="$R/backend/messaging_domain/.mops/.build/messaging_domain.wasm" \
+          node scripts/test-account-deletion-proof-replica.mjs
+      - name: Report
+        if: always()
+        run: |
+          echo '## Account deletion proof (disposable canisters only)' >> "$GITHUB_STEP_SUMMARY"
+          f="$RUNNER_TEMP/deletion-proof.json"
+          test -f "$f" && node -e 'const r=require(process.argv[1]);require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY,r.steps.map(s=>"- "+(s.passed?"PASS":"FAIL")+": "+s.service).join("\n")+"\n")' "$f" || true

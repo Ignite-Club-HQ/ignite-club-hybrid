@@ -1031,3 +1031,7 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [x] Account claim built: club service one-time hashed links (register/redeem/export, erasure-aware), /claim-account page, migrate-club `invite` action emailing verified Supabase addresses via Resend.
 - [ ] Account claim goes live only after the protected all-groups club service upgrade (owner approval). Needs RESEND_API_KEY secret + ICP_EMAIL_FROM/ICP_EMAIL_APP_URL vars in the group-2-admin-controls environment.
 - [ ] Member-owned loaders (children, RSVPs, chats, points, notifications) using claimed pairs; then photos/Vault, verify and switch-over.
+
+## Privacy: deletion fixes to deploy
+- [ ] Run **Upgrade backend (all mainnet groups)** to ship deletion fixes (calendar setting + chat pairing now removed)
+- [ ] Optional: run **Prove account deletion (isolated only)** workflow
