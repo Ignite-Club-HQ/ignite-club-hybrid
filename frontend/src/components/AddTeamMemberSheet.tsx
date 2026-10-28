@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import { UserPlus, Search, Loader2, Mail, X, Check, Send, Users, Plus, Upload, Baby, MessageSquare, AlertTriangle, Share2, Pencil } from "lucide-react";
 import TeamJoinLinkCard from "@/components/invite/TeamJoinLinkCard";
+import { canManageTeamInviteLinks } from "@/features/membership/inviteFlowRules";
 import { parseRecipients, looksLikeMultiRecipient } from "@/components/invite/recipientParser";
 const MemberCSVImportDialog = lazyWithRetry(() => import("@/components/MemberCSVImportDialog").then(m => ({ default: m.MemberCSVImportDialog })));
 import { Button } from "@/components/ui/button";
@@ -833,7 +834,9 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
                 <TeamJoinLinkCard
                   teamId={teamId}
                   teamName={teamName}
+                  clubId={clubId}
                   teamType={teamType}
+                  managerOverride={canManageTeamInviteLinks(canBulkInvite, playersOnly)}
                   autoCreateLink
                 />
                 <div className="flex items-center gap-3 pt-1">
