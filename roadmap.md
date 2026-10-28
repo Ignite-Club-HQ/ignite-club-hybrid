@@ -1,5 +1,5 @@
 ## Retained keys for child, guest and Player-of-the-Match names — 28 October 2026
-- [ ] Verify the shared encrypted-name reader reuses 30-day device keys after sign-out, refreshes authorized ciphertext on each read, and refuses removed access; preserve fresh write checks and adult audience restrictions.
+- [x] Verified the shared child/guest/Player-of-the-Match reader already uses retained keys: the earlier claim that those reads force fresh derivation was incorrect. Added read-path tests confirming 30-day retention across sign-out, updated ciphertext display, revoked-access refusal and derivation after expiry; all 92 focused regressions pass. Fresh write checks and adult audience restrictions remain unchanged.
 - [ ] Deploy web app and confirm on a real signed-in test club; no backend upgrade is required for this caching change.
 
 ## Invite emails without storing addresses — 28 October 2026
