@@ -136,7 +136,10 @@ export async function saveIcpIdentityProfile(
       roles: previous?.roles ?? [],
       profileMissing: false,
     };
-    cacheIcpIdentityProfile(principal, privateNameMaintained ? { ...resolved, displayName: null } : resolved);
+    // Cache the unlocked own name on this device (per account, wiped on
+    // sign-out) so returning to the app shows the name immediately instead
+    // of a placeholder while the guarded unlock replays in the background.
+    cacheIcpIdentityProfile(principal, resolved);
     if (privateNameMaintained) (await import('./ownPrivateName')).rememberOwnPrivateName(caller, input.displayName);
     return privateNameMaintained ? { ...resolved, privateNameMaintained: true } : resolved;
   } finally {
@@ -197,7 +200,9 @@ export async function fetchIcpIdentityProfile(
       roles: roles.value,
       profileMissing: !canisterProfile,
     };
-    cacheIcpIdentityProfile(principal, canisterProfile?.display_name?.startsWith('pii-display-name:') ? { ...resolved, displayName: null } : resolved);
+    // Cache the unlocked own name on this device (per account, wiped on
+    // sign-out) so returning to the app shows the name immediately.
+    cacheIcpIdentityProfile(principal, resolved);
     return resolved;
   } finally {
     client.dispose();
