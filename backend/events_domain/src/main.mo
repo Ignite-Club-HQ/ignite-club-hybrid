@@ -4696,6 +4696,7 @@ persistent actor class Main(governorInit : Principal) = this {
     removed += eventViews.size() - keepViews.size(); eventViews := keepViews;
     let keepReach = pushReachability.filter(func(p) = not p.user.equal(caller));
     removed += pushReachability.size() - keepReach.size(); pushReachability := keepReach;
+    switch (scheduleViewPreferences.take(caller)) { case (?_) removed += 1; case null {} };
     let keepMini = miniLeagueRsvps.filter(func(r) = switch (r.subject) { case (#account(id)) id != me; case (#mini_league_player(_)) true });
     removed += miniLeagueRsvps.size() - keepMini.size(); miniLeagueRsvps := keepMini;
     for((eventId,details) in Map.entries(gamePlayerDetails).toArray().values()) {
