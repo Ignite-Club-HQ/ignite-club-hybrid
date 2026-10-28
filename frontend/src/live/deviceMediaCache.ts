@@ -54,8 +54,27 @@ export function loadStoredClubKey(canisterId: string, principal: string, clubId:
   }
 }
 
+/** Most record (pii:) keys kept per sign-in; oldest-expiring are dropped first. */
+export const MAX_STORED_RECORD_KEYS = 300;
+
+function boundRecordKeys(canisterId: string, principal: string): void {
+  const prefix = `${CLUB_KEY_PREFIX}${canisterId}:${principal}:pii:`;
+  const rows: { name: string; exp: number }[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const name = localStorage.key(i);
+    if (!name?.startsWith(prefix)) continue;
+    let exp = 0;
+    try { exp = (JSON.parse(localStorage.getItem(name) ?? "{}") as { exp?: number }).exp ?? 0; } catch { /* drop first */ }
+    rows.push({ name, exp });
+  }
+  if (rows.length < MAX_STORED_RECORD_KEYS) return;
+  rows.sort((a, b) => a.exp - b.exp);
+  for (const row of rows.slice(0, rows.length - MAX_STORED_RECORD_KEYS + 1)) localStorage.removeItem(row.name);
+}
+
 export function storeClubKey(canisterId: string, principal: string, clubId: string, key: Uint8Array): void {
   try {
+    if (clubId.startsWith("pii:")) boundRecordKeys(canisterId, principal);
     localStorage.setItem(
       clubKeyName(canisterId, principal, clubId),
       JSON.stringify({ k: toB64(key), exp: Date.now() + CLUB_KEY_TTL_MS }),
