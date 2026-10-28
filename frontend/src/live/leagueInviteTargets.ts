@@ -12,7 +12,22 @@ function optional<T>(p: Promise<T[]>, ms = 8000): Promise<T[]> {
   });
 }
 
-export async function readLiveInviteTargets(ctx: FeatureBackendContext) {
+// Home warms this quietly so the Invite sheet opens with its answer ready.
+// Memory only, per signed-in principal, briefly reused.
+const WARM_MS = 2 * 60_000;
+let warm: { key: string; at: number; read: Promise<Awaited<ReturnType<typeof readInviteTargetsNow>>> } | null = null;
+export function readLiveInviteTargets(ctx: FeatureBackendContext) {
+  const key = ctx.identity.getPrincipal().toText();
+  if (warm && warm.key === key && Date.now() - warm.at < WARM_MS) return warm.read;
+  const read = readInviteTargetsNow(ctx);
+  const entry = { key, at: Date.now(), read };
+  warm = entry;
+  read.catch(() => { if (warm === entry) warm = null; });
+  return read;
+}
+export function __resetInviteTargetsWarm() { warm = null; }
+
+async function readInviteTargetsNow(ctx: FeatureBackendContext) {
   const { getLiveMyRoleGrants } = await import('./features/membership');
   const grantsP = getLiveMyRoleGrants(ctx);
   const [grants, miniLeagues, competitions] = await Promise.all([
@@ -28,14 +43,32 @@ export async function readLiveInviteTargets(ctx: FeatureBackendContext) {
     }, { everyGroup: true, merge: (parts) => [...new Map(parts.flat().map(row => [row.id, row])).values()] })),
   ]);
   const teamIds = [...new Set(grants.flatMap(g => g.team))];
-  const teams = (await Promise.all(teamIds.map(teamId => readMembershipInScope(ctx, { teamId }, async scoped => {
-    return (await (await import('./features/club')).getLiveTeam(scoped, teamId))[0] ?? null;
-  }).catch(() => null)))).filter(t => t?.is_active);
+  // A team grant already names its club: route straight there instead of
+  // discovering each team across groups, and bound every read so one slow
+  // service can never hold the sheet open.
+  const clubOfTeam = new Map<string, string>();
+  for (const g of grants) if (g.team[0] && g.club[0]) clubOfTeam.set(g.team[0], g.club[0]);
+  const bounded = <T,>(p: Promise<T>, ms = 10_000) => new Promise<T | null>(resolve => {
+    const t = setTimeout(() => resolve(null), ms);
+    p.then(v => { clearTimeout(t); resolve(v); }, () => { clearTimeout(t); resolve(null); });
+  });
+  const grantClubIds = [...new Set(grants.flatMap(g => g.club))];
+  const clubRead = new Map<string, Promise<Awaited<ReturnType<typeof readLeagueClub>> | null>>();
+  const readClub = (id: string) => {
+    let p = clubRead.get(id);
+    if (!p) { p = bounded(readLeagueClub(ctx, id)); clubRead.set(id, p); }
+    return p;
+  };
+  grantClubIds.forEach(readClub);
+  const teams = (await Promise.all(teamIds.map(teamId => bounded(readMembershipInScope(ctx,
+    clubOfTeam.has(teamId) ? { clubId: clubOfTeam.get(teamId)! } : { teamId },
+    async scoped => (await (await import('./features/club')).getLiveTeam(scoped, teamId))[0] ?? null,
+  ))))).filter(t => t?.is_active);
   const clubIds = [...new Set([
-    ...grants.flatMap(g => g.club), ...miniLeagues.map(l => l.club_id),
+    ...grantClubIds, ...miniLeagues.map(l => l.club_id),
     ...teams.flatMap(t => t ? [t.club_id] : []), ...competitions.flatMap(c => c.club_id ? [c.club_id] : []),
   ])];
-  const clubs = (await Promise.all(clubIds.map(id => readLeagueClub(ctx, id).catch(() => null))))
+  const clubs = (await Promise.all(clubIds.map(readClub)))
     .filter(c => c?.is_active).map(c => ({ id: c?.id ?? '', name: c?.name ?? '' }));
   const names = new Map(clubs.map(c => [c.id, c.name]));
   return {

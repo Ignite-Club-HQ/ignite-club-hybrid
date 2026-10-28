@@ -64,7 +64,55 @@ export function useAddTeamMemberSearch({
   bulkMembers,
 }: UseAddTeamMemberSearchArgs) {
   const { user } = useAuth();
-  const { data: searchResults = [], isLoading: isSearching } = useQuery({
+  const icpMembership = isFeatureRoutedToIcp("membership");
+
+  // ICP: everyone in the club is listed straight away from the club roster
+  // (shared, briefly remembered with the Messages pickers), and names unlock
+  // separately so the people appear first. Encrypted names cannot be searched
+  // server-side, so typing filters this list on the device.
+  const {
+    data: clubRoster = [],
+    isLoading: clubRosterLoading,
+    isError: clubRosterError,
+    refetch: refetchClubRoster,
+  } = useQuery({
+    queryKey: ["invite-club-roster", user?.id, clubId],
+    enabled: open && icpMembership && !!clubId,
+    staleTime: 3 * 60 * 1000,
+    retry: 1,
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => [] as Array<{ id: string; display_name: string; avatar_url: string | null }>,
+        icp: async (ctx) => {
+          const { fetchLiveMessagingCandidates } = await import("@/live/messagingCandidates");
+          const read = fetchLiveMessagingCandidates(ctx, [clubId]);
+          const timeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Club members took too long to load.")), 20_000));
+          const rows = await Promise.race([read, timeout]);
+          return rows.map((r) => ({ id: r.id, display_name: r.display_name, avatar_url: r.avatar_url }));
+        },
+      }, { clubId }),
+  });
+  const rosterIds = clubRoster.map((r) => r.id);
+  const { data: rosterNames } = useQuery({
+    queryKey: ["invite-club-roster-names", user?.id, clubId, rosterIds.join(",")],
+    enabled: open && icpMembership && !!clubId && rosterIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async ({ signal }) =>
+      withFeatureBackend("membership", {
+        supabase: async () => new Map<string, string>(),
+        icp: async (ctx) => (await import("@/live/clubScopedNames")).unlockClubScopedNames(ctx, clubId, rosterIds, signal),
+      }, { clubId }),
+  });
+  const clubPeople: SearchProfile[] = clubRoster
+    .map((r) => ({ id: r.id, display_name: rosterNames?.get(r.id) ?? r.display_name, avatar_url: r.avatar_url }))
+    .sort((a, b) => (a.display_name ?? "").localeCompare(b.display_name ?? ""));
+  const term = debouncedNameInput.trim().toLowerCase();
+  const clubPeopleMatches = term
+    ? clubPeople.filter((p) => (p.display_name ?? "").toLowerCase().includes(term))
+    : clubPeople;
+
+  const { data: remoteSearchResults = [], isLoading: remoteSearching } = useQuery({
     queryKey: ["user-search-team-member", user?.id, debouncedNameInput, clubId],
     queryFn: async ({ signal }) => {
       if (debouncedNameInput.length < 2) return [];
@@ -88,8 +136,10 @@ export function useAddTeamMemberSearch({
         },
       }, { clubId });
     },
-    enabled: open && debouncedNameInput.length >= 2,
+    enabled: open && !icpMembership && debouncedNameInput.length >= 2,
   });
+  const searchResults = icpMembership ? clubPeopleMatches.slice(0, 50) : remoteSearchResults;
+  const isSearching = icpMembership ? clubRosterLoading : remoteSearching;
 
   const { data: pendingInviteResults = [] } = useQuery({
     queryKey: ["pending-invite-search", debouncedNameInput, clubId, teamId],
@@ -475,6 +525,10 @@ export function useAddTeamMemberSearch({
   });
 
   return {
+    clubPeople,
+    clubPeopleLoading: icpMembership && clubRosterLoading,
+    clubPeopleError: icpMembership && clubRosterError,
+    refetchClubPeople: refetchClubRoster,
     filteredResults: searchResults,
     filteredPendingResults,
     identityMap,

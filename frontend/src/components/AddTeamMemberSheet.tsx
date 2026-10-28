@@ -395,6 +395,10 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
   const discoverEmailStyle = (clubBranding as { invite_email_style?: string } | null | undefined)?.invite_email_style === 'discover';
 
   const {
+    clubPeople,
+    clubPeopleLoading,
+    clubPeopleError,
+    refetchClubPeople,
     filteredResults,
     filteredPendingResults,
     identityMap,
@@ -918,7 +922,48 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
                 </div>
                 <p className="text-[11px] text-muted-foreground">You can paste multiple names.</p>
 
-                {isSearching && (
+                {!nameInput.trim() && clubPeopleLoading && (
+                  <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading club members…
+                  </div>
+                )}
+                {!nameInput.trim() && clubPeopleError && !clubPeopleLoading && (
+                  <div className="flex items-center justify-between gap-2 py-2 text-sm text-muted-foreground">
+                    <span>Couldn't load club members just now.</span>
+                    <Button type="button" variant="outline" size="sm" onClick={() => void refetchClubPeople()}>Try again</Button>
+                  </div>
+                )}
+                {!nameInput.trim() && !clubPeopleLoading && clubPeople.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">People in this club</p>
+                    <div className="space-y-1 max-h-64 overflow-y-auto rounded-lg border bg-muted/30 p-2">
+                      {clubPeople.map((person) => (
+                        <button
+                          key={person.id}
+                          type="button"
+                          onClick={() => { setSelectedUser(person); setNameInput(""); }}
+                          className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-background transition-colors text-left"
+                        >
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={person.avatar_url || undefined} />
+                            <AvatarFallback className="bg-primary/20 text-primary text-sm">
+                              {person.display_name?.[0]?.toUpperCase() || "?"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-medium truncate">{person.display_name || "Unknown"}</span>
+                            {existingMembers?.includes(person.id) && (
+                              <span className="text-[11px] text-muted-foreground truncate">Already on this team — pick to add a child</span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {isSearching && debouncedNameInput.length >= 2 && (
                   <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Searching...
