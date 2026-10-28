@@ -99,7 +99,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
 import { useChatProfileWorkset } from "@/hooks/useChatProfileWorkset";
 import { privateClubNameDisplaysEnabled } from "@/live/privateClubNameDisplayMode";
-import { getCachedMessages, cacheMessages, shouldRefetchMessages } from "@/lib/messageCache";
+import { getCachedMessages, cacheMessages, shouldRefetchMessages, isCachedThreadComplete } from "@/lib/messageCache";
 import { consumeFromNotificationFlag } from "@/lib/notificationPreload";
 import { logChatOpenLatency } from "@/lib/chatOpenLatency";
 import { useChatPerfMarks, markChatFetch } from "@/hooks/useChatPerfMarks";
@@ -751,6 +751,7 @@ export default function ClubChatPage() {
         hasPrevious: !!prev,
         cachedMessageCount: cachedMessages.length,
         openedFromNotification: !!openedFromNotificationRef.current,
+        cachedComplete: isCachedThreadComplete("club", clubId),
       });
       if (source === "previous") return prev;
       if (source === "none") return undefined;
@@ -780,8 +781,10 @@ export default function ClubChatPage() {
   const [localMessages, setLocalMessages] = useState<Message[] | undefined>(() => {
     if (!clubId) return undefined;
     const cached = getCachedClubMessages(clubId);
-    return cached.length >= 2 ? cached : undefined;
+    return cached.length >= 2 || isCachedThreadComplete("club", clubId) ? cached : undefined;
   });
+  // A saved copy from a real read (even an empty chat) paints straight away.
+  const [savedThreadComplete] = useState(() => !!clubId && isCachedThreadComplete("club", clubId));
   const [infiniteScrollEnabled, setInfiniteScrollEnabled] = useState(false);
   // Realtime reactions must reach BOTH stores (query cache + localMessages).
   const reactionQueryKey = useMemo(() => ["club-messages", clubId], [clubId]);
@@ -792,7 +795,7 @@ export default function ClubChatPage() {
     queryKey: reactionQueryKey,
     setLocalMessages,
   });
-  const hasMeaningfulLocal = (localMessages?.length ?? 0) >= 2;
+  const hasMeaningfulLocal = (localMessages?.length ?? 0) >= 2 || (savedThreadComplete && localMessages !== undefined);
   const showLoadingRaw =
     (!authReady && !hasMeaningfulLocal) ||
     (isLoading && !messagesData && !hasMeaningfulLocal);

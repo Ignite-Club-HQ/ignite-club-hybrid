@@ -67,7 +67,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { usePrivateChatProfiles } from "@/hooks/usePrivateChatProfiles";
 import { privateProfileSearchRehearsalEnabled } from "@/live/privateProfileSearchMode";
 import { Card, CardContent } from "@/components/ui/card";
-import { getCachedMessages, cacheMessages, CachedMessage, shouldRefetchMessages } from "@/lib/messageCache";
+import { getCachedMessages, cacheMessages, CachedMessage, shouldRefetchMessages, isCachedThreadComplete } from "@/lib/messageCache";
 import { getChatThreadLabel, rememberChatThreadLabel } from "@/lib/chatThreadLabelCache";
 import { consumeFromNotificationFlag } from "@/lib/notificationPreload";
 import { logChatOpenLatency } from "@/lib/chatOpenLatency";
@@ -773,7 +773,8 @@ export default function DirectMessagePage() {
       // proper loading state is shown until the real fetch lands.
       if (!conversationId) return undefined;
       const messages = getCachedDirectMessages(conversationId);
-      if (messages.length < 2) return undefined;
+      // A saved copy from a real read is usable even when short or empty.
+      if (messages.length < 2 && !isCachedThreadComplete("dm", conversationId)) return undefined;
 
       return { messages, hasOlderMessages: false };
     },
@@ -828,7 +829,7 @@ export default function DirectMessagePage() {
   const [localMessages, setLocalMessages] = useState<DirectMessage[] | undefined>(() => {
     if (!conversationId) return undefined;
     const cached = getCachedDirectMessages(conversationId);
-    return cached.length >= 2 ? cached : undefined;
+    return cached.length >= 2 || isCachedThreadComplete("dm", conversationId) ? cached : undefined;
   });
   const localMessagesRef = useRef(localMessages);
   localMessagesRef.current = localMessages;

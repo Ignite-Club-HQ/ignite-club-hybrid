@@ -120,15 +120,26 @@ export async function fetchIcpTeamLatestPage(queryClient: QueryClient, userId: s
 
 /**
  * Background-load the newest page of the inbox's top team chats so opening one
- * shows messages at once. Skips chats already cached; one at a time.
+ * shows messages at once. Skips chats already cached; a few at a time so the
+ * last of them is not left waiting behind the others.
  */
 export async function prefetchIcpTeamThreads(queryClient: QueryClient, userId: string, teams: ReadonlyArray<{ id: string; clubId?: string | null }>, max = 5) {
-  for (const t of teams.slice(0, max)) {
-    if (queryClient.getQueryData(["team-messages", t.id])) continue;
-    await queryClient.prefetchQuery({
-      queryKey: ["team-messages", t.id],
-      queryFn: () => fetchIcpTeamLatestPage(queryClient, userId, t.id, t.clubId),
-      staleTime: 30_000,
-    }).catch(() => undefined);
-  }
+  const queue = teams.slice(0, max).filter(t => !queryClient.getQueryData(["team-messages", t.id]));
+  await runFewAtATime(queue, t => queryClient.prefetchQuery({
+    queryKey: ["team-messages", t.id],
+    queryFn: () => fetchIcpTeamLatestPage(queryClient, userId, t.id, t.clubId),
+    staleTime: 30_000,
+  }));
+}
+
+/** Bounded parallel background work; failures are ignored. */
+export async function runFewAtATime<T>(items: readonly T[], work: (item: T) => Promise<unknown>, limit = 3): Promise<void> {
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await work(item).catch(() => undefined);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
 }
