@@ -55,6 +55,6 @@ it('only a genuinely absent server profile is reported missing', async () => {
 it('ignores a stale reference hint and reads the confirmed reference', async () => {
   const stale = `pii-display-name:v1:${authority}:stale`;
   localStorage.setItem(`ignite_icp_private_name_ref:${target.host}|${principal}`, stale);
-  mocks.unlock.mockImplementation(async (_ctx: unknown, ref: string) => { console.log('UNLOCK', ref); return ref === reference ? 'New name' : 'Old name'; });
+  mocks.unlock.mockImplementation(async (_ctx: unknown, ref: string) => ref === reference ? 'New name' : 'Old name');
   expect((await fetchIcpIdentityProfile(identity, principal, target)).displayName).toBe('New name');
 });

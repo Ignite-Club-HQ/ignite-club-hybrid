@@ -160,8 +160,9 @@ export async function fetchIcpIdentityProfile(
   const refHintKey = `${PRIVATE_NAME_REF_HINT_PREFIX}${target.host}|${principal}`;
   let hintedRef: string | null = null;
   try { hintedRef = localStorage.getItem(refHintKey); } catch { /* ignore */ }
-  const speculative = hintedRef?.startsWith("pii-display-name:")
-    ? import("./privateProfileNames").then(({ readPrivateOwnProfileName }) => readPrivateOwnProfileName({ identity, target }, hintedRef as string))
+  const namesModule = hintedRef?.startsWith("pii-display-name:") ? import("./privateProfileNames") : null;
+  const speculative = namesModule
+    ? namesModule.then(({ readPrivateOwnProfileName }) => readPrivateOwnProfileName({ identity, target }, hintedRef as string))
     : null;
   speculative?.catch(() => {});
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
@@ -184,7 +185,7 @@ export async function fetchIcpIdentityProfile(
       else localStorage.removeItem(refHintKey);
     } catch { /* ignore */ }
     if (savedRef) {
-      const { readPrivateOwnProfileName } = await import("./privateProfileNames");
+      const { readPrivateOwnProfileName } = await (namesModule ?? import("./privateProfileNames"));
       displayName = speculative && hintedRef === savedRef
         ? await speculative
         : await readPrivateOwnProfileName({ identity, target }, savedRef);
