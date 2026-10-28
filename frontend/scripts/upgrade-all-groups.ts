@@ -319,6 +319,22 @@ for(const t of displayLinks){
   journal.displayIdentityLinks[t.canisterId].phase='complete';await persist();
   console.log(`Linked ${t.groupId} club service to the account service for private name displays.`);
 }
+// Shared-key audiences need each club service to know its group's private-
+// details service. Idempotent: set only when empty, stop on any mismatch.
+for(const t of targets.filter(t=>t.name==='club_domain')){
+  const expected=inventory.pii[t.groupId];
+  if(!expected)throw Error(`No private-details service recorded for ${t.groupId}`);
+  const factory=()=>IDL.Service({pii_canister_status:IDL.Func([],[IDL.Opt(IDL.Principal)],['query']),set_pii_canister:IDL.Func([IDL.Principal],[IDL.Variant({Ok:IDL.Null,Err:IDL.Text})],[])});
+  const actor=Actor.createActor(factory,{agent,canisterId:t.canisterId}) as unknown as {pii_canister_status():Promise<[]|[Principal]>;set_pii_canister(p:Principal):Promise<{Ok:null}|{Err:string}>};
+  const current=(await actor.pii_canister_status())[0]?.toText();
+  if(current===expected){console.log(`${t.groupId} club service private-details link confirmed.`);continue;}
+  if(current)throw Error(`${t.groupId} club service points at ${current}, expected ${expected}; not changed`);
+  await gate();
+  const r=await actor.set_pii_canister(Principal.fromText(expected));
+  if('Err'in r)throw Error(`Private-details link refused for ${t.groupId}: ${r.Err}`);
+  if((await actor.pii_canister_status())[0]?.toText()!==expected)throw Error(`Private-details link readback failed for ${t.groupId}`);
+  console.log(`Set ${t.groupId} club service private-details link.`);
+}
 if(journal.publication || journal.published){validateJournal(journal,binding);console.log('Exact saved snapshot retained for publication resume; modules reverified without reinstall.');process.exit(0);}
 // Metadata's ordered page index is a required, idempotent release prerequisite.
 for(const t of targets.filter(t=>t.name==='media_metadata')){
