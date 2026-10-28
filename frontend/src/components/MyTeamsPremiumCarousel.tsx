@@ -590,6 +590,12 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
     [user?.id, activeClubFilter]
   );
   const snapshot = snapshotWithTs?.data ?? null;
+  // The team list is always fetched for every club once and filtered on
+  // screen, so switching the club theme never waits on a new per-club read.
+  const allClubsSnapshotWithTs = useMemo(
+    () => getCachedCarouselWithTs<CarouselSnapshot>(user?.id, null),
+    [user?.id]
+  );
 
 
   // Defer non-critical queries (photos) until after first paint to free up the main thread
@@ -613,23 +619,24 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
 
   // Fetch teams & leagues
   const { data: rawItems = snapshot?.items ?? [], isLoading, isFetching, isError } = useQuery({
-    queryKey: ["my-teams-premium-v2", user?.id, activeClubFilter],
+    queryKey: ["my-teams-premium-v2", user?.id],
     meta: { persist: !isIcp },
     // Read-only: a stalled cold-start read is abandoned after its deadline and
     // asked again, instead of leaving skeleton cards until the user leaves Home.
     retry: isIcp ? 2 : 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
-    initialData: snapshot?.items,
-    initialDataUpdatedAt: snapshotWithTs?.timestamp,
+    initialData: allClubsSnapshotWithTs?.data?.items,
+    initialDataUpdatedAt: allClubsSnapshotWithTs?.timestamp,
     queryFn: async ({ signal }) => {
       if (!user) return [];
+      const activeClubFilter: string | null = null;
 
       if (isIcp) {
         return withReadDeadline(withFeatureBackend("competitions", {
           // Unreachable: this branch only runs when ICP mode is active.
           supabase: async () => [] as TeamOrLeague[],
-          icp: (ctx) => fetchIcpCarouselItems(ctx, activeClubFilter ?? null),
-        }, activeClubFilter ? { clubId: activeClubFilter } : { everyGroup: true, merge: mergeLists }), "My teams", 12_000, signal);
+          icp: (ctx) => fetchIcpCarouselItems(ctx, null),
+        }, { everyGroup: true, merge: mergeLists }), "My teams", 12_000, signal);
       }
 
       const { data: roles, error: rolesError } = await supabase

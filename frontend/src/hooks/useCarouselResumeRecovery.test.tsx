@@ -10,7 +10,7 @@ afterEach(() => { m.active = undefined; vi.clearAllMocks(); });
 describe('carousel foreground listeners', () => {
   it('recovers cards through native return and coalesces a simultaneous browser visibility event', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-    const key = ['my-teams-premium-v2', 'paul', null];
+    const key = ['my-teams-premium-v2', 'paul'];
     client.setQueryData(key, []);
     let resolve: ((value: { id: string }[]) => void) | undefined;
     const read = vi.fn(() => new Promise<{ id: string }[]>(done => { resolve = done; }));
