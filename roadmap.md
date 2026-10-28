@@ -1,6 +1,7 @@
 ## Chat compatibility and obsolete name-task cleanup — 28 October 2026
-- [ ] Fix the account chat read / legacy query reply mismatch for polls; run the relevant compatibility regressions.
-- [ ] Retire superseded private-name conversion and old rollout entries without marking genuine privacy, deployment or signed-in acceptance work complete.
+- [x] Fixed the account chat-opening response to include the legacy twin's bundled poll results; both endpoints share the existing six-poll selector after authorization. Regenerated both binding trees and the source-derived migration schema. All 12 adapter regressions, 8 migration/release checks and 17-contract drift check pass; real disposable canister verifies poll/vote readback, excluded unreferenced polls, matching six-poll bounds, invalid limits and outsider denial. No live changes.
+- [x] Retired 22 obsolete/duplicate conversion and already-released secure-save/display checklist entries, preserving non-conversion privacy, deletion, search restrictions and signed-in acceptance follow-ups above their historical sections. Dormant tooling and approval gates unchanged.
+- [ ] Deploy the chat-service fix through the protected all-group backend upgrade, then Deploy web app for matching bindings; live deployment was not requested in this task.
 - [x] Paul declined old rewards-point merging because all affected data is test data; no merge or account mutation is requested.
 
 ## Privacy follow-ups retained after checklist cleanup — 28 October 2026
@@ -30,7 +31,7 @@
 - [x] Sign-out now clears decrypted photo bytes but keeps saved key copies for their 30-day life, and an own-name read reuses its saved key instead of re-deriving every sign-in; audience-scoped reads of another person's name never reuse or save a key, and every read still re-fetches ciphertext through authorization. The explicit "remove saved copies" action removes key copies too.
 - [x] Key-cache, device-cache, private-name, profile-fetch, logout and storage-settings regressions pass (106 focused, 80 in ICP mode, 1249 live-suite passed); ICP guard check passes and preview build OK.
 - [ ] Deploy frontend and time Paul's real sign-out/sign-in; live confirmation needs his Internet Identity session.
-- [ ] Unrelated pre-existing check fails: messaging's account chat read omits the legacy twin's `polls` field, so the local rehearsal read adapter refuses it. Needs a backend signature decision; no live change and no frontend effect.
+- [x] Resolved the chat-opening protected-twin `polls` mismatch; contract, adapter and real-canister regressions pass (see current completion above). Live release remains separate.
 
 ## Profile retry after logout — 28 October 2026
 - [x] Identified the six-second optional name-enrichment deadline on required own-profile reopening; added a separate thirty-second guarded read, caller-bound profile fetch and a sign-out escape from the retry screen. No account, name or club records changed.
