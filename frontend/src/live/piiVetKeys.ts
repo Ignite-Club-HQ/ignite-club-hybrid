@@ -297,9 +297,11 @@ export async function fetchPiiVetKeys(
     if (fieldId !== 'display_name') throw new Error('Private-name audiences cannot unlock another field.');
     options = { ...options, fresh: true, audience: { ...options.audience } };
   }
-  // Only a caller's own record key may be retained on device. Audience-scoped
-  // reads (another person's name) never reuse or store a key copy.
-  const retain = options.retainOwnKey === true && !options.audience;
+  // Record keys (children, guests, Player of the Match, own name) are kept on
+  // device for 30 days so reopening the app skips the paid derivation; the
+  // ciphertext itself is still re-read through an authorized read every time.
+  // Audience-scoped reads of another person's name never reuse or store a copy.
+  const retain = !options.audience && (options.retainOwnKey === true || !options.fresh);
   active();
   const out = new Map<string, VetKey>();
   const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
