@@ -1,3 +1,6 @@
+## Unexpected multiple sign-in IDs — 28 October 2026
+- [ ] Trace browser/Android derivation origins, account linking and collision recovery; distinguish proven causes from unknown historical events, and identify essential recurrence prevention without changing live records.
+
 ## Clubs blank and slow sign-in — 28 October 2026
 - [x] Live read-only probe: Group 2's club service rejects every membership check with "Linked account authority unavailable" (its identity grant is eligibility-only, so the new linked sign-in lookup always gets no account). One failing group makes the app refuse the whole club list, so Group 1 clubs vanished too and screens kept retrying.
 - [x] Fix: a missing account reply now keeps exact sign-in behaviour instead of rejecting; linked sign-ins still widen access only where the account service shares them. Motoko check and linked-membership test pass.
