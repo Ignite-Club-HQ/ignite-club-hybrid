@@ -1,3 +1,7 @@
+## Unexpected multiple sign-in IDs — 28 October 2026
+- [x] Audited browser/native origins, source history, public live declarations and the supplied post-move account export; documented proven two-domain behavior versus unproven historical principal attribution in docs/sign-in-principal-audit-2026-10-28.md. All 17 existing origin/redirect/native bridge tests pass in jsdom. No live changes.
+- [ ] Pin consistent production sign-in configuration only after a real signed-in check identifies the origin producing retained mbrvi; then verify the same II on browser/Android reads the same account/clubs. Blocked on that session evidence; blindly switching origins risks another new principal.
+
 ## Clubs blank and slow sign-in — 28 October 2026
 - [x] Live read-only probe: Group 2's club service rejects every membership check with "Linked account authority unavailable" (its identity grant is eligibility-only, so the new linked sign-in lookup always gets no account). One failing group makes the app refuse the whole club list, so Group 1 clubs vanished too and screens kept retrying.
 - [x] Fix: a missing account reply now keeps exact sign-in behaviour instead of rejecting; linked sign-ins still widen access only where the account service shares them. Motoko check and linked-membership test pass.
