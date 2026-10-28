@@ -14,7 +14,7 @@ const offchainHides = [
   ["AdMob settings", "pages/AdMobSettingsPage.tsx", "AdMob settings are unavailable in ICP lab mode"],
   ["temporary passwords", "pages/AdminTempPasswordPage.tsx", "Temporary passwords are unavailable in ICP lab mode"],
   ["application payment configuration", "pages/AppStripeSettingsPage.tsx", "Application payment configuration is unavailable in ICP lab mode"],
-  ["subscription management", "pages/ClubUpgradePage.tsx", "Subscription management is not yet available for Internet Identity accounts."],
+  ["subscription management", "pages/ClubUpgradePage.tsx", "Manage this subscription through the service where it was purchased."],
   ["promo-code redemption", "pages/ClubUpgradePage.tsx", "Promo codes are not yet available for Internet Identity accounts."],
   ["fee payments", "pages/PayFeesPage.tsx", "Fee payments are unavailable in ICP lab mode"],
   ["password recovery", "pages/ResetPasswordPage.tsx", "Password recovery is unavailable in ICP lab mode"],

@@ -44,7 +44,7 @@ describe('ICP match rewards and player eligibility', () => {
     const result = await readProfileSummaries(['paul', 'sam', 'paul']);
     expect(result.get('paul')).toEqual({ display_name: 'Paul', avatar_url: 'avatar-ref' });
     expect(result.get('sam')).toEqual({ display_name: 'Sam', avatar_url: null });
-    expect(m.profiles).toHaveBeenCalledWith(expect.anything(), ['paul', 'sam']);
+    expect(m.profiles).toHaveBeenCalledWith(expect.anything(), ['paul', 'sam'], undefined);
     expect(m.scope).toHaveBeenCalledWith({ shared: 'person' });
     expect(m.from).not.toHaveBeenCalled();
   });

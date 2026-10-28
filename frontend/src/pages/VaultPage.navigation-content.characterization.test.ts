@@ -51,7 +51,7 @@ describe("VaultPage navigation and search presentation contract", () => {
     expect(clusterSource).toContain("Pro feature — Upgrade to unlock vault");
     expect(clusterSource).toMatch(/!isPro \? \(\s*<Lock className="h-4 w-4 text-muted-foreground" \/>/);
     expect(clusterSource).toContain('<ChevronRight className="h-4 w-4 text-muted-foreground" />');
-    expect(vaultPageSource).toMatch(/if \(!club\.is_pro\) \{\s*navigate\(`\/clubs\/\$\{club\.id\}\/upgrade`\);\s*return;\s*\}/);
+    expect(vaultPageSource).toMatch(/if \(!club\.is_pro\) \{\s*navigate\(`\/clubs\/\$\{club\.id\}\/upgrade`(?:, \{[^)]*\})?\);\s*return;\s*\}/);
     expect(vaultPageSource).toMatch(/setCurrentView\(\{ type: "club", clubId: club\.id, clubName: club\.name \}\)/);
   });
 

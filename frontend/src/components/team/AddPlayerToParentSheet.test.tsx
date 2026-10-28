@@ -179,6 +179,7 @@ describe("AddPlayerToParentSheet — canonical child creation", () => {
         "child-1",
         "Ava Smith",
         expect.objectContaining({ _isPrincipal: true }),
+        "club-1",
       ),
     );
     expect(mocks.rpc).not.toHaveBeenCalled();
