@@ -1,6 +1,7 @@
 ## Settings messaging warnings — 28 October 2026
 - [x] Identified the kept-mounted inbox's unconditional Supabase thread prefetch for broadcast/club messages; disabled it for ICP and fenced delayed reads/publication across provider changes. Existing authorized ICP readers remain unchanged.
-- [ ] Run mounted prefetch regressions and ICP guard checks; real signed-in phone confirmation requires frontend publication and Paul's Internet Identity session.
+- [x] Mounted prefetch and inbox regressions pass (92 tests in each backend mode), ICP guard check passes and preview build OK.
+- [ ] Publish the frontend correction and confirm Settings with Paul's real Internet Identity sign-in; no usable II session is available here. No canister upgrade is required.
 
 ## Linked Internet Identity membership access — 28 October 2026
 - [x] Club/team consensus admission now reads current configured identity-service aliases, retaining original role owners, exact team scopes, account-wide club exclusions and exact-only legacy queries. Identity filters pending/denied aliases; transient observations are bounded and cannot authorize later callbacks. Revoked/relinked logins remain exact-only, preserving no-resurrection rules.
