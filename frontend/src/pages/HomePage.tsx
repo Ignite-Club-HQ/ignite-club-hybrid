@@ -1008,9 +1008,12 @@ export default function HomePage() {
   // Warm the exact selected club without waiting for Home's feed/Pro directory.
   // Catalogue reads remain authorized by the owning service; warming grants nothing.
   useEffect(() => {
-    if (!user?.id || !activeClubFilter) return;
-    void queryClient.prefetchQuery(homeRewardQuery(supabase, user.id, resolveAuthBackend(), activeClubFilter));
-  }, [user?.id, activeClubFilter, queryClient]);
+    if (!user?.id) return;
+    const ids = activeClubFilter
+      ? [activeClubFilter]
+      : rewardClubs.filter((club: any) => isAppAdmin || club.hasPro).map((club: any) => club.id).slice(0, 6);
+    for (const id of ids) void queryClient.prefetchQuery(homeRewardQuery(supabase, user.id, resolveAuthBackend(), id));
+  }, [user?.id, activeClubFilter, queryClient, rewardClubs, isAppAdmin]);
 
   // Rewards are per-club. Lock if none of the user's relevant clubs have Pro
   // (scoped to activeClubFilter when set, otherwise any club). App admins bypass.

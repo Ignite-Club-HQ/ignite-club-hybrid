@@ -13,15 +13,23 @@ describe("ICP reward persistence", () => {
     calls.refresh_club_roles.mockResolvedValue({ Ok: null });
     calls.list_rewards.mockResolvedValue({ Ok: [] });
   });
-  it("verifies club membership before reading rewards", async () => {
+  it("reads rewards directly when the club already admits the caller", async () => {
+    calls.list_rewards.mockResolvedValue({ Ok: [] });
+    await listLiveClubRewards(ctx, "goat", null, false);
+    expect(calls.refresh_club_roles).not.toHaveBeenCalled();
+  });
+  it("refreshes membership then retries when the first read is refused", async () => {
+    calls.list_rewards.mockResolvedValueOnce({ Err: "Forbidden" }).mockResolvedValueOnce({ Ok: [] });
+    calls.refresh_club_roles.mockResolvedValue({ Ok: null });
     await listLiveClubRewards(ctx, "goat", null, false);
     expect(calls.refresh_club_roles).toHaveBeenCalledWith("goat");
-    expect(calls.refresh_club_roles.mock.invocationCallOrder[0]).toBeLessThan(calls.list_rewards.mock.invocationCallOrder[0]);
+    expect(calls.list_rewards).toHaveBeenCalledTimes(2);
   });
   it("stops a reward read if membership verification fails", async () => {
+    calls.list_rewards.mockResolvedValue({ Err: "Forbidden" });
     calls.refresh_club_roles.mockResolvedValue({ Err: "Could not verify club membership" });
     await expect(listLiveClubRewards(ctx, "goat", null, false)).rejects.toThrow("Could not verify club membership");
-    expect(calls.list_rewards).not.toHaveBeenCalled();
+    expect(calls.list_rewards).toHaveBeenCalledTimes(1);
   });
   it("sends the entered reward and 20-point cost without replacing its fields", async () => {
     calls.create_reward.mockResolvedValue({ Ok: { id: "rwd-goat-1" } });
