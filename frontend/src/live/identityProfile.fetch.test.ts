@@ -44,9 +44,10 @@ it('only a genuinely absent server profile is reported missing', async () => {
 });it('starts the guarded name read alongside the profile read once the reference is known', async () => {
   await fetchIcpIdentityProfile(identity, principal, target);
   mocks.unlock.mockClear();
-  let profileStarted = false;
-  mocks.get.mockImplementation(async () => { profileStarted = true; return { display_name: reference, avatar_ref: [] }; });
-  mocks.unlock.mockImplementation(async () => { expect(profileStarted).toBe(false); return 'Saved name'; });
+  let unlockStarted!: () => void;
+  const started = new Promise<void>((resolve) => { unlockStarted = resolve; });
+  mocks.get.mockImplementation(async () => { await started; return { display_name: reference, avatar_ref: [] }; });
+  mocks.unlock.mockImplementation(async () => { unlockStarted(); return 'Saved name'; });
   const result = await fetchIcpIdentityProfile(identity, principal, target);
   expect(result.displayName).toBe('Saved name');
   expect(mocks.unlock).toHaveBeenCalledOnce();
@@ -55,7 +56,6 @@ it('ignores a stale reference hint and reads the confirmed reference', async () 
   await fetchIcpIdentityProfile(identity, principal, target);
   const newer = `${reference}x`;
   mocks.get.mockResolvedValue({ display_name: newer, avatar_ref: [] });
-  mocks.unlock.mockReset();
   mocks.unlock.mockImplementation(async (_ctx: unknown, ref: string) => ref === newer ? 'New name' : 'Old name');
   expect((await fetchIcpIdentityProfile(identity, principal, target)).displayName).toBe('New name');
 });
