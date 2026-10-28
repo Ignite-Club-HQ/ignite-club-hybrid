@@ -934,6 +934,10 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'invite_email_sender_status' : ActorMethod<
+    [],
+    { 'from' : string, 'app_url' : string, 'configured' : boolean }
+  >,
   'invite_stats' : ActorMethod<
     [string, bigint, bigint],
     { 'Ok' : InviteStats } |
@@ -943,6 +947,16 @@ export interface Main {
   'is_club_member' : ActorMethod<[Principal, string], boolean>,
   'is_member_removed' : ActorMethod<[string, Principal], boolean>,
   'is_user_on_any_team' : ActorMethod<[Array<string>, Principal], boolean>,
+  /**
+   * / Owner-approved (2026-10-28) one-time link of the original Group 1 club
+   * / service to the shared account service, used only so private club-name
+   * / displays can confirm membership. Set-once; does not release lifecycle sync.
+   */
+  'link_display_identity_authority' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'link_guardian' : ActorMethod<
     [string, Principal],
     { 'Ok' : null } |
@@ -1626,6 +1640,7 @@ export interface Main {
   'read_has_child_guardian' : ActorMethod<[Principal, string], boolean>,
   'read_has_club_membership' : ActorMethod<[Principal, string], boolean>,
   'read_has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
+  'read_has_pii_audience' : ActorMethod<[Principal, string, string], boolean>,
   'read_media_quota_store_registry' : ActorMethod<
     [],
     { 'Ok' : { 'stores' : Array<Principal>, 'active' : boolean } } |
@@ -2055,6 +2070,11 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'send_invite_email' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_accessibility_prefs' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -2170,6 +2190,11 @@ export interface Main {
   >,
   'set_identity_access_canister' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_invite_email_sender' : ActorMethod<
+    [string, string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

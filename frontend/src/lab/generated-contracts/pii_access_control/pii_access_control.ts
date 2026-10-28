@@ -186,6 +186,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_shared_audience_vetkey(kind: string, scope: string, transport_public_key: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: Uint8Array;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     grant_pii_read(pii_id: string, field_id: string, reader: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -685,6 +692,16 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.get_private_profile_names_batch(arg0, arg1);
         return from_candid_variant_n7(result);
+    }
+    async get_shared_audience_vetkey(arg0: string, arg1: string, arg2: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: Uint8Array;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_shared_audience_vetkey(arg0, arg1, arg2);
+        return from_candid_variant_n6(result);
     }
     async grant_pii_read(arg0: string, arg1: string, arg2: Principal): Promise<{
         __kind__: "Ok";

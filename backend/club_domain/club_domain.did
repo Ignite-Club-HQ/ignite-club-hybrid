@@ -1098,6 +1098,12 @@ type Main =
        Err: text;
        Ok;
      });
+   invite_email_sender_status: () ->
+    (record {
+       app_url: text;
+       configured: bool;
+       from: text;
+     }) query;
    invite_stats: (club_id: text, since_ms: nat64, until_ms: nat64) ->
     (variant {
        Err: text;
@@ -1107,6 +1113,14 @@ type Main =
    is_club_member: (user: principal, club_id: text) -> (bool) query;
    is_member_removed: (club: text, user: principal) -> (bool) query;
    is_user_on_any_team: (team_ids: vec text, user: principal) -> (bool) query;
+   /// Owner-approved (2026-10-28) one-time link of the original Group 1 club
+   /// service to the shared account service, used only so private club-name
+   /// displays can confirm membership. Set-once; does not release lifecycle sync.
+   link_display_identity_authority: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    link_guardian: (child_id: text, user: principal) ->
     (variant {
        Err: text;
@@ -1799,6 +1813,8 @@ type Main =
    read_has_child_guardian: (user: principal, child_id: text) -> (bool);
    read_has_club_membership: (user: principal, club_id: text) -> (bool);
    read_has_club_staff_role: (user: principal, club_id: text) -> (bool);
+   read_has_pii_audience: (user: principal, kind: text, scope: text) ->
+    (bool);
    read_media_quota_store_registry: () ->
     (variant {
        Err: text;
@@ -2032,9 +2048,6 @@ type Main =
                                Err: text;
                                Ok: TeamCreationRequest;
                              });
-   send_invite_email: (invite_id: text, email: text) -> (variant { Err: text; Ok; });
-   invite_email_sender_status: () -> (record { configured: bool; from: text; app_url: text; }) query;
-   set_invite_email_sender: (key: text, from: text, app_url: text) -> (variant { Err: text; Ok; });
    resend_pending_invite: (id: text) ->
     (variant {
        Err: text;
@@ -2202,6 +2215,11 @@ type Main =
                                Err: text;
                                Ok: nat16;
                              });
+   send_invite_email: (invite_id: text, email: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_accessibility_prefs: (prefs_json: text) -> (variant {
                                                      Err: text;
                                                      Ok;
@@ -2310,6 +2328,11 @@ type Main =
                                                        Err: text;
                                                        Ok;
                                                      });
+   set_invite_email_sender: (key: text, from: text, app_url: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_messaging_domain_canister: (id: principal) ->
     (variant {
        Err: text;
@@ -2339,11 +2362,6 @@ type Main =
     (variant {
        Err: text;
        Ok: Child;
-     });
-   link_display_identity_authority: (id: principal) ->
-    (variant {
-       Err: text;
-       Ok;
      });
    /// Independent deletion-only configuration for an empty owner-test group.
    /// Does not release linked-account sync or register lifecycle receivers.

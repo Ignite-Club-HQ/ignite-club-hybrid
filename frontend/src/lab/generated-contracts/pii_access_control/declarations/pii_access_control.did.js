@@ -167,6 +167,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(EncryptedPii), 'Err' : IDL.Text })],
         [],
       ),
+    'get_shared_audience_vetkey' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
+        [],
+      ),
     'grant_pii_read' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

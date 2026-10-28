@@ -111,6 +111,11 @@ export interface Main {
     { 'Ok' : Array<EncryptedPii> } |
       { 'Err' : string }
   >,
+  'get_shared_audience_vetkey' : ActorMethod<
+    [string, string, Uint8Array],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'grant_pii_read' : ActorMethod<
     [string, string, Principal],
     { 'Ok' : null } |
