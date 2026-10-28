@@ -42,7 +42,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function listLiveProfilesByIds(
   ctx: FeatureBackendContext,
   ids: readonly string[],
-  privateOptions?: { audience?: import('../privateProfileAudience').PrivateProfileAudience; resolveAuthority?: import('../privateProfileAuthority').PrivateProfileAuthorityResolver; signal?: AbortSignal; hydratePrivateNames?: boolean },
+  privateOptions?: { audience?: import('../privateProfileAudience').PrivateProfileAudience; resolveAuthority?: import('../privateProfileAuthority').PrivateProfileAuthorityResolver; signal?: AbortSignal; hydratePrivateNames?: boolean; clubId?: string },
 ) {
   if (ids.length === 0) return [];
   const requestedByAccount = new Map<string, string[]>();
@@ -90,6 +90,15 @@ export async function listLiveProfilesByIds(
       // everywhere instead of "Unknown".
       const { fillOwnPrivateName } = await import("../ownPrivateName");
       const filled = fillOwnPrivateName(out, caller);
+      if (privateOptions?.clubId && !privateOptions.audience) {
+        // Other people's protected names unlock through the shared club.
+        const pending = filled.filter(p => p.display_name?.startsWith('pii-display-name:')).map(p => p.account_id);
+        const { unlockClubScopedNames } = await import("../clubScopedNames");
+        const names = pending.length ? await unlockClubScopedNames(ctx, privateOptions.clubId, pending, privateOptions.signal).catch(() => new Map<string, string>()) : new Map<string, string>();
+        return filled.map(profile => profile.display_name?.startsWith('pii-display-name:')
+          ? { ...profile, display_name: names.get(profile.account_id) ?? null }
+          : profile);
+      }
       if (privateOptions?.hydratePrivateNames === false) {
         return filled.map(profile => ({ ...profile, display_name: profile.display_name?.startsWith('pii-display-name:') ? null : profile.display_name }));
       }
