@@ -1,3 +1,8 @@
+## Chat compatibility and obsolete name-task cleanup — 28 October 2026
+- [ ] Fix the account chat read / legacy query reply mismatch for polls; run the relevant compatibility regressions.
+- [ ] Retire superseded private-name conversion and old rollout entries without marking genuine privacy, deployment or signed-in acceptance work complete.
+- [x] Paul declined old rewards-point merging because all affected data is test data; no merge or account mutation is requested.
+
 ## Retained keys for child, guest and Player-of-the-Match names — 28 October 2026
 - [x] Verified the shared child/guest/Player-of-the-Match reader already uses retained keys: the earlier claim that those reads force fresh derivation was incorrect. Added read-path tests confirming 30-day retention across sign-out, updated ciphertext display, revoked-access refusal and derivation after expiry; all 92 focused regressions pass. Fresh write checks and adult audience restrictions remain unchanged.
 - [ ] Deploy web app and confirm on a real signed-in test club; no backend upgrade is required for this caching change.
