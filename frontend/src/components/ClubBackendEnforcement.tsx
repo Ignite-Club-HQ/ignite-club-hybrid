@@ -3,10 +3,7 @@ import { useOptionalAuth } from "@/hooks/useAuth";
 import { AppSplash } from "@/components/AppSplash";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  getCurrentInternetIdentityConfirmed,
-  signOutInternetIdentity,
-} from "@/live/internetIdentityAuth";
+import { getCurrentInternetIdentityConfirmed } from "@/live/internetIdentityAuth";
 // features/membership is imported lazily at the call site so the ICP SDK
 // stays out of the entry chunk (this component mounts at app start).
 import { getActiveIcpTarget } from "@/live/targetRegistry";
@@ -24,8 +21,9 @@ import { getCurrentCountry } from "@/live/userCountry";
 import { clearUserClubIds, setUserClubIds } from "@/live/userClubs";
 
 /**
- * Applies the app-admin per-club backend overrides
- * (`backend_routing_config.clubBackendOverrides`) after sign-in.
+ * Refreshes signed-in memberships and checks email-mode club routing.
+ * A confirmed Internet Identity account stays on-chain: a club's country
+ * describes placement preference, not a migration of its existing records.
  *
  * Membership is only knowable post-auth, so the flow is two-phase:
  *  1. Pre-auth, routing reads the cached club-backend hint so /auth shows
@@ -167,17 +165,24 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         if (cancelled) return;
         setUserClubIds(clubIds);
 
+        // These memberships came from the caller-authorized canisters. Mapping
+        // their countries through today's email default does not move those
+        // clubs to Supabase or create an email identity for this account.
+        // Retain the actual signed-in provider, including explicit ?auth=icp
+        // choices and restored/redirect sessions without that URL parameter.
+        if (provider === "icp") {
+          if (membershipKnown) cacheClubBackendHint("icp");
+          sessionStorage.removeItem(ENFORCED_KEY);
+          settle();
+          return;
+        }
+
         // A club's backend follows its home country, using the same country
         // rules as the sign-in screen.
         const config = getBackendRoutingConfig();
         let homeCountries: Record<string, string | null> = {};
         try {
-          if (identity) {
-            const { getLiveClubHomeCountries } = await import("@/live/features/club");
-            homeCountries = await getLiveClubHomeCountries({ identity, target: getActiveIcpTarget() }, clubIds);
-          } else {
-            homeCountries = await fetchSupabaseHomeCountries(clubIds);
-          }
+          homeCountries = await fetchSupabaseHomeCountries(clubIds);
         } catch (error) {
           membershipKnown = false;
           console.warn("[club-backend] Could not load club home countries.", error);
@@ -202,7 +207,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         }
         // The person deliberately picked email sign-in on this device
         // (?auth=email): honour it — their data is read from Supabase.
-        if (provider === "supabase" && readAuthChoice() === "supabase") {
+        if (readAuthChoice() === "supabase") {
           sessionStorage.removeItem(ENFORCED_KEY);
           settle();
           return;
@@ -242,13 +247,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
               ? "Your club uses Internet Identity. Signing you out so you can sign in with it."
               : "Your club uses email sign-in. Signing you out so you can sign in with it.",
         });
-        if (provider === "icp") {
-          const { disconnectChatRealtime } = await import("@/live/wsRealtime");
-          disconnectChatRealtime();
-          await signOutInternetIdentity();
-        } else {
-          await supabase.auth.signOut();
-        }
+        await supabase.auth.signOut();
         // Deliberately NOT settling: keep the loader up until the reload
         // replaces the page, so no wrong-backend query can fire in between.
         // Reload the ROOT, not the current URL: the published/preview hosting
