@@ -11,7 +11,7 @@ import { connectLivePiiAccessControl } from "./domains";
 import type { FeatureBackendContext } from "./featureRouter";
 import type { PrivateProfileAudience } from './privateProfileAudience';
 import { unwrapCandid } from "./features/candid";
-import { clearDeviceMediaCaches, forgetStoredClubKey, loadStoredClubKey, storeClubKey } from "./deviceMediaCache";
+import { clearDeviceCachedPhotos, forgetStoredClubKey, loadStoredClubKey, storeClubKey } from "./deviceMediaCache";
 
 /**
  * Client-side vetKeys (IBE) cryptography for pii_access_control.
@@ -26,9 +26,12 @@ import { clearDeviceMediaCaches, forgetStoredClubKey, loadStoredClubKey, storeCl
  * separator); it must stay byte-identical with ibeIdentity in
  * backend/pii_access_control/src/main.mo.
  *
- * Derived vetKeys are cached in memory for the session (each derivation is
- * a paid vetkd_derive_key call on the canister). The cache is cleared on
- * sign-out via clearPiiVetKeyCache.
+ * Derived vetKeys are cached in memory for the session and, for records that
+ * opt in (retainOwnKey), on device for 30 days — each derivation is a paid
+ * vetkd_derive_key call on the canister. In-memory caches are cleared on
+ * sign-out via clearPiiVetKeyCache; device key copies survive so the next
+ * sign-in opens without re-deriving, and stay removable through the explicit
+ * "remove saved copies" action (clearStoredDeviceKeys).
  */
 
 const textEncoder = new TextEncoder();
@@ -46,7 +49,10 @@ let verificationKeyCache: { canisterId: string; key: DerivedPublicKey } | null =
 const vetKeyCache = new Map<string, VetKey>();
 let clubNameKeyGeneration = 0;
 
-/** Drops all cached key material — call on sign-out / identity switch. */
+/** Drops all in-session key material and cached photo bytes — call on
+ * sign-out / identity switch. Device key copies keep their 30-day life so a
+ * returning sign-in does not re-derive them; clearStoredDeviceKeys removes
+ * those copies explicitly. */
 export function clearPiiVetKeyCache(): void {
   clubNameKeyGeneration++;
   verificationKeyCache = null;
@@ -55,7 +61,7 @@ export function clearPiiVetKeyCache(): void {
   clubMediaKeyCache.clear();
   clubMediaLockSupported.clear();
   void import("./mediaDecrypt").then(m => m.clearIcpPhotoResolutionCache());
-  void clearDeviceMediaCaches();
+  void clearDeviceCachedPhotos();
 }
 
 // ==================== Per-club photo key ====================
@@ -275,27 +281,30 @@ export async function fetchPiiVetKeys(
   ctx: FeatureBackendContext,
   piiIds: string[],
   fieldId: string,
-  options: { fresh?: boolean; assertActive?: () => void; audience?: PrivateProfileAudience } = {},
+  options: { fresh?: boolean; assertActive?: () => void; audience?: PrivateProfileAudience; retainOwnKey?: boolean } = {},
 ): Promise<Map<string, VetKey>> {
   const active = options.assertActive ?? (() => {});
   if (options.audience) {
     if (fieldId !== 'display_name') throw new Error('Private-name audiences cannot unlock another field.');
     options = { ...options, fresh: true, audience: { ...options.audience } };
   }
+  // Only a caller's own record key may be retained on device. Audience-scoped
+  // reads (another person's name) never reuse or store a key copy.
+  const retain = options.retainOwnKey === true && !options.audience;
   active();
   const out = new Map<string, VetKey>();
   const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   active();
   const cid = canisterId.toText();
   const principal = ctx.identity.getPrincipal().toText();
-  // Device-stored keys (30 days, cleared on sign-out) skip the paid
+  // Device-stored keys (30 days, kept through sign-out) skip the paid
   // derivation — previously every app open re-derived every visible name.
   const memoryKey = (id: string) => `${ctx.target.host}|${cid}|${principal}|${fieldId}\u001f${id}`;
   const storeKey = (id: string) => `pii:${fieldId}:${id}`;
-  // Private profile reads require a fresh authorization decision, never a
-  // retained media/session key. Fresh results are not placed into any cache.
+  // Private profile reads re-read their ciphertext every time; a retained key
+  // copy only skips the derivation step, never the authorized read.
   for (const id of piiIds) {
-    if (options.fresh) continue;
+    if (options.fresh && !retain) continue;
     const memKey = memoryKey(id);
     if (vetKeyCache.has(memKey)) continue;
     const stored = loadStoredClubKey(cid, principal, storeKey(id));
@@ -306,7 +315,7 @@ export async function fetchPiiVetKeys(
       forgetStoredClubKey(cid, principal, storeKey(id));
     }
   }
-  const missing = [...new Set(piiIds)].filter((id) => options.fresh || !vetKeyCache.has(memoryKey(id)));
+  const missing = [...new Set(piiIds)].filter((id) => (options.fresh && !retain) || !vetKeyCache.has(memoryKey(id)));
   if (missing.length === 0) {
     for (const id of piiIds) { const key = vetKeyCache.get(memoryKey(id)); if (key) out.set(id, key); }
     return out;
@@ -337,13 +346,16 @@ export async function fetchPiiVetKeys(
         verificationKey,
         piiIbeIdentity(chunk[i], fieldId),
       );
-      if (options.fresh) out.set(chunk[i], vetKey);
-      else vetKeyCache.set(memoryKey(chunk[i]), vetKey);
+      if (options.fresh && !retain) out.set(chunk[i], vetKey);
+      else {
+        vetKeyCache.set(memoryKey(chunk[i]), vetKey);
+        if (retain) storeClubKey(cid, principal, storeKey(chunk[i]), vetKey.serialize());
+      }
     }
   }
 
   active();
-  if (options.fresh) return out;
+  if (options.fresh && !retain) return out;
   for (const id of piiIds) {
     const cached = vetKeyCache.get(memoryKey(id));
     if (cached) out.set(id, cached);
