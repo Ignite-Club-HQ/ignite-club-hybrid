@@ -318,7 +318,7 @@ export function ChatParticipantsList({
                 (selfIds.has(id) ? (((myProfile as any)?.avatar_url as string | null) ?? null) : null);
               const profilesFor = async (ids: string[]) => {
                 if (ids.length === 0) return new Map<string, any>();
-                const profiles = await listLiveProfilesByIds(ctx, ids).catch(() => []);
+                const profiles = await listLiveProfilesByIds(ctx, ids, resolvedClubId ? { clubId: resolvedClubId } : undefined).catch(() => []);
                 return new Map(profiles.map((p: any) => [p.account_id, p]));
               };
               const toMembers = (

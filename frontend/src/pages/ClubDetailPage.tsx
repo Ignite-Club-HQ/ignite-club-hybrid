@@ -407,7 +407,7 @@ export default function ClubDetailPage() {
         const userOf = (g: any): string =>
           g.account_id ?? (g.user?.toText ? g.user.toText() : String(g.user ?? ""));
         const ids = Array.from(new Set(grantLists.flatMap((l) => l.grants.map(userOf)).filter(Boolean)));
-        const profiles = (await listLiveProfilesByIds(ctx, ids).catch(() => [])) as any[];
+        const profiles = (await listLiveProfilesByIds(ctx, ids, { clubId: id! }).catch(() => [])) as any[];
         const byId = new Map(profiles.map((p) => [p.account_id, p]));
         const { accountIdForPrincipal } = await import("@/live/features/identityAccessClient");
         const selfIds = new Set<string>([user?.id, user?.id ? `principal:${user.id}` : null, (myProfile as any)?.id].filter(Boolean) as string[]);

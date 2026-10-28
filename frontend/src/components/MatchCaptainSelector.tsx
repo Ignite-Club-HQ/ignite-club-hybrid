@@ -173,7 +173,7 @@ export default function MatchCaptainSelector({
     .filter((id): id is string => !!id).map((id) => id.replace(/^principal:/, "")))];
   const { data: adultProfiles } = useQuery({
     queryKey: ["roster-profile-names", eventId, user?.id, isIcp, profileIds.join(",")],
-    queryFn: ({ signal }) => withReadDeadline(readProfileSummaries(profileIds), "Captain names", 12_000, signal),
+    queryFn: ({ signal }) => withReadDeadline(readProfileSummaries(profileIds, clubId), "Captain names", 12_000, signal),
     enabled: !!user && isIcp && profileIds.length > 0,
     staleTime: 60_000,
     retry: false,

@@ -653,7 +653,7 @@ export default function PlayerOfMatchSelector({
   );
   const { data: adultProfiles } = useQuery({
     queryKey: ["roster-profile-names", eventId, goingAdultIds.join(",")],
-    queryFn: () => readProfileSummaries(goingAdultIds),
+    queryFn: () => readProfileSummaries(goingAdultIds, clubId),
     enabled: isIcp && goingAdultIds.length > 0,
     staleTime: 60_000,
   });
