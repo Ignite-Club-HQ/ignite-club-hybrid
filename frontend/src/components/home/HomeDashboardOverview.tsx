@@ -44,6 +44,7 @@ interface HomeDashboardRole {
 
 interface HomeDashboardOverviewProps {
   firstName: string;
+  namePending?: boolean;
   email?: string;
   activeClubName: string | null;
   activeClubFilter: string | null;
@@ -75,6 +76,7 @@ interface HomeDashboardOverviewProps {
 
 export function HomeDashboardOverview({
   firstName,
+  namePending = false,
   email,
   activeClubName,
   activeClubFilter,
