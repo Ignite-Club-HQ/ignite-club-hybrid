@@ -67,6 +67,7 @@ try {
   ok(await as(identity, person).erase_account(account.id));
 
   const after = await dumps();
+  for (const [k, v] of Object.entries(after.chat)) if (text(v).includes(person.toText())) console.log('CHAT FIELD', k, text(v).slice(0, 400));
   const leftovers = {
     identity: traces('Sign-in and profile', after.identity, needles),
     club: traces('Club and team access', after.club, needles),
