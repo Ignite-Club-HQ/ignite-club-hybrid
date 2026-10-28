@@ -31,7 +31,7 @@ it('shared converted-name saves maintain copies and never replace the reference 
   const result = await saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, target);
   expect(mocks.prepare).toHaveBeenCalledOnce(); expect(mocks.refresh).toHaveBeenCalledOnce();
   expect(mocks.set).toHaveBeenCalledWith(reference, undefined); expect(result.displayName).toBe('After');
-  expect(mocks.cache.mock.calls[0][1].displayName).toBeNull(); expect(result.privateNameMaintained).toBe(true);
+  expect(mocks.cache.mock.calls[0][1].displayName).toBe('After'); expect(result.privateNameMaintained).toBe(true);
 });
 it('avatar-only saves preserve the reference without another name encryption or key-copy write', async () => {
   await saveIcpIdentityProfile(identity, subject, { displayName: 'Before', avatarRef: 'avatar' }, target);
@@ -51,7 +51,7 @@ it('production saves publish only a verified encrypted reference without enablin
   mocks.rehearsal.mockReturnValue(false);
   await saveIcpIdentityProfile(identity, subject, { displayName: 'After' }, { ...target, host: 'https://icp-api.io' });
   expect(mocks.authority).toHaveBeenCalledOnce(); expect(mocks.get).not.toHaveBeenCalled(); expect(mocks.set).toHaveBeenCalledWith(reference, undefined); expect(mocks.prepare).toHaveBeenCalledOnce();
-  expect(mocks.refresh).not.toHaveBeenCalled(); expect(mocks.grants).not.toHaveBeenCalled(); expect(mocks.cache.mock.calls[0][1].displayName).toBeNull();
+  expect(mocks.refresh).not.toHaveBeenCalled(); expect(mocks.grants).not.toHaveBeenCalled(); expect(mocks.cache.mock.calls[0][1].displayName).toBe('After');
 });
 it('unreleased production saving never falls back to plaintext or a PII side copy', async () => {
   mocks.rehearsal.mockReturnValue(false); mocks.authority.mockRejectedValue(Error('Secure personal-name saving is not released'));

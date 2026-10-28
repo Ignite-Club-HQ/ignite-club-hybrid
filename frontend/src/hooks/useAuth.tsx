@@ -1399,6 +1399,12 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     }
     const cached = getCachedIcpIdentityProfile(principal);
     setIcpProfile(cached);
+    // Warm the in-memory own-name store from the device cache so the
+    // member's own rows (events, chats, posts) show their name before the
+    // background unlock completes.
+    if (cached?.displayName) {
+      void import("@/live/ownPrivateName").then((m) => m.rememberOwnPrivateName(principal, cached.displayName!)).catch(() => undefined);
+    }
     setIcpProfileResolved(knownCachedIcpProfile(cached));
     setIcpNamePending(Boolean(cached && !cached.displayName && knownCachedIcpProfile(cached)));
     setIcpProfileError(false);

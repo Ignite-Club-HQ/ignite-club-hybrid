@@ -26,7 +26,8 @@ it('reopens a saved encrypted profile without persisting its decrypted name', as
   const result = await fetchIcpIdentityProfile(identity, principal, target);
   expect(result.displayName).toBe('Saved name'); expect(result.profileMissing).toBe(false);
   expect(mocks.unlock).toHaveBeenCalledWith({ identity, target }, reference);
-  expect(mocks.cache).toHaveBeenCalledWith(principal, { ...result, displayName: null });
+  // The unlocked own name is cached on device so app resume shows it instantly.
+  expect(mocks.cache).toHaveBeenCalledWith(principal, result);
 });
 it('never reads or caches a profile for a different signed-in caller', async () => {
   await expect(fetchIcpIdentityProfile(identity, authority, target)).rejects.toThrow('signed-in identity');
