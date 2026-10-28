@@ -167,6 +167,22 @@ function useResolvedAssetUrls(posts: LiveMediaPost[] | undefined) {
   };
   const [urls, setUrls] = useState<Record<string, string>>(initial);
   const doneRef = useRef(new Set<string>());
+  // Photos that failed (often right after resuming, while the connection
+  // wakes up) are retried a few times and again when the app is reopened,
+  // instead of staying on "could not be loaded" until a restart.
+  const failuresRef = useRef(new Map<string, number>());
+  const [retryTick, setRetryTick] = useState(0);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || !failuresRef.current.size) return;
+      for (const id of failuresRef.current.keys()) doneRef.current.delete(id);
+      failuresRef.current.clear();
+      setRetryTick((t) => t + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onVisible);
+    return () => { document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("online", onVisible); };
+  }, []);
   useEffect(() => {
     if (!posts) return;
     let cancelled = false;
@@ -199,13 +215,19 @@ function useResolvedAssetUrls(posts: LiveMediaPost[] | undefined) {
         while (!cancelled && misses.length) {
           const asset = misses.shift();
           if (!asset?.sourceUrl) continue;
-          try {
-            const resolved = await resolveIcpBlobObjectUrl(asset.sourceUrl);
-            if (!cancelled) show(asset, resolved ?? UNAVAILABLE_PHOTO_URL, !!resolved);
-          } catch (err) {
-            console.warn("[icp-media-feed] could not load asset", asset.id, err);
-            if (!cancelled) show(asset, UNAVAILABLE_PHOTO_URL, false);
+          let resolved: string | null = null;
+          let lastError: unknown = null;
+          for (const delay of [0, 2_000, 6_000]) {
+            if (delay) await new Promise((r) => setTimeout(r, delay));
+            if (cancelled) return;
+            try { resolved = await resolveIcpBlobObjectUrl(asset.sourceUrl); lastError = null; break; }
+            catch (err) { lastError = err; }
           }
+          if (cancelled) return;
+          if (resolved) { failuresRef.current.delete(asset.id); show(asset, resolved, true); continue; }
+          if (lastError) console.warn("[icp-media-feed] could not load asset", asset.id, lastError);
+          failuresRef.current.set(asset.id, (failuresRef.current.get(asset.id) ?? 0) + 1);
+          show(asset, UNAVAILABLE_PHOTO_URL, false);
         }
       };
       await Promise.all(Array.from({ length: 8 }, worker));
@@ -217,7 +239,7 @@ function useResolvedAssetUrls(posts: LiveMediaPost[] | undefined) {
         if (!a.sourceUrl || !sessionPhotoUrls.has(a.sourceUrl)) doneRef.current.delete(a.id);
       });
     };
-  }, [posts]);
+  }, [posts, retryTick]);
   return urls;
 }
 
