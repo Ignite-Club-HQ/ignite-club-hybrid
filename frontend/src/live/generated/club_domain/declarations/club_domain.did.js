@@ -1416,6 +1416,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamCreationRequest, 'Err' : IDL.Text })],
         [],
       ),
+    'send_invite_email' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'invite_email_sender_status' : IDL.Func(
+        [],
+        [IDL.Record({ 'configured' : IDL.Bool, 'from' : IDL.Text, 'app_url' : IDL.Text })],
+        ['query'],
+      ),
+    'set_invite_email_sender' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'resend_pending_invite' : IDL.Func(
         [IDL.Text],
         [

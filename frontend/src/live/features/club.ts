@@ -4,7 +4,6 @@ import { connectLiveClubDomain } from "../domains";
 import { fetchMyRoleGrantsEverywhere } from "./myRoleGrants";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
-import { registerLivePiiText } from "./vault";
 import { batched as batchedCall } from "./batching";
 
 /**
@@ -659,15 +658,11 @@ export async function createLivePendingInvite(
     ),
     "Create pending invite",
   );
-  // Register the invitee email on pii_access_control (pii_id = invite id,
-  // field_id = "email", owner = the inviting caller). Best effort — the
-  // invite itself already exists and must not fail on a PII write.
+  // Email is sent once by the club service and never stored anywhere; only a
+  // salted hash is kept so a duplicate invite to the same address is caught.
   const inviteId = (result as { invite?: { id?: string } } | undefined)?.invite?.id;
+  let emailDelivery: InviteEmailDelivery = "not_requested";
   if (inviteId && input.email) {
-    await registerLivePiiText(ctx, inviteId, "email", input.email);
-    // Also index the invite by a hash of its email + club id so a later
-    // create_pending_invite call can dedupe without ever reading a plaintext
-    // email back off the canister (see lib/inviteEmailDedupe.ts).
     try {
       const { hashInviteEmail } = await import("@/lib/inviteEmailDedupe");
       const hash = await hashInviteEmail(input.email, input.clubId);
@@ -675,8 +670,22 @@ export async function createLivePendingInvite(
     } catch (err) {
       console.warn("[createLivePendingInvite] email hash registration failed:", err);
     }
+    emailDelivery = await sendLiveInviteEmail(ctx, inviteId, input.email);
   }
-  return result;
+  return Object.assign(result as object, { emailDelivery }) as typeof result & { emailDelivery: InviteEmailDelivery };
+}
+
+export type InviteEmailDelivery = "not_requested" | "sent" | { failed: string };
+
+/** Hands the address to the club service for one Resend delivery; nothing is saved. */
+export async function sendLiveInviteEmail(ctx: FeatureBackendContext, inviteId: string, email: string): Promise<InviteEmailDelivery> {
+  try {
+    const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+    const reply = await actor.send_invite_email(inviteId, email.trim().toLowerCase());
+    return "Ok" in reply ? "sent" : { failed: reply.Err };
+  } catch (err) {
+    return { failed: err instanceof Error ? err.message : "Email could not be sent" };
+  }
 }
 
 export async function listLivePendingInvitesByClub(ctx: FeatureBackendContext, clubId: string) {
@@ -710,10 +719,10 @@ export async function createLiveFamilyInvite(ctx: FeatureBackendContext, input: 
   const result = await unwrapCandid(actor.create_family_invite(input.requestId, input.clubId, input.teamId,
     input.children.map(c => ({ id: c.id, existing: c.existing })), input.second,
     input.boundSecondary ? [Principal.fromText(input.boundSecondary.replace(/^principal:/, ""))] : []), "Create family invite");
-  if (input.email) await registerLivePiiText(ctx, result.invite.id, "email", input.email);
+  const emailDelivery = input.email ? await sendLiveInviteEmail(ctx, result.invite.id, input.email) : "not_requested" as const;
   const secondary = result.secondary[0];
-  if (secondary && input.secondaryEmail) await registerLivePiiText(ctx, secondary.id, "email", input.secondaryEmail);
-  return result;
+  const secondaryEmailDelivery = secondary && input.secondaryEmail ? await sendLiveInviteEmail(ctx, secondary.id, input.secondaryEmail) : "not_requested" as const;
+  return { ...result, emailDelivery, secondaryEmailDelivery };
 }
 
 export async function readLiveFamilyInviteReceipt(ctx: FeatureBackendContext, id: string) {

@@ -38,6 +38,7 @@ import MediaQuotaCutover "mediaQuotaCutover";
 import MediaRetainedQuota "mediaRetainedQuota";
 import MediaRetainedCutover "mediaRetainedCutover";
 import MediaJournalRetirement "mediaJournalRetirement";
+import InviteEmail "inviteEmail";
 import MediaJournalToken "../../shared/MediaJournalToken";
 import MediaGrowthReservations "mediaGrowthReservations";
 import MembershipPage "membershipPage";
@@ -384,6 +385,10 @@ persistent actor class Main(governorInit : Principal) = this {
   // governor-only, reads are public so an unauthenticated boot can fetch the
   // routing config. Never store secrets here — state is replica-visible.
   var appConfig : [(Text, Text)];
+  // Resend sender for invite emails. Governor-set, never returned by any
+  // method. Recipient addresses are never stored; only sent invite ids.
+  var invite_email_sender : ?InviteEmail.Sender;
+  var invite_emails_sent : [Text];
 
   // Per-club home country (ISO two-letter code), mirroring the Supabase
   // clubs.home_country column. Fixed at creation: club admins can set it
@@ -4987,6 +4992,44 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(caller) };
   
     } finally { privateNameWriterGate.leave(privateWriterLease) };
+  };
+
+  // ---- Invite email: send once, store nothing about the recipient. ----
+  public shared ({ caller }) func set_invite_email_sender(key : Text, from : Text, app_url : Text) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (key == "") { invite_email_sender := null; return #Ok };
+    if (key.size() > 256 or from.size() == 0 or from.size() > 200 or not app_url.startsWith(#text "https://") or app_url.size() > 200 or app_url.endsWith(#text "/")) return #Err("Invalid sender settings");
+    invite_email_sender := ?{ key; from; app_url };
+    #Ok
+  };
+
+  public query func invite_email_sender_status() : async { configured : Bool; from : Text; app_url : Text } {
+    switch (invite_email_sender) { case (?s) ({ configured = true; from = s.from; app_url = s.app_url }); case null ({ configured = false; from = ""; app_url = "" }) }
+  };
+
+  public shared ({ caller }) func send_invite_email(invite_id : Text, email : Text) : async { #Ok; #Err : Text } {
+    if (caller.isAnonymous()) return #Err("Sign in required");
+    let sender = invite_email_sender ?? return #Err("Email sending is not set up yet; share the link instead");
+    let invite = pendingInvites.find(func i = i.id == invite_id) ?? return #Err("Invite not found");
+    if (invite.invited_by != caller) return #Err("Only the person who created this invite can email it");
+    if (invite.status != "pending") return #Err("Invite is no longer pending");
+    if (isExcluded(caller, invite.club_id) or isTransferFenced(invite.club_id)) return #Err("Forbidden");
+    let to = email.trim(#char ' ').toLower();
+    if (not InviteEmail.validEmail(to)) return #Err("Invalid email");
+    if (invite_emails_sent.any(func id = id == invite_id)) return #Err("Invite already emailed; create a fresh invite to send again");
+    // Reserve before the await so concurrent calls cannot send twice.
+    invite_emails_sent := (if (invite_emails_sent.size() >= 5000) invite_emails_sent.sliceToArray(1000, invite_emails_sent.size()) else invite_emails_sent).concat([invite_id]);
+    let ic : actor { http_request : InviteEmail.Request -> async InviteEmail.HttpResult } = actor ("aaaaa-aa");
+    let result = try {
+      await (with cycles = 20_000_000_000) ic.http_request(InviteEmail.request(sender, invite_id, invite.kind, to))
+    } catch (_) {
+      return #Err("Email delivery outcome unknown; share the link instead")
+    };
+    if (result.status >= 200 and result.status < 300) #Ok
+    else {
+      invite_emails_sent := invite_emails_sent.filter(func id = id != invite_id);
+      #Err("Email service refused the invite (" # Nat.toText(result.status) # "); share the link instead")
+    }
   };
 
   // Opaque child IDs only: names are encrypted by the client before commit.

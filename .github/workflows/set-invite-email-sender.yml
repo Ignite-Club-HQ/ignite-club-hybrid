@@ -1,0 +1,76 @@
+# Stores the Resend sender on every group's club service so invite emails
+# send without the address ever being saved. Needs repository secret
+# RESEND_API_KEY (a key from your Resend account) plus DEPLOYER_PEM.
+
+name: Set invite email sender (ICP)
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_address:
+        description: "Sender, e.g. Ignite Club HQ <invites@yourdomain.com> (domain must be verified in Resend)"
+        required: true
+      app_url:
+        description: "App address used in invite links"
+        required: true
+        default: "https://proe7-kqaaa-aaaas-qg6gq-cai.icp0.io"
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ICP_HOME: ${{ github.workspace }}/.icp-home
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+
+      - name: Install icp CLI
+        run: npm install -g @icp-sdk/icp-cli --no-fund --no-audit
+
+      - name: Restore deployer identity
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOYER_PEM" ]; then
+            echo "::error::The DEPLOYER_PEM repository secret is not set."
+            echo "Use the same key as the deploy workflow (the 'deployer-key' artifact"
+            echo "from the first deploy run): Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          mkdir -p "$ICP_HOME/identity/keys"
+          PEM_FILE="$ICP_HOME/identity/keys/ignite-governor.pem"
+          printf '%s' "$DEPLOYER_PEM" \
+            | tr -d '\r' \
+            | sed 's/\\\\n/\n/g' \
+            | sed 's/\\n/\n/g' \
+            | sed -n '/-----BEGIN/,/-----END/p' \
+            | sed 's/^.*-----BEGIN/-----BEGIN/' \
+            | sed 's/\(-----END [A-Z ]*KEY-----\).*$/\1/' \
+            > "$PEM_FILE"
+          if ! grep -q -- '-----BEGIN' "$PEM_FILE" || ! grep -q -- '-----END' "$PEM_FILE"; then
+            echo "::error::The DEPLOYER_PEM secret does not contain a valid key file."
+            exit 1
+          fi
+          ALGO="$(openssl asn1parse -in "$PEM_FILE" 2>/dev/null | grep -m1 'OBJECT' || true)"
+          if printf '%s' "$ALGO" | grep -qi 'rsa'; then
+            echo "::error::The DEPLOYER_PEM secret holds an RSA key, which the Internet Computer does not accept."
+            exit 1
+          fi
+          icp identity import --from-pem "$PEM_FILE" --storage plaintext ignite-governor
+          icp identity default ignite-governor
+          echo "==> Governor principal: $(icp identity principal)"
+
+      - name: Configure sender on all groups
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          FROM_ADDRESS: ${{ inputs.from_address }}
+          APP_URL: ${{ inputs.app_url }}
+        run: node scripts/set-invite-email-sender.mjs
