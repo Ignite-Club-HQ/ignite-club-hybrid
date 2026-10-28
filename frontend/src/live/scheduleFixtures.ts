@@ -48,7 +48,7 @@ export async function loadScheduleFixtures(ctx: FeatureBackendContext, scope: Fi
       .catch(() => ({ name: 'Club', sport: null }));
     clubs.set(id, value); return value;
   };
-  const readCompetition = (competition: Competition): Promise<void> => {
+  const readCompetition = (competition: Competition, managed: boolean): Promise<void> => {
     const hit = jobs.get(competition.id);
     if (hit) return hit;
     pending++;
@@ -77,7 +77,15 @@ export async function loadScheduleFixtures(ctx: FeatureBackendContext, scope: Fi
             teams: null, clubs: info, competition_id: competition.id, is_competition_fixture: true,
           });
         }
-      } catch { failed.add(`competition:${competition.id}`); }
+      } catch (error) {
+        // Other clubs' public competitions are listed to everyone, but their
+        // fixtures are only readable by participants. "Not yours" is not a
+        // failed refresh; only competitions you manage/entered report errors.
+        const text = error instanceof Error ? error.message : String(error);
+        if (!managed && /forbidden|denied|not authori[sz]ed/i.test(text)) return;
+        console.warn('[schedule] competition fixtures failed', competition.id, text);
+        failed.add(`competition:${competition.id}`);
+      }
       finally { pending--; publish(); }
     })();
     jobs.set(competition.id, job); return job;
@@ -91,8 +99,8 @@ export async function loadScheduleFixtures(ctx: FeatureBackendContext, scope: Fi
       const competitions = await source.read();
       await Promise.all(competitions.filter(competition => competition.status !== 'archived' &&
         (source.managed || competition.visibility === 'public') && (!scope.clubId || competition.club_id === scope.clubId))
-        .map(readCompetition));
-    } catch { failed.add(source.id); }
+        .map(competition => readCompetition(competition, source.managed)));
+    } catch (error) { console.warn('[schedule] competition list failed', source.id, error instanceof Error ? error.message : String(error)); failed.add(source.id); }
     finally { pending--; publish(); }
   }));
   return snapshot();
