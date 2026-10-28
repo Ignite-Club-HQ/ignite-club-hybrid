@@ -347,7 +347,7 @@ export function useAddExistingTeamMemberMutation({
                   if (childId) {
                     // Names live on pii_access_control, not club_domain —
                     // register the name and grant the parent read access.
-                    await registerLiveChildNamePii(ctx, childId, child.name.trim(), userPrincipal);
+                    await registerLiveChildNamePii(ctx, childId, child.name.trim(), userPrincipal, clubId);
                     // Club-scoped read grant so coaches/members can render
                     // the name on rosters.
                     await grantLiveClubChildNameRead(ctx, childId, clubId);

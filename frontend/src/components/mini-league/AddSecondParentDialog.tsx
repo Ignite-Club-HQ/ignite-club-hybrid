@@ -146,7 +146,7 @@ export function AddSecondParentDialog({
         const child = await createLiveChildForParentInClub(ctx, clubId, parentPrincipal);
         // Names live on pii_access_control, not club_domain — register the
         // player name and grant the parent read access (best effort).
-        await registerLiveChildNamePii(ctx, child.id, playerName, parentPrincipal);
+        await registerLiveChildNamePii(ctx, child.id, playerName, parentPrincipal, clubId);
         // Club-scoped read grant so club members can render the name.
         await grantLiveClubChildNameRead(ctx, child.id, clubId);
         return child.id;

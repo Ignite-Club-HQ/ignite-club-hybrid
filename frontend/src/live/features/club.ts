@@ -704,11 +704,11 @@ export async function createLiveFamilyInvite(ctx: FeatureBackendContext, input: 
   for (const child of input.children) {
     if (!child.existing) {
       if (!child.name.trim()) throw new Error("Child name required");
-      await registerLivePii(ctx, child.id, "name", new TextEncoder().encode(child.name), ctx.identity.getPrincipal());
+      await registerLivePii(ctx, child.id, "name", new TextEncoder().encode(child.name), ctx.identity.getPrincipal(), { kind: "clubchildren", scope: input.clubId, club: input.clubId });
       await grantLivePiiReadClub(ctx, child.id, "name", input.clubId);
       for (const [field, value] of [["year_of_birth", child.yearOfBirth], ["jersey_number", child.jerseyNumber]]) {
         if (value) {
-          await registerLivePii(ctx, child.id, field, new TextEncoder().encode(value), ctx.identity.getPrincipal());
+          await registerLivePii(ctx, child.id, field, new TextEncoder().encode(value), ctx.identity.getPrincipal(), { kind: "clubchildren", scope: input.clubId, club: input.clubId });
           await grantLivePiiReadClub(ctx, child.id, field, input.clubId);
         }
       }

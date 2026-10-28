@@ -5,7 +5,7 @@ import { getCurrentInternetIdentity } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { isBlobStoreConfigured, uploadBytesToBlobStore } from "./blobStoreUpload";
 import { resolveAuthBackend } from "./authBackendMode";
-import { clubIdFromMediaPath, encryptClubMedia, encryptPiiValue, isClubMediaLockSupported } from "./piiVetKeys";
+import { clubIdFromMediaPath, encryptClubMedia, encryptPiiValue, encryptSharedValue, isClubMediaLockSupported, type SharedAudience } from "./piiVetKeys";
 import { grantLiveClubPiiRead, grantLivePiiReadClub, grantLivePiiReadCompetition, registerLivePii } from "./features/vault";
 import { MEDIA_BLOB_PII_FIELD } from "./mediaDecrypt";
 import type { LiveBlobRef } from "./mediaStorage";
@@ -63,6 +63,8 @@ export async function tryUploadMediaToBlobStore(args: {
   /** "own" keeps the per-file lock even under clubs/ (e.g. vault files,
    * which only club staff may open — the club lock admits every member). */
   lock?: "club" | "own";
+  /** Role-limited Vault files: lock bytes to this shared audience key. */
+  audience?: SharedAudience;
   beforeUpload?: (ref: LiveBlobRef) => Promise<void>;
 }): Promise<BlobMediaUpload | null> {
   const target = args.context?.target ?? getActiveIcpTarget();
@@ -88,7 +90,9 @@ export async function tryUploadMediaToBlobStore(args: {
       ? uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime, args.beforeUpload)
       : uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime);
   }
-  const ciphertext = await encryptPiiValue(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, bytes);
+  const ciphertext = args.audience
+    ? await encryptSharedValue(ctx, args.audience, bytes)
+    : await encryptPiiValue(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, bytes);
   // The access record's ciphertext is only a content-hash marker (the store
   // re-verifies the same hash on finalize), so register it IN PARALLEL with
   // the byte upload instead of after it — saves two sequential round trips.

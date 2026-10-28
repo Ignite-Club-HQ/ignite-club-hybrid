@@ -95,6 +95,7 @@ export function forgetStoredClubKey(canisterId: string, principal: string, clubI
 /** Club id a stored key belongs to, or null for person-scoped keys (pii:...). */
 export function storedKeyClubId(slot: string): string | null {
   if (slot.startsWith("pii:")) return null;
+  if (slot.startsWith("shared:")) { const c = slot.slice(7).split(":")[0]; return c || null; }
   const marker = ":clubnames:";
   const i = slot.lastIndexOf(marker);
   if (slot.startsWith("private-club-name:")) return i >= 0 ? slot.slice(i + marker.length) : null;

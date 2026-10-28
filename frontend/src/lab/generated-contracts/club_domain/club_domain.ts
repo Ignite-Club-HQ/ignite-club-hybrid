@@ -1097,6 +1097,11 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    invite_email_sender_status(): Promise<{
+        from: string;
+        app_url: string;
+        configured: boolean;
+    }>;
     invite_stats(club_id: string, since_ms: bigint, until_ms: bigint): Promise<{
         __kind__: "Ok";
         Ok: InviteStats;
@@ -1108,6 +1113,18 @@ export interface MainInterface {
     is_club_member(user: Principal, club_id: string): Promise<boolean>;
     is_member_removed(club: string, user: Principal): Promise<boolean>;
     is_user_on_any_team(team_ids: Array<string>, user: Principal): Promise<boolean>;
+    /**
+     * / Owner-approved (2026-10-28) one-time link of the original Group 1 club
+     * / service to the shared account service, used only so private club-name
+     * / displays can confirm membership. Set-once; does not release lifecycle sync.
+     */
+    link_display_identity_authority(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     link_guardian(child_id: string, user: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1997,6 +2014,7 @@ export interface MainInterface {
     read_has_child_guardian(user: Principal, child_id: string): Promise<boolean>;
     read_has_club_membership(user: Principal, club_id: string): Promise<boolean>;
     read_has_club_staff_role(user: Principal, club_id: string): Promise<boolean>;
+    read_has_pii_audience(user: Principal, kind: string, scope: string): Promise<boolean>;
     read_media_quota_store_registry(): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -2550,6 +2568,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    send_invite_email(invite_id: string, email: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_accessibility_prefs(prefs_json: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -2698,6 +2723,13 @@ export interface MainInterface {
         Err: string;
     }>;
     set_identity_access_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_invite_email_sender(key: string, from: string, app_url: string): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -4820,6 +4852,14 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.import_media_retained_store(arg0);
         return from_candid_variant_n17(result);
     }
+    async invite_email_sender_status(): Promise<{
+        from: string;
+        app_url: string;
+        configured: boolean;
+    }> {
+        const result = await this.actor.invite_email_sender_status();
+        return result;
+    }
     async invite_stats(arg0: string, arg1: bigint, arg2: bigint): Promise<{
         __kind__: "Ok";
         Ok: InviteStats;
@@ -4845,6 +4885,16 @@ export class Club_domain implements club_domainInterface {
     async is_user_on_any_team(arg0: Array<string>, arg1: Principal): Promise<boolean> {
         const result = await this.actor.is_user_on_any_team(arg0, arg1);
         return result;
+    }
+    async link_display_identity_authority(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.link_display_identity_authority(arg0);
+        return from_candid_variant_n17(result);
     }
     async link_guardian(arg0: string, arg1: Principal): Promise<{
         __kind__: "Ok";
@@ -6158,6 +6208,10 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.read_has_club_staff_role(arg0, arg1);
         return result;
     }
+    async read_has_pii_audience(arg0: Principal, arg1: string, arg2: string): Promise<boolean> {
+        const result = await this.actor.read_has_pii_audience(arg0, arg1, arg2);
+        return result;
+    }
     async read_media_quota_store_registry(): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -6931,6 +6985,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.send_fee_reminders(arg0, arg1, arg2, arg3);
         return from_candid_variant_n324(result);
     }
+    async send_invite_email(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.send_invite_email(arg0, arg1);
+        return from_candid_variant_n17(result);
+    }
     async set_accessibility_prefs(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -7149,6 +7213,16 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_identity_access_canister(arg0);
+        return from_candid_variant_n17(result);
+    }
+    async set_invite_email_sender(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_invite_email_sender(arg0, arg1, arg2);
         return from_candid_variant_n17(result);
     }
     async set_messaging_domain_canister(arg0: Principal): Promise<{

@@ -2,7 +2,7 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { IbeCiphertext } from "@icp-sdk/vetkeys";
 import { connectLivePiiAccessControl, connectLiveVaultDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
-import { decryptPiiText, encryptPiiValue, fetchPiiVetKeys } from "../piiVetKeys";
+import { decryptPiiText, encryptPiiValue, encryptSharedValue, fetchPiiVetKeys, parseSharedCiphertext, tryDecryptShared, type SharedAudience } from "../piiVetKeys";
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
 import { scheduleVaultUploadRecovery } from "../vaultUploadRecovery";
 import { reconcileVaultUploadIntent } from "../vaultUploadIntentRecovery";
@@ -29,8 +29,11 @@ export async function registerLivePii(
   fieldId: string,
   plaintext: Uint8Array,
   domainOwner: Principal,
+  audience?: SharedAudience,
 ) {
-  const ciphertext = await encryptPiiValue(ctx, piiId, fieldId, plaintext);
+  const ciphertext = audience
+    ? await encryptSharedValue(ctx, audience, plaintext)
+    : await encryptPiiValue(ctx, piiId, fieldId, plaintext);
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   return unwrapCandid(
     actor.register_pii(piiId, fieldId, ciphertext, domainOwner),
@@ -236,10 +239,17 @@ export async function resolveLivePiiTextBatch(
   try {
     const rows = await getLiveEncryptedPiiBatch(ctx, piiIds, fieldId, operation, purpose);
     if (rows.length === 0) return out;
-    const readableIds = rows.map((row) => row.pii_id);
-    const vetKeys = await fetchPiiVetKeys(ctx, readableIds, fieldId);
     const decoder = new TextDecoder();
-    for (const row of rows) {
+    const perRecord: typeof rows = [];
+    await Promise.all(rows.map(async (row) => {
+      const bytes = Uint8Array.from(row.ciphertext);
+      if (!parseSharedCiphertext(bytes)) { perRecord.push(row); return; }
+      const plain = await tryDecryptShared(ctx, bytes);
+      if (plain) out.set(row.pii_id, decoder.decode(plain));
+    }));
+    if (perRecord.length === 0) return out;
+    const vetKeys = await fetchPiiVetKeys(ctx, perRecord.map((row) => row.pii_id), fieldId);
+    for (const row of perRecord) {
       const vetKey = vetKeys.get(row.pii_id);
       if (!vetKey) continue; // ciphertext readable but no key grant — treat as no access
       try {
@@ -288,10 +298,15 @@ export async function registerLiveChildNamePii(
   childId: string,
   childName: string,
   parent: Principal,
+  clubId?: string | null,
 ): Promise<void> {
   const owner = ctx.identity.getPrincipal();
   try {
-    await registerLivePii(ctx, childId, "name", textEncoder.encode(childName), owner);
+    // With a club, the name is locked to the club-children key: one key per
+    // club opens every child's name for that club's members.
+    await registerLivePii(ctx, childId, "name", textEncoder.encode(childName), owner,
+      clubId ? { kind: "clubchildren", scope: clubId, club: clubId } : undefined);
+    if (clubId) await grantLiveClubPiiRead(ctx, childId, "name", clubId);
     await grantLivePiiRead(ctx, childId, "name", parent);
   } catch (error) {
     console.error("[vault] child name PII registration failed", {
@@ -331,6 +346,7 @@ export async function registerLivePiiText(
   piiId: string,
   fieldId: string,
   text: string,
+  audience?: SharedAudience,
 ): Promise<void> {
   try {
     await registerLivePii(
@@ -339,6 +355,7 @@ export async function registerLivePiiText(
       fieldId,
       textEncoder.encode(text),
       ctx.identity.getPrincipal(),
+      audience,
     );
   } catch (error) {
     console.error("[vault] PII registration failed", {

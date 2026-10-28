@@ -1477,6 +1477,17 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'invite_email_sender_status' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'from' : IDL.Text,
+            'app_url' : IDL.Text,
+            'configured' : IDL.Bool,
+          }),
+        ],
+        ['query'],
+      ),
     'invite_stats' : IDL.Func(
         [IDL.Text, IDL.Nat64, IDL.Nat64],
         [IDL.Variant({ 'Ok' : InviteStats, 'Err' : IDL.Text })],
@@ -1497,6 +1508,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Text), IDL.Principal],
         [IDL.Bool],
         ['query'],
+      ),
+    'link_display_identity_authority' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
       ),
     'link_guardian' : IDL.Func(
         [IDL.Text, IDL.Principal],
@@ -2340,6 +2356,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Bool],
         [],
       ),
+    'read_has_pii_audience' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
     'read_media_quota_store_registry' : IDL.Func(
         [],
         [
@@ -2825,6 +2846,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
         [],
       ),
+    'send_invite_email' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_accessibility_prefs' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -2940,6 +2966,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_identity_access_canister' : IDL.Func(
         [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_invite_email_sender' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

@@ -128,6 +128,11 @@ type Main =
                             Err: text;
                             Ok: vec EncryptedPii;
                           });
+   get_shared_audience_vetkey: (kind: text, scope: text,
+    transport_public_key: blob) -> (variant {
+                                      Err: text;
+                                      Ok: blob;
+                                    });
    grant_pii_read: (pii_id: text, field_id: text, reader: principal) ->
     (variant {
        Err: text;

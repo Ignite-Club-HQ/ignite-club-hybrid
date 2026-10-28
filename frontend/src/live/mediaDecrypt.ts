@@ -3,7 +3,7 @@ import { hasOwnerTestRouting, readOwnerTestRouteCached } from './ownerTestRoutin
 import { getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { blobAssetUrl, listBlobStoreCanisterIds } from "./mediaStorage";
-import { clubIdFromMediaPath, decryptClubMediaWithSavedKey, decryptPiiValue, tryDecryptClubMedia } from "./piiVetKeys";
+import { clubIdFromMediaPath, decryptClubMediaWithSavedKey, decryptPiiValue, parseSharedCiphertext, tryDecryptClubMedia, tryDecryptShared } from "./piiVetKeys";
 import { readCachedPhoto, writeCachedPhoto } from "./deviceMediaCache";
 import type { IcpTargetConfig } from "./targetRegistry";
 
@@ -199,7 +199,9 @@ async function resolveUncachedIcpBlobObjectUrl(url: string): Promise<string | nu
   // Club photos: try the shared per-club key first (one derivation per club
   // per session); photos locked before the change fall back to their own key.
   const clubId = clubIdFromMediaPath(match.path);
-  const clubPlain = clubId ? await tryDecryptClubMedia(ctx, clubId, ciphertext) : null;
+  const sharedPlain = parseSharedCiphertext(ciphertext) ? await tryDecryptShared(ctx, ciphertext) : null;
+  if (parseSharedCiphertext(ciphertext) && !sharedPlain) throw new Error("You don't have access to this file.");
+  const clubPlain = sharedPlain ?? (clubId ? await tryDecryptClubMedia(ctx, clubId, ciphertext) : null);
   const plaintext = clubPlain ?? (await decryptPiiValue(ctx, match.path, MEDIA_BLOB_PII_FIELD, ciphertext));
   // Copy into a plain ArrayBuffer — BlobPart rejects views over a
   // SharedArrayBuffer-backed buffer, and the decrypted bytes come back as a
@@ -209,7 +211,7 @@ async function resolveUncachedIcpBlobObjectUrl(url: string): Promise<string | nu
   // Save only the still-encrypted bytes, and only for club-key photos that the
   // saved club key can reopen offline (older per-photo locks are not saved).
   const piiCanisterId = target?.canisterIds.pii_access_control;
-  if (clubPlain && clubId && piiCanisterId) {
+  if (clubPlain && !sharedPlain && clubId && piiCanisterId) {
     const sealed = new ArrayBuffer(ciphertext.byteLength);
     new Uint8Array(sealed).set(ciphertext);
     void writeCachedPhoto(principal, match.canisterId, match.path, sealed, { clubId, piiCanisterId });
