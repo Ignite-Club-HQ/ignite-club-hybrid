@@ -137,6 +137,7 @@ export async function saveIcpIdentityProfile(
       profileMissing: false,
     };
     cacheIcpIdentityProfile(principal, privateNameMaintained ? { ...resolved, displayName: null } : resolved);
+    if (privateNameMaintained) (await import('./ownPrivateName')).rememberOwnPrivateName(caller, input.displayName);
     return privateNameMaintained ? { ...resolved, privateNameMaintained: true } : resolved;
   } finally {
     client.dispose();
