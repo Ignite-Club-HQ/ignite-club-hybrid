@@ -38,6 +38,31 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
       }), `${label} connection`, 60_000, signal);
     } finally { retired = true; }
   };
+  // Same split for display labels: cold group discovery right after sign-in
+  // used to eat the whole 20s label deadline, so every login showed
+  // "names could not be retrieved" even though the services were fine.
+  const metaRead = async <T,>(clubId: string, label: string, action: (scoped: FeatureBackendContext) => Promise<T>) => {
+    let retired = false;
+    try {
+      return await withReadDeadline(readMembershipInScope(ctx, { clubId }, scoped => {
+        assertReadNotAborted(signal);
+        if (retired) throw new Error(`${label} connection expired`);
+        return read(action(scoped), label);
+      }), `${label} connection`, 60_000, signal);
+    } finally { retired = true; }
+  };
+  // One quiet retry for transient first-read failures before reporting.
+  const once = async <T,>(source: string, attempt: () => Promise<T>): Promise<T> => {
+    try { return await attempt(); } catch (first) {
+      assertReadNotAborted(signal);
+      await new Promise(resolve => setTimeout(resolve, 750));
+      assertReadNotAborted(signal);
+      try { return await attempt(); } catch (error) {
+        console.warn('[schedule] source failed', source, error instanceof Error ? error.message : String(error), '| first:', first instanceof Error ? first.message : String(first));
+        throw error;
+      }
+    }
+  };
   const ids = [...new Set(scope.clubIds)];
   const rows = new Map<string, MemberScheduleEvent[]>();
   const failed = new Set<string>();
@@ -56,7 +81,7 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
   const teamName = (id: string, clubId: string) => {
     const key = teamKey(clubId, id);
     const hit = names.get(key); if (hit) return hit;
-    const promise = read(readMembershipInScope(ctx, { clubId }, scoped => getLiveTeam(scoped, id)), 'Schedule team name')
+    const promise = once(`team:${id}`, () => metaRead(clubId, 'Schedule team name', scoped => getLiveTeam(scoped, id)))
       .then(value => {
         const name = value[0]?.name?.trim();
         if (!name) failed.add(`team:${id}`);
@@ -66,7 +91,7 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
   };
   await Promise.all(ids.map(async clubId => {
     try {
-      const raw = await eventRead(clubId, 'Schedule events', scoped => listLiveEvents(scoped, clubId, scope.selectedTeamId));
+      const raw = await once(`club:${clubId}`, () => eventRead(clubId, 'Schedule events', scoped => listLiveEvents(scoped, clubId, scope.selectedTeamId)));
       successful++;
       const visible = raw.flatMap<MemberScheduleEvent>(event => {
         const start = scheduleTimestampDate(event.starts_at_ms);
@@ -101,12 +126,12 @@ export async function loadMemberSchedule(ctx: FeatureBackendContext, scope: Memb
       // Each ancillary reply updates only this club; slow names cannot delay
       // event visibility, and duties never query an unrelated group's actor.
       await Promise.all([
-        read(readMembershipInScope(ctx, { clubId }, scoped => getLiveClubProfile(scoped, clubId)), 'Schedule club name').then(value => {
+        once(`profile:${clubId}`, () => metaRead(clubId, 'Schedule club name', scoped => getLiveClubProfile(scoped, clubId))).then(value => {
           const profile = value[0];
           rows.set(clubId, (rows.get(clubId) ?? []).map(row => ({ ...row, clubs: { name: profile?.name ?? 'Club', sport: profile?.sport[0] ?? null } })));
           publish();
         }).catch(() => { failed.add(`profile:${clubId}`); }),
-        eventRead(clubId, 'Schedule duties', scoped => listLiveEventDutyTeams(scoped, visible.map(row => row.id))).then(value => {
+        once(`duties:${clubId}`, () => eventRead(clubId, 'Schedule duties', scoped => listLiveEventDutyTeams(scoped, visible.map(row => row.id)))).then(value => {
           const duties = new Map(value.map(row => [row.event_id, row.team_id]));
           rows.set(clubId, (rows.get(clubId) ?? []).map(row => ({ ...row, duty_team_id: duties.get(row.id) ?? null })));
           publish();
