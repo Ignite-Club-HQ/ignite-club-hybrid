@@ -2032,6 +2032,9 @@ type Main =
                                Err: text;
                                Ok: TeamCreationRequest;
                              });
+   send_invite_email: (invite_id: text, email: text) -> (variant { Err: text; Ok; });
+   invite_email_sender_status: () -> (record { configured: bool; from: text; app_url: text; }) query;
+   set_invite_email_sender: (key: text, from: text, app_url: text) -> (variant { Err: text; Ok; });
    resend_pending_invite: (id: text) ->
     (variant {
        Err: text;

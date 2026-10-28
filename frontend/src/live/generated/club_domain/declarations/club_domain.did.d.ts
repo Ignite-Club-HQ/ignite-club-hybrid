@@ -1013,6 +1013,9 @@ export interface Main {
     { 'Ok' : TeamCreationRequest } |
       { 'Err' : string }
   >,
+  'send_invite_email' : ActorMethod<[string, string], { 'Ok' : null } | { 'Err' : string }>,
+  'invite_email_sender_status' : ActorMethod<[], { 'configured' : boolean, 'from' : string, 'app_url' : string }>,
+  'set_invite_email_sender' : ActorMethod<[string, string, string], { 'Ok' : null } | { 'Err' : string }>,
   'resend_pending_invite' : ActorMethod<
     [string],
     { 'Ok' : { 'invite' : PendingInvite, 'payload' : InvitePayload } } |
