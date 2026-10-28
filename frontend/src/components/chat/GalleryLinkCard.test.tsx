@@ -45,12 +45,13 @@ describe("Group 2 gallery announcement reads", () => {
   });
   it("ends a stalled metadata read with retry instead of an endless blank card", async () => {
     vi.useFakeTimers();
-    mocks.getCard.mockReturnValueOnce(new Promise(() => {}));
+    mocks.getCard.mockReturnValue(new Promise(() => {}));
     const { client, unmount } = openCard();
     try {
-      await act(async () => { await vi.advanceTimersByTimeAsync(20_001); });
+      // 45s deadline, one quiet retry after 2s, then a second 45s deadline.
+      await act(async () => { await vi.advanceTimersByTimeAsync(45_001 + 2_000 + 45_001); });
       expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
-      expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+      expect(mocks.dispatch).toHaveBeenCalledTimes(2);
     } finally { unmount(); client.clear(); vi.useRealTimers(); }
   });
   it("retries an unlock failure independently without rereading the gallery card", async () => {
@@ -83,9 +84,16 @@ describe("Group 2 gallery announcement reads", () => {
   it("retains a refused read as a retryable error rather than missing content or discovery", async () => {
     mocks.getCard.mockRejectedValue(new Error("Access denied"));
     const { client, unmount } = openCard();
-    await screen.findByRole("button", { name: "Try again" });
-    await waitFor(() => expect(mocks.getCard).toHaveBeenCalledTimes(1));
-    expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+    await screen.findByRole("button", { name: "Try again" }, { timeout: 5_000 });
+    await waitFor(() => expect(mocks.getCard).toHaveBeenCalledTimes(2));
+    expect(mocks.dispatch).toHaveBeenCalledTimes(2);
+    unmount(); client.clear();
+  });
+  it("shows a removed card as no longer available instead of an error", async () => {
+    mocks.getCard.mockRejectedValue(new Error("galleryCard not found or not authorized"));
+    const { client, unmount } = openCard();
+    await screen.findByText("This photo update is no longer available.");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     unmount(); client.clear();
   });
 });
