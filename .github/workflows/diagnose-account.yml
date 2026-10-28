@@ -1,0 +1,38 @@
+# Read-only account check: shows which account each sign-in ID lands on and
+# what the original account holds. Changes nothing.
+name: Check account (read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      principals:
+        description: "Sign-in IDs to check (space or comma separated)"
+        required: true
+        default: "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe tavrz-s2z7n-5jkdv-dpho3-pvd3c-yog77-euqar-egkuv-xbzei-ftw3d-eqe"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+      - name: Install ICP SDK
+        run: mkdir -p /tmp/icp-run && cd /tmp/icp-run && npm init -y >/dev/null && npm pkg set type=module && npm install @icp-sdk/core@^5.4.0 --no-fund --no-audit
+      - name: Check account
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          PRINCIPALS: ${{ inputs.principals }}
+          IDS_FILE: ${{ github.workspace }}/deploy/mainnet/.icp/data/mappings/ic.ids.json
+          IDL_FILE: /tmp/icp-run/identity_access.did.js
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOYER_PEM" ]; then echo "::error::DEPLOYER_PEM secret is not set."; exit 1; fi
+          cp scripts/diagnose-account.mjs /tmp/icp-run/
+          cp frontend/src/lab/generated-contracts/identity_access/declarations/identity_access.did.js /tmp/icp-run/
+          node /tmp/icp-run/diagnose-account.mjs
