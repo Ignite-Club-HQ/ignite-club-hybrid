@@ -24,6 +24,9 @@ try {
     group.actor.setPrincipal(governor); ok(await group.actor.create_club(name, name, name, [], []));
     ok(await group.actor.add_role_grant(app, name, 'club_admin', []));
     ok(await group.actor.add_role_grant(app, name, 'team_admin', ['u9']));
+    const team = { id: 'u9', club_id: name, name: 'U9', archived: false, is_active: true, is_shell: false, playhq_auto_create_events: false };
+    for (const key of ['age_group', 'deleted_at_ms', 'description', 'division', 'folder_id', 'gender', 'logo_url', 'playhq_competition_id', 'playhq_team_id', 'shell_claim_token', 'shell_claimed_at_ms', 'shell_claimed_by', 'shell_contact_email', 'shell_contact_name', 'shell_invited_by', 'team_type']) team[key] = [];
+    ok(await group.actor.save_team(team));
   }
   identity.actor.setPrincipal(governor); ok(await identity.actor.set_club_authorities(groups.map(g => g.canisterId)));
   for (const group of groups) { group.actor.setPrincipal(governor); ok(await group.actor.set_identity_access_canister(identity.canisterId)); }
@@ -41,6 +44,8 @@ try {
     assert.equal(await group.actor.read_account_is_club_member(browser, 'unrelated-club'), false);
     ok(await group.actor.read_account_get_club_roster(group.name));
     ok(await group.actor.set_club_kind(group.name, 'club'));
+    ok(await group.actor.set_team_welcome_email('u9', true, 'Welcome', 'Test'));
+    await refused(() => group.actor.set_team_welcome_email('unrelated-team', true, 'Welcome', 'Test'));
     group.actor.setPrincipal(outsider);
     assert.deepEqual(await group.actor.read_account_my_role_grants(), []);
     await refused(() => group.actor.read_account_get_club_roster(group.name));
