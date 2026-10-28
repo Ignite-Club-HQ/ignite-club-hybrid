@@ -2,7 +2,7 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { IbeCiphertext } from "@icp-sdk/vetkeys";
 import { connectLivePiiAccessControl, connectLiveVaultDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
-import { decryptPiiText, encryptPiiValue, fetchPiiVetKeys } from "../piiVetKeys";
+import { decryptPiiText, encryptPiiValue, encryptSharedValue, fetchPiiVetKeys, parseSharedCiphertext, tryDecryptShared, type SharedAudience } from "../piiVetKeys";
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
 import { scheduleVaultUploadRecovery } from "../vaultUploadRecovery";
 import { reconcileVaultUploadIntent } from "../vaultUploadIntentRecovery";
@@ -341,6 +341,7 @@ export async function registerLivePiiText(
   piiId: string,
   fieldId: string,
   text: string,
+  audience?: SharedAudience,
 ): Promise<void> {
   try {
     await registerLivePii(
@@ -349,6 +350,7 @@ export async function registerLivePiiText(
       fieldId,
       textEncoder.encode(text),
       ctx.identity.getPrincipal(),
+      audience,
     );
   } catch (error) {
     console.error("[vault] PII registration failed", {
