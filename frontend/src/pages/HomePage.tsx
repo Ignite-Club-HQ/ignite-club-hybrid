@@ -2310,6 +2310,7 @@ export default function HomePage() {
     <div className="py-6 space-y-5">
       <HomeDashboardOverview
         firstName={firstName}
+        namePending={profileNamePending}
         email={user?.email}
         activeClubName={activeClubName}
         activeClubFilter={activeClubFilter}

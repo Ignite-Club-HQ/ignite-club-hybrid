@@ -119,7 +119,18 @@ export function HomeDashboardOverview({
       <div className="px-1 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-foreground">
-            Welcome{firstName ? `, ${firstName}` : ""}! 👋
+            {namePending ? (
+              <span className="inline-flex items-center gap-2">
+                Welcome,
+                <span
+                  className="inline-block h-6 w-24 animate-pulse rounded-md bg-muted"
+                  aria-label="Loading your name"
+                />
+                ! 👋
+              </span>
+            ) : (
+              <>Welcome{firstName ? `, ${firstName}` : ""}! 👋</>
+            )}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Here's what's coming up
