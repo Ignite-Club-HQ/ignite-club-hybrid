@@ -266,6 +266,10 @@ export async function listLiveClubRewards(
   activeOnly: boolean,
 ): Promise<ClubReward[]> {
   const a = await actor(ctx);
+  // Fast path: list_rewards is a query. Only pay the slow role-mirror refresh
+  // (an update call) when the cached membership mirror refuses the caller.
+  const first = await a.list_rewards(clubId, candidOpt(teamId), activeOnly);
+  if (first && typeof first === "object" && "Ok" in first) return (first as { Ok: ClubReward[] }).Ok;
   await unwrapCandid(a.refresh_club_roles(clubId), "Verify club membership");
   return unwrapCandid(a.list_rewards(clubId, candidOpt(teamId), activeOnly), "List club rewards");
 }
