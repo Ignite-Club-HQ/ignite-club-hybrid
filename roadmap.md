@@ -1,3 +1,8 @@
+## Own name after sign-in — 28 October 2026
+- [x] Sign-in re-opens the saved encrypted name and remembers it for the session; a screen that fetched the caller's own row before that unlock finished could keep a blank copy for an hour, so the unlocked name now replaces every saved copy of the caller's own row (principal text, `principal:` form and derived account id) without inventing rows or touching anyone else's.
+- [x] ownPrivateName, shared name-cache, private-name and profile-fetch regressions pass (82 focused); preview build OK.
+- [ ] Deploy frontend and confirm Paul's own name shows in an event, a chat and a member list after signing out and back in.
+
 ## Faster sign-in with retained key copies — 28 October 2026
 - [x] Sign-out now clears decrypted photo bytes but keeps saved key copies for their 30-day life, and an own-name read reuses its saved key instead of re-deriving every sign-in; audience-scoped reads of another person's name never reuse or save a key, and every read still re-fetches ciphertext through authorization. The explicit "remove saved copies" action removes key copies too.
 - [x] Key-cache, device-cache, private-name, profile-fetch, logout and storage-settings regressions pass (106 focused, 80 in ICP mode, 1249 live-suite passed); ICP guard check passes and preview build OK.
