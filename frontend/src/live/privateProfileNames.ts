@@ -87,7 +87,7 @@ export async function readPrivateOwnProfileName(ctx: FeatureBackendContext, refe
   try {
     // Overlap the (public) verification-key load with the ciphertext read;
     // a first unlock on this device otherwise pays both one after another.
-    (await import('./piiVetKeys')).prewarmPiiVerificationKey(ctx);
+    try { (await import('./piiVetKeys')).prewarmPiiVerificationKey(ctx); } catch { /* optional warm-up */ }
     const names = await Promise.race([
       readNames(ctx, [ref.subject], FIELD, guard, undefined, ref.subject === caller),
       new Promise<never>((_, reject) => { timer = setTimeout(() => { retired = true; reject(new Error('Private display name unlock timed out.')); }, 30000); }),
