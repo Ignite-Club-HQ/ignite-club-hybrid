@@ -303,6 +303,36 @@ export async function sendLiveMessage(
   return sent;
 }
 
+/** Explicit canister refusals that mean the club/team chat or its member list is not provisioned yet. Nothing was written. */
+export function isChatProvisioningRefusal(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /Conversation access forbidden|Conversation not found|Unknown conversation|Chat access required|not a participant/i.test(message);
+}
+
+/**
+ * Send to a club or team chat without waiting on the club-wide chat setup
+ * (one sequential service call per team) before every message. Setup runs
+ * only after an explicit "not provisioned" refusal, then the same send key is
+ * retried once. Network/unknown outcomes are never retried.
+ */
+export async function sendLiveClubScopedMessage(
+  ctx: FeatureBackendContext,
+  clubId: string | null | undefined,
+  conversationId: string,
+  body: string,
+  idempotencyKey: string,
+  attachment?: LiveMessageAttachment | null,
+  replyToId?: string | null,
+) {
+  try {
+    return await sendLiveMessage(ctx, conversationId, body, idempotencyKey, attachment, replyToId);
+  } catch (err) {
+    if (!clubId || !isChatProvisioningRefusal(err)) throw err;
+    await ensureLiveClubConversations(ctx, clubId);
+    return sendLiveMessage(ctx, conversationId, body, idempotencyKey, attachment, replyToId);
+  }
+}
+
 /**
  * Fire-and-forget: asks the Supabase push sender (verify-iap-receipt-icp
  * ?job=push-kick) to deliver queued notifications now instead of waiting for

@@ -123,7 +123,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { assertReadNotAborted, withReadDeadline } from "@/live/readDeadline";
 import { readIcpThreadPage } from "@/features/messaging/thread/icpThreadRead";
 import { writeOnce } from "@/live/clubScope";
-import { ensureLiveClubConversations, isLiveConversationAbsent, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { ensureLiveClubConversations, isLiveConversationAbsent, listLiveLatestMessagesPage, listLiveReactions, sendLiveClubScopedMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
@@ -1548,7 +1548,6 @@ export default function ClubChatPage() {
         icp: async (ctx) => {
           // Club id doubles as the conversation id (deterministic on the
           // messaging canister). Reply threading is Supabase-only.
-          try { await ensureLiveClubConversations(ctx, clubId!); } catch { /* best-effort self-heal */ }
           const attachment = image_url
             ? { kind: "image", refId: image_url, url: image_url }
             : (() => {
@@ -1558,7 +1557,7 @@ export default function ClubChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          const saved = await sendLiveMessage(ctx, clubId ?? '', text, sendKey, attachment, reply_to_id);
+          const saved = await sendLiveClubScopedMessage(ctx, clubId, clubId ?? '', text, sendKey, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, clubId!, user!.id).catch(() => { /* best-effort engagement counter */ });
           return { id: saved.id, text: saved.body, image_url, created_at: new Date(Number(saved.created_at_ms)).toISOString() };},
       }, { clubId: clubId ?? '', writeKey: sendKey, attempts: 1 });
