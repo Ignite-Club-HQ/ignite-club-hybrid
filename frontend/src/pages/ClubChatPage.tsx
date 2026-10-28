@@ -2,6 +2,7 @@ import { prefetchMessagePolls } from "@/lib/pollReadRepository";
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
+import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
 import React, { Suspense, useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from "react";

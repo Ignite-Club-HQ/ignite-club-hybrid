@@ -2,6 +2,7 @@ import { prefetchMessagePolls } from "@/lib/pollReadRepository";
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, Suspense } from "react";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
+import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
 import { chatSendFailureReason } from "@/lib/chatSendFailure";
 import { withReadDeadline } from "@/live/readDeadline";
 import { readIcpThreadPage } from "@/features/messaging/thread/icpThreadRead";

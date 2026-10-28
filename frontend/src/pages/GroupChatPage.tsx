@@ -2,6 +2,7 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Suspense } from "react";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
+import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
 import { readIcpGroupMetadata } from "@/features/messaging/thread/icpThreadRead";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
