@@ -2,6 +2,11 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Suspense } from "react";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
+import {
+  applyPendingInboxPreview,
+  discardPendingInboxPreview,
+  settlePendingInboxPreview,
+} from "@/features/messaging/inbox/pendingInboxPreview";
 import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
 import { readIcpGroupMetadata } from "@/features/messaging/thread/icpThreadRead";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
@@ -1164,6 +1169,13 @@ export default function GroupChatPage() {
       const previousReplyTo = replyTo;
       const { baseText: unsentText, pollId: unsentPollId } = splitPollMarkup(text);
 
+      // Inbox preview + row float show the message while it is still sending.
+      applyPendingInboxPreview(queryClient, "group", user?.id, groupId, { text, image_url: image_url ?? null });
+      if (groupId) {
+        recordOwnSentConversation(`group-${groupId}`);
+        recordOwnSentConversation(`league-${groupId}`);
+      }
+
       const optimisticMessage: GroupMessage = {
         id: tempId,
         group_id: groupId!,
@@ -1220,6 +1232,9 @@ export default function GroupChatPage() {
         return;
       }
 
+      // The send left the pending preview state either way from here on.
+      settlePendingInboxPreview(queryClient, "group", user?.id, groupId);
+
       // Succeeded-but-errored: the row already arrived via realtime.
       const currentData = queryClient.getQueryData<{ messages: GroupMessage[] }>(["group-messages", groupId]);
       if (authoritativeMessageExists(currentData?.messages, { authorId: user?.id, text: variables.text, imageUrl: variables.image_url ?? null, replyToId: variables.reply_to_id ?? null, sentAtMs: context?.sentAtMs })) {
@@ -1237,6 +1252,7 @@ export default function GroupChatPage() {
         });
         setLocalMessages((prev) => (prev ? prev.filter((m) => m.id !== context.tempId) : prev));
       }
+      discardPendingInboxPreview(queryClient, "group", user?.id, groupId);
 
       restoreFailedSendComposer({
         context,
@@ -1251,6 +1267,7 @@ export default function GroupChatPage() {
     },
 
     onSuccess: (result, variables, context) => {
+      settlePendingInboxPreview(queryClient, "group", user?.id, groupId);
       if (result?.confirmedMessage) {
         applyConfirmedInboxPreview(queryClient, "group", user?.id, groupId, result.confirmedMessage);
         // League chats share this page; only the key that exists in the

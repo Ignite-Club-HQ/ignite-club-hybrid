@@ -2,6 +2,11 @@ import { prefetchMessagePolls } from "@/lib/pollReadRepository";
 import { useRealtimeReactionSync } from "@/hooks/useRealtimeReactionSync";
 import { confirmPendingSend } from "@/lib/pendingSendKeeper";
 import { applyConfirmedInboxPreview } from "@/features/messaging/inbox/confirmedInboxPreview";
+import {
+  applyPendingInboxPreview,
+  discardPendingInboxPreview,
+  settlePendingInboxPreview,
+} from "@/features/messaging/inbox/pendingInboxPreview";
 import { recordOwnSentConversation } from "@/features/messaging/inbox/ownSendBump";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
@@ -1570,6 +1575,10 @@ export default function ClubChatPage() {
       const previousReplyingTo = replyingTo;
       const { baseText: unsentText, pollId: unsentPollId } = splitPollMarkup(text);
 
+      // Inbox preview + row float show the message while it is still sending.
+      applyPendingInboxPreview(queryClient, "club", user?.id, clubId, { text, image_url: image_url ?? null });
+      if (clubId) recordOwnSentConversation(`club-${clubId}`);
+
       const optimisticMessage: Message = {
         id: tempId,
         club_id: clubId!,
@@ -1626,6 +1635,9 @@ export default function ClubChatPage() {
         return;
       }
 
+      // The send left the pending preview state either way from here on.
+      settlePendingInboxPreview(queryClient, "club", user?.id, clubId);
+
       // Succeeded-but-errored: the row already arrived via realtime.
       const currentData = queryClient.getQueryData<{ messages: Message[] }>(["club-messages", clubId]);
       if (authoritativeMessageExists(currentData?.messages, { authorId: user?.id, text: variables.text, imageUrl: variables.image_url ?? null, replyToId: variables.reply_to_id ?? null, sentAtMs: context?.sentAtMs })) {
@@ -1644,6 +1656,7 @@ export default function ClubChatPage() {
         });
         setLocalMessages((prev) => (prev ? prev.filter((m) => m.id !== context.tempId) : prev));
       }
+      discardPendingInboxPreview(queryClient, "club", user?.id, clubId);
 
       restoreFailedSendComposer({
         context,
@@ -1661,8 +1674,9 @@ export default function ClubChatPage() {
     },
 
     onSuccess: (result, variables, context) => {
+      settlePendingInboxPreview(queryClient, "club", user?.id, clubId);
       if (result?.confirmedMessage) {
-        applyConfirmedInboxPreview(queryClient, "club", user?.id, clubId, result.confirmedMessage);
+        applyConfirmedInboxPreview(queryConfirirmInboxPreviewPlaceholder, "club", user?.id, clubId, result.confirmedMessage);
         if (clubId) recordOwnSentConversation(`club-${clubId}`);
       }
       if (result?.confirmedMessage && context?.tempId) {
