@@ -1039,3 +1039,12 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 ## Privacy: deletion fixes to deploy
 - [ ] Run **Upgrade backend (all mainnet groups)** to ship deletion fixes (calendar setting + chat pairing now removed)
 - [ ] Optional: run **Prove account deletion (isolated only)** workflow
+
+## Shared-key private details (target ~$40-50/month per 200-member club)
+- [ ] Private-details service: add club-children, team-names and Vault-audience key endpoints, each checking membership/role again after the key is made
+- [ ] Club service: add a team-membership check the private-details service can call (reuse the existing team check)
+- [ ] Children's names: encrypt a club copy under the club-children key; keep parent/guardian access
+- [ ] Guest, fill-in and Player of the Match names: encrypt under the event's team key (team looked up from the event record, never read from the reference)
+- [ ] Vault: encrypt under a role-audience key built from the folder's existing role limits; never fall back to club-wide access
+- [ ] Device key store: keep shared keys for 30 days; delete them when access is lost
+- [ ] Tests (PocketIC + frontend), then Upgrade backend (all mainnet groups) + Deploy web app
