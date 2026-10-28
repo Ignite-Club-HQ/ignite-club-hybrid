@@ -3753,6 +3753,27 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { removalReceiver.leave(user) };
   };
 
+  // Shared-key private-detail audiences, asked only by the configured PII
+  // canister. kind/scope: "clubchildren"/<club>, "teamnames"/<team>,
+  // "vaultrole"/"<club>|<team or empty>|<role,role,...>". Boolean only.
+  public shared ({ caller }) func read_has_pii_audience(user : Principal, kind : Text, scope : Text) : async Bool {
+    switch (piiCanister) { case (?p) { if (not p.equal(caller)) return false }; case null return false };
+    if (user.equal(Principal.anonymous()) or scope == "" or scope.size() > 512) return false;
+    if (not removalReceiver.enter(user)) throw Error.reject("Account removal fenced or operation capacity reached");
+    try {
+    await admitAccount(user);
+    PiiAudience.decide(kind, scope, {
+      isMember = func(club : Text) : Bool = not isExcluded(user, club) and isMember(user, club);
+      teamClub = func(team : Text) : ?Text = teamClub(team);
+      excluded = func(club : Text) : Bool = isExcluded(user, club);
+      onTeam = func(team : Text) : Bool = isOnTeam(user, team);
+      hasRole = func(role : Text, club : Text, team : ?Text) : Bool = acl.roles.any(func(g) =
+        ownsMembershipPrincipal(user, g.user) and g.role == role and g.club == ?club and
+        (switch (team) { case null true; case (?t) g.team == ?t or g.team == null }));
+    })
+    } finally { removalReceiver.leave(user) };
+  };
+
   // Authority-owned candidates for club-only private name matching. Each call
   // scans <=100 source rows and emits <=25 principals, with a durable cursor.
   public shared ({ caller }) func read_profile_candidates(club_id : Text, cursor : ?ProfileMembership.Cursor) : async { #Ok : ProfileMembership.Page; #Err : Text } {
