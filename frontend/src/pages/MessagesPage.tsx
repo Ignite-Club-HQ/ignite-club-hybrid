@@ -71,6 +71,7 @@ import {
   partitionInboxGroups,
 } from "@/features/messaging/inbox/inboxFilterPolicy";
 import {
+  bumpOwnSentRows,
   filterInboxConversations,
   normalizeInboxTypeFilter,
   partitionInboxByReadState,
@@ -78,6 +79,10 @@ import {
   type InboxConversation,
   type InboxPreviewMessage,
 } from "@/features/messaging/inbox/inboxReadModel";
+import {
+  peekOwnSentConversationKeys,
+  subscribeOwnSentConversations,
+} from "@/features/messaging/inbox/ownSendBump";
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { resetInboxOpenLog } from "@/lib/inboxOpenLatency";
 import { shouldBlockInboxReveal } from "@/lib/inboxRevealPolicy";
@@ -1910,8 +1915,31 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
     key: row => row.item.key,
     merge: (old, fresh) => ({ ...fresh, section: old.section }),
   });
-  const unreadItems = placedRows.filter(row => row.section === "unread").map(row => row.item);
-  const recentItems = placedRows.filter(row => row.section === "recent").map(row => row.item);
+
+  // After the user sends a message, that conversation floats to the top of
+  // its current section straight away — the stable list above deliberately
+  // freezes order during refreshes, and back-navigation keeps the same
+  // history entry, so without this the just-messaged chat stayed put until
+  // a full page return. Read/unread grouping is preserved: rows never cross
+  // sections, and the natural lastActivity order takes over once the inbox
+  // refetch lands.
+  const [ownSendBumps, setOwnSendBumps] = useState<readonly string[]>(() => peekOwnSentConversationKeys());
+  useEffect(
+    () => subscribeOwnSentConversations(() => setOwnSendBumps(peekOwnSentConversationKeys())),
+    [],
+  );
+  const orderedRows = useMemo(
+    () => bumpOwnSentRows(
+      {
+        unread: placedRows.filter(row => row.section === "unread"),
+        recent: placedRows.filter(row => row.section === "recent"),
+      },
+      ownSendBumps,
+    ),
+    [placedRows, ownSendBumps],
+  );
+  const unreadItems = orderedRows.filter(row => row.section === "unread").map(row => row.item);
+  const recentItems = orderedRows.filter(row => row.section === "recent").map(row => row.item);
 
   const { visibleRecent, hiddenOps } = useMemo(
     () => resolveOperationalConversationDisclosure(recentItems, {
