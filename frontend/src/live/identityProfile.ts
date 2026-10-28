@@ -269,3 +269,8 @@ export async function getIcpClubSwitcherHintSeen(
     client.dispose();
   }
 }
+
+/** Device hint holding the account's saved private-name REFERENCE (never the
+ * name), so the next sign-in can start the name read in parallel. Kept across
+ * sign-out like the retained own-name key; it opens nothing by itself. */
+const PRIVATE_NAME_REF_HINT_PREFIX = "ignite_icp_private_name_ref:";
