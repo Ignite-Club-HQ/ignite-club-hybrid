@@ -89,4 +89,11 @@ describe("Group 2 gallery announcement reads", () => {
     expect(mocks.dispatch).toHaveBeenCalledTimes(2);
     unmount(); client.clear();
   });
+  it("shows a removed card as no longer available instead of an error", async () => {
+    mocks.getCard.mockRejectedValue(new Error("galleryCard not found or not authorized"));
+    const { client, unmount } = openCard();
+    await screen.findByText("This photo update is no longer available.");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    unmount(); client.clear();
+  });
 });
