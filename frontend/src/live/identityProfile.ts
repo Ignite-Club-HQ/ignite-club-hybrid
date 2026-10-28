@@ -169,6 +169,9 @@ export async function fetchIcpIdentityProfile(
       const { hydratePrivateProfileNames } = await import("./privateProfileNames");
       const [hydrated] = await hydratePrivateProfileNames({ identity, target }, [canisterProfile]);
       displayName = hydrated?.display_name ?? null;
+      // A saved private name that could not be unlocked is not a missing
+      // profile; fail transiently so callers never send members to onboarding.
+      if (!displayName) throw new Error("Private display name could not be unlocked yet.");
     }
     const resolved: IcpIdentityProfile = {
       accountId: principal,
