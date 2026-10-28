@@ -211,7 +211,7 @@ async function resolveUncachedIcpBlobObjectUrl(url: string): Promise<string | nu
   // Save only the still-encrypted bytes, and only for club-key photos that the
   // saved club key can reopen offline (older per-photo locks are not saved).
   const piiCanisterId = target?.canisterIds.pii_access_control;
-  if (clubPlain && clubId && piiCanisterId) {
+  if (clubPlain && !sharedPlain && clubId && piiCanisterId) {
     const sealed = new ArrayBuffer(ciphertext.byteLength);
     new Uint8Array(sealed).set(ciphertext);
     void writeCachedPhoto(principal, match.canisterId, match.path, sealed, { clubId, piiCanisterId });

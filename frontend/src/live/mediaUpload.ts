@@ -5,7 +5,7 @@ import { getCurrentInternetIdentity } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { isBlobStoreConfigured, uploadBytesToBlobStore } from "./blobStoreUpload";
 import { resolveAuthBackend } from "./authBackendMode";
-import { clubIdFromMediaPath, encryptClubMedia, encryptPiiValue, isClubMediaLockSupported } from "./piiVetKeys";
+import { clubIdFromMediaPath, encryptClubMedia, encryptPiiValue, encryptSharedValue, isClubMediaLockSupported, type SharedAudience } from "./piiVetKeys";
 import { grantLiveClubPiiRead, grantLivePiiReadClub, grantLivePiiReadCompetition, registerLivePii } from "./features/vault";
 import { MEDIA_BLOB_PII_FIELD } from "./mediaDecrypt";
 import type { LiveBlobRef } from "./mediaStorage";
