@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { IDL } from '@icp-sdk/core/candid';
 import { adaptLocalAccountReads, adaptRemoteAccountReads, isLoopbackRehearsalHost } from './accountReadAdapter.mjs';
 import { idlFactory as vaultIdl } from '../lab/bindings/vault_domain/declarations/vault_domain.did.js';
+import { idlFactory as chatIdl } from '../lab/bindings/messaging_domain/declarations/messaging_domain.did.js';
 
 describe('local protected read adapter', () => {
   it('validates every generated service before exposing exact-signature twins', () => {
@@ -43,6 +44,14 @@ describe('local protected read adapter', () => {
   it('refuses changed argument or result signatures', () => {
     const wrong = IDL.Service({ get: IDL.Func([IDL.Text], [IDL.Text], ['query']), read_account_get: IDL.Func([IDL.Nat], [IDL.Text], []) });
     expect(() => adaptLocalAccountReads({}, wrong, 'http://localhost')).toThrow('Incompatible');
+  });
+  it('opens a chat through its exact protected twin and preserves bundled polls', async () => {
+    const result = { Ok: { page: { messages: [], next_sequence: [], latest_sequence: 0n }, reactions: [], pins: [], polls: [{ poll: { id: 'poll-chat-1' }, counts: [1, 0], total_votes: 1 }] } };
+    const actor = { open_conversation: vi.fn(), read_account_open_conversation: vi.fn().mockResolvedValue(result) };
+    const wrapped = adaptLocalAccountReads(actor, chatIdl({ IDL }), 'http://localhost:4943');
+    expect(await wrapped.open_conversation('chat', 25)).toBe(result);
+    expect(actor.read_account_open_conversation).toHaveBeenCalledWith('chat', 25);
+    expect(actor.open_conversation).not.toHaveBeenCalled();
   });
 });
 
