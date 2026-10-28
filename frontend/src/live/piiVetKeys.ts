@@ -256,10 +256,38 @@ async function getPiiVerificationKey(
   if (verificationKeyCache && verificationKeyCache.canisterId === id) {
     return verificationKeyCache;
   }
-  const bytes = await actor.pii_vetkey_verification_key();
-  const key = DerivedPublicKey.deserialize(Uint8Array.from(bytes));
-  verificationKeyCache = { canisterId: id, key };
-  return verificationKeyCache;
+  // The verification key is PUBLIC (it only verifies derived keys) and fixed
+  // per canister, but fetching it is a slow update call plus a management
+  // canister round trip. Keep a device copy so sign-in never waits on it twice.
+  const storageKey = `${VERIFICATION_KEY_STORAGE_PREFIX}${ctx.target.host}|${id}`;
+  try {
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const key = DerivedPublicKey.deserialize(Uint8Array.from(atob(stored), (c) => c.charCodeAt(0)));
+      verificationKeyCache = { canisterId: id, key };
+      return verificationKeyCache;
+    }
+  } catch { /* fall through to a network read */ }
+  const inFlight = verificationKeyInFlight.get(storageKey);
+  if (inFlight) return inFlight;
+  const request = (async () => {
+    const bytes = Uint8Array.from(await actor.pii_vetkey_verification_key());
+    const key = DerivedPublicKey.deserialize(bytes);
+    verificationKeyCache = { canisterId: id, key };
+    try { localStorage.setItem(storageKey, btoa(String.fromCharCode(...bytes))); } catch { /* best effort */ }
+    return verificationKeyCache;
+  })().finally(() => verificationKeyInFlight.delete(storageKey));
+  verificationKeyInFlight.set(storageKey, request);
+  return request;
+}
+
+const VERIFICATION_KEY_STORAGE_PREFIX = "ignite_pii_verification_key:";
+const verificationKeyInFlight = new Map<string, Promise<{ canisterId: string; key: DerivedPublicKey }>>();
+
+/** Starts loading the public verification key early so a first unlock can
+ * overlap it with the ciphertext read. Never throws. */
+export function prewarmPiiVerificationKey(ctx: FeatureBackendContext): void {
+  void getPiiVerificationKey(ctx).catch(() => {});
 }
 
 /**

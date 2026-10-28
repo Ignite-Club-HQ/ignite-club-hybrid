@@ -153,6 +153,18 @@ export async function fetchIcpIdentityProfile(
   if (!isLiveIdentityAccessConfigured(target)) {
     throw new Error(`Identity access canister is not configured for ICP target ${target.alias}.`);
   }
+  // Sign-in speed: when this device already knows the account's saved
+  // private-name reference (a pointer, not the name), start the required
+  // guarded name read alongside the profile read instead of after it. The
+  // result is used only if the profile confirms the exact same reference.
+  const refHintKey = `${PRIVATE_NAME_REF_HINT_PREFIX}${target.host}|${principal}`;
+  let hintedRef: string | null = null;
+  try { hintedRef = localStorage.getItem(refHintKey); } catch { /* ignore */ }
+  const namesModule = hintedRef?.startsWith("pii-display-name:") ? import("./privateProfileNames") : null;
+  const speculative = namesModule
+    ? namesModule.then(({ readPrivateOwnProfileName }) => readPrivateOwnProfileName({ identity, target }, hintedRef as string))
+    : null;
+  speculative?.catch(() => {});
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
   try {
     const [profileResult, roles] = await Promise.allSettled([
@@ -167,9 +179,16 @@ export async function fetchIcpIdentityProfile(
       throw profileResult.reason;
     }
     let displayName: string | null = canisterProfile?.display_name ?? null;
-    if (canisterProfile?.display_name?.startsWith("pii-display-name:")) {
-      const { readPrivateOwnProfileName } = await import("./privateProfileNames");
-      displayName = await readPrivateOwnProfileName({ identity, target }, canisterProfile.display_name);
+    const savedRef = canisterProfile?.display_name?.startsWith("pii-display-name:") ? canisterProfile.display_name : null;
+    try {
+      if (savedRef) localStorage.setItem(refHintKey, savedRef);
+      else localStorage.removeItem(refHintKey);
+    } catch { /* ignore */ }
+    if (savedRef) {
+      const { readPrivateOwnProfileName } = await (namesModule ?? import("./privateProfileNames"));
+      displayName = speculative && hintedRef === savedRef
+        ? await speculative
+        : await readPrivateOwnProfileName({ identity, target }, savedRef);
     }
     const resolved: IcpIdentityProfile = {
       accountId: principal,
@@ -252,3 +271,8 @@ export async function getIcpClubSwitcherHintSeen(
     client.dispose();
   }
 }
+
+/** Device hint holding the account's saved private-name REFERENCE (never the
+ * name), so the next sign-in can start the name read in parallel. Kept across
+ * sign-out like the retained own-name key; it opens nothing by itself. */
+const PRIVATE_NAME_REF_HINT_PREFIX = "ignite_icp_private_name_ref:";
