@@ -84,15 +84,23 @@ persistent actor class Main(governorInit : Principal) = this {
       let epoch = membershipEpoch();
       let account = await accountAdmission.account(subject);
       if (authority != accountAdmissionAuthority or epoch != membershipEpoch() or nameCleanup.locked() or removalReceiver.denied(subject)) throw Error.reject("Account authority changed; retry");
-      let current = account ?? throw Error.reject("Linked account authority unavailable");
-      // A receiver may already hold an unlink receipt before the identity
-      // reply advances. Keep exact-principal behavior, never inherit aliases
-      // from that obsolete generation (sync itself returns its existing Err).
-      let verified = if (AccountUnlinkFence.rejects(current.id, current.version, current.principals, identityUnlinkReceipts)) ({ current with principals = [subject] }) else current;
-      // Time.now is constant only within this execution segment. No query,
-      // later message or callback may reuse these aliases as permission.
-      if (linkedMembershipSnapshots.size() >= 256) linkedMembershipSnapshots.clear();
-      linkedMembershipSnapshots.add(subject, { account = verified; observed = Time.now() });
+      switch (account) {
+        // Eligibility already passed. When the account service does not share
+        // linked sign-ins with this group (eligibility-only grant) or cannot
+        // answer, keep the original exact-principal behaviour: aliases only
+        // ever widen access, so their absence must not reject the member.
+        case null { linkedMembershipSnapshots.remove(subject) };
+        case (?current) {
+          // A receiver may already hold an unlink receipt before the identity
+          // reply advances. Keep exact-principal behavior, never inherit aliases
+          // from that obsolete generation (sync itself returns its existing Err).
+          let verified = if (AccountUnlinkFence.rejects(current.id, current.version, current.principals, identityUnlinkReceipts)) ({ current with principals = [subject] }) else current;
+          // Time.now is constant only within this execution segment. No query,
+          // later message or callback may reuse these aliases as permission.
+          if (linkedMembershipSnapshots.size() >= 256) linkedMembershipSnapshots.clear();
+          linkedMembershipSnapshots.add(subject, { account = verified; observed = Time.now() });
+        };
+      };
     };
   };
   func denyLegacyAccountQuery() {
