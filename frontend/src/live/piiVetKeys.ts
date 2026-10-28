@@ -237,6 +237,15 @@ export async function tryDecryptClubMedia(
   }
 }
 
+/** Unlocks a saved (still-encrypted) club photo with the key already saved on
+ * this device. No network call, no paid derivation; null when no key is saved
+ * (expired or the member was removed), so the caller re-reads with authorization. */
+export function decryptClubMediaWithSavedKey(piiCanisterId: string, principal: string, clubId: string, ciphertext: Uint8Array): Uint8Array | null {
+  const stored = loadStoredClubKey(piiCanisterId, principal, clubId);
+  if (!stored) return null;
+  try { return IbeCiphertext.deserialize(ciphertext).decrypt(VetKey.deserialize(stored)); } catch { return null; }
+}
+
 async function getPiiVerificationKey(
   ctx: FeatureBackendContext,
 ): Promise<{ canisterId: string; key: DerivedPublicKey }> {
