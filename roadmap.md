@@ -1048,5 +1048,7 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [x] Vault: encrypt under a role-audience key built from the folder's existing role limits; never fall back to club-wide access
 - [x] Device key store: keep shared keys for 30 days; delete them when access is lost
 - [x] Tests (Motoko unit + frontend)
-- [ ] Children added from Profile before joining a team stay on their own key until re-saved (low cost; optional follow-up)
+- [x] Children added from Profile move onto the club children key when first added to a team (app update)
+- [x] Upgrade backend confirms each group's club service → private-details link (sets if empty, stops on mismatch); live after next Upgrade backend
+- [x] Accepted: removed team members keep older guest/Vault keys up to 30 days (owner decision)
 - [ ] Owner: run Upgrade backend (all mainnet groups) + Deploy web app

@@ -185,8 +185,17 @@ export default function IcpChildrenPage() {
       const { ctx, club, vault } = await load();
       await club.setMyLiveChildTeam(ctx, child.id, teamId, assigned);
       const t = teamById.get(teamId);
-      // Let club staff see the name on rosters (best effort).
-      if (assigned && t) await vault.grantLiveClubChildNameRead(ctx, child.id, t.club_id).catch(() => {});
+      if (assigned && t) {
+        // First team: the child was saved before any club was known, so move
+        // the name onto that club's shared children key (one unlock per club
+        // instead of one per child). Later teams keep the existing key.
+        if (child.teams.length === 0 && child.isPrimary && child.name.trim()) {
+          await vault.registerLiveChildNamePii(ctx, child.id, child.name.trim(), ctx.identity.getPrincipal(), t.club_id);
+        } else {
+          // Let club staff see the name on rosters (best effort).
+          await vault.grantLiveClubChildNameRead(ctx, child.id, t.club_id).catch(() => {});
+        }
+      }
     },
     onSuccess: (_d, v) => { invalidate(); toast({ title: v.assigned ? "Added to team" : "Removed from team" }); },
     onError: (e: any) => toast({ title: "Failed to update team", description: e?.message, variant: "destructive" }),

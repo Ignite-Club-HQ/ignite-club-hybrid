@@ -1483,6 +1483,11 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Read-only: which private-details service this club service trusts.
+     * / Used by the upgrade workflow to confirm the link before release.
+     */
+    pii_canister_status(): Promise<Principal | null>;
     prepare_account_removal(request: Request__1): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -5421,6 +5426,10 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.open_private_name_writer_window(arg0);
         return from_candid_variant_n17(result);
+    }
+    async pii_canister_status(): Promise<Principal | null> {
+        const result = await this.actor.pii_canister_status();
+        return from_candid_opt_n5(result);
     }
     async prepare_account_removal(arg0: Request__1): Promise<{
         __kind__: "Ok";

@@ -7103,6 +7103,10 @@ persistent actor class Main(governorInit : Principal) = this {
     } finally { privateNameWriterGate.leave(privateWriterLease) };
   };
 
+  /// Read-only: which private-details service this club service trusts.
+  /// Used by the upgrade workflow to confirm the link before release.
+  public query func pii_canister_status() : async ?Principal { piiCanister };
+
   // Removes every club_domain record scoped to one team. Callers must have
   // already verified the team is soft-deleted and the caller may delete it.
   func purgeTeamLocal(teamId : Text) {
