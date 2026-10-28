@@ -760,7 +760,7 @@ export default function MessagesPage() {
   // Prefetch is kept separate from inbox composition so native can suppress
   // speculative work without changing cached conversation/read-model state.
   useInboxThreadPrefetch({
-    enabled: !!user,
+    enabled: !!user && initialized && !useIcpLab,
     queryClient,
     client: supabase,
     teamIds: (teams ?? []).map((team) => team.id),
