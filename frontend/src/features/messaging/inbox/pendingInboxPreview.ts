@@ -70,24 +70,34 @@ function markMapFor(client: QueryClient): Map<string, Map<string, Mark>> {
       if (event.type !== "updated" || event.action.type !== "success") return;
       const pending = ownedMarks.get(event.query.queryHash);
       if (!pending) return;
-      const data = event.query.state.data;
-      let dropped = false;
+      let data = event.query.state.data as
+        | { latestMessages?: Record<string, InboxPreviewMessage> }
+        | { id: string; last_message?: { created_at?: string } }[]
+        | undefined;
+      let changed = false;
       for (const [key, mark] of pending) {
         const [scope, , targetId] = key.split(":") as [AnyScope, string, string];
         if (scope === "dm") {
-          const row = Array.isArray(data)
-            ? (data as { id: string; last_message?: { created_at?: string } }[]).find((row) => row.id === targetId)
-            : undefined;
-          if (timestamp(row?.last_message) > timestamp(mark.preview)) pending.delete(key);
+          if (!Array.isArray(data)) continue;
+          const row = (data as { id: string; last_message?: { created_at?: string } }[]).find((row) => row.id === targetId);
+          if (timestamp(row?.last_message) > timestamp(mark.preview)) {
+            pending.delete(key);
+          } else if (timestamp(row?.last_message) < timestamp(mark.preview)) {
+            data = moveDirectConversationToTop(data as { id: string }[], mark.preview) as typeof data;
+            changed = true;
+          }
           continue;
         }
         const current = (data as { latestMessages?: Record<string, InboxPreviewMessage> } | undefined)?.latestMessages?.[targetId];
         if (timestamp(current) > timestamp(mark.preview)) {
           pending.delete(key);
-          dropped = true;
+          changed = true;
+        } else if (timestamp(current) < timestamp(mark.preview)) {
+          data = mergeLatestMessagesPreview(data as { latestMessages?: Record<string, InboxPreviewMessage> }, targetId, mark.preview) as typeof data;
+          changed = true;
         }
       }
-      if (dropped && pending.size === 0) ownedMarks.delete(event.query.queryHash);
+      if (changed && data !== event.query.state.data) client.setQueryData(event.query.queryKey, data);
     });
   }
   return marks;
