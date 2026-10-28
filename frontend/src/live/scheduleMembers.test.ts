@@ -159,4 +159,10 @@ describe('progressive member schedule', () => {
     expect(result.events[1].teams?.name).toBe('U9');
     expect(mocks.team).toHaveBeenCalledTimes(1);
   });
+  it('quietly retries a transient club-name failure instead of warning on every login', async () => {
+    mocks.profile.mockRejectedValueOnce(new Error('Network connection lost')).mockResolvedValue([{ name: 'Cats', sport: [] }]);
+    const result = await loadMemberSchedule(ctx, { ...scope, clubIds: ['g1'] });
+    expect(result.failed).toEqual([]);
+    expect(result.events[0]?.clubs.name).toBe('Cats');
+  });
 });
