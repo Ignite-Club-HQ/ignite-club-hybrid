@@ -342,7 +342,7 @@ function SupabaseCompetitionDetailPage() {
       if (!id || !user?.id) throw new Error("Sign in to contact competition admins.");
       return withFeatureBackend("messaging", {
         supabase: async () => {
-          const { data, error } = await supabase.rpc("ensure_competition_admin_thread", { _competition_id: id });
+          const { data, error } = await (supabase as any).rpc("get_or_create_competition_admin_chat", { p_competition_id: id });
           if (error) throw error;
           return data;
         },
