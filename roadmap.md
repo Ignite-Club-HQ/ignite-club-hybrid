@@ -1092,3 +1092,7 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [x] Wired into TeamChatPage, ClubChatPage, GroupChatPage (incl. league chats) and DirectMessagePage: apply on send, settle on acknowledgement, restore the previous preview when a send fails (offline-queued sends keep the preview).
 - [x] Row floats to the top of its section at send start via `ownSendBump`.
 - [x] Tests: `pendingInboxPreview.test.ts` (11) + full messaging suite (43 files, 391 passed); takes effect after **Deploy web app**.
+
+## Prod repo hybrid branch
+- [ ] Owner: add MIGRATION_GITHUB_TOKEN secret, run **Copy to prod repo (hybrid branch)** in check mode, then apply
+- [ ] Owner: enter listed missing secrets in prod; choose option A (release from hybrid repo) or B (launchers on prod main)

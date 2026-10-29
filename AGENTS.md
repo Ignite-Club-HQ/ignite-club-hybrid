@@ -80,3 +80,4 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Name save/display/cleanup releases stay separate; read nested rules. Display initializes only the secure-save-pinned PII verifier; approved G1 linking journals exact whole-wiring readback. Why: permit only approved authority transitions, not other audiences or drift.
 
 
+- Prod-repo copy uses scripts/migrate-to-prod-branch.mjs (branch `hybrid`, add-only, no force-push, never prod main); migrate-github-repo.mjs is the older file/secret copier. Why: hybrid must land beside prod without altering it.
