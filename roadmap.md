@@ -1096,3 +1096,10 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 ## Prod repo hybrid branch
 - [ ] Owner: add MIGRATION_GITHUB_TOKEN secret, run **Copy to prod repo (hybrid branch)** in check mode, then apply
 - [ ] Owner: enter listed missing secrets in prod; choose option A (release from hybrid repo) or B (launchers on prod main)
+
+## Later: secrets to create in ignite-club_hq-prod
+Only needed when releasing ICP from the prod repo. Never replace prod's existing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.
+- [ ] DEPLOYER_PEM — same value as hybrid repo (ICP deploy identity)
+- [ ] ICP_PUSH_WORKER_SEED — same value as hybrid repo
+- [ ] Optional when enabled: RESEND_API_KEY, FCM_SERVICE_ACCOUNT_JSON, ICP_EMAIL_PRIVATE_KEY, ICP_EMAIL_WORKER_SEED, FUEL_MONTHLY_CEILING_CYCLES
+- [ ] Environments (for Group 2 releases): group-2-admin-controls (Paul as required reviewer), group-2-owner-opening
