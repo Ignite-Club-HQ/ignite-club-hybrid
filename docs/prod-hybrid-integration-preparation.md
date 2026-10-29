@@ -25,6 +25,12 @@ The hybrid versions remain available in the second-parent history and on `hybrid
 
 **Runtime/build selection remains unresolved.** Prod keeps its root app/build configuration, while hybrid's app is under `frontend/`. This preparation branch does not activate the hybrid app. Existing native/hosting setup must be adapted deliberately after target compatibility is verified, not replaced blindly. Retained root instructions and the hybrid nested instructions need reconciliation before activating the split layout.
 
+## Guarded selection preparation
+
+`scripts/prod-hybrid-build.mjs` now provides an explicit optional build path to root `dist/`, preserving existing commands and native identity; see `docs/prod-hybrid-build-selection.md`. It refuses missing/conflicting target settings instead of falling back to hybrid's database. No existing hosting/native commands invoke it yet.
+
+**Target discrepancy:** retained Netlify/Codemagic production settings select `yabcfiuntwqjwvschnji`, whereas the requested screenshot/DEV target is `ecsdwrarzfexssxtrymj`. Live compatibility must cover the actual release target; neither connection was changed. Native plugin/callback and same-origin hosting endpoint reconciliation remain essential, not certified by adapter tests.
+
 ## Workflow review
 
 The union contains all existing prod workflows plus missing hybrid workflows; there were no same-path workflow conflicts. Reviewed push filters do not match `integration-hybrid`. No pull request is opened, so PR triggers are not activated. Schedules run from the default branch, which remains untouched.
