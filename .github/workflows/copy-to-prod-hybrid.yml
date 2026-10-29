@@ -1,0 +1,35 @@
+name: Copy to prod repo (hybrid branch)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = report only; apply = add missing items + create branch; sync = also fast-forward existing hybrid branch"
+        type: choice
+        options: [check, apply, sync]
+        default: check
+
+permissions:
+  contents: read
+
+concurrency:
+  group: copy-to-prod-hybrid
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run copy
+        env:
+          MIGRATION_GITHUB_TOKEN: ${{ secrets.MIGRATION_GITHUB_TOKEN }}
+        run: |
+          case "${{ inputs.mode }}" in
+            check) node scripts/migrate-to-prod-branch.mjs ;;
+            apply) node scripts/migrate-to-prod-branch.mjs --apply ;;
+            sync)  node scripts/migrate-to-prod-branch.mjs --apply --sync ;;
+          esac
