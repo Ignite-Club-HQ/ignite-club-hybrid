@@ -35,6 +35,6 @@ describe("competition event signature compatibility", () => {
     let failure: unknown;
     try { await createSupabaseCompetitionEvent(input); } catch (error) { failure = error; }
     expect(failure).toEqual(transportFailure);
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls.length).toBe(1);
   });
 });
