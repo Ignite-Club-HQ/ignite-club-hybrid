@@ -1096,7 +1096,9 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 ## Prod repo hybrid branch
 - [x] Copied source main `6940e37a5a0f904d2f93d9f9fdce578ef4bfda96` with full history into `Ignite-Club-HQ/ignite-club_hq-prod` branch `hybrid` through temporary owner-approved deploy keys; no token needed. Verified prod main remains `96642d0750e03d933b68957d61999de3ae983b9c`; source main matched the copied revision. Both temporary keys deleted and verified absent. No secrets, environments or database connections changed.
 - [x] Post-copy automation check: GitHub recorded a failed validation-only notice for `deliver-private-name-approval.yml` (run 40802733471), with zero jobs and zero check runs; no deployment executed. Fixing that unrelated workflow is outside the approved copy scope.
-- [ ] Owner: enter listed missing secrets in prod; choose option A (release from hybrid repo) or B (launchers on prod main)
+- [x] Paul chose to run hybrid workflows from the prod repository (29 October 2026); keep existing prod workflows, application code and secrets unchanged.
+- [ ] Add manual-only workflow registrations to prod main, retaining execution from hybrid and existing release safeguards; verify availability without running a deployment.
+- [ ] Owner: enter listed missing secrets and configure protected environments in prod before live releases; reconcile the unresolved source release and transfer verified journals before changing release repository.
 
 ## Later: secrets to create in ignite-club_hq-prod
 Only needed when releasing ICP from the prod repo. Never replace prod's existing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.
