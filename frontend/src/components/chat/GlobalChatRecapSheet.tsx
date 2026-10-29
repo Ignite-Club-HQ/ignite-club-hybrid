@@ -299,7 +299,7 @@ export function GlobalChatRecapSheet({ open, onOpenChange, scopes }: GlobalChatR
             if (!uid) return null;
             const { data, error } = await supabase
           .from("profiles")
-          .select("display_name, first_name")
+          .select("display_name")
           .eq("id", uid)
           .maybeSingle();
             if (error) throw error;
@@ -316,7 +316,6 @@ export function GlobalChatRecapSheet({ open, onOpenChange, scopes }: GlobalChatR
           if (first) tokens.add(first);
         };
         push((prof as any)?.display_name);
-        push((prof as any)?.first_name);
         setMyNames(Array.from(tokens));
       } catch { /* ignore */ }
     })();

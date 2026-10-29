@@ -445,10 +445,10 @@ export function AppHeader() {
           .not("team_id", "is", null),
         db
           .from("team_memberships")
-          .select("teams!inner(club_id)")
-          .eq("user_id", user.id)
+          .select("teams!inner(club_id), club_players!inner(profile_id)")
+          .eq("club_players.profile_id", user.id)
           .eq("status", "active"),
-        db.from("club_players").select("club_id").eq("user_id", user.id),
+        db.from("club_players").select("club_id").eq("profile_id", user.id),
       ]);
       const ids = new Set<string>();
       (clubRoles.data || []).forEach((r: any) => r.club_id && ids.add(r.club_id));

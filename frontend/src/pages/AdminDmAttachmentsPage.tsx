@@ -114,7 +114,7 @@ export default function AdminDmAttachmentsPage() {
           if (restrictedUserIds.size === 0) return [] as any[];
           const { data } = await supabase
             .from("profiles")
-            .select("id, display_name, email, avatar_url")
+            .select("id, display_name, avatar_url")
             .in("id", Array.from(restrictedUserIds));
           return data || [];
         },
@@ -212,10 +212,10 @@ export default function AdminDmAttachmentsPage() {
         supabase: async () => {
           const { data } = await supabase
             .from("profiles")
-            .select("id, display_name, email, avatar_url")
-            .or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)
+            .select("id, display_name, avatar_url")
+            .ilike("display_name", `%${q}%`)
             .limit(20);
-          return (data || []).map((u: any) => ({ id: u.id, display_name: u.display_name, email: u.email }));
+          return (data || []).map((u: any) => ({ id: u.id, display_name: u.display_name, email: null as string | null }));
         },
         icp: async (ctx) => {
           const { searchLiveProfilesWithPrincipals } = await import("@/live/features/identityAccessClient");

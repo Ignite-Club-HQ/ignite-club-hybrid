@@ -267,16 +267,20 @@ export default function CreateGroupDialog({
       }
 
       if (miniLeagueId) {
-        // mini-league member roles
-        const { data } = await (supabase as any)
-          .from("user_roles")
-          .select("user_id, role")
-          .eq("mini_league_id", miniLeagueId);
+        // user_roles has no mini_league_id column; mini-league people live in
+        // mini_league_admins (staff) and mini_league_players (player parents).
+        const [{ data: admins }, { data: players }] = await Promise.all([
+          supabase.from("mini_league_admins").select("user_id").eq("mini_league_id", miniLeagueId),
+          supabase.from("mini_league_players").select("parent_user_id").eq("mini_league_id", miniLeagueId),
+        ]);
         const seen = new Map<string, Set<string>>();
-        ((data as any[]) || []).forEach((r: any) => {
-          if (!seen.has(r.role)) seen.set(r.role, new Set());
-          seen.get(r.role)!.add(r.user_id);
-        });
+        const add = (role: string, uid: string | null) => {
+          if (!uid) return;
+          if (!seen.has(role)) seen.set(role, new Set());
+          seen.get(role)!.add(uid);
+        };
+        (admins || []).forEach((r: any) => add("league_admin", r.user_id));
+        (players || []).forEach((r: any) => add("parent", r.parent_user_id));
         seen.forEach((set, role) => { counts[role] = set.size; });
         return counts;
       }
@@ -417,12 +421,20 @@ export default function CreateGroupDialog({
         return new Set((data || []).map(r => r.user_id)).size;
       }
       if (miniLeagueId) {
-        const { data } = await (supabase as any)
-          .from("user_roles")
-          .select("user_id")
-          .eq("mini_league_id", miniLeagueId)
-          .in("role", selectedRoles);
-        return new Set(((data as any[]) || []).map((r: any) => r.user_id)).size;
+        // user_roles has no mini_league_id column; count mini-league staff and
+        // player parents from their own tables instead.
+        const wantsStaff = selectedRoles.some((r) => ["league_admin", "competition_admin", "coach"].includes(r));
+        const wantsParents = selectedRoles.some((r) => ["parent", "player"].includes(r));
+        const ids = new Set<string>();
+        if (wantsStaff) {
+          const { data } = await supabase.from("mini_league_admins").select("user_id").eq("mini_league_id", miniLeagueId);
+          (data || []).forEach((r: any) => r.user_id && ids.add(r.user_id));
+        }
+        if (wantsParents) {
+          const { data } = await supabase.from("mini_league_players").select("parent_user_id").eq("mini_league_id", miniLeagueId);
+          (data || []).forEach((r: any) => r.parent_user_id && ids.add(r.parent_user_id));
+        }
+        return ids.size;
       }
       if (!clubInfo?.clubId) return 0;
 

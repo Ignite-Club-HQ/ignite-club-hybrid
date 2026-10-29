@@ -71,10 +71,10 @@ export function ClubWideRsvpBreakdown({ eventId, clubId, grouping, targetTeamIds
   const { data, isLoading } = useQuery({
     queryKey: ["club-wide-rsvp-breakdown", eventId, clubId, grouping, targetTeamIds?.join(",") ?? ""],
     queryFn: async () => {
-      // 1. Teams in the club (id, name, age_group) — filter to target teams if set.
+      // 1. Teams in the club (id, name, level_age) — filter to target teams if set.
       let teamsQ = supabase
         .from("teams")
-        .select("id, name, age_group")
+        .select("id, name, level_age")
         .eq("club_id", clubId);
       if (targetSet) teamsQ = teamsQ.in("id", Array.from(targetSet));
       const { data: teams } = await teamsQ;
@@ -110,10 +110,10 @@ export function ClubWideRsvpBreakdown({ eventId, clubId, grouping, targetTeamIds
     if (!data) return [];
     const { teams, roles, assignments, rsvps } = data;
 
-    // Build lookup: team_id → { name, age_group }
+    // Build lookup: team_id → { name, level_age }
     const teamMeta = new Map<string, { name: string; age_group: string | null }>();
     for (const t of teams as any[]) {
-      teamMeta.set(t.id, { name: t.name, age_group: t.age_group });
+      teamMeta.set(t.id, { name: t.name, age_group: t.level_age ?? null });
     }
 
     // Members: [{ id, name, groupKey, groupLabel, team }]

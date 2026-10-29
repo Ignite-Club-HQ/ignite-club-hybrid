@@ -42,7 +42,7 @@ export function ChatGroupJoinRequests({ groupId, enabled = true }: ChatGroupJoin
           const userIds = rows.map((r) => r.user_id);
           const { data: profiles } = await supabase
             .from("profiles")
-            .select("id, full_name, avatar_url")
+            .select("id, display_name, avatar_url")
             .in("id", userIds);
           const byId = new Map((profiles ?? []).map((p: any) => [p.id, p]));
           return rows.map((r) => ({ ...r, profile: byId.get(r.user_id) || null }));
@@ -59,7 +59,7 @@ export function ChatGroupJoinRequests({ groupId, enabled = true }: ChatGroupJoin
               id: principalText,
               user_id: principalText,
               created_at: new Date(Number(r.created_at_ms)).toISOString(),
-              profile: { full_name: shortName, avatar_url: null },
+              profile: { display_name: shortName, avatar_url: null },
             };
           });
         },
@@ -142,7 +142,7 @@ export function ChatGroupJoinRequests({ groupId, enabled = true }: ChatGroupJoin
       </div>
       <ul className="space-y-1.5">
         {requests.map((r: any) => {
-          const name = r.profile?.full_name || "Member";
+          const name = r.profile?.display_name || "Member";
           const initials = name.slice(0, 2).toUpperCase();
           const busy = approveMutation.isPending || rejectMutation.isPending;
           return (

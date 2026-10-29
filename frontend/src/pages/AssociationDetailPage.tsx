@@ -145,8 +145,8 @@ function SupabaseAssociationDetailPage() {
           .from("events")
           .select("id", { count: "exact", head: true })
           .in("club_id", clubIds)
-          .gte("start_at", new Date().toISOString())
-          .lte("start_at", new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()),
+          .gte("event_date", new Date().toISOString().slice(0, 10))
+          .lte("event_date", new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)),
         supabase.from("user_roles").select("user_id", { count: "exact", head: true }).in("club_id", clubIds),
       ]);
       return {

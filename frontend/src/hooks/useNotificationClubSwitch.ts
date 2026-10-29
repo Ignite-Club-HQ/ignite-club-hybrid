@@ -116,8 +116,8 @@ async function verifyClubMembership(userId: string, clubId: string): Promise<Mem
 
   const teamRes = await db
     .from("team_memberships")
-    .select("id, teams!inner(club_id)")
-    .eq("user_id", userId)
+    .select("id, teams!inner(club_id), club_players!inner(profile_id)")
+    .eq("club_players.profile_id", userId)
     .eq("status", "active")
     .eq("teams.club_id", clubId)
     .limit(1);
@@ -127,7 +127,7 @@ async function verifyClubMembership(userId: string, clubId: string): Promise<Mem
   const playerRes = await db
     .from("club_players")
     .select("id")
-    .eq("user_id", userId)
+    .eq("profile_id", userId)
     .eq("club_id", clubId)
     .limit(1);
   if (playerRes.error) sawError = true;

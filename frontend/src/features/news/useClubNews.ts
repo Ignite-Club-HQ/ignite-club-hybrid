@@ -352,7 +352,6 @@ export function useClubMiniLeaguesForNews(clubId?: string | null) {
             .from("mini_leagues")
             .select("id, name")
             .eq("club_id", clubId)
-            .eq("status", "active")
             .order("name");
           if (error) throw error;
           return (data ?? []) as Array<{ id: string; name: string }>;
