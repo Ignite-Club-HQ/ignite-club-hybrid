@@ -30,7 +30,7 @@ describe("competition event signature compatibility", () => {
     expect(rpc).toHaveBeenCalledTimes(1);
   });
   it("does not retry network failures", async () => {
-    rpc.mockImplementation(async () => { throw new Error("Transport unavailable"); });
+    rpc.mockImplementation(() => { throw new Error("Transport unavailable"); });
     let failure: unknown;
     try { await createSupabaseCompetitionEvent(input); } catch (error) { failure = error; }
     expect(failure).toBeInstanceOf(Error);
