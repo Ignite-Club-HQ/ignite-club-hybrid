@@ -1,4 +1,5 @@
 ## Supabase compatibility before prod merge — 29 October 2026
+- [ ] Owner requested copying only compatibility fixes and their report/tests into prod hybrid; preserve prod main, workflows, secrets, settings and database. Verify exact file hashes after the copy.
 - [x] Compared hybrid runtime requirements with prod's saved schema; report: `docs/supabase-prod-compatibility-2026-10-29.md`. Both databases, prod main, secrets and automation unchanged.
 - [ ] Obtain a live schema-only report from Ignite Club HQ - Prod (`ecsdwrarzfexssxtrymj`); this chat's SQL tools are scoped to hybrid (`cdrxmelhysdqrccttsjg`). Saved types/migrations are not live verification.
 - [x] Fixed committee role/status interpretation, email-invite redirect, competition event signature compatibility and prod competition-admin chat RPC; 42 focused tests passed in each backend mode; preview build OK.
