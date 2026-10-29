@@ -1,3 +1,8 @@
+## Supabase compatibility before prod merge — 29 October 2026
+- [ ] Compare hybrid runtime requirements with prod's saved schema and identify essential code differences; keep both databases, prod main, secrets and automation unchanged.
+- [ ] Obtain a live schema-only report from Ignite Club HQ - Prod (`ecsdwrarzfexssxtrymj`); this chat's SQL tools are scoped to hybrid (`cdrxmelhysdqrccttsjg`). Saved types/migrations are not live verification.
+- [ ] Fix confirmed essential code differences and run focused Supabase/ICP regressions. Database changes require separate review and approval; never replay the full migration history or bypass protected History reads.
+
 ## Chat warning after profile-name edit — 29 October 2026
 - [x] Failed club chat-list reads now reject refresh instead of caching missing chats and reporting setup failure; existing successful inbox results survive and recover on successful reads. Removed the obsolete setup banner. All 33 focused regressions pass in each backend mode; preview build OK. Profile save does not explicitly refresh this query, so the screenshot alone does not establish that editing the name caused the underlying read failure. Permissions unchanged.
 - [ ] Deploy web app and confirm on Paul's signed-in phone; no Internet Identity session is available here.
