@@ -73,11 +73,7 @@ it. Skills are authoritative — prefer them over general knowledge.
 - Permanent discovery reserves identity memories 18–24; revision-bound subject/source indexes stage and reclaim in bounded steps, pin all sources even when skipping empty ones; no public cutover until location/concurrency/recovery pass. Stage A remains. Why: incomplete or stale indexes cannot hide clubs or grant access.
 - Membership source retention captures one immutable array generation without copying on writes; exact sequential traversal and historical completion leave newer changes pending and unreadable. Why: finite reconstruction must finish under ongoing writes without certifying stale memberships.
 
-- Media paging releases only via upgrade-media-paging.yml on the exact G1/G2 media_metadata canisters, finishing backfill before snapshot refresh. Why: never hide photos or touch photo stores.
 
 - ICP events atomically commit dates, duties and reminders under caller receipts; consensus supplies audiences, unknown relays stay locked.
 - Vault recovery reads owner-wide intents and exact decrypted hash markers before strict grants/store acknowledgement; unknown outcomes retain locks/cursors. Erasure scrubs shared ancestors without orphaning others. Cleanup needs age/allowance or erasure receipts; backups commit validated pages to writable sinks, retaining Blob fallback where unsupported. Why: prevent guessed recovery, data loss and partial exports.
 - Name save/display/cleanup releases stay separate; read nested rules. Display initializes only the secure-save-pinned PII verifier; approved G1 linking journals exact whole-wiring readback. Why: permit only approved authority transitions, not other audiences or drift.
-
-
-- Prod-repo copy uses scripts/migrate-to-prod-branch.mjs (branch `hybrid`, add-only, no force-push, never prod main); migrate-github-repo.mjs is the older file/secret copier. Why: hybrid must land beside prod without altering it.
