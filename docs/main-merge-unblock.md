@@ -2,6 +2,8 @@
 
 Repository: Ignite-Club-HQ/ignite-club_hq-prod. Review branch only; no main/prod merge, jobs or database operations.
 
+Published to integration-hybrid at `70d821c8a58791e4523a1ba4972bf009af90af6c`; all 68 file hashes verified against GitHub. Main remains at `96642d0750e03d933b68957d61999de3ae983b9c`. Fresh Actions reads show no new run for this commit. The prod branch was not queried or changed.
+
 ## Prepared
 
 - All 61 workflows / 62 jobs have destination-scoped locks. Main and its pull requests cannot execute jobs by default. Integration preparation cannot execute jobs. Production branch and source-repository job behavior is preserved.
