@@ -13,7 +13,7 @@ type EventInput = {
 
 /** Only a PostgREST signature miss proves the first write never executed. */
 export async function createSupabaseCompetitionEvent(input: EventInput) {
-  const rpc = supabase.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{
+  const rpc = supabase.rpc.bind(supabase) as unknown as (name: string, args: Record<string, unknown>) => Promise<{
     data: unknown; error: { code?: string; message: string } | null;
   }>;
   let result = await rpc("create_competition_event", {
