@@ -2,9 +2,11 @@
 
 The existing prod root app, package commands, Netlify configuration, Codemagic workflows, Capacitor identity, Supabase configuration and secrets remain unchanged. The optional `scripts/prod-hybrid-build.mjs` builds the hybrid app under `frontend/` into root `dist/`, where the retained production web/native setup expects bundled assets. Nothing invokes it automatically.
 
-## Essential target discrepancy
+## Owner-pinned main / DEV boundary (supersedes earlier target investigation)
 
-The screenshot and saved root development configuration identify `ecsdwrarzfexssxtrymj`. Retained Netlify production and Codemagic production settings instead explicitly select `yabcfiuntwqjwvschnji`. This is a dev/production split, not permission to replace either setting. Obtain read-only compatibility reports for the database actually used by each intended release; checking DEV alone cannot certify production.
+Paul confirmed at 02:23 UTC: the final merge destination is `main` ONLY, using Ignite Club HQ DEV at `https://ecsdwrarzfexssxtrymj.supabase.co`. Never touch the `prod` branch or production database (`yabcfiuntwqjwvschnji`), including read-only database probes. Existing production hosting/native settings remain untouched and are outside this integration. No production report is needed or allowed. DEV changes still require separate approval.
+
+`scripts/prod-main-dev-policy.mjs` pins this target and rejects prod branch/production context signals and any other Supabase target before build work. This guards the optional integration build only; it does not disable existing unrelated workflows. Main-triggered promotion, database jobs and external hosting/native auto-deploy must remain prevented before merge. The final merge API must explicitly target main, never prod.
 
 ## Prepared invocation, not activation
 

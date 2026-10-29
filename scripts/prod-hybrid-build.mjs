@@ -3,10 +3,12 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { assertMainDevOnly } from './prod-main-dev-policy.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export function resolveProdHybridEnv(env) {
+  assertMainDevOnly(env);
   if (env.IGNITE_BUILD_TARGET !== 'hybrid') throw new Error('Explicit IGNITE_BUILD_TARGET=hybrid is required.');
   const expected = env.IGNITE_EXPECTED_SUPABASE_URL?.trim();
   if (!expected) throw new Error('IGNITE_EXPECTED_SUPABASE_URL must identify the independently verified target.');
