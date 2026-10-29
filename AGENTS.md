@@ -10,7 +10,7 @@
 <!-- LOVABLE:END -->
 
 - Preview: frontend/ via lovable.toml and scripts/*-preview.mjs; map SUPABASE_URL/PUBLISHABLE_KEY to IGNITE_LIVE_SUPABASE_URL/ANON_KEY; root stays dependency-free.
-- Prod compatibility requires a live target schema report before merge; saved types cannot prove deployed contracts. Why: preserve target settings and permissions.
+- Prod integration joins both histories add-only; activation waits for live schema and retained config resolution. Why: preserve target setup and permissions.
 - Home warms scoped member rosters via the shared bounded memo (frontend/AGENTS.md); labels grant no access. Why: pickers reuse reads. Linked account rules: backend/AGENTS.md.
 - Install via scripts/ensure-frontend-deps.mjs only: npm ci wipes preview dependencies. build-preview.mjs copies live-index.html for SPA hosting.
 - Read nested AGENTS.md; bound caches; preserve keyboardSafe. Own-name unlocks use a required guarded read, not optional enrichment. Why: short name deadlines must not hide existing profiles.
