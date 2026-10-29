@@ -1094,7 +1094,8 @@ Validation budget: changed rules plus direct regressions per substantial batch; 
 - [x] Tests: `pendingInboxPreview.test.ts` (11) + full messaging suite (43 files, 391 passed); takes effect after **Deploy web app**.
 
 ## Prod repo hybrid branch
-- [ ] Owner: add MIGRATION_GITHUB_TOKEN secret, run **Copy to prod repo (hybrid branch)** in check mode, then apply
+- [x] Copied source main `6940e37a5a0f904d2f93d9f9fdce578ef4bfda96` with full history into `Ignite-Club-HQ/ignite-club_hq-prod` branch `hybrid` through temporary owner-approved deploy keys; no token needed. Verified prod main remains `96642d0750e03d933b68957d61999de3ae983b9c`; source main matched the copied revision. Both temporary keys deleted and verified absent. No secrets, environments or database connections changed.
+- [x] Post-copy automation check: GitHub recorded a failed validation-only notice for `deliver-private-name-approval.yml` (run 40802733471), with zero jobs and zero check runs; no deployment executed. Fixing that unrelated workflow is outside the approved copy scope.
 - [ ] Owner: enter listed missing secrets in prod; choose option A (release from hybrid repo) or B (launchers on prod main)
 
 ## Later: secrets to create in ignite-club_hq-prod
