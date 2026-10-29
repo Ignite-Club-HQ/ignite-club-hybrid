@@ -1,0 +1,55 @@
+# One-off: lets the new repo's deploy key upgrade the test frontend canister.
+# Only ADDS a controller; removes nothing. Safe to delete after it succeeds.
+name: Grant new deployer access to frontend canister
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  grant:
+    runs-on: ubuntu-latest
+    env:
+      ICP_HOME: ${{ github.workspace }}/.icp-home
+      CANISTER: proe7-kqaaa-aaaas-qg6gq-cai
+      NEW_CONTROLLER: jfagr-a4uwo-nlikz-ysri5-ipbrt-k4qa2-vkofo-it7lz-eha3w-4wix6-oqe
+      EXPECTED_SIGNER: vk34m-qhp7i-xyaaw-itwxz-uohx7-ucw52-mx2vs-alcau-3h4ga-rayrt-pae
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+      - name: Install deploy tools
+        run: npm install -g @icp-sdk/icp-cli@1.7.0 --no-fund --no-audit
+      - name: Restore deployer identity
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$ICP_HOME/identity/keys"
+          PEM_FILE="$ICP_HOME/identity/keys/old.pem"
+          python3 - "$PEM_FILE" <<'PY'
+          import os, re, sys
+          raw = os.environ["DEPLOYER_PEM"].replace("\r", "").replace("\\n", "\n")
+          raw = re.sub(r"[\u2010-\u2015\u2212]", "-", raw)
+          m = re.search(r"-{2,}\s*BEGIN\s+((?:EC\s+)?PRIVATE\s+KEY)\s*-{2,}(.*?)-{2,}\s*END\s+\1\s*-{2,}", raw, re.S | re.I)
+          if not m:
+              print("::error::No PRIVATE KEY block in DEPLOYER_PEM"); sys.exit(1)
+          label = re.sub(r"\s+", " ", m.group(1).upper()); body = re.sub(r"\s+", "", m.group(2))
+          with open(sys.argv[1], "w") as f:
+              f.write(f"-----BEGIN {label}-----\n" + "\n".join(body[i:i+64] for i in range(0, len(body), 64)) + f"\n-----END {label}-----\n")
+          PY
+          icp identity import --from-pem "$PEM_FILE" --storage plaintext old-deployer
+          icp identity default old-deployer
+          ME="$(icp identity principal)"
+          echo "Signer: $ME"
+          if [ "$ME" != "$EXPECTED_SIGNER" ]; then
+            echo "::error::This repo's key is not the canister controller ($EXPECTED_SIGNER). Nothing changed."
+            exit 1
+          fi
+      - name: Add new deployer as controller
+        working-directory: deploy/frontend
+        run: |
+          set -euo pipefail
+          grep -q "$CANISTER" .icp/data/mappings/ic.ids.json || { echo "::error::frontend mapping is not $CANISTER"; exit 1; }
+          icp canister settings update frontend --add-controller "$NEW_CONTROLLER" -e ic --force
+          icp canister status frontend -e ic 2>&1 | grep -i -A3 controller || true
