@@ -110,10 +110,10 @@ export function ClubWideRsvpBreakdown({ eventId, clubId, grouping, targetTeamIds
     if (!data) return [];
     const { teams, roles, assignments, rsvps } = data;
 
-    // Build lookup: team_id → { name, age_group }
+    // Build lookup: team_id → { name, level_age }
     const teamMeta = new Map<string, { name: string; age_group: string | null }>();
     for (const t of teams as any[]) {
-      teamMeta.set(t.id, { name: t.name, age_group: t.age_group });
+      teamMeta.set(t.id, { name: t.name, age_group: t.level_age ?? null });
     }
 
     // Members: [{ id, name, groupKey, groupLabel, team }]
