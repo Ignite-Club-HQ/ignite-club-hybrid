@@ -1,7 +1,9 @@
 ## Supabase compatibility before prod merge — 29 October 2026
-- [ ] Compare hybrid runtime requirements with prod's saved schema and identify essential code differences; keep both databases, prod main, secrets and automation unchanged.
+- [x] Compared hybrid runtime requirements with prod's saved schema; report: `docs/supabase-prod-compatibility-2026-10-29.md`. Both databases, prod main, secrets and automation unchanged.
 - [ ] Obtain a live schema-only report from Ignite Club HQ - Prod (`ecsdwrarzfexssxtrymj`); this chat's SQL tools are scoped to hybrid (`cdrxmelhysdqrccttsjg`). Saved types/migrations are not live verification.
-- [ ] Fix confirmed essential code differences and run focused Supabase/ICP regressions. Database changes require separate review and approval; never replay the full migration history or bypass protected History reads.
+- [x] Fixed committee role/status interpretation, email-invite redirect, competition event signature compatibility and prod competition-admin chat RPC; 42 focused tests passed in each backend mode; preview build OK.
+- [ ] Confirm target's protected History/report RPCs, email-code invites, competition visibility/Vault/news and required columns from the live schema-only report, then approve only necessary additive changes. Blocker: this chat cannot query the prod database. Never replay full migration history or bypass protected History reads.
+- [ ] Test signed-in acceptance on an isolated target copy before merging; blocker: target schema/access evidence unavailable here. New local fixes have not been copied again into prod hybrid.
 
 ## Chat warning after profile-name edit — 29 October 2026
 - [x] Failed club chat-list reads now reject refresh instead of caching missing chats and reporting setup failure; existing successful inbox results survive and recover on successful reads. Removed the obsolete setup banner. All 33 focused regressions pass in each backend mode; preview build OK. Profile save does not explicitly refresh this query, so the screenshot alone does not establish that editing the name caused the underlying read failure. Permissions unchanged.
