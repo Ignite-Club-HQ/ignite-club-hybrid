@@ -71,10 +71,10 @@ export function ClubWideRsvpBreakdown({ eventId, clubId, grouping, targetTeamIds
   const { data, isLoading } = useQuery({
     queryKey: ["club-wide-rsvp-breakdown", eventId, clubId, grouping, targetTeamIds?.join(",") ?? ""],
     queryFn: async () => {
-      // 1. Teams in the club (id, name, age_group) — filter to target teams if set.
+      // 1. Teams in the club (id, name, level_age) — filter to target teams if set.
       let teamsQ = supabase
         .from("teams")
-        .select("id, name, age_group")
+        .select("id, name, level_age")
         .eq("club_id", clubId);
       if (targetSet) teamsQ = teamsQ.in("id", Array.from(targetSet));
       const { data: teams } = await teamsQ;
