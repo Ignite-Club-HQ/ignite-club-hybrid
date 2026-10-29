@@ -31,7 +31,8 @@ describe("competition event signature compatibility", () => {
   });
   it("does not retry network failures", async () => {
     const transportFailure = { name: "TypeError", message: "Failed to fetch" };
-    rpc.mockRejectedValue(transportFailure);
+    // Model the SDK's lazy thenable rather than a pre-rejected mock promise.
+    rpc.mockImplementation(() => ({ then: (_resolve: unknown, reject: (error: unknown) => void) => reject(transportFailure) }));
     let failure: unknown;
     try { await createSupabaseCompetitionEvent(input); } catch (error) { failure = error; }
     expect(failure).toEqual(transportFailure);
