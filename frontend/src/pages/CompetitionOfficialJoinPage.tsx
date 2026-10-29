@@ -18,6 +18,7 @@ import {
   fetchLivePublicRoleLinkPreview,
 } from "@/live/features/competitions";
 import { hashOfficialInviteCode, hashOfficialInviteEmail } from "@/features/competitions/officialEmailInvite";
+import { normalizeOfficialRole, officialJoinPath } from "@/features/competitions/officialRole";
 
 type OfficialRole = "referee" | "committee_member";
 type LinkInfo = {
@@ -42,7 +43,7 @@ export default function CompetitionOfficialJoinPage() {
   const [error, setError] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
-  const nextPath = `/competitions/officials/join?token=${encodeURIComponent(token)}`;
+  const nextPath = officialJoinPath(token, emailInvite);
   const isIcpLink = !emailInvite && token.startsWith("crl-");
 
   useEffect(() => {
@@ -76,27 +77,29 @@ export default function CompetitionOfficialJoinPage() {
               const { data, error: rpcError } = await (supabase as any).rpc("get_competition_role_email_invite_status", { p_token: token });
               if (rpcError) throw rpcError;
               const row = data?.[0];
-              if (!row || !["referee", "committee_member"].includes(row.role)) {
+              const officialRole = normalizeOfficialRole(row?.role);
+              if (!row || !officialRole) {
                 return { status: "invalid", competitionId: null, competitionName: null, role: null } as LinkInfo;
               }
               return {
                 status: row.status as LinkInfo["status"],
                 competitionId: row.competition_id,
                 competitionName: row.competition_name,
-                role: row.role as OfficialRole,
+                role: officialRole,
               } satisfies LinkInfo;
             }
             const { data, error: rpcError } = await (supabase as any).rpc("get_competition_role_link_status", { p_token: token });
             if (rpcError) throw rpcError;
             const row = data?.[0];
-            if (!row || !["referee", "committee_member"].includes(row.role)) {
+            const officialRole = normalizeOfficialRole(row?.role);
+            if (!row || !officialRole) {
               return { status: "invalid", competitionId: null, competitionName: null, role: null } as LinkInfo;
             }
             return {
-              status: row.status === "archived" ? "archived" : row.status === "valid" ? "valid" : "invalid",
+              status: row.status === "used_up" ? "used" : ["valid", "archived", "expired", "used", "revoked"].includes(row.status) ? row.status as LinkInfo["status"] : "invalid",
               competitionId: row.competition_id,
               competitionName: row.competition_name,
-              role: row.role as OfficialRole,
+              role: officialRole,
             } satisfies LinkInfo;
           },
           icp: async (ctx) => {
@@ -225,7 +228,7 @@ export default function CompetitionOfficialJoinPage() {
             <>
               <div>
                 <p className="font-semibold">{info?.competitionName}</p>
-                <p className="mt-1 text-sm text-muted-foreground">Join as a {roleLabel(info!.role!)}.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Join as a {info?.role ? roleLabel(info.role) : "official"}.</p>
               </div>
               {emailInvite && (
                 <div className="w-full space-y-2 text-left">
@@ -244,7 +247,7 @@ export default function CompetitionOfficialJoinPage() {
               )}
               <Button className="w-full" disabled={joining} onClick={() => void join()}>
                 {joining && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {user ? `Join as ${roleLabel(info!.role!)}` : "Sign in to join"}
+                {user ? `Join as ${info?.role ? roleLabel(info.role) : "official"}` : "Sign in to join"}
               </Button>
             </>
           )}

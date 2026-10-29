@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { createSupabaseCompetitionEvent } from "@/features/competitions/createSupabaseCompetitionEvent";
 
 type EventType = "social" | "training" | "game";
 
@@ -65,18 +65,16 @@ export function CreateCompetitionEventButton({
       const { withFeatureBackend } = await import("@/live/featureRouter");
       const count = await withFeatureBackend("competitions", {
         supabase: async () => {
-          const { data, error } = await supabase.rpc("create_competition_event", {
-            p_operation_id: requestId,
-            p_competition_id: competitionId,
-            p_title: title.trim(),
-            p_event_type: eventType,
-            p_starts_at: startsAt.toISOString(),
-            p_ends_at: endsAt.toISOString(),
-            p_location: location.trim() || null,
-            p_description: description.trim() || null,
+          return createSupabaseCompetitionEvent({
+            operationId: requestId,
+            competitionId,
+            title: title.trim(),
+            eventType,
+            startsAt: startsAt.toISOString(),
+            endsAt: endsAt.toISOString(),
+            location: location.trim() || null,
+            description: description.trim() || null,
           });
-          if (error) throw error;
-          return data;
         },
         icp: async (ctx) => {
           const { createLiveCompetitionEvent } = await import("@/live/features/competitions");
