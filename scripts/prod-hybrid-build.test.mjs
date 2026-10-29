@@ -4,8 +4,8 @@ import { resolveProdHybridEnv, runProdHybridBuild } from './prod-hybrid-build.mj
 
 const env = {
   IGNITE_BUILD_TARGET: 'hybrid',
-  IGNITE_EXPECTED_SUPABASE_URL: 'https://target.supabase.co',
-  VITE_SUPABASE_URL: 'https://target.supabase.co',
+  IGNITE_EXPECTED_SUPABASE_URL: 'https://ecsdwrarzfexssxtrymj.supabase.co',
+  VITE_SUPABASE_URL: 'https://ecsdwrarzfexssxtrymj.supabase.co',
   VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture',
 };
 test('no explicit selection refuses all work', () => {
@@ -13,7 +13,7 @@ test('no explicit selection refuses all work', () => {
 });
 test('verified target and retained public key map exactly', () => {
   const result = resolveProdHybridEnv(env);
-  assert.equal(result.IGNITE_LIVE_SUPABASE_URL, 'https://target.supabase.co');
+  assert.equal(result.IGNITE_LIVE_SUPABASE_URL, 'https://ecsdwrarzfexssxtrymj.supabase.co');
   assert.equal(result.IGNITE_LIVE_SUPABASE_ANON_KEY, 'sb_publishable_fixture');
 });
 test('missing target cannot fall back to a committed environment', () => {
@@ -37,7 +37,7 @@ test('service-role JWT refuses', () => {
 });
 test('anon JWT must belong to exact target', () => {
   assert.throws(() => resolveProdHybridEnv({ ...env, VITE_SUPABASE_PUBLISHABLE_KEY: jwt({ role: 'anon', ref: 'other' }) }));
-  assert.equal(resolveProdHybridEnv({ ...env, VITE_SUPABASE_PUBLISHABLE_KEY: jwt({ role: 'anon', ref: 'target' }) }).IGNITE_LIVE_SUPABASE_URL, 'https://target.supabase.co');
+  assert.equal(resolveProdHybridEnv({ ...env, VITE_SUPABASE_PUBLISHABLE_KEY: jwt({ role: 'anon', ref: 'ecsdwrarzfexssxtrymj' }) }).IGNITE_LIVE_SUPABASE_URL, 'https://ecsdwrarzfexssxtrymj.supabase.co');
 });
 test('Supabase verification cannot be skipped', () => {
   assert.throws(() => resolveProdHybridEnv({ ...env, IGNITE_LIVE_ICP_ONLY: '1' }));
